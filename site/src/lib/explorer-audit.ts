@@ -1,6 +1,7 @@
-// Builds the audit explorer's model, per shape, from src/data/explorer/audit.yaml.
+// Builds the audit explorer's model, per preset, from src/data/explorer/audit.yaml.
 // Ports, drivers and runtimes come from architecture.yaml so the two explorers
-// agree. Nothing here states a fact about audit.
+// agree. Nothing here states a fact about audit. A "shape" in this file is a
+// preset (T0 to T6) of an environment; a "role" is an actor.
 import { parse } from 'yaml';
 import { assertOpenDecision } from './od';
 import raw from '../data/explorer/audit.yaml?raw';
@@ -15,7 +16,7 @@ export const statuses: Record<string, string> = arch.statuses;
 export type AuditShape = MapModel & {
   shape: any;
   audit: any;
-  outbox: any;
+  transport: any;
   ack: string;
   wait: string;
   recv: string;
@@ -30,15 +31,14 @@ export function shapes(): AuditShape[] {
 function build(sh: any): AuditShape {
   const rt = arch.runtimes[sh.runtime];
   const au = data.shapes[sh.id];
-  const ok = data.outbox_kinds[sh.ports.outbox === 'sqs' ? 'sqs' : 'spool'];
+  const ok = data.transport_kinds[sh.ports.transport === 'sqs' ? 'sqs' : 'spool'];
   const cluster = sh.nodes > 1;
   const lambda = sh.runtime === 'lambda';
   const nodes: MapNode[] = [];
   const nameOf: Record<string, string> = {};
   const defs = data.nodes;
 
-  const outboxDrv = arch.drivers[sh.ports.outbox];
-  for (const [id, n] of Object.entries<any>(defs)) {
+    for (const [id, n] of Object.entries<any>(defs)) {
     let l2 = n.l2 ?? '';
     let l3 = n.l3 ?? '';
     let shared = !!n.shared;
@@ -56,7 +56,7 @@ function build(sh: any): AuditShape {
       else if (!n.l2 || n.role === 'entry') {
         if (n.role !== 'entry') { l2 = fill(rt.role.id_short, { id: rid }); l3 = fill(rt.role.sock_short, { id: rid }); }
       }
-      kind = 'role';
+      kind = 'actor';
       status = 'agreed';
       rows = [
         { k: 'Unit', v: fill(rt.role.unit, { id: rid }), code: true },
@@ -67,13 +67,13 @@ function build(sh: any): AuditShape {
     } else if (n.port && cls === 'driver') {
       const did = sh.ports[n.port];
       const d = arch.drivers[did];
-      const perRole = d.instance === 'per-role';
+      const perRole = d.instance === 'per-actor';
       shared = !perRole;
       cls = perRole ? 'driver-role' : 'driver-shared';
       const portTitle = label(n.port);
       l2 = `${d.title}, ${d.instance}`;
       l3 = `${portTitle} port`;
-      kind = perRole ? 'driver service, per-role' : `driver service, shared${d.shared_name ? ` (${d.shared_name})` : ''}`;
+      kind = perRole ? 'driver service, per-actor' : `driver service, shared${d.shared_name ? ` (${d.shared_name})` : ''}`;
       status = d.status;
       od = d.od;
       rows = [
@@ -87,12 +87,12 @@ function build(sh: any): AuditShape {
       } else {
         rows.push({ k: 'Listens', v: `${fill(rt.role_driver.listen, { driver: 'aws', role: '<role>' })}, one per role that uses it`, code: true });
       }
-      if (n.port === 'outbox') {
+      if (n.port === 'transport') {
         rows.push({ k: 'Durable means', v: ok.durable });
         rows.push({ k: 'Records wait', v: ok.wait + (cluster ? ok.cluster_wait ?? '' : '') });
         rows.push({ k: 'Who the record is from', v: ok.caller });
         rows.push({ k: 'Instance', v: ok.instance });
-        if (ok.od) notes.push({ id: ok.od, text: 'The outbox port per shape is not fully decided.' });
+        rows.push({ k: 'Mode in this preset', v: ok.mode });
       }
       if (n.port === 'keys') rows.push({ k: 'Used here by', v: 'the notary only' });
     } else if (n.port && cls === 'store') {
@@ -111,12 +111,12 @@ function build(sh: any): AuditShape {
       if (n.port === 'keys') rows.push({ k: 'Notary seal key', v: au.notary_key });
       if (n.port === 'state') rows = [{ k: 'Backend', v: sh.state }, { k: 'Holds', v: 'audit_batches, cursors and dedupe, replicated; no record bodies' }];
       if (n.port === 'index') {
-        rows = [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: sh.runtime === 'lambda' ? 'None in this install; a separate audit install holds the index' : 'One file per node' }];
+        rows = [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: sh.runtime === 'lambda' ? 'None in this install; Search does not run inside serverless, so a separate audit install holds the search index' : 'One file per node in the current draft; where Search runs is open (OD-32)' }];
       }
     } else if (cls === 'external') {
       kind = 'outside sluis';
     } else if (id === 'producers') {
-      kind = 'roles, producers';
+      kind = 'actors, producers';
       status = 'agreed';
     } else if (id === 'recovery') {
       kind = 'break-glass tool';
@@ -126,6 +126,13 @@ function build(sh: any): AuditShape {
       status = 'agreed';
     }
     if (id === 'index' && !n.port) rows = [];
+    // Optional per-node overrides from the YAML (used by actors whose placement is open).
+    if (n.kind) kind = n.kind;
+    if (n.status) status = n.status;
+    if (n.od) od = n.od;
+    if (n.rows) rows = n.rows;
+    if (n.extra_rows) rows = [...rows, ...n.extra_rows];
+    for (const o of n.od_note ?? []) notes.push({ id: o.id, text: o.text });
 
     const detail: Detail = {
       title: n.title,
@@ -141,8 +148,8 @@ function build(sh: any): AuditShape {
       // The index node is an index store, not a driver.
       const d = arch.drivers[sh.ports.index];
       const bl = arch.backing_lines[`index.${sh.ports.index}`];
-      nodes.push(place({ id, lane: n.lane, row: n.row, cls: 'store', shared: false, title: 'index', l2: bl[0], l3: bl[1], detail: { ...detail, kind: 'index', cls: 'store', status: d.status, od: d.od, rows: [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: lambda ? 'none in this install: a separate audit install holds the index' : 'one file per node' }], notes: [] } }));
-      nameOf[id] = 'index';
+      nodes.push(place({ id, lane: n.lane, row: n.row, cls: 'store', shared: false, title: 'search index', l2: bl[0], l3: bl[1], detail: { ...detail, kind: 'search index', cls: 'store', status: d.status, od: d.od, rows: [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: lambda ? 'none in this install: Search does not run inside serverless, so a separate audit install holds the search index' : 'one file per node in the current draft; where Search runs is open (OD-32)' }], notes: [{ id: 'OD-32', text: 'Where Search runs: on the log host, a separate host or Deployment, or nowhere (the scan instead).' }] } }));
+      nameOf[id] = 'search index';
       continue;
     }
     nodes.push(place({ id, lane: n.lane, row: n.row, cls: detail.cls, shared, title: n.title, l2, l3, detail }));
@@ -166,9 +173,9 @@ function build(sh: any): AuditShape {
   if (au.note) noteList.push({ text: au.note, status: au.assumed ? 'proposed' : 'agreed' });
   return {
     id: sh.id, name: sh.name, nodes, edges, width, height, lanes,
-    intro: `Outbox: ${ok.short}. Keys: ${sh.keys}. State: ${sh.state}. Archive: ${au.blob}, ${au.lock}.`,
+    intro: `Environment: ${sh.environment}. Transport: ${ok.short}. Keys: ${sh.keys}. State: ${sh.state}. Blob: ${au.blob}, ${au.lock}.`,
     notes: noteList.map((x) => (x.od ? x : { ...x, od: undefined })) as any,
-    shape: sh, audit: au, outbox: ok,
+    shape: sh, audit: au, transport: ok,
     ack: ok.durable,
     wait: ok.wait + (cluster ? ok.cluster_wait ?? '' : ''),
     recv: ok.recv + (cluster ? ok.cluster_recv ?? '' : ''),

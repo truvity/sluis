@@ -16,9 +16,9 @@ Slack is a chat workspace. sluis uses it as a source of facts about users and as
 - **A leaver is reported.** A person who left the directory but still sits in a channel is shown in a report, with a breaker that stops a pass which would remove too many.
 - **An approver is told that a request waits.** The notifier sends a message to a person or a channel, and handles the reply that comes back through the webhook.
 
-## Integration roles
+## Integration actors
 
-| Role | What it does for Slack |
+| Actor | What it does for Slack |
 |---|---|
 | `Provisioner` | Makes managed channels equal their desired membership: creates or adopts a channel by name, invites, removes. |
 | `Notifier` | Sends a message to a person or a place. |
@@ -73,7 +73,7 @@ An example; see [the setup pattern](/integrations/connecting/#slack-app-manifest
 integrations:
   slack:
     acme:
-      roles: [provisioner, notifier, facts]
+      actors: [provisioner, notifier, facts]
       app:
         id: sync
         bot_scopes: [users:read, users:read.email, channels:read, groups:read,
@@ -85,7 +85,7 @@ integrations:
 
 - v1 does the channel work today and runs it as a controller in the Slack module, with a console flow for connecting a workspace and a catalogue of Apps. See [Connect a Slack workspace](/v1/guides/sluis/connect/slack-workspace/), [a catalogue of Slack Apps](/v1/guides/sluis/connect/slack-apps-catalogue/), [Slack Connect channels](/v1/guides/sluis/connect/slack-connect-channels/) and [console channels](/v1/guides/sluis/connect/slack-console-channels/).
 - The v1 App is created with a configuration token, once; v2 keeps that and describes it as a manifest pattern.
-- v1 sends no notifications. The `Notifier` role and `chat:write` are new.
+- v1 sends no notifications. The `Notifier` actor and `chat:write` are new.
 - Parity issues: [#812](https://github.com/truvity/sluis/issues/812) policy channels, [#813](https://github.com/truvity/sluis/issues/813) console and Slack Connect channels, [#814](https://github.com/truvity/sluis/issues/814) workspace connection and Apps catalogue.
 
 :::note[Proposed]

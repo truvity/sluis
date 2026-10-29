@@ -1,25 +1,35 @@
 # Data for the audit explorer (docs/architecture/audit-explorer.mdx).
 #
-# The shapes' ports, drivers and runtimes come from architecture.yaml, so the
+# The presets' ports, drivers and runtimes come from architecture.yaml, so the
 # two explorers agree. This file adds what is specific to audit. Written by
-# hand from the design today; the roles, edges and ACLs are generated from the
+# hand from the design today; the actors, edges and ACLs are generated from the
 # permission manifest once it exists. `status` is agreed | proposed | open.
+#
+# Audit shares the sluis port definitions (keys, state, lease, blob, transport,
+# index, cloud) and adds one port, witness. Whether audit runs its own
+# instances of those drivers under its own identities is proposed (OD-37).
+# The keys keep their old names where code reads them: `shapes` lists the
+# presets, `nodes[].role` names an actor of architecture.yaml.
 
 default_shape: T4
 
 # ---------------------------------------------------------------------------
-# What an outbox driver does, per kind. `ack` is what "durable" means.
+# The transport port. Two modes: direct (a stream to the writer) or queue
+# (a spool, SQS, or NATS JetStream). `durable` is what "durable" means. The
+# transport per preset is open (OD-34), and so is direct mode with the writer
+# down (OD-35). The presets use spool or SQS today.
 # ---------------------------------------------------------------------------
-outbox_kinds:
+transport_kinds:
   spool:
     driver: spool
-    short: local spool
-    title: "spool: a local, fsync'd spool"
-    used_on: "T0 to T4 (servers)"
+    mode: queue
+    short: "queue, local spool"
+    title: "spool: a local, fsync'd spool (queue)"
+    used_on: "T0 to T4 (bare-metal presets)"
     durable: "the record is appended to the node's local spool and fsync'd"
     wait: "In the local spool on the node: segment files on disk (illustrative). The size cap and what happens at it are not yet decided."
     recv: "The writer reads the spool in append order and acknowledges what it has finished."
-    caller: "The spool driver is a shared instance, so it checks the caller's peer credentials against its access list and notes which role appended."
+    caller: "The spool driver is a shared instance, so it checks the caller's peer credentials against its access list and notes which actor appended."
     drain: "The writer reads the spool in append order, rolls records into batches by count, size and interval, puts the objects, registers them and acks. Dedupe by record id absorbs anything delivered twice."
     bound: "Free disk on the node and the spool cap (not yet decided)"
     instance: "shared: one spool, the driver checks every caller's peer credentials"
@@ -29,63 +39,97 @@ outbox_kinds:
     status: agreed
   sqs:
     driver: sqs
-    short: SQS queue
-    title: "aws: an SQS queue"
-    used_on: "T5 (Lambda)"
+    mode: queue
+    short: "queue, SQS"
+    title: "sqs: an SQS queue (queue)"
+    used_on: "T5 (serverless); T6 proposed (decided as SQS for now)"
     durable: "SQS accepted the message in the queue, up to its retention; failed deliveries move to a dead-letter queue"
     wait: "In the SQS queue, up to its retention (SQS allows up to 14 days). Messages that keep failing move to a dead-letter queue after the maximum receive count."
     recv: "The Lambda event source mapping hands batches of messages to the writer function. The function returns the messages it could not archive."
-    caller: "Each role has its own aws driver (a Lambda extension) and sends under its own IAM role. SQS reports the sender, and the writer takes the observer from that, never from the message body."
-    drain: "The event source mapping delivers the backlog in batches as fast as the function and its archive and state limits allow. A batch that fails returns its messages; dedupe by record id absorbs repeats. Messages that fail repeatedly go to the dead-letter queue."
-    bound: "Queue retention (up to 14 days), function concurrency, archive and state throughput"
-    instance: "per-role: each producer sends under its own IAM role"
+    caller: "Each actor has its own aws driver (a Lambda extension) and sends under its own IAM role. SQS reports the sender, and the writer takes the observer from that, never from the message body."
+    drain: "The event source mapping delivers the backlog in batches as fast as the function and its blob and state limits allow. A batch that fails returns its messages; dedupe by record id absorbs repeats. Messages that fail repeatedly go to the dead-letter queue."
+    bound: "Queue retention (up to 14 days), function concurrency, blob and state throughput"
+    instance: "per-actor: each producer sends under its own IAM role"
     status: agreed
+  nats:
+    driver: nats-jetstream
+    mode: queue
+    short: "queue, NATS JetStream"
+    title: "nats-jetstream: a JetStream stream (queue)"
+    used_on: "no preset yet: a candidate for clusters, or for Kubernetes instead of SQS (OD-34)"
+    durable: "the stream accepted the message; it is replicated when the NATS service has three nodes"
+    wait: "In the JetStream stream, up to its retention limits."
+    recv: "The writer pulls from a durable consumer and acknowledges what it has archived."
+    caller: "Each producer connects with its own credential; the writer takes the observer from that, never from the message body."
+    drain: "The writer pulls the backlog from its consumer in batches. Dedupe by record id absorbs redelivery."
+    bound: "Stream retention and storage on the NATS service"
+    instance: "per-actor: each producer connects under its own credential"
+    dependency: "a NATS service (3 nodes to replicate)"
+    status: open
+    od: OD-34
+  direct:
+    driver: direct
+    mode: direct
+    short: "direct, a stream to the writer"
+    title: "direct-unix / direct-mtls: a stream to the writer (direct)"
+    used_on: "no preset yet (OD-34): direct-unix on the same host, direct-mtls between hosts"
+    durable: "the writer received the record and acknowledged it; nothing is held in between"
+    wait: "Nowhere by default. When the writer is down, a producer must fail the operation, fall back to a local spool, or hold the record in memory, which is unsafe (OD-35)."
+    recv: "The writer is the receiver: it accepts the stream and acknowledges each record."
+    caller: "direct-unix reads the caller's peer credentials; direct-mtls reads the client certificate."
+    drain: "Nothing to drain in the pure mode. With a local spool fallback (b), the spool is replayed when the writer returns."
+    bound: "The writer's availability, or the fallback spool's size"
+    instance: "the writer is the one receiver; producers connect to it"
+    status: open
+    od: OD-35
 
 # ---------------------------------------------------------------------------
-# Audit-specific facts per shape
+# Audit-specific facts per preset (the key stays `shapes`)
 # ---------------------------------------------------------------------------
 shapes:
   T0:
-    notary_key: "a software key, called only by the notary role (an access-list entry on the shared soft driver)"
+    notary_key: "a software key, called only by the notary actor (an access-list entry on the shared soft driver)"
     blob: "an S3-compatible store, local"
     lock: "no object lock"
     cluster: "single node"
     assumed: true
-    note: "T0 uses a local spool, a software key and a local S3-compatible store as an assumption: the agreed outbox list names the other shapes only."
+    note: "T0 uses a local spool, a software key and a local S3-compatible store as an assumption: the agreed transport list names the other presets only."
   T1:
     notary_key: "one key, the node's own on its YubiKey, used by the notary's own Unix user through the shared key driver. Residual risk: root on the node can sign."
     blob: "an S3-compatible store (for example R2)"
-    lock: "object lock per install"
+    lock: "lock mode removable (an account admin can lift it)"
     cluster: "single node"
   T2:
     notary_key: "each node co-signs batch heads (2 of 3) with its own YubiKey key; no separate notary YubiKey"
     blob: "an S3-compatible store (for example R2)"
-    lock: "object lock per install"
+    lock: "lock mode removable (an account admin can lift it)"
     cluster: "three nodes; each node's writer drains its own spool"
   T3:
-    notary_key: "one KMS key; the key policy names the notary role only. Residual risk: root on the node can sign."
+    notary_key: "one KMS key; the key policy names the notary actor only. Residual risk: root on the node can sign."
     blob: "an S3 bucket"
-    lock: "object lock per install"
+    lock: "lock mode compliance (Object Lock), per install"
     cluster: "single node"
   T4:
-    notary_key: "each node co-signs batch heads (2 of 3) with its own KMS ECC_NIST_P384 signing key (one per node, which also signs that node's workload JWTs); only the notary role may sign with it. A shared key cannot support co-signing, because KMS Sign takes no encryption context"
+    notary_key: "each node co-signs batch heads (2 of 3) with its own KMS ECC_NIST_P384 signing key (one per node, which also signs that node's workload JWTs); only the notary actor may sign with it. A shared key cannot support co-signing, because KMS Sign takes no encryption context"
     blob: "an S3 bucket"
-    lock: "object lock per install"
+    lock: "lock mode compliance (Object Lock), per install"
     cluster: "three instances; each node's writer drains its own spool"
   T5:
-    notary_key: "a single notary key, used only by the notary function's role. There is no co-signing; the function role is the isolation."
+    notary_key: "a single notary key, used only by the notary function's IAM role. There is no co-signing; the function's role is the isolation."
     blob: "an S3 bucket"
-    lock: "object lock per install"
+    lock: "lock mode compliance (Object Lock), per install"
     cluster: "managed by the platform"
-    note: "T5 ships no audit index. audit-read and its index run in a separate audit install on another shape that reads the same bucket: Kubernetes with Postgres (any connection string, for example CNPG), or a server with sqlite. A small install can run sluis audit search from the CLI, which builds a local sqlite index from the chain. The index is a rebuildable cache; the chain in the bucket is the record."
+    note: "T5 ships no search index; it is decided that Search does not run inside serverless. audit-read and its search index run in a separate audit install that reads the same blob: Kubernetes with Postgres (any connection string, for example CNPG), or a server with sqlite. Where Search runs is open (OD-32). A small install can run sluis audit search from the CLI, which builds a local sqlite index from the chain. The search index is a rebuildable cache; the chain in the blob is the record."
 
 # ---------------------------------------------------------------------------
 # The map
 # ---------------------------------------------------------------------------
-lanes: [Callers, Outbox, Audit roles, Drivers, Stores]
+lanes: [Callers, Transport, Audit actors, Ports and drivers, Stores]
 
-# `role` names a role of architecture.yaml, for its unit and identity;
-# `port` names a port, resolved to the shape's driver.
+# `role` names an actor of architecture.yaml, for its unit and identity;
+# `port` names a port, resolved to the preset's driver. Optional per node:
+# `kind`, `status`, `od` override the detail panel; `rows` replaces and
+# `extra_rows` adds rows; `od_note` adds open-decision notes.
 nodes:
   client:
     lane: 0
@@ -114,20 +158,39 @@ nodes:
     l3_lambda: tcp 127.0.0.1
     does: Takes the public request, forwards search to audit-read, and is also a producer.
     holds: Its loopback TCP port, reached through the edge connector
-    never: Any key; a way to read the outbox
+    never: Any key; a way to read the transport
   producers:
     lane: 0
     row: 3.5
     cls: role
     title: producers
     l2: signer policy ca
-    l3: quota integrations
-    does: Every other role appends a record for each thing it did, refusals included.
-    holds: Append on the outbox, nothing else about audit
-    never: Archive, state, index or key access for audit; a way to read the outbox back
+    l3: integrations
+    does: Every other actor puts a record on the transport for each thing it did, refusals included.
+    holds: Put on the transport, nothing else about audit
+    never: Blob, state, index or key access for audit; a way to read the transport back
+  quota:
+    lane: 0
+    row: 4.5
+    cls: role
+    title: quota
+    l2: engine and state (cas)
+    l3: placement open
+    kind: actor
+    status: open
+    od: OD-38
+    does: "Rate limits and caps. A separate box: the quota engine, with its quota state (the state port with compare-and-set). Every limit decision is audited, so it is a producer like every other actor."
+    rows:
+      - { k: Placement, v: "Open: a separate product or an actor (OD-38)." }
+      - { k: Mode, v: "Enforcement needs live state with compare-and-set; metering can be a view derived from the log (OD-33)." }
+    holds: Put on the transport; its own quota state
+    never: Blob, index or key access for audit
+    od_note:
+      - { id: OD-33, text: "Quota as enforcement or metering." }
+      - { id: OD-38, text: "Quota as a separate product, or an actor." }
   recovery:
     lane: 0
-    row: 5.2
+    row: 5.8
     cls: node
     title: recovery
     l2: break-glass
@@ -135,36 +198,44 @@ nodes:
     does: The break-glass tool. Its proof needs no Kubernetes (a hardware-token challenge or SRP). It spools its audit record locally and delivers it later, instead of blocking.
     holds: A local spool on the machine it runs on
     never: A dependency on entry, the state store or the writer
-  outbox:
+  transport:
     lane: 1
     row: 2.3
     cls: driver
-    port: outbox
-    title: outbox driver
-    does: "The outbox port. A request returns once its record is durable here, never waiting for the writer. Three calls: Append for producers, Receive and Ack for the writer (illustrative names)."
+    port: transport
+    title: transport driver
+    does: "The transport port, which decouples the emitter (a library in every actor) from the writer. A request returns once its record is durable here, never waiting for the writer. Two modes: direct (a stream to the writer) or queue (a spool, SQS or NATS JetStream). The calls are put for producers and receive and ack for the writer, or a stream (illustrative names)."
+    extra_rows:
+      - { k: Modes, v: "direct (direct-unix on the same host, direct-mtls between hosts) or queue (spool, SQS, NATS JetStream). The presets use queue today." }
+      - { k: "Where the writer runs", v: "One installation's placement, not the model: it may be on the same node as sluis or somewhere else." }
+    od_note:
+      - { id: OD-34, text: "The transport per preset: direct or queue, and where NATS JetStream fits (clusters, or Kubernetes instead of SQS)." }
+      - { id: OD-35, text: "Direct mode when the writer is down: fail the operation, fall back to a local spool, or an in-memory buffer (unsafe)." }
   rspool:
     lane: 1
-    row: 5.2
+    row: 5.8
     cls: driver
     shared: true
     title: recovery spool
     l2: local disk, fsync
-    l3: every shape
-    does: A local spool for break-glass records. A file on every shape, including the ones where the normal outbox is a queue; on Lambda recovery runs from an operator machine (illustrative).
+    l3: every preset
+    does: A local spool for break-glass records. A file in every preset, including the ones where the normal transport is a queue or a direct stream; on Lambda recovery runs from an operator machine (illustrative).
   writer:
     lane: 2
-    row: 1.2
+    row: 1.0
     cls: role
     role: audit-writer
     title: audit-writer
     l2_lambda: Lambda function
     l3_lambda: SQS event source
-    does: Takes records from the outbox, validates, stamps, dedupes, rolls batches, puts the object and registers the batch.
-    holds: Receive and ack on the outbox; write on the batch prefix of the archive; append on audit_batches
+    does: Takes records from the transport, validates, stamps, dedupes, rolls batches, puts the object and registers the batch. It declares exactly 1 instance; with more than one node, or on elastic nodes, it needs the lease port (on serverless a reserved concurrency of 1 may stand in).
+    holds: Receive and ack on the transport; write on the batch prefix of the blob; append on audit_batches
+    od_note:
+      - { id: OD-39, text: "Proposed name: writer. The audit actors writer, witness, indexer and reader replace notary, audit-writer and audit-read." }
     never: A signing key; the index; any way to hand a record back to a caller
   notary:
     lane: 2
-    row: 3.1
+    row: 2.05
     cls: role
     role: notary
     title: notary
@@ -173,120 +244,175 @@ nodes:
     does: Reads new batches, checks them, signs the batch head, and puts the seal and the trust log.
     holds: Read on batches; write only under seals/ and keys/; its own signing key
     never: Write on batch objects; anything the writer holds
+    od_note:
+      - { id: OD-39, text: "Proposed: the notary is folded into the key-holder access list, or kept as a thin checker. The witness cosigns batch heads." }
+  witness:
+    lane: 2
+    row: 3.1
+    cls: role
+    title: witness
+    l2: proposed actor
+    l3: the witness port
+    kind: actor
+    status: proposed
+    od: OD-39
+    does: "Cosigns batch heads. The witness port is the only port audit adds to the shared ones. Drivers: none, peer (two or more nodes) or external (an external witness)."
+    rows:
+      - { k: Port, v: "witness: cosign. Drivers none, peer, external." }
+      - { k: Placement, v: "Per installation. Whether a witness is optional or required is open (OD-36)." }
+    holds: Cosign on batch heads; its own key
+    never: Write on batch objects; anything the writer holds
+    od_note:
+      - { id: OD-36, text: "Witness optional or required." }
+      - { id: OD-39, text: "Proposed: the witness is one of the four audit actors that replace notary, audit-writer and audit-read." }
+  indexer:
+    lane: 2
+    row: 4.15
+    cls: role
+    title: indexer
+    l2: applies the batch stream
+    l3: placement open
+    kind: actor
+    status: open
+    od: OD-32
+    does: "Search, the indexer. Follows audit_batches from its cursor, fetches each new batch from the blob and applies it to the search index. It declares instances: exactly 1; with more than one node it needs the lease port. It does not run inside serverless."
+    rows:
+      - { k: Placement, v: "Open: on the log host, a separate host or Deployment, or nowhere (the scan instead) (OD-32)." }
+      - { k: Instances, v: "exactly 1; the lease port when nodes > 1" }
+    holds: Read on audit_batches and the blob; write on the search index
+    never: Write on the blob; any signing key
+    od_note:
+      - { id: OD-32, text: "Where Search runs." }
+      - { id: OD-39, text: "Proposed name: indexer." }
   read:
     lane: 2
-    row: 5.0
+    row: 5.2
     cls: role
     role: audit-read
     title: audit-read
-    l2_lambda: Lambda function
-    l3_lambda: called by entry
-    does: Applies the batch stream to the node's index, answers search and records each read.
-    holds: Read on audit_batches and the archive; the node's index
-    never: Write on the archive; any signing key
+    l2: reader
+    l3: queries, audits reads
+    l2_lambda: separate audit install
+    l3_lambda: placement open
+    does: "Search, the reader. Answers search from the search index and records each read. Where Search runs is open: on the log host, a separate host or Deployment, or nowhere (the scan instead). It does not run inside serverless."
+    holds: Read on the blob; the search index
+    never: Write on the blob; any signing key
+    od_note:
+      - { id: OD-32, text: "Where Search runs is open. It is decided that it does not run inside serverless." }
+      - { id: OD-39, text: "Proposed name: reader." }
   index:
     lane: 2
     row: 6.4
     cls: store
     port: index
-    title: index
-    does: "The search index, a projection of the batch stream. Losing one costs search time and no evidence: the archive and the seals are the record."
+    title: search index
+    does: "The search index (the index port), a projection of the batch stream. Losing one costs search time and no evidence: the blob and the seals are the record."
   statedrv:
     lane: 3
-    row: 1.2
+    row: 1.0
     cls: driver
     port: state
     title: state driver
     does: The state port. Holds audit_batches, cursors and dedupe, replicated.
+    od_note:
+      - { id: OD-37, text: "Proposed: audit runs its own instances of the shared ports' drivers (keys, state, lease, blob, transport, index, cloud), under its own identities. The only port audit adds is witness." }
   keysdrv:
     lane: 3
-    row: 3.1
+    row: 2.6
     cls: driver
     port: keys
     title: key driver
     does: The keys port, for the notary only in this view.
   blobdrv:
     lane: 3
-    row: 5.0
+    row: 4.4
     cls: driver
     port: blob
     title: blob driver
-    does: The blob port, over the S3 API.
+    does: The blob port (with a lock mode), over the S3 API.
   statestore:
     lane: 4
-    row: 1.2
+    row: 1.0
     cls: store
     port: state
     title: state store
     does: Replicated state. It holds the ordered audit_batches sequence, the cursors and dedupe. It carries no record bodies. The leader assigns the next sequence number.
   keystore:
     lane: 4
-    row: 3.1
+    row: 2.6
     cls: store
     port: keys
     title: key store
     does: Where the notary's seal key lives. The writer cannot reach it.
   archive:
     lane: 4
-    row: 5.0
+    row: 4.4
     cls: store
     port: blob
-    title: archive
-    does: "Object storage, S3-compatible or S3. The record lives here: batch objects, seals and the trust log. With object lock nobody can overwrite or delete before retention ends. A put never replaces an object."
+    title: blob
+    does: "Object storage, S3-compatible or S3, used through the blob port with a lock mode (none, removable or compliance). The record lives here: batch objects, seals and the trust log. With a compliance lock nobody can overwrite or delete before retention ends; a removable lock can be lifted by an account admin. A put never replaces an object."
 
 calls:
   - { f: client, t: entry, m: "POST /token", d: "Token exchange; success or refusal, both are audited." }
   - { f: auditor, t: entry, m: HTTPS, d: "Search, get, export or erasure request." }
-  - { f: entry, t: producers, m: "Decide, Sign", d: "Asks the other roles to verify, decide and sign." }
-  - { f: entry, t: outbox, m: Append, d: Records the exchange. }
-  - { f: producers, t: outbox, m: Append, d: Record of what each role did. }
+  - { f: entry, t: producers, m: "Decide, Sign", d: "Asks the other actors to verify, decide and sign." }
+  - { f: entry, t: transport, m: Put, d: Records the exchange. }
+  - { f: producers, t: transport, m: Put, d: Record of what each actor did. }
   - { f: entry, t: read, m: Search, d: "Forwards the search with the caller's grant." }
-  - { f: writer, t: outbox, m: "Receive, Ack", d: "Takes records, acknowledges after the batch is registered." }
-  - { f: read, t: outbox, m: Append, d: Records each read of the trail. }
-  - { f: recovery, t: rspool, m: Append, d: "Break-glass record, fsync'd locally." }
-  - { f: rspool, t: outbox, m: replay, d: "Replay into the normal outbox." }
+  - { f: entry, t: quota, m: Adjust, d: "Rate and count limits." }
+  - { f: quota, t: transport, m: Put, d: "Records each limit decision." }
+  - { f: writer, t: transport, m: "Receive, Ack", d: "Takes records, acknowledges after the batch is registered." }
+  - { f: read, t: transport, m: Put, d: Records each read of the trail. }
+  - { f: witness, t: transport, m: Put, d: Records each cosignature. }
+  - { f: indexer, t: transport, m: Put, d: Records each purge it applies. }
+  - { f: recovery, t: rspool, m: Put, d: "Break-glass record, fsync'd locally." }
+  - { f: rspool, t: transport, m: replay, d: "Replay into the normal transport." }
   - { f: writer, t: blobdrv, m: "Put batch", d: Puts the batch object. }
-  - { f: writer, t: statedrv, m: "Append batch", d: Registers the batch in audit_batches. }
+  - { f: writer, t: statedrv, m: "Register batch", d: Registers the batch in audit_batches. }
   - { f: notary, t: statedrv, m: "Read batches", d: Reads batches since its cursor. }
   - { f: notary, t: keysdrv, m: "Sign head", d: Signs the batch head with its own key. }
   - { f: notary, t: blobdrv, m: "Get, Put seal", d: "Reads batch objects; puts seals and the trust log." }
-  - { f: read, t: statedrv, m: "Follow batches", d: Reads audit_batches from its cursor. }
-  - { f: read, t: blobdrv, m: "Get batch", d: Fetches batch objects. }
-  - { f: read, t: index, m: "Apply, Query", d: "Applies batches, answers queries." }
+  - { f: witness, t: statedrv, m: "Read heads", d: "Reads new batch heads." }
+  - { f: witness, t: blobdrv, m: "Get, Put cosign", d: "Reads seals; puts its cosignature." }
+  - { f: indexer, t: statedrv, m: "Follow batches", d: Reads audit_batches from its cursor. }
+  - { f: indexer, t: blobdrv, m: "Get batch", d: Fetches batch objects. }
+  - { f: indexer, t: index, m: Apply, d: "Applies batches to the search index." }
+  - { f: read, t: blobdrv, m: "Get batch", d: Fetches the batch object when one record is opened. }
+  - { f: read, t: index, m: Query, d: "Answers queries." }
   - { f: statedrv, t: statestore, m: "", d: "" }
   - { f: keysdrv, t: keystore, m: "", d: "" }
   - { f: blobdrv, t: archive, m: "", d: "" }
 
 flows:
   - id: exchange
-    title: Exchange to archive
+    title: Exchange to blob
     why: From a workload's request to a sealed batch and a searchable record.
     steps:
       - title: A workload exchanges a token
         nodes: [client, entry]
         edges: ["client>entry"]
         text: A CI job or workload posts its token through the edge connector to entry. Whatever happens next, success or refusal, leaves a record.
-      - title: entry asks the other roles
-        nodes: [entry, producers]
-        edges: ["entry>producers"]
-        text: entry has the subject verified, asks policy to decide and signer to sign. A refusal stops here with a reason, and is audited the same way.
-      - title: Each role appends its record
-        nodes: [producers, outbox]
-        edges: ["producers>outbox"]
-        text: Every role that acted appends what it did (a decision, a signature) to the outbox over its own socket.
+      - title: entry asks the other actors
+        nodes: [entry, producers, quota]
+        edges: ["entry>producers", "entry>quota"]
+        text: entry has the subject verified, asks policy to decide, quota to admit and signer to sign. A refusal stops here with a reason, and is audited the same way.
+      - title: Each actor puts its record on the transport
+        nodes: [producers, quota, transport]
+        edges: ["producers>transport", "quota>transport"]
+        text: Every actor that acted puts what it did (a decision, a limit check, a signature) on the transport over its own socket. In queue mode the record is queued; in direct mode it is streamed to the writer.
         variants:
-          - { shapes: [T0, T1, T2, T3, T4], text: "The spool driver checks the caller's peer credentials and notes which role appended." }
-          - { shapes: [T5], text: "Each role sends under its own IAM role." }
+          - { shapes: [T0, T1, T2, T3, T4], text: "The spool driver checks the caller's peer credentials and notes which actor appended." }
+          - { shapes: [T5], text: "Each actor sends under its own IAM role." }
       - title: entry records the exchange and answers
-        nodes: [entry, outbox, client]
-        edges: ["entry>outbox"]
-        text: entry appends the exchange record. The outbox answers that it is durable, and entry then answers the client. The request never waited for the writer, the archive or the index.
+        nodes: [entry, transport, client]
+        edges: ["entry>transport"]
+        text: entry puts the exchange record on the transport. The transport answers that it is durable, and entry then answers the client. The request never waited for the writer, the blob or the index.
         variants:
           - { shapes: [T0, T1, T2, T3, T4], text: "Durable means the record was appended to the local spool and fsync'd." }
           - { shapes: [T5], text: "Durable means SQS accepted the message." }
       - title: The writer takes the records
-        nodes: [writer, outbox]
-        edges: ["writer>outbox"]
+        nodes: [writer, transport]
+        edges: ["writer>transport"]
         text: The writer receives records, validates each against the catalogue, stamps recorded_at and the observer from the verified caller, and skips a record id it has already written.
         variants:
           - { shapes: [T2, T4], text: "Each node's writer drains its own spool." }
@@ -297,7 +423,7 @@ flows:
       - title: The batch is registered, in order
         nodes: [writer, statedrv, statestore]
         edges: ["writer>statedrv", "statedrv>statestore"]
-        text: Only after the put succeeds, the writer appends an entry to audit_batches in the state store, with the next sequence number, the object key, sha256, record count and Merkle root. Then it acks the outbox. A crash between put and register means a redelivery and a second object; a duplicate costs an object, a loss cannot be repaired.
+        text: Only after the put succeeds, the writer appends an entry to audit_batches in the state store, with the next sequence number, the object key, sha256, record count and Merkle root. Then it acks the transport. A crash between put and register means a redelivery and a second object; a duplicate costs an object, a loss cannot be repaired.
       - title: The notary reads the new batches
         nodes: [notary, statedrv, statestore, blobdrv, archive]
         edges: ["notary>statedrv", "notary>blobdrv", "statedrv>statestore", "blobdrv>archive"]
@@ -310,20 +436,24 @@ flows:
           - { shapes: [T2], text: "The notary co-signs batch heads 2 of 3 across the nodes, with no separate notary YubiKey." }
           - { shapes: [T4], text: "Each node signs with its own KMS signing key, and the notary co-signs batch heads 2 of 3 across the nodes." }
           - { shapes: [T1, T3], text: "One key signs the head. Root on the node can sign; that residual risk is written down." }
-          - { shapes: [T5], text: "A single notary key, used only by the notary function's role. There is no co-signing; the function role is the isolation." }
-      - title: The seal goes to the archive
+          - { shapes: [T5], text: "A single notary key, used only by the notary function's IAM role. There is no co-signing; the function's role is the isolation." }
+      - title: The seal goes to the blob
         nodes: [notary, blobdrv, archive]
         edges: ["notary>blobdrv", "blobdrv>archive"]
-        text: The notary puts the seal under seals/ with a conditional put, and the trust anchors under keys/ once if absent. Its archive credential cannot write batch objects.
-      - title: Every node updates its index
-        nodes: [read, statedrv, blobdrv, index]
-        edges: ["read>statedrv", "read>blobdrv", "read>index", "statedrv>statestore", "blobdrv>archive"]
-        text: audit-read on each node follows audit_batches from its cursor, fetches each new batch object and applies it to the index, then advances the cursor. Lag is the leader sequence minus that cursor.
+        text: The notary puts the seal under seals/ with a conditional put, and the trust anchors under keys/ once if absent. Its blob credential cannot write batch objects.
+      - title: A witness cosigns the head (proposed)
+        nodes: [witness, statedrv, blobdrv, archive]
+        edges: ["witness>statedrv", "witness>blobdrv", "blobdrv>archive"]
+        text: Where the installation has a witness, it cosigns the batch head and puts its cosignature next to the seal. The witness port has three drivers, none, peer and external. Whether a witness is optional or required is open (OD-36), and the witness as an actor is proposed (OD-39).
+      - title: The indexer updates the search index
+        nodes: [indexer, statedrv, blobdrv, index]
+        edges: ["indexer>statedrv", "indexer>blobdrv", "indexer>index", "statedrv>statestore", "blobdrv>archive"]
+        text: The indexer follows audit_batches from its cursor, fetches each new batch object and applies it to the search index, then advances the cursor. Lag is the leader sequence minus that cursor. In the current draft every node has an indexer; where Search runs is open (OD-32).
         variants:
-          - { shapes: [T5], text: "T5 has no index of its own. The audit-read of a separate audit install follows the chain in the same bucket and keeps the index there." }
+          - { shapes: [T5], text: "T5 has no search index of its own; Search does not run inside serverless. The indexer of a separate audit install follows the chain in the same blob and keeps the index there." }
   - id: search
     title: An auditor searches
-    why: audit-read answers from the node's index; the read is itself audited.
+    why: audit-read answers from the search index; the read is itself audited.
     steps:
       - title: The auditor sends a search
         nodes: [auditor, entry]
@@ -338,19 +468,19 @@ flows:
       - title: The query runs on the local index
         nodes: [read, index]
         edges: ["read>index"]
-        text: audit-read runs the query on the node's index, with typed filters and keyset paging so ties are stable. A record outside the grant is reported as absent, not forbidden.
+        text: audit-read runs the query on the search index, with typed filters and keyset paging so ties are stable. A record outside the grant is reported as absent, not forbidden.
       - title: The read is recorded
-        nodes: [read, outbox]
-        edges: ["read>outbox"]
-        text: "audit-read appends an audit.search record: the caller, the query and the rule that allowed it. A refused read is recorded too. It takes the same outbox path as every other record."
+        nodes: [read, transport]
+        edges: ["read>transport"]
+        text: "audit-read puts an audit.search record on the transport: the caller, the query and the rule that allowed it. A refused read is recorded too. It takes the same transport path as every other record."
       - title: One record is opened
         nodes: [read, blobdrv, archive]
         edges: ["read>blobdrv", "blobdrv>archive"]
-        text: When the auditor opens a single record, audit-read fetches the batch object from the archive and returns the line, which carries its own hash. The index is never the only copy.
+        text: When the auditor opens a single record, audit-read fetches the batch object from the blob and returns the line, which carries its own hash. The index is never the only copy.
       - title: The answer says how fresh it is
         nodes: [entry, auditor]
         edges: ["auditor>entry"]
-        text: The answer can name this node's cursor and the leader sequence it last saw, so the auditor knows how far behind it is (illustrative). Records still waiting in the outbox are not searchable yet.
+        text: The answer can name this node's cursor and the leader sequence it last saw, so the auditor knows how far behind it is (illustrative). Records still waiting in the transport are not searchable yet.
   - id: erasure
     title: An erasure reaches every node
     why: A purge travels in the same ordered stream as the records it affects.
@@ -360,25 +490,25 @@ flows:
         edges: ["auditor>entry"]
         text: An operator with the erasure grant asks to erase an identity under one tenant, with a reason. A grant to read is not a grant to erase.
       - title: entry records the request
-        nodes: [entry, outbox]
-        edges: ["entry>outbox"]
-        text: "entry appends an erasure record: who asked, what scope, why. It returns when that record is durable in the outbox, like any other request."
+        nodes: [entry, transport]
+        edges: ["entry>transport"]
+        text: "entry puts an erasure record on the transport: who asked, what scope, why. It returns when that record is durable in the transport, like any other request."
       - title: The writer cuts a purge entry
-        nodes: [writer, outbox]
-        edges: ["writer>outbox"]
+        nodes: [writer, transport]
+        edges: ["writer>transport"]
         text: The writer validates the erasure record like any record and cuts it into a batch as a purge entry.
       - title: The purge joins the ordered stream
         nodes: [writer, blobdrv, archive, statedrv, statestore]
         edges: ["writer>blobdrv", "writer>statedrv", "blobdrv>archive", "statedrv>statestore"]
-        text: The batch object holding the erasure record is put in the archive, then the writer appends the purge entry to audit_batches, in the same ordered sequence as record batches.
-      - title: Every node applies it at the same position
-        nodes: [read, statedrv, index]
-        edges: ["read>statedrv", "read>index"]
-        text: On each node audit-read reaches the entry at its cursor and applies the purge to its index. Records before the entry are purged, records after it are untouched. A node that was down applies the same entry when it returns, and a node rebuilt from zero replays the whole sequence including the purge.
-      - title: The archive is not edited; the erasure is sealed
+        text: The batch object holding the erasure record is put in the blob, then the writer appends the purge entry to audit_batches, in the same ordered sequence as record batches.
+      - title: Every indexer applies it at the same position
+        nodes: [indexer, statedrv, index]
+        edges: ["indexer>statedrv", "indexer>index"]
+        text: On each node the indexer reaches the entry at its cursor and applies the purge to its index. Records before the entry are purged, records after it are untouched. A node that was down applies the same entry when it returns, and a node rebuilt from zero replays the whole sequence including the purge.
+      - title: The blob is not edited; the erasure is sealed
         nodes: [notary, statedrv, keysdrv]
         edges: ["notary>statedrv", "notary>keysdrv"]
-        text: Archive objects are not rewritten. Where the install uses pseudonymisation keys, destroying the key makes the pseudonyms in the archive meaningless. The erasure record is sealed by the notary like any other, so the erasure is itself evidence.
+        text: Blob objects are not rewritten. Where the install uses pseudonymisation keys, destroying the key makes the pseudonyms in the blob meaningless. The erasure record is sealed by the notary like any other, so the erasure is itself evidence.
   - id: recovery
     title: Recovery during an outage
     why: Break-glass work spools locally, never blocks, and is delivered later.
@@ -392,23 +522,23 @@ flows:
         nodes: [recovery, rspool]
         edges: ["recovery>rspool"]
         down: [writer, entry]
-        text: Before the action, recovery appends its audit record (who, what, why) to a spool on the machine it runs on and fsyncs it. This is a local file on every shape.
+        text: Before the action, recovery writes its audit record (who, what, why) to a spool on the machine it runs on and fsyncs it. This is a local file in every preset.
       - title: The action goes ahead
         nodes: [recovery]
         edges: []
         down: [writer, entry]
-        text: Recovery does not wait on audit. The outbox, the writer, the archive and the index can all be down.
+        text: Recovery does not wait on audit. The transport, the writer, the blob and the search index can all be down.
       - title: The platform comes back
-        nodes: [writer, outbox, entry]
+        nodes: [writer, transport, entry]
         edges: []
-        text: entry, the state store and the writer are running again, and the normal outbox accepts records again.
+        text: entry, the state store and the writer are running again, and the normal transport accepts records again.
       - title: The spool is replayed
-        nodes: [rspool, outbox]
-        edges: ["rspool>outbox"]
-        text: The recovery records move from the recovery spool into the normal outbox, in order, keeping occurred_at. Who does the replay is not yet decided (the recovery tool's next run, the writer's start, or an operator command).
+        nodes: [rspool, transport]
+        edges: ["rspool>transport"]
+        text: The recovery records move from the recovery spool into the normal transport, in order, keeping occurred_at. Who does the replay is not yet decided (the recovery tool's next run, the writer's start, or an operator command).
       - title: Delivery goes the usual way
-        nodes: [writer, outbox, blobdrv, archive, statedrv, statestore]
-        edges: ["writer>outbox", "writer>blobdrv", "writer>statedrv", "blobdrv>archive", "statedrv>statestore"]
+        nodes: [writer, transport, blobdrv, archive, statedrv, statestore]
+        edges: ["writer>transport", "writer>blobdrv", "writer>statedrv", "blobdrv>archive", "statedrv>statestore"]
         text: The writer treats them as any record. It dedupes by id, so a replay run twice is harmless, and recorded_at lands hours after occurred_at, so the gap stays visible.
   - id: down
     title: The writer is down for an hour
@@ -418,41 +548,41 @@ flows:
         nodes: [writer]
         edges: []
         down: [writer]
-        text: The archive is unreachable, or the state store has lost quorum, or a deploy failed.
+        text: The blob is unreachable, or the state store has lost quorum, or a deploy failed.
         variants:
           - { shapes: [T2, T4], text: "On a cluster another node's writer keeps draining its own spool; this is the case where no writer can run." }
       - title: Requests keep succeeding
-        nodes: [client, entry, producers, outbox]
-        edges: ["client>entry", "entry>outbox", "producers>outbox"]
+        nodes: [client, entry, producers, transport]
+        edges: ["client>entry", "entry>transport", "producers>transport"]
         down: [writer]
-        text: entry and the other roles keep appending. The outbox answers as before, so callers see no change in errors or latency.
-      - title: Records queue in the outbox
-        nodes: [outbox]
+        text: entry and the other actors keep putting records on the transport. In queue mode it answers as before, so callers see no change in errors or latency. In direct mode the answer depends on what is decided for a writer that is down (OD-35).
+      - title: Records queue in the transport
+        nodes: [transport]
         edges: []
         down: [writer]
-        text: See the table below for where records wait on each shape. The outbox depth and the age of the oldest record grow.
-      - title: Watch the outbox, not the lag
-        nodes: [outbox, read]
+        text: See the table below for where records wait in each preset. The transport depth and the age of the oldest record grow.
+      - title: Watch the transport, not the lag
+        nodes: [transport, read]
         edges: []
         down: [writer]
-        text: "Index lag does not grow, because the leader sequence stops too: it reads 0 while the trail is an hour behind the world. The outbox age is the alarm."
+        text: "Index lag does not grow, because the leader sequence stops too: it reads 0 while the trail is an hour behind the world. The transport age is the alarm."
       - title: Readers and the notary carry on
         nodes: [read, index, notary]
         edges: ["read>index"]
         down: [writer]
         text: audit-read keeps answering from what it has. The notary has no new batches, so it seals nothing new. Whether a quiet period still gets a seal is part of the seal cadence, which is not yet decided.
       - title: The writer returns
-        nodes: [writer, outbox]
-        edges: ["writer>outbox"]
-        text: The writer reads the backlog from the outbox, as the table below says for each shape.
+        nodes: [writer, transport]
+        edges: ["writer>transport"]
+        text: The writer reads the backlog from the transport, as the table below says for each preset.
       - title: The backlog becomes batches
         nodes: [writer, blobdrv, archive, statedrv, statestore]
         edges: ["writer>blobdrv", "writer>statedrv", "blobdrv>archive", "statedrv>statestore"]
-        text: Records roll by count, size and interval, so an hour of backlog becomes a modest number of batches, not one per record. Each is put, then registered in order, then acked. The limit is the archive and the state store, not the callers.
+        text: Records roll by count, size and interval, so an hour of backlog becomes a modest number of batches, not one per record. Each is put, then registered in order, then acked. The limit is the blob and the state store, not the callers.
       - title: Seals and indexes catch up
-        nodes: [notary, read, index]
-        edges: ["notary>statedrv", "read>statedrv", "read>index"]
-        text: The notary seals the new batches and each node applies them from its cursor. Lag jumps and falls back to 0, and the outbox age falls back to seconds.
+        nodes: [notary, indexer, index]
+        edges: ["notary>statedrv", "indexer>statedrv", "indexer>index"]
+        text: The notary seals the new batches and each indexer applies them from its cursor. Lag jumps and falls back to 0, and the transport age falls back to seconds.
 
 # ---------------------------------------------------------------------------
 # Static sections
@@ -461,23 +591,26 @@ promises:
   - title: Every success and every refusal is audited
     text: A successful token exchange leaves a record. So does a refused one, with the refusal as its reason, a read of the trail, a recovery action and an erasure.
     status: agreed
-  - title: A request returns once its record is durable in the outbox
-    text: The caller never waits for the writer, the archive or the index. Durable means what the outbox driver says. If the writer is down for an hour, requests still succeed and records queue.
+  - title: A request returns once its record is durable on the transport
+    text: The caller never waits for the writer, the blob or the index. Durable means what the transport driver says. In queue mode, if the writer is down for an hour, requests still succeed and records queue. In direct mode the answer for a writer that is down is open (OD-35).
     status: agreed
   - title: The writer cannot sign, and the notary cannot write a record
     text: The notary holds nothing the writer holds. A compromised writer cannot vouch for what it wrote, and a compromised notary can at worst refuse to seal.
     status: agreed
-  - title: The index is a projection, never the evidence
-    text: Losing an index costs search time and no evidence. The archive and the seals are the record, and verification never trusts the index or state.
+  - title: The search index is a projection, never the evidence
+    text: Losing a search index costs search time and no evidence. The blob and the seals are the record, and verification never trusts the index or state.
     status: agreed
   - title: The state store on the write path is acceptable
-    text: Given the outbox, a reconciler that compares the bucket listing with audit_batches, and verification that never trusts state.
+    text: Given the transport, a reconciler that compares the bucket listing with audit_batches, and verification that never trusts state.
     status: proposed
   - title: Clusters drain per node and co-sign
-    text: Each node's writer drains its own spool. The notary co-signs batch heads 2 of 3 across the nodes. On T2 there is no separate notary YubiKey, and on T4 each node has its own KMS signing key. On T5 a single notary key is used only by the notary function's role, with no co-signing.
+    text: In the current draft each node's writer drains its own spool (the writer declares exactly 1 instance, so placement is per installation). The notary co-signs batch heads 2 of 3 across the nodes. On T2 there is no separate notary YubiKey, and on T4 each node has its own KMS signing key. On T5 a single notary key is used only by the notary function's role, with no co-signing.
     status: agreed
   - title: Recovery never blocks on audit
     text: The recovery proof needs no Kubernetes. Recovery spools its audit record locally and delivers it later.
+    status: agreed
+  - title: Audit shares the sluis ports
+    text: The ports are keys, state, lease, blob, transport, index and cloud, plus witness, the only port audit adds. The log is a blob with a lock mode, quota state is state with compare-and-set, and Search uses the index port. That audit runs its own instances of those drivers under its own identities is proposed (OD-37).
     status: agreed
 
 chain:
@@ -498,13 +631,13 @@ chain:
     - Compares the key against a pinned thumbprint taken from the operator out of band.
   notes:
     - title: Three layers
-      text: Hashes show each object is the one written. The lock (object lock in compliance mode, where the install has it) stops anyone overwriting or deleting before retention ends. Seals show nothing was removed or added, and that the operator did not choose what was signed.
+      text: Hashes show each object is the one written. The lock (the blob's lock mode, compliance where the install has it, removable otherwise, or none) stops anyone overwriting or deleting before retention ends. Seals show nothing was removed or added, and that the operator did not choose what was signed.
       status: agreed
     - title: Trust is the pin
       text: An auditor trusts a key because they pinned its thumbprint. Anything in the trust log is distribution; a verifier ignores an unpinned key.
       status: agreed
     - title: Who holds the seal key
-      text: The notary alone. On hardware shapes its own Unix user, and on a cluster each node co-signs 2 of 3 with no separate notary YubiKey. On T4 each node has its own KMS signing key, on T5 a single key behind the notary function's role, and on T3 one KMS key under the notary role.
+      text: The notary alone. On hardware presets its own Unix user, and on a cluster each node co-signs 2 of 3 with no separate notary YubiKey. On T4 each node has its own KMS signing key, on T5 a single key behind the notary function's role, and on T3 one KMS key under the notary role.
       status: agreed
     - title: Seal granularity
       text: A seal covers the batches since the previous seal. The cadence (hourly, or after N batches) is not yet decided.
@@ -519,37 +652,44 @@ lag:
     - { id: node-3, cursor: 95 }
 
 index_notes:
-  - title: One index per node
-    text: SQLite with FTS5, fed by the ordered audit_batches sequence in replicated state. Each node applies batches from its own cursor, so a node that was down catches up in order, and a new node replays from zero. Purges and erasures are entries in the same sequence.
+  - title: One search index per node (current draft)
+    text: SQLite with FTS5, fed by the ordered audit_batches sequence in replicated state. Each node applies batches from its own cursor, so a node that was down catches up in order, and a new node replays from zero. Purges and erasures are entries in the same sequence. Where Search runs at all is open (OD-32).
     status: proposed
   - title: Rebuilding
-    text: The index can be thrown away. A node rebuilds by replaying audit_batches from zero and fetching each batch object.
+    text: The search index can be thrown away. A node rebuilds by replaying audit_batches from zero and fetching each batch object.
     status: agreed
-  - title: The archive
-    text: Object storage, S3-compatible (for example R2) or S3, with or without object lock depending on the install. Archive objects are never edited or deleted early.
+  - title: The blob
+    text: Object storage, S3-compatible (for example R2) or S3, through the blob port. Its lock mode (none, removable or compliance) depends on the installation. Blob objects are never edited or deleted early.
     status: agreed
 
 compare:
   - { topic: "Record, catalogue, profiles", v1: "one record format, a catalogue per application, profile copies per purpose", v2: kept }
-  - { topic: "How a record is accepted", v1: "emit library with block or async delivery to a receiver, JetStream or SQS", v2: "outbox port with a driver per shape; the request returns on outbox durability" }
-  - { topic: "Who runs it", v1: "pods or Lambda functions, a chart or a Pulumi library; a CronJob for the notary", v2: "roles started by the platform; drivers as services, no exec" }
+  - { topic: "How a record is accepted", v1: "emit library with block or async delivery to a receiver, JetStream or SQS", v2: "transport port (direct, or queue: spool, SQS, NATS JetStream); the request returns on transport durability" }
+  - { topic: "Who runs it", v1: "pods or Lambda functions, a chart or a Pulumi library; a CronJob for the notary", v2: "actors started by the platform; drivers as services, no exec" }
   - { topic: "Coordination between parts", v1: "none: the bucket layout is the contract and each part lists the bucket", v2: "the ordered audit_batches sequence in replicated state" }
-  - { topic: Index, v1: "PostgreSQL, fed by observe, which lists the bucket from a cursor after a settle window", v2: "an index per node (SQLite on servers), fed by the batch stream from the node's cursor" }
+  - { topic: Index, v1: "PostgreSQL, fed by observe, which lists the bucket from a cursor after a settle window", v2: "a search index (SQLite on servers in the current draft), fed by the batch stream from the indexer's cursor; where Search runs is open (OD-32)" }
   - { topic: Seals, v1: "one per profile, tenant and hour, built by listing the bucket; empty hours sealed", v2: "one per run over new batches, chained by prev; cadence not yet decided" }
   - { topic: "Notary key", v1: "KMS, a transit key or a key file; a separate service account from the writer", v2: "its own key on the keys driver, or its own KMS key; separate in all cases" }
-  - { topic: Recovery, v1: "not part of audit", v2: "a local spool on every shape; never blocks" }
-  - { topic: Archive, v1: "S3 with or without object lock, per install preset", v2: kept }
+  - { topic: Recovery, v1: "not part of audit", v2: "a local spool in every preset; never blocks" }
+  - { topic: Blob, v1: "S3 with or without object lock, per install preset", v2: "kept; the blob port with a lock mode (none, removable, compliance)" }
 
-compare_note: "A mismatch worth naming. v1 makes the bucket the only contract between the parts, and the index follows the bucket. The v2 design puts an ordered sequence in replicated state and feeds the index from it. The archive stays the source of truth, since a node can still rebuild from it, but the state store is now on the write path of every batch."
+compare_note: "A mismatch worth naming. v1 makes the bucket the only contract between the parts, and the search index follows the bucket. The v2 design puts an ordered sequence in replicated state and feeds the search index from it. The blob stays the source of truth, since a node can still rebuild from it, but the state store is now on the write path of every batch."
 
 # Open points. `od` ids are rows of /open-decisions/; the others are listed
 # as not yet decided and carry no id.
 open_points:
   - { od: null, title: "Spool format and size cap", text: "One segment file per run or per size, a cap per node or per install, and what a request does at the cap: fail closed, shed load, or write somewhere else." }
   - { od: null, title: "Who replays a recovery spool", text: "The recovery tool on its next run, the writer on its next start, or an operator command." }
-  - { od: null, title: "Whether the notary calls KMS directly", text: "On cloud shapes the notary could call KMS from its own role without a driver service, since KMS already enforces which role may sign." }
+  - { od: null, title: "Whether the notary calls KMS directly", text: "On cloud presets the notary could call KMS from its own IAM role without a driver service, since KMS already enforces which role may sign." }
   - { od: null, title: "Object lock per install", text: "Which installs take compliance mode, which governance first, which none, and what an install without a lock must add." }
-  - { od: null, title: "Witnesses for the trust log", text: "Whether a third party witnesses the trust log, and who would." }
+  - { od: OD-36, title: "Witness optional or required", text: "Whether a witness cosigns the trust log and batch heads, whether that is optional or required, and who would. The witness port has the drivers none, peer and external." }
+  - { od: OD-34, title: "Transport per preset", text: "Direct or queue (spool, SQS, NATS JetStream), and where NATS JetStream fits: clusters, or Kubernetes instead of SQS." }
+  - { od: OD-35, title: "Direct mode when the writer is down", text: "Fail the operation, fall back to a local spool, or hold the record in memory, which is unsafe." }
+  - { od: OD-32, title: "Where Search runs", text: "On the log host, a separate host or Deployment, or nowhere (the scan instead). It is decided that it does not run inside serverless." }
+  - { od: OD-33, title: "Quota: enforcement or metering", text: "Enforcement needs live state with compare-and-set. Metering can be a view derived from the log." }
+  - { od: OD-38, title: "Quota: a separate product, or an actor", text: "Quota is its own box either way; this is about what it is." }
+  - { od: OD-37, title: "Audit's driver instances", text: "Separate instances of the shared ports' drivers under audit's own identities (proposed)." }
+  - { od: OD-39, title: "Audit actors", text: "Writer, indexer, reader and witness replace notary, audit-writer and audit-read (proposed). The notary is folded into the key-holder access list, or kept as a thin checker." }
   - { od: null, title: "Observer identity on a node without Kubernetes", text: "The candidates are the peer credentials the spool driver saw, or the workload JWT from the node agent." }
-  - { od: null, title: "Writers across nodes", text: "Each node's writer drains its own spool, so no writer reads another node's spool. Still open: how batch sequence numbers stay ordered across the writers (the state store hands them out), and what drains a spool while its node is down." }
+  - { od: null, title: "Writers across nodes", text: "Each node's writer drains its own spool, so no writer reads another node's spool. The writer declares exactly 1 instance, so with more than one node it needs the lease port. Still open: how batch sequence numbers stay ordered across the writers (the state store hands them out), and what drains a spool while its node is down." }
   - { od: null, title: "Seal cadence", text: "Hourly like v1, or after N batches, and whether quiet periods are sealed." }

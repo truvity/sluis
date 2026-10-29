@@ -1,12 +1,12 @@
 ---
 title: PostgreSQL
-description: How an engineer or a service opens a PostgreSQL session with a client certificate from the sluis ca role that expires the same day, in place of a password.
+description: How an engineer or a service opens a PostgreSQL session with a client certificate from the sluis ca actor that expires the same day, in place of a password.
 status: target
 sidebar:
   order: 8
 ---
 
-PostgreSQL is a **client profile**, not an integration: sluis calls nothing outside for it. The `ca` role signs a short-lived X.509 client certificate, and the database trusts the CA. This page is here because "connect a database" is a use case every operator asks about.
+PostgreSQL is a **client profile**, not an integration: sluis calls nothing outside for it. The `ca` actor signs a short-lived X.509 client certificate, and the database trusts the CA. This page is here because "connect a database" is a use case every operator asks about.
 
 ## What it's for
 
@@ -15,9 +15,9 @@ PostgreSQL is a **client profile**, not an integration: sluis calls nothing outs
 - **A database password is no longer shared.** The common name of the certificate is the identity, and the database maps the name to a role.
 - **Access follows the directory.** Leave the group, and the next request is refused; the old certificate dies by itself.
 
-## Integration roles
+## Integration actors
 
-None. A client profile has no process and no credential of its own. The certificate is signed by the [`ca`](/concepts/roles/) role, whose key sits in a hardware key or a KMS key. The client generates its own ECDSA P-384 key, so the private key never leaves the machine, and sends only a certificate signing request.
+None. A client profile has no process and no credential of its own. The certificate is signed by the [`ca`](/concepts/actors/) actor, whose key sits in a hardware key or a KMS key. The client generates its own ECDSA P-384 key, so the private key never leaves the machine, and sends only a certificate signing request.
 
 ## What sluis asks the vendor for
 
@@ -75,7 +75,7 @@ The command signs in with the cached sign-in, requests a certificate, writes the
 ## v1 → v2 notes
 
 - v1 does not sign the certificate itself. OpenBao trusts the issuer on a JWT auth mount and signs the database client certificate; `sluisctl psql` and `sluisctl pg` authenticate to OpenBao and run the tool. See [Connect PostgreSQL with short-lived client certificates](/v1/guides/sluis/connect/postgresql/) and [Connect OpenBao](/v1/guides/sluis/connect/openbao/).
-- In v2 the `ca` role signs the certificate. No secrets manager is needed for this use case, and sluis stays out of secrets storage.
+- In v2 the `ca` actor signs the certificate. No secrets manager is needed for this use case, and sluis stays out of secrets storage.
 - **PostgreSQL 18's native OAuth does not apply today:** v1 serves no device authorization grant for it, and v2 plans one for the command line ([#855](https://github.com/truvity/sluis/issues/855)).
 - Parity issues: [#824](https://github.com/truvity/sluis/issues/824) certificates, [#829](https://github.com/truvity/sluis/issues/829) the `psql` and `pg` wrappers.
 

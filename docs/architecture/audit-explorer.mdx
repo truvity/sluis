@@ -1,6 +1,6 @@
 ---
 title: Audit explorer
-description: An interactive map of how sluis audit works on each deployment shape, from the outbox to the sealed archive and the index, drawn from data files.
+description: An interactive map of how sluis audit works in each preset, from the transport to the sealed blob and the search index, drawn from data files.
 status: target
 tableOfContents: false
 sidebar:
@@ -10,53 +10,55 @@ import AuditExplorer from '../../site/src/components/explorer/AuditExplorer.astr
 import OpenDecision from '../../site/src/components/explorer/OpenDecision.astro';
 import Proposed from '../../site/src/components/explorer/Proposed.astro';
 
-This is the target state, not a running system. Every role writes its records to a durable outbox and moves on. One writer turns them into ordered batches in an object-storage archive, a separate notary seals the batches, and each node keeps a search index fed from the same ordered batch stream. The page is drawn from `site/src/data/explorer/audit.yaml`, which today is written by hand from the design; once the permission manifest exists, the roles, sockets and call edges are generated from it. The ideas behind the page are on [Audit](/concepts/audit/); the roles are described under [Roles](/concepts/roles/).
+This is the target state, not a running system. Every actor puts its records on the transport and moves on. One writer turns them into ordered batches in a blob (object storage with a lock mode), a separate notary seals the batches, and an indexer feeds a search index from the same ordered batch stream. The page is drawn from `site/src/data/explorer/audit.yaml`, which today is written by hand from the design; once the permission manifest exists, the actors, sockets and call edges are generated from it. The ideas behind the page are on [Audit](/concepts/audit/); the actors are described under [Actors](/concepts/actors/).
 
-The same roles, the same records and the same integrity chain run on every shape. Only the drivers behind the outbox, key, state, blob and index ports change. Pick a shape; the map, the flows, the sockets and the outage table follow it. Without script the page shows T4 and every table is plain HTML.
+Audit shares the sluis port definitions: keys, state, lease, blob, transport, index and cloud, plus witness, the only port audit adds. The same actors, the same records and the same integrity chain run in every preset. Only the drivers behind the transport, keys, state, blob and index ports change. That audit runs its own instances of those drivers, under its own identities, is proposed ([OD-37](/open-decisions/#od-37)). Pick a preset; the map, the flows, the sockets and the outage table follow it. Without script the page shows T4 and every table is plain HTML.
 
-## Shapes
+## Presets
 
 <AuditExplorer part="toggle" />
 
 ## Map and flows
 
-Select a box to see what it holds, what it never holds and who it calls. Choose a flow to step through it: each step lights the lines it uses, in order. Roles other than `entry` listen only on Unix sockets; the network listeners are `entry`'s loopback port, which the edge connector connects to, and, on a cluster, the state driver's Raft port. The architecture explorer shows [the sockets and processes](/architecture/explorer/) of each shape.
+Select a box to see what it holds, what it never holds and who it calls. Choose a flow to step through it: each step lights the lines it uses, in order. Actors other than `entry` listen only on Unix sockets; the network listeners are `entry`'s loopback port, which the edge connector connects to, and, on a bare-metal cluster, the state driver's Raft port. The architecture explorer shows [the sockets and processes](/architecture/explorer/) of each preset.
+
+Search (the indexer, the search index and the reader) and Quota are separate boxes. Where each runs is open: [OD-32](/open-decisions/#od-32) for Search, [OD-38](/open-decisions/#od-38) and [OD-33](/open-decisions/#od-33) for Quota. The witness is a proposed actor ([OD-36](/open-decisions/#od-36), [OD-39](/open-decisions/#od-39)).
 
 <AuditExplorer part="map" />
 
 ## What audit promises
 
-The promises are the same on every shape. How each is kept changes with the drivers.
+The promises are the same in every preset. How each is kept changes with the drivers.
 
 <AuditExplorer part="promises" />
 
-## The outbox port
+## The transport port
 
-A request returns once its audit record is durable in the outbox, never waiting for the writer. The port has three calls, Append for producers and Receive and Ack for the writer. One contract; the driver behind it depends on the shape. The outbox may deliver out of order, twice or late: the sequence is made later, when the writer registers a batch, and the writer dedupes by record id.
+The emitter (a library in every actor) and the writer are decoupled by the transport port. It replaces the older queue port and "outbox". The port has two modes. In **direct** mode the producer streams the record to the writer. In **queue** mode the record goes through a spool, SQS or NATS JetStream. A request returns once its audit record is durable on the transport, never waiting for the archive or the index. One contract; the driver behind it depends on the installation. The transport may deliver out of order, twice or late: the sequence is made later, when the writer registers a batch, and the writer dedupes by record id. A writer on the same node as sluis is one installation's placement, not the model.
 
-<AuditExplorer part="outbox" />
+<AuditExplorer part="transport" />
 
-The audit outbox is a local spool on servers, co-signed in cluster mode, and an SQS queue on Lambda. Kubernetes (T6) is proposed, with SQS as its outbox for now ([OD-22](/open-decisions/#od-22)): see [Kubernetes](/shapes/kubernetes/). The recovery path is separate: it spools locally on every shape and never blocks.
+Today the bare-metal presets use a local spool (co-signed in cluster mode) and the serverless preset uses an SQS queue. Kubernetes (T6) is proposed, with SQS as its transport for now ([OD-22](/open-decisions/#od-22)): see [Kubernetes](/environments/kubernetes/). The transport per preset is open ([OD-34](/open-decisions/#od-34)), and so is what direct mode does when the writer is down ([OD-35](/open-decisions/#od-35)). The recovery path is separate: it spools locally in every preset and never blocks.
 
 ## The integrity chain
 
-How an auditor can tell that nothing was removed, changed or added. The notary signs batch heads, which form a hash chain, and verification never trusts the index or the state.
+How an auditor can tell that nothing was removed, changed or added. The notary signs batch heads, which form a hash chain, and verification never trusts the search index or the state.
 
 <AuditExplorer part="chain" />
 
 <Proposed>
-The state store sits on the write path of every batch. This is acceptable given the outbox, a reconciler that compares the bucket listing with `audit_batches`, and verification that reads the archive and the seals only.
+The state store sits on the write path of every batch. This is acceptable given the transport, a reconciler that compares the bucket listing with `audit_batches`, and verification that reads the blob and the seals only.
 </Proposed>
 
-## Index and lag
+## Search index and lag
 
 <AuditExplorer part="lag" />
 
-A node keeps its index in a file on servers. Lambda ships no index: `audit-read` and its index run in a separate audit install that reads the same bucket, on Kubernetes with Postgres or on a server with `sqlite`. The index is a rebuildable cache; the chain in the bucket is the record.
+In the current draft a node keeps its search index in a file on servers. Serverless ships no search index, because it is decided that Search does not run inside serverless: `audit-read` and its index run in a separate audit install that reads the same blob, on Kubernetes with Postgres or on a server with `sqlite`. Where Search runs at all is open ([OD-32](/open-decisions/#od-32)): on the log host, a separate host or Deployment, or nowhere (the scan instead). The search index is a rebuildable cache; the chain in the blob is the record.
 
 ## When the writer is down for an hour
 
-Step through the last flow on the map for the order of events. This table says what queues where on each shape and how it drains.
+Step through the last flow on the map for the order of events. This table says what queues where in each preset and how it drains. It describes queue mode; direct mode queues nothing, and what it does is open ([OD-35](/open-decisions/#od-35)).
 
 <AuditExplorer part="outage" />
 

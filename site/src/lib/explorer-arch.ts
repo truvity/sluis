@@ -1,7 +1,10 @@
-// Builds the architecture explorer's model, per shape, from
+// Builds the architecture explorer's model, per preset, from
 // src/data/explorer/architecture.yaml. Nothing here states a fact about sluis:
 // facts are in the YAML, and this file only expands them (names from the
-// runtime templates, the call graph per shape, the layout of the map).
+// runtime templates, the call graph per preset, the layout of the map).
+// Vocabulary: a "shape" in the code is a preset (T0 to T6) of an environment
+// (bare-metal, serverless, kubernetes); a "role" in the code is an actor. The
+// identifiers keep their old names; the text shown to the reader uses the new.
 import { parse } from 'yaml';
 import { assertOpenDecision } from './od';
 import raw from '../data/explorer/architecture.yaml?raw';
@@ -20,11 +23,11 @@ export type ShapeModel = MapModel & {
   ports: { port: string; driver: string; instance: string; backing: string }[];
 };
 
-const LANES = ['Edge and node', 'Roles', 'Drivers', 'Backing stores', 'Integrations', 'Outside'];
+const LANES = ['Edge and node', 'Actors', 'Drivers', 'Backing stores', 'Integrations', 'Outside'];
 
 const ROLE_ORDER = ['policy', 'signer', 'ca', 'notary', 'quota', 'audit-writer', 'audit-read'];
 const INT_ORDER = ['int-upstream', 'int-workload', 'int-facts', 'int-minter', 'int-provisioner', 'int-notifier'];
-const PORT_ROW: Record<string, number> = { keys: 1, state: 2.8, blob: 4.6, outbox: 6.2 };
+const PORT_ROW: Record<string, number> = { keys: 1, state: 2.8, blob: 4.6, transport: 6.2 };
 
 
 export function shapes(): ShapeModel[] {
@@ -88,7 +91,7 @@ function build(shape: any): ShapeModel {
     });
   }
 
-  // ---- lane 1: roles
+  // ---- lane 1: actors
   ROLE_ORDER.forEach((id, i) => {
     const r = data.roles[id];
     add({
@@ -99,11 +102,11 @@ function build(shape: any): ShapeModel {
   });
 
   // ---- lanes 2 and 3: drivers and their backing stores
-  for (const port of ['keys', 'state', 'blob', 'outbox'] as const) {
+  for (const port of ['keys', 'state', 'blob', 'transport'] as const) {
     const driverId = shape.ports[port];
     const d = data.drivers[driverId];
     const p = data.ports[port];
-    const perRole = d.instance === 'per-role';
+    const perRole = d.instance === 'per-actor';
     const users: string[] = p.users;
     const tpl = perRole ? rt.role_driver : rt.shared_driver;
     const vars = { id: driverId, driver: perRole ? 'aws' : driverId };
@@ -111,7 +114,7 @@ function build(shape: any): ShapeModel {
       ? users.map((u) => `${fill(tpl.unit, { ...vars, role: u })}: ${fill(tpl.listen, { ...vars, role: u })}`)
       : [];
     const rows: Row[] = [
-      { k: 'Instance', v: perRole ? `per-role: one per role that uses it (${users.length}), each running as that role` : 'shared: one instance, which checks each caller by peer credentials against an access list generated from the manifest' },
+      { k: 'Instance', v: perRole ? `per-actor: one per actor that uses it (${users.length}), each running as that actor` : 'shared: one instance, which checks each caller by peer credentials against an access list generated from the manifest' },
     ];
     if (d.shared_name) rows.push({ k: 'Shared driver', v: `${d.shared_name}: audits every use` });
     if (!perRole) {
@@ -120,6 +123,7 @@ function build(shape: any): ShapeModel {
       rows.push({ k: 'Listens', v: fill(tpl.listen, vars), code: true });
     }
     rows.push({ k: 'Binary', v: `/usr/libexec/sluis/${d.binary}`, code: true });
+    if (d.mode) rows.push({ k: 'Transport mode', v: d.mode });
     rows.push({ k: 'Backed by', v: d.backing });
     rows.push({ k: 'Holds', v: d.holds });
     if (d.slots) rows.push({ k: 'Slot plan', v: d.slots });
@@ -129,16 +133,16 @@ function build(shape: any): ShapeModel {
       ...(perRole ? [{ title: 'Instances (unit: socket)', items: instances }] : []),
     ];
     const notes: Detail['notes'] = [];
-    if (port === 'outbox' && driverId === 'spool') notes.push({ text: 'On a cluster each node has its own spool.' });
+    if (port === 'transport' && driverId === 'spool') notes.push({ text: 'On a cluster each node has its own spool.' });
     if (d.od) notes.push({ id: d.od, text: 'See the open decisions page.' });
     add({
       id: p.node, lane: 2, row: PORT_ROW[port], cls: perRole ? 'driver-role' : 'driver-shared', shared: !perRole,
       title: `${port} · ${d.title}`,
-      l2: perRole ? `per-role x ${users.length}` : fill(tpl.id_short, vars),
-      l3: perRole ? 'uid of each role' : fill(tpl.sock_short, vars),
+      l2: perRole ? `per-actor x ${users.length}` : fill(tpl.id_short, vars),
+      l3: perRole ? 'uid of each actor' : fill(tpl.sock_short, vars),
       detail: {
         title: `${label(port)} driver: ${d.title}`,
-        kind: perRole ? 'driver service, per-role' : `driver service, shared${d.shared_name ? ` (${d.shared_name})` : ''}`,
+        kind: perRole ? 'driver service, per-actor' : `driver service, shared${d.shared_name ? ` (${d.shared_name})` : ''}`,
         cls: perRole ? 'driver-role' : 'driver-shared',
         status: d.status, od: d.od, does: d.does, rows, lists, notes,
       },
@@ -148,7 +152,7 @@ function build(shape: any): ShapeModel {
       id: p.store_node, lane: 3, row: PORT_ROW[port], cls: 'store', shared: false,
       title: bl[0], l2: bl[1], l3: p.store_title,
       detail: {
-        title: `${label(p.store_title)}: ${d.backing}`, kind: 'backing store', cls: 'store', does: `The ${port} port's backing store on this shape: ${d.backing}.`,
+        title: `${label(p.store_title)}: ${d.backing}`, kind: 'backing store', cls: 'store', does: `The ${port} port's backing store in this preset: ${d.backing}.`,
         rows: [], lists: [], notes: port === 'keys' && shape.id === 'T0' ? [{ text: "A YubiKey on the host is reached through the host's pcscd socket, which lets several programs share the card." }] : [],
       },
     });
@@ -234,14 +238,14 @@ function build(shape: any): ShapeModel {
       const get = (k: string) => d.rows.find((r) => r.k === k)?.v ?? '';
       return { id: n.id, title: n.title, kind: d.kind, unit: get('Unit'), identity: get('Identity'), listen: get('Listens') };
     });
-  const ports = (['keys', 'state', 'blob', 'outbox', 'index'] as const).map((p) => {
+  const ports = (['keys', 'state', 'blob', 'transport', 'index'] as const).map((p) => {
     const d = data.drivers[shape.ports[p]];
     return { port: p, driver: d.title, instance: d.instance, backing: d.backing };
   });
 
   return {
     id: shape.id, name: shape.name, shape, runtime: rt, nodes, edges, width, height, lanes, processes, ports,
-    intro: `${shape.hardware}. Keys: ${shape.keys}. State: ${shape.state}.`,
+    intro: `Environment: ${shape.environment}. ${shape.hardware}. Keys: ${shape.keys}. State: ${shape.state}.`,
     notes: shape.notes ?? [],
   };
 
@@ -263,9 +267,9 @@ function build(shape: any): ShapeModel {
     if (r.listener_note) notes.push({ text: r.listener_note });
     for (const o of r.od_note ?? []) notes.push({ id: o.id, text: o.text });
     return {
-      title: r.name, kind: 'role', cls: 'role', status: r.status, od: r.od, does: r.does, rows,
+      title: r.name, kind: 'actor', cls: 'role', status: r.status, od: r.od, does: r.does, rows,
       lists: [
-        { title: 'Drivers it uses on this shape', items: usedPorts },
+        { title: 'Drivers it uses in this preset', items: usedPorts },
         { title: 'Manifest summary (illustrative)', items: r.resources },
       ],
       notes,

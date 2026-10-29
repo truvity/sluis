@@ -15,9 +15,9 @@ An on-call tool pages people. To do that it needs to know who they are, which ro
 - **The rotation follows the group.** A rotation's participants are the members of a directory group, in order, and the person who is on call stays on call when the list changes.
 - **A person can be reached on Telegram.** They link their Telegram account to their sluis identity once, with a single-use link, and the on-call tool's contact method is verified without anyone typing a code.
 
-## Integration roles
+## Integration actors
 
-| Integration | Role | What it does |
+| Integration | Actor | What it does |
 |---|---|---|
 | GoAlert | `Provisioner` | Makes users, roles, rotation participants and contact methods equal the desired state. Assigns the administrator role from a named group, which is an authority mapping and so comes from the decision point, never from the integration. |
 | Telegram | `Notifier`, plus the account-link flow of the base `Integration` contract | Delivers a message to a person or a place, and receives interactions through its webhook. |
@@ -55,5 +55,5 @@ An example; see [the setup patterns](/integrations/connecting/). Neither vendor 
 - The rotation update keeps the active participant: the update call is positional, so the integration computes the active index itself.
 
 :::note[Proposed]
-Both integrations are part of the v2 contract set but are not scheduled. Their configuration keys, and whether Telegram stays a separate `Notifier` or becomes a delivery mode of another role, are not decided.
+Both integrations are part of the v2 contract set but are not scheduled. Their configuration keys, and whether Telegram stays a separate `Notifier` or becomes a delivery mode of another integration actor, are not decided.
 :::

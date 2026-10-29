@@ -80,11 +80,11 @@ Each component is a tarball for each architecture at `bin/<version>/<component>_
 
 Lambda is zip only, so layers and extensions combine. The zips are published under `lambda/<version>/` for `x86_64` and `arm64`:
 
-- `functions/`: one zip per process role;
+- `functions/`: one zip per actor;
 - `layers/`: shared layers, including the vendored Lambda Web Adapter (pinned v1.1.0), which is built into sluis's own layer and not referenced from the public AWS layer;
 - `extensions/`: the drivers that run as Lambda extensions.
 
-A function has at most five layers and 250 MB unzipped, including layers and extensions. See [AWS Lambda](/shapes/aws-lambda/).
+A function has at most five layers and 250 MB unzipped, including layers and extensions. See [Serverless](/environments/serverless/).
 
 ## OCI images
 

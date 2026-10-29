@@ -12,16 +12,16 @@ The tutorials describe the target state. They show the experience sluis v2 is bu
 
 ## Tutorials
 
-| Tutorial | Shape | You finish with |
+| Tutorial | Preset | You finish with |
 |---|---|---|
-| [Install sluis on a single node](/tutorials/single-node-install/) | [T1 Single node](/shapes/single-node/) | One arm64 board with a YubiKey, signed in, with a token verified against the JWKS and the audit trail read |
+| [Install sluis on a single board](/tutorials/single-node-install/) | [T1 Single board](/environments/presets/#t1-single-board) on [bare-metal](/environments/bare-metal/) | One arm64 board with a YubiKey, signed in, with a token verified against the JWKS and the audit trail read |
 
 ## How the tutorials are kept true
 
-The tutorials are part of the test suite. Each one lives under `tests/tutorials` in the repository and runs on all five shapes T1 to T5, so a step that stops working fails CI. Development uses [T0](/shapes/local/).
+The tutorials are part of the test suite. Each one lives under `tests/tutorials` in the repository and runs on all five presets T1 to T5, so a step that stops working fails CI. Development uses [T0](/environments/presets/#t0-local).
 
 ## Before you start
 
 - Read the [overview](/overview/) for what sluis is and does.
-- Pick the shape with the comparison on [Shapes](/shapes/).
+- Pick the environment and the preset with the comparison on [Environments](/environments/) and [Presets](/environments/presets/).
 - Check [Platforms](/distribution/platforms/) for the distributions and architectures you can use.

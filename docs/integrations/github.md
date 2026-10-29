@@ -6,7 +6,7 @@ sidebar:
   order: 1
 ---
 
-GitHub is the integration with the most roles. It is one process that holds the credentials of the GitHub Apps and plays four roles: it verifies Actions identity tokens, supplies team facts, mints installation tokens and reconciles team membership.
+GitHub is the integration that plays the most kinds of integration actor. It is one process that holds the credentials of the GitHub Apps and plays four kinds: it verifies Actions identity tokens, supplies team facts, mints installation tokens and reconciles team membership.
 
 ## What it's for
 
@@ -17,13 +17,13 @@ GitHub is the integration with the most roles. It is one process that holds the 
 - **Self-hosted runners register** with an App that can do nothing but manage runners.
 - **A job proves where it runs** so that other systems, such as a cloud account, can trust it. The proof is the Actions identity token; GitHub holds no sluis secret.
 
-## Integration roles
+## Integration actors
 
-| Role | What it does for GitHub |
+| Actor | What it does for GitHub |
 |---|---|
 | `WorkloadVerifier` | Verifies an Actions identity token against GitHub's key set and returns attributes: `github.repository`, `ref`, `job_workflow_ref`, `environment`, `visibility`, owner and repository ids. It needs no secret, so it can run apart from the App keys. |
 | `FactsSource` | Reports organisation members, team members and maintainers. |
-| `CredentialMinter` | Mints an installation token for a catalogued App, for a mint grant that the `policy` role signed. |
+| `CredentialMinter` | Mints an installation token for a catalogued App, for a mint grant that the `policy` actor signed. |
 | `Provisioner` | Makes the organisation's teams equal the desired state core publishes: invites, adds, promotes and removes. |
 
 A person's GitHub account is linked to their work address through a separate **link App**, so that a team can be filled from a directory group.
@@ -75,7 +75,7 @@ An example, with the flow in [the setup patterns](/integrations/connecting/#gith
 integrations:
   github:
     example-org:
-      roles: [verifier, facts, minter, provisioner]
+      actors: [verifier, facts, minter, provisioner]
       verifier:
         owners: [example-org]            # the trust boundary for Actions tokens
       apps:

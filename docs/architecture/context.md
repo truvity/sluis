@@ -8,7 +8,7 @@ sidebar:
 
 At the first zoom level sluis is one box. This page says who talks to it, what they can call, and which resources it touches to answer. How the box is split into components is [L2](/architecture/components/); how it is split into processes is [L3](/architecture/processes/).
 
-## Actors
+## Who uses sluis
 
 ```mermaid
 flowchart LR
@@ -52,9 +52,9 @@ What each box stands for:
 | Upstream identity providers | Workspace directories and generic OIDC |
 | Directory and team systems | Facts about people and groups; sluis reads and reconciles them |
 | Downstream systems | Cloud APIs, GitHub, chat workspaces; sluis mints credentials and provisions desired state |
-| Platform | KMS or YubiKey, blob store, queue, state: keys, records, objects and messages |
+| Platform | KMS or YubiKey, blob, transport, state: keys, records, objects and messages |
 
-| Actor | What they do with sluis |
+| Party | What they do with sluis |
 | ----- | ----------------------- |
 | **Person** | Signs in through an upstream identity provider, from a browser or from a CLI on a machine with a browser; signs in on a headless machine with device login; refreshes, lists and revokes their sessions; signs out |
 | **Robot** | A CI job or a workload presents a platform token (a GitHub Actions token, a Kubernetes ServiceAccount token, an AWS web-identity token) and exchanges it for an access token, a downstream credential, or a certificate |
@@ -147,40 +147,40 @@ The operations below are new in v2. Their paths and RPC names are proposed and m
 
 ## Resources each use case touches
 
-A use case touches resources of eight classes: a **signing key**, **state** (records), a **blob** store, a **queue**, the **audit sink**, **secrets**, **config** (policy and clients), and **external** systems. The matrix lists the operations. `r` marks an operation on the request path (the caller waits); `b` marks one in the background.
+A use case touches resources of eight classes: a **signing key**, **state** (records), a **blob**, a **transport**, the **audit sink**, **secrets**, **config** (policy and clients), and **external** systems. The matrix lists the operations. `r` marks an operation on the request path (the caller waits); `b` marks one in the background.
 
-Operations: `sign` and `verify` (public key only), `wrap` and `unwrap`, `read`, `list`, `create` (if absent), `cas` (compare and swap on a revision), `put`, `append`, `delete`, `enqueue` and `dequeue`, `fetch` (external read), `call` (external write).
+Operations: `sign` and `verify` (public key only), `wrap` and `unwrap`, `read`, `list`, `create` (if absent), `cas` (compare and swap on a revision), `put`, `append`, `delete`, `put` on the transport and `receive`, `fetch` (external read), `call` (external write).
 
-| Use case | Key | State | Blob | Queue | Audit | Secret | Config | External |
+| Use case | Key | State | Blob | Transport | Audit | Secret | Config | External |
 | -------- | --- | ----- | ---- | ----- | ----- | ------ | ------ | -------- |
-| Sign in through an upstream | sign r | cas, create, read r | | | enqueue b | read r | read r | fetch r |
-| Device login | sign r | cas, create, read r and b | | | enqueue b | | read r | call b, fetch r |
-| Refresh, UserInfo, revoke, sign out, sessions | sign, verify r | cas, create, delete, list, read r | | | enqueue b | | read r | call b |
-| Agent sessions and resources | sign r | create r | | | enqueue b | | read r | fetch r |
-| Recovery sign-in | sign r | cas, create, read r | | | enqueue r, spooled locally | read r | read r | call r |
-| Token exchange from a platform token | sign, verify r | create, read r | | | enqueue b | | read r | fetch r |
-| Mint a GitHub installation token | sign r | append, read r | | | enqueue b | | read r | call r |
-| Mint a cloud API token on demand | | cas, read r | | | enqueue b | read r | read r | call r, fetch r |
-| Rotate stored credentials on a schedule | | cas, create, delete, read b | | dequeue b | enqueue b | put, read b | read b | call b |
-| Issue certificates | sign r | read r | put b | | enqueue b | | read r | |
-| Refresh directory facts, reconcile teams and channels | sign b | cas, create, list, read b | put b, read r | dequeue b | enqueue b | read b | read b | call b, fetch b and r |
-| Connect an integration | put r | cas, create r | | | enqueue b | put r | | call r |
-| Resolve grants, answer "what do I hold" | verify r | read r | | | enqueue b | | read r | |
+| Sign in through an upstream | sign r | cas, create, read r | | | put b | read r | read r | fetch r |
+| Device login | sign r | cas, create, read r and b | | | put b | | read r | call b, fetch r |
+| Refresh, UserInfo, revoke, sign out, sessions | sign, verify r | cas, create, delete, list, read r | | | put b | | read r | call b |
+| Agent sessions and resources | sign r | create r | | | put b | | read r | fetch r |
+| Recovery sign-in | sign r | cas, create, read r | | | put r, spooled locally | read r | read r | call r |
+| Token exchange from a platform token | sign, verify r | create, read r | | | put b | | read r | fetch r |
+| Mint a GitHub installation token | sign r | append, read r | | | put b | | read r | call r |
+| Mint a cloud API token on demand | | cas, read r | | | put b | read r | read r | call r, fetch r |
+| Rotate stored credentials on a schedule | | cas, create, delete, read b | | receive b | put b | put, read b | read b | call b |
+| Issue certificates | sign r | read r | put b | | put b | | read r | |
+| Refresh directory facts, reconcile teams and channels | sign b | cas, create, list, read b | put b, read r | receive b | put b | read b | read b | call b, fetch b and r |
+| Connect an integration | put r | cas, create r | | | put b | put r | | call r |
+| Resolve grants, answer "what do I hold" | verify r | read r | | | put b | | read r | |
 | Deliver policy and configuration | | | | | | | read b | |
-| Rotate a client secret | verify r | | | dequeue b | enqueue b | cas, create, read r | read r | |
-| Emit, seal and witness audit batches | sign b | append, cas, read b | put b | enqueue, dequeue b | call b | | | call b |
-| Query and verify the audit trail | | read r | read r | | enqueue b | | read r | |
-| Console reads and actions | | cas, read r | read r | | enqueue b | | read r | |
-| Back up, restore, migrate | | cas, create, list, put b | list, put, read b | dequeue b | call, enqueue b | cas, list, put, read b | | |
+| Rotate a client secret | verify r | | | receive b | put b | cas, create, read r | read r | |
+| Emit, seal and witness audit batches | sign b | append, cas, read b | put b | put, receive b | call b | | | call b |
+| Query and verify the audit trail | | read r | read r | | put b | | read r | |
+| Console reads and actions | | cas, read r | read r | | put b | | read r | |
+| Back up, restore, migrate | | cas, create, list, put b | list, put, read b | receive b | call, put b | cas, list, put, read b | | |
 | Rotate signing keys, key ceremonies | sign, wrap, unwrap b | create, list b | | | | | | |
 | Discovery and offline verification | | list r | | | | | read r | |
 | Install, bootstrap, health | | create, read b | | | call b | read b | read b | call b |
-| Admit a metered operation | | cas r | | | enqueue b | | | |
+| Admit a metered operation | | cas r | | | put b | | | |
 
 Four things follow from the matrix, and they shape L2 and L3:
 
-- **Every sign-in-side use case is on the request path of state and of a signing key.** Nothing in that group touches a blob store or a queue. The strongest consistency need is state: a single-use code, a refresh token and a revocation must each be linearizable.
-- **Downstream minting puts one to three external round trips on the caller's request path.** The decision and the credential-holding call are different credential holders, so they are different roles.
+- **Every sign-in-side use case is on the request path of state and of a signing key.** Nothing in that group touches a blob; the transport is used only to emit the audit record. The strongest consistency need is state: a single-use code, a refresh token and a revocation must each be linearizable.
+- **Downstream minting puts one to three external round trips on the caller's request path.** The decision and the credential-holding call are different credential holders, so they are different actors.
 - **Controllers, refreshes and backups are background only.** They hold the broadest credentials and never need a listener.
 - **Recovery is the one request-path use case that must not wait on audit.** It spools its audit record locally and delivers it later, so a down audit install does not shut the emergency door.
 
@@ -218,7 +218,7 @@ sequenceDiagram
   participant A as audit sink
   S->>ST: create session record
   S->>K: sign access token
-  S--)A: enqueue the exchange
+  S--)A: put the exchange record on the transport
   S-->>J: token or refusal
 ```
 
@@ -242,7 +242,7 @@ sequenceDiagram
   S->>C: does a grant cover it
   S->>ST: read live credentials
   alt grant missing or cap reached
-    S--)A: enqueue the refusal
+    S--)A: put the refusal record on the transport
     S-->>J: access_denied
   end
 ```
@@ -262,12 +262,12 @@ sequenceDiagram
   S->>SE: read the credential
   S->>V: create credential
   S->>ST: record id
-  S--)A: enqueue mint
+  S--)A: put the mint record on the transport
   S-->>J: credential, once
 ```
 
 The secret is the minter credential, and the vendor is the downstream API. The credential is created narrowed to the grant. The id is recorded with a compare-and-swap (cas). The audit record never holds the value. The answer carries the credential and its expiry, shown once.
 
-At L2 this one participant becomes several: the decision is made by the policy role, and the call that holds the vendor credential is made by an integration that only carries out what core has authorized. See [Components](/architecture/components/).
+At L2 this one participant becomes several: the decision is made by the `policy` actor, and the call that holds the vendor credential is made by an integration that only carries out what core has authorized. See [Components](/architecture/components/).
 
-Next: [Components](/architecture/components/) opens the box. [Shapes](/shapes/) shows the same box installed in each environment.
+Next: [Components](/architecture/components/) opens the box. [Environments](/environments/) shows the same box running in each environment.

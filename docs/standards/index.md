@@ -74,10 +74,10 @@ A row can carry two statuses, for example "implemented in v1; target in v2". Iss
 
 | Identifier | Title | What sluis uses it for | Status | Notes |
 |---|---|---|---|---|
-| [RFC 5280](https://www.rfc-editor.org/rfc/rfc5280) | X.509 Public Key Infrastructure Certificate and CRL Profile | The `ca` role's certificates; the public keys in KMS are exported as SubjectPublicKeyInfo. | Target in v2 | v1 has no CA: it relies on OpenBao for certificates. |
+| [RFC 5280](https://www.rfc-editor.org/rfc/rfc5280) | X.509 Public Key Infrastructure Certificate and CRL Profile | The `ca` actor's certificates; the public keys in KMS are exported as SubjectPublicKeyInfo. | Target in v2 | v1 has no CA: it relies on OpenBao for certificates. |
 | [RFC 5280 §5](https://www.rfc-editor.org/rfc/rfc5280#section-5) | Certificate Revocation Lists | A static, published CRL. | Target in v2 | Short lifetimes are the main control; revocation lists back them. |
 | [RFC 6960](https://www.rfc-editor.org/rfc/rfc6960) | OCSP | An online responder. | To verify | Not designed. Whether sluis runs a responder, or relies on short lifetimes and CRLs alone, is not decided. |
-| [OpenSSH certificate format](https://datatracker.ietf.org/doc/draft-miller-ssh-cert/) | SSH Certificate Format (an IETF draft; OpenSSH's `PROTOCOL.certkeys`) | User and host certificates from the `ca` role. | Target in v2 | v1 does not sign SSH keys. A key revocation list is published statically. |
+| [OpenSSH certificate format](https://datatracker.ietf.org/doc/draft-miller-ssh-cert/) | SSH Certificate Format (an IETF draft; OpenSSH's `PROTOCOL.certkeys`) | User and host certificates from the `ca` actor. | Target in v2 | v1 does not sign SSH keys. A key revocation list is published statically. |
 | [RFC 9881](https://www.rfc-editor.org/rfc/rfc9881) | ML-DSA in X.509 | Post-quantum certificate signatures. | Planned | |
 | [RFC 9935](https://www.rfc-editor.org/rfc/rfc9935) | ML-KEM in X.509 | Post-quantum key establishment keys in certificates. | Planned | |
 | [RFC 7929](https://www.rfc-editor.org/rfc/rfc7929) | DANE Bindings for OpenPGP (OPENPGPKEY) | Publishing the release key in DNS. | Planned | Backlog research on how users find release keys ([#889](https://github.com/truvity/sluis/issues/889)); needs DNSSEC on the zone. |

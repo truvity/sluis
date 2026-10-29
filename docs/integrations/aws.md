@@ -1,6 +1,6 @@
 ---
 title: AWS
-description: How people and CI jobs assume AWS roles with sluis as the OIDC provider, how AWS roles prove themselves to sluis, and how sluis's own roles reach AWS.
+description: How people and CI jobs assume AWS roles with sluis as the OIDC provider, how AWS roles prove themselves to sluis, and how sluis's own actors reach AWS.
 status: target
 sidebar:
   order: 6
@@ -12,7 +12,7 @@ AWS appears in three directions, and it helps to keep them apart.
 |---|---|---|
 | **Accounts trust sluis** | A person or a CI job proves its identity to sluis, then to an AWS account. | An IAM OIDC provider for sluis's issuer; `AssumeRoleWithWebIdentity` at STS. |
 | **AWS roles prove themselves to sluis** | A Lambda function, container task or instance running as an IAM role calls a service that trusts sluis. | AWS outbound identity federation; sluis verifies the token (a `WorkloadVerifier`). |
-| **sluis's own roles reach AWS** | A sluis role on a node writes to its bucket or uses its key. | The workload identity of [Identity](/concepts/identity/): a per-node issuer and `AssumeRoleWithWebIdentity`. |
+| **sluis's own actors reach AWS** | A sluis actor on a node writes to its bucket or uses its key. | The workload identity of [Identity](/concepts/identity/): a per-node issuer and `AssumeRoleWithWebIdentity`. |
 
 ## What it's for
 
@@ -20,15 +20,15 @@ AWS appears in three directions, and it helps to keep them apart.
 - **A CI job deploys** with a role limited to that job. The job exchanges its CI identity token for a sluis token for one role's audience, and assumes the role. No access key is stored in CI.
 - **A container registry and a package repository work on the same profile.** ECR's credential helper and `aws codeartifact login` use the profile that sluis wrote.
 - **A Lambda function calls an internal service.** It asks AWS for an identity token for the service's audience, the service passes it to sluis, and sluis returns a token for the function's role and groups.
-- **A sluis role writes its audit archive to a bucket** with credentials from `AssumeRoleWithWebIdentity`, so a compromised node can reach only the roles it runs.
+- **A sluis actor writes its audit archive to a bucket** with credentials from `AssumeRoleWithWebIdentity`, so a compromised node can reach only the actors it runs.
 
-## Integration roles
+## Integration actors
 
-| Role | What it does for AWS |
+| Actor | What it does for AWS |
 |---|---|
 | `WorkloadVerifier` | Verifies an AWS outbound-federation token: issuer is a declared account's issuer, audience matches, signature checks against the account's key set, the token is fresh, the account in the role ARN matches, and the subject is a role ARN. It rejects assumed-role sessions, users and the account root. |
 
-The first and third directions need no integration process: the account trusts sluis's issuer, and the driver exchanges a workload token. They are **client profiles** and cloud-driver configuration. AWS does not play the `CredentialMinter` role: STS mints the credentials, and sluis only issues the token that STS accepts.
+The first and third directions need no integration process: the account trusts sluis's issuer, and the driver exchanges a workload token. They are **client profiles** and cloud-driver configuration. AWS does not play the `CredentialMinter` integration actor: STS mints the credentials, and sluis only issues the token that STS accepts.
 
 ## What sluis asks the vendor for
 
@@ -52,7 +52,7 @@ Signing: AWS accepts ES384, the algorithm sluis uses by default, so no RSA key i
 
 - Every exchange, with the proof (person, CI or workload), the audience, the outcome and the groups.
 - A refusal: a role in no group, an unknown audience, a token from an undeclared account (the caller sees one fixed answer for all of these).
-- For sluis's own roles, AWS's own CloudTrail records each `AssumeRoleWithWebIdentity`, and the trust policy names the node's issuer and the role's subject.
+- For sluis's own actors, AWS's own CloudTrail records each `AssumeRoleWithWebIdentity`, and the trust policy names the node's issuer and the actor's subject.
 
 ## Setup
 
@@ -89,7 +89,7 @@ region = eu-example-1
 
 - v1 does the account side and the verifier today. See [Connect an AWS account without Identity Center](/v1/guides/sluis/connect/aws-account/), [Connect AWS workloads](/v1/guides/sluis/connect/aws-workloads/) and [Use ECR and CodeArtifact](/v1/guides/sluis/connect/registries-and-artifacts/). The commands are `sluisctl aws-config` and `sluisctl aws`.
 - v1 writes the IAM objects by hand or with its Pulumi library. In v2 the provider and trust policies come from the same configuration as the clients (the permission-manifest approach).
-- The per-node workload identity for sluis's own roles is new in v2 ([#870](https://github.com/truvity/sluis/issues/870)).
+- The per-node workload identity for sluis's own actors is new in v2 ([#870](https://github.com/truvity/sluis/issues/870)).
 - Parity issues: [#819](https://github.com/truvity/sluis/issues/819) roles through web identity, [#784](https://github.com/truvity/sluis/issues/784) AWS role tokens as a proof.
 
 :::note[Proposed]

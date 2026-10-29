@@ -1,14 +1,14 @@
 ---
-title: Kubernetes (T6)
-description: "T6 runs sluis as a node pod and a separate audit side, with a container and a token audience per role, KMS keys on EKS and a Helm chart pinned by digest."
+title: Kubernetes
+description: "The kubernetes environment runs sluis as a node pod and a separate audit side, a container and a token audience per actor, on EKS with KMS and a Helm chart."
 status: target
 sidebar:
-  order: 7
+  order: 3
 ---
 
-Kubernetes (T6) is in design and test scope now (see [OD-7](/open-decisions/#od-7)). Everything on this page is the design as proposed, except the points that [agreed decisions](/open-decisions/) already fix: sluis writes no Kubernetes objects, a driver talks to its role over a Unix socket, and the audit path is the one in [Audit](/concepts/audit/). The pod layout ([OD-17](/open-decisions/#od-17)), AWS KMS only ([OD-20](/open-decisions/#od-20)), DynamoDB only ([OD-21](/open-decisions/#od-21)) and the SQS outbox ([OD-22](/open-decisions/#od-22)) are decided.
+The kubernetes environment, preset [T6](/environments/presets/#t6-kubernetes-eks), is in design and test scope now (see [OD-7](/open-decisions/#od-7)). Everything on this page is the design as proposed, except the points that [agreed decisions](/open-decisions/) already fix: sluis writes no Kubernetes objects, a driver talks to its actor over a Unix socket, and the audit path is the one in [Audit](/concepts/audit/). The pod layout ([OD-17](/open-decisions/#od-17)), AWS KMS only ([OD-20](/open-decisions/#od-20)), DynamoDB only ([OD-21](/open-decisions/#od-21)) and the SQS transport ([OD-22](/open-decisions/#od-22)) are decided.
 
-In T6 a role is a container with its own user id and its own cloud identity. The containers of one node form a pod, and the audit path forms a second pod, cut at the audit queue ([OD-17](/open-decisions/#od-17)). The first release supports Amazon EKS with AWS KMS ([OD-20](/open-decisions/#od-20)), and a cluster with no key mode that the floor allows refuses to start. The audit side's shape is being redesigned as a separate audit installation; see [OD-31](/open-decisions/#od-31).
+On Kubernetes an actor is a container with its own user id and its own cloud identity. The containers of one node form a pod, and the audit path forms a second pod, cut at the audit transport ([OD-17](/open-decisions/#od-17)). The first release supports Amazon EKS with AWS KMS ([OD-20](/open-decisions/#od-20)), and a cluster with no key mode that the floor allows refuses to start. The audit side is being redesigned as a separate audit installation; see [OD-31](/open-decisions/#od-31).
 
 :::note[Proposed]
 The chart renders everything from the permission manifest, and sluis itself calls no Kubernetes API. The maintainer has not yet agreed the rest of the proposals on this page. Other clusters are specified where a decision is open.
@@ -37,13 +37,13 @@ flowchart LR
 
 The gateway reaches the edge relay. The drivers reach the keys and the state.
 
-The node pod runs two or three replicas. A request enters through the edge relay and never leaves the pod: the roles and their drivers call each other over Unix sockets.
+The node pod runs two or three replicas. A request enters through the edge relay and never leaves the pod: the actors and their drivers call each other over Unix sockets.
 
 ### The audit pod
 
 ```mermaid
 flowchart LR
-  node["Node pod"] -. "audit records" .-> q["Queue"]
+  node["Node pod"] -. "audit records" .-> q["Transport<br/>(SQS)"]
   q --> aw
   subgraph audit["Audit pod"]
     aw["audit-writer"] --> nt["notary"]
@@ -53,26 +53,28 @@ flowchart LR
   follower --> idx["postgres<br/>index"]
 ```
 
-The audit pod runs two replicas, and one of them writes. The queue is the only link between the two pods. `audit-read`, in the node pod, reads the same index.
+The audit pod runs two replicas, and one of them writes. The transport is the only link between the two pods. `audit-read`, in the node pod, reads the same index.
 
 :::caution[Open decision OD-31: Audit as a separate installation]
-The audit side is being redesigned as its own installation, connected to sluis over the network. Open: the roles of the audit installation, the transport from emitters, how an emitter authenticates, and a co-located profile for a small install. The design is not settled. The lean is that audit is its own installation, and sluis emits over TCP or a queue through an outbox.
+The audit side is being redesigned as its own installation, connected to sluis over the network. Open: the actors of the audit installation, the transport from emitters, how an emitter authenticates, and a co-located profile for a small install. The design is not settled. The lean is that audit is its own installation, and sluis emits over TCP or a queue through the transport port.
+
+The points [OD-32](/open-decisions/#od-32) to [OD-39](/open-decisions/#od-39) refine this one: where Search runs, quota, the transport per preset, direct mode when the writer is down, the witness, the driver instances of audit, and the audit actors.
 :::
 
 ## What runs where
 
 - **Sockets stay Unix sockets.** Roles and drivers talk over Unix sockets in shared volumes, and the callee reads the caller's user id with `SO_PEERCRED` and checks the call graph, default deny.
-- Helm charts are OCI artifacts with images pinned by digest. They are built from the release output; see [Packages](/distribution/packages/). One release means one set of images, so the roles inside a pod can never be at different versions.
+- Helm charts are OCI artifacts with images pinned by digest. They are built from the release output; see [Packages](/distribution/packages/). One release means one set of images, so the actors inside a pod can never be at different versions.
 - sluis does not write Kubernetes objects. It exports, and clusters pull. cert-manager and trust-manager stay as clients of sluis. The chart renders no Role, RoleBinding, ClusterRole or ClusterRoleBinding, because sluis needs no access to the Kubernetes API.
 
-- **Two pod kinds, cut along the audit queue** ([OD-17](/open-decisions/#od-17)).
-  - The **node pod** holds every role on the synchronous call graph: `entry`, `signer`, `policy`, `ca`, `quota`, `audit-read` and the integrations, with their drivers and the edge container. It runs as a Deployment of two or three replicas spread over zones. Replicas exist for availability, not throughput.
-  - The **audit pod** holds `audit-writer`, `notary` and the index follower. One replica writes at a time, chosen by a lease with a fencing token. The only link between the two pods is the audit queue, so no call crosses a pod boundary.
-  - One pod per node with every role a container is the shape inside each pod. One pod per role with mutual TLS between pods was rejected: it gives every role a TCP listener and needs a certificate for every pod from `ca`.
-  - The audit side's shape is being redesigned as a separate audit installation, connected to sluis over the network; see [OD-31](/open-decisions/#od-31).
+- **Two pod kinds, cut along the audit transport** ([OD-17](/open-decisions/#od-17)).
+  - The **node pod** holds every actor on the synchronous call graph: `entry`, `signer`, `policy`, `ca`, `quota`, `audit-read` and the integrations, with their drivers and the edge container. It runs as a Deployment of two or three replicas spread over zones. Replicas exist for availability, not throughput.
+  - The **audit pod** holds `audit-writer`, `notary` and the index follower. One replica writes at a time, chosen by a lease with a fencing token. The only link between the two pods is the audit transport, so no call crosses a pod boundary.
+  - One pod per node with every actor a container is the layout inside each pod. One pod per actor with mutual TLS between pods was rejected: it gives every actor a TCP listener and needs a certificate for every pod from `ca`.
+  - The audit side is being redesigned as a separate audit installation, connected to sluis over the network; see [OD-31](/open-decisions/#od-31).
 
 :::note[Proposed]
-- **A role is a container.** Each role and each driver runs as its own container with a unique user id, a read-only root file system, no capabilities, no privilege escalation and the runtime default seccomp profile. Drivers are native sidecars, so the platform starts them before the roles that call them.
+- **An actor is a container.** Each actor and each driver runs as its own container with a unique user id, a read-only root file system, no capabilities, no privilege escalation and the runtime default seccomp profile. Drivers are native sidecars, so the platform starts them before the actors that call them.
 - **The mount is the first lock.** Each callee has its own volume for its socket directory, and that volume is mounted read-only only into the containers that the call graph allows. On Kubernetes this replaces the socket group of the hosts, because a container cannot have its own supplementary groups. The callee still checks the peer's user id.
 - **A driver is never a pod of its own,** because a socket cannot cross a pod boundary.
 :::
@@ -87,33 +89,33 @@ Options: integrations as containers of the node pod; each as a pod of its own, c
 
 ## Keys
 
-- A software key is refused on a production shape.
+- A software key is refused in production.
 - A cluster with no key mode that the floor allows does not start. `sluis config check` and the process both refuse.
 
-For now the Kubernetes shape supports AWS KMS only, on EKS ([OD-20](/open-decisions/#od-20)). A cluster outside AWS is not supported until a second key mode is wanted.
+For now the kubernetes environment supports AWS KMS only, on EKS ([OD-20](/open-decisions/#od-20)). A cluster outside AWS is not supported until a second key mode is wanted.
 
 :::note[Proposed]
-On AWS (EKS) the keys are AWS KMS keys with the same layout as the other AWS shapes: one symmetric key with encryption contexts for sealing, and one `ECC_NIST_P384` key per authority purpose. Each key policy names one role.
+On AWS (EKS) the keys are AWS KMS keys with the same layout as the other AWS presets: one symmetric key with encryption contexts for sealing, and one `ECC_NIST_P384` key per authority purpose. Each key policy names one actor.
 
 When a second mode is wanted, PKCS#11 through `key-holder` comes first, then cloud KMS drivers. A remote `key-holder` on a machine with a hardware key is not proposed, because it puts a key beside a network listener.
 :::
 
 ## Identity
 
-The identity of a role is the token mounted into its container.
+The identity of an actor is the token mounted into its container.
 
 :::note[Proposed]
-The pod defines one projected ServiceAccount token volume for each role, with an audience for that role, and mounts it only into the role's container and its driver. The role's cloud driver exchanges the token with the cloud: `AssumeRoleWithWebIdentity` on AWS, Workload Identity Federation on Google Cloud, a federated credential on Azure. It is the same driver code path as on the EC2 shapes. Only the source of the token differs: the kubelet and the API server issue it, and not `sluis-node`.
+The pod defines one projected ServiceAccount token volume for each actor, with an audience for that actor, and mounts it only into the actor's container and its driver. The actor's cloud driver exchanges the token with the cloud: `AssumeRoleWithWebIdentity` on AWS, Workload Identity Federation on Google Cloud, a federated credential on Azure. It is the same driver code path as on the EC2 shapes. Only the source of the token differs: the kubelet and the API server issue it, and not `sluis-node`.
 
-The pod's default ServiceAccount token is not mounted. The cloud role of each sluis role trusts the cluster's issuer, the audience of that role, and the namespace and ServiceAccount of the install. Nothing in the cluster is created for this: the infrastructure code that the manifest generates registers the issuer and the roles.
+The pod's default ServiceAccount token is not mounted. The cloud role of each sluis actor trusts the cluster's issuer, the audience of that actor, and the namespace and ServiceAccount of the install. Nothing in the cluster is created for this: the infrastructure code that the manifest generates registers the issuer and the actors.
 
 The workload tokens are the cluster's, signed by the cluster's key. They are not sluis keys, so the P-384 rule of [Keys](/concepts/keys/) does not cover them.
 
-EKS Pod Identity is used for a pod that holds a single role, because its credentials belong to the pod and not to a container. The node agent `sluis-node` is not used on Kubernetes.
+EKS Pod Identity is used for a pod that holds a single actor, because its credentials belong to the pod and not to a container. The node agent `sluis-node` is not used on Kubernetes.
 :::
 
 :::caution[Open decision OD-19: Cloud identity for pods]
-Options: EKS Pod Identity per pod; projected tokens per container with an audience per role; per-role tokens signed by `sluis-node` in the pod; a mix. Pod Identity alone cannot separate the roles of a pod, because every container of the pod can use the pod's credentials. The proposal is projected tokens per container as the default.
+Options: EKS Pod Identity per pod; projected tokens per container with an audience per actor; per-actor tokens signed by `sluis-node` in the pod; a mix. Pod Identity alone cannot separate the actors of a pod, because every container of the pod can use the pod's credentials. The proposal is projected tokens per container as the default.
 :::
 
 On a cluster outside AWS the cluster's issuer must be reachable by the cloud, or its public keys must be published as static documents, as in [Identity](/concepts/identity/). Setting the API server's issuer is an operator step on the cluster.
@@ -123,19 +125,19 @@ Pods also must not reach the node's instance metadata service. Every key policy 
 ## State
 
 - The chart refuses more than one replica on any state store that is not shared.
-- For now the Kubernetes shape supports DynamoDB only for state ([OD-21](/open-decisions/#od-21)).
-- **State port:** DynamoDB on EKS, with conditional writes, transactions for the atomic batch, and IAM conditions that allow exactly one writer role for each record kind.
+- For now the kubernetes environment supports DynamoDB only for state ([OD-21](/open-decisions/#od-21)).
+- **State port:** DynamoDB on EKS, with conditional writes, transactions for the atomic batch, and IAM conditions that allow exactly one writer actor for each record kind.
 
 :::note[Proposed]
-A Postgres state driver, for example on CNPG, with a database role for each sluis role, is the portable follow-up. rqlite on Kubernetes is not proposed, because it would add a second replication layer and a shared driver inside a cluster that already offers replicated databases.
+A Postgres state driver, for example on CNPG, with a database role for each sluis actor, is the portable follow-up. rqlite on Kubernetes is not proposed, because it would add a second replication layer and a shared driver inside a cluster that already offers replicated databases.
 :::
 
 ## Audit
 
 - **Index:** `postgres`, with any connection string (for example CNPG).
-- The sealed batches go to the blob store, and the `notary` signs batch heads into the hash chain, as in every shape.
-- A separate audit install, which holds `audit-read` and the index for an install that has no index of its own, such as [AWS Lambda](/shapes/aws-lambda/), runs from the same chart with a different profile.
-- **Outbox:** for now SQS is the audit outbox on Kubernetes ([OD-22](/open-decisions/#od-22)), as on Lambda. Producers may only send, and the writer receives. Blocking on the archive is not used, because a request must never wait for the writer, the archive or the index.
+- The sealed batches go to the blob store, and the `notary` signs batch heads into the hash chain, as in every environment.
+- A separate audit install, which holds `audit-read` and the index for an install that has no index of its own, such as [serverless](/environments/serverless/), runs from the same chart with a different profile.
+- **Transport:** for now SQS is the audit transport on Kubernetes ([OD-22](/open-decisions/#od-22)), as on Lambda. Producers may only send, and the writer receives. Blocking on the archive is not used, because a request must never wait for the writer, the archive or the index.
 
 :::note[Proposed]
 A volume spool, with a writer in every replica, is proposed for clusters outside AWS.
@@ -153,13 +155,13 @@ A console reaches `audit-read` over a Unix socket in its own install. For an aud
 
 ## Edge
 
-`entry` listens on `127.0.0.1` on every shape. A gateway cannot route to a loopback address in another pod, and the kubelet's HTTP and TCP probes connect to the pod address, so they cannot reach it either.
+`entry` listens on `127.0.0.1` in every environment. A gateway cannot route to a loopback address in another pod, and the kubelet's HTTP and TCP probes connect to the pod address, so they cannot reach it either.
 
 :::note[Proposed]
 `entry` keeps its loopback listener. A container in the same pod bridges it, in one of two modes:
 
 - **Edge relay (the default).** A small container that holds no key listens on the pod address and forwards to `entry` on `127.0.0.1`. A Service targets its port, so any Gateway API implementation or Ingress controller can route to it. The relay serves a health endpoint for the gateway, passes the client address in `X-Forwarded-For`, and removes that header from requests unless they come from a configured trusted proxy. A certificate can be configured when the hop from the gateway must be encrypted.
-- **`cloudflared`.** A sidecar that connects out to the edge and to `entry`'s loopback port, as on the board and EC2 shapes. The pod accepts no inbound connection at all.
+- **`cloudflared`.** A sidecar that connects out to the edge and to `entry`'s loopback port, as on the board and EC2 presets. The pod accepts no inbound connection at all.
 
 The kubelet probes `entry` with an `exec` probe, which runs inside the container's network namespace and reaches the loopback port. `entry` is not bound to the pod address.
 :::
@@ -199,15 +201,15 @@ Which Kubernetes version and features the chart requires: native sidecars, the `
 ## Testing
 
 :::note[Proposed]
-The shape is tested in three parts.
+The environment is tested in three parts.
 
 - **Smoke test on kind, on every pull request.** The chart installs under the `restricted` level. A first test confirms that `SO_PEERCRED` identifies the peer by user id across the containers of one pod. The rest checks the socket reachability matrix, the NetworkPolicy deny matrix, the edge, the probes, a rolling upgrade, and that the render contains no RBAC objects. It runs without cloud credentials, with a development profile.
-- **A real EKS cluster in the development account,** as a job of the integration-test workflow that runs on the private runner, nightly and on release candidates, never on a pull request. It covers what kind cannot: the cluster's issuer into the cloud, key policies per role, IAM conditions on the state, and the queue.
+- **A real EKS cluster in the development account,** as a job of the integration-test workflow that runs on the private runner, nightly and on release candidates, never on a pull request. It covers what kind cannot: the cluster's issuer into the cloud, key policies per actor, IAM conditions on the state, and the queue.
 - **A cluster outside AWS** joins the matrix when a key mode for it exists.
 :::
 
 :::caution[Open decision OD-25: Development profile for the Kubernetes smoke test]
-A smoke test on kind has no KMS, and the floor refuses a software key on a production shape. Options: a `kubernetes-dev` shape profile that allows a software key, on the terms of the local shape; an emulated KMS; no signer in the smoke test. The proposal is the profile.
+A smoke test on kind has no KMS, and the floor refuses a software key in production. Options: a `kubernetes-dev` preset that allows a software key, on the terms of [T0](/environments/presets/#t0-local); an emulated KMS; no signer in the smoke test. The proposal is the profile.
 :::
 
 :::caution[Open decision OD-27: Reaching a development EKS cluster from the integration job]
@@ -219,6 +221,6 @@ Options: a public API endpoint limited to the private runner's address; an ephem
 - Identity is as strong as the cluster. A cluster administrator, a compromised node or a permissive admission policy can mint a token for any audience of a ServiceAccount, or open a shell in a container. A cluster is one trust domain.
 - A network policy and the cloud's view of the pod are per pod. All containers of a pod share its egress allow-list, so the allow-list is the union of what every container needs. An integration with a long list of hosts is the candidate for its own pod (OD-29).
 - Separation between containers depends on unique user ids, on no container being able to change its user id, and on `shareProcessNamespace` being false. The generator and the tests enforce all three, and `SO_PEERCRED` behaviour has to be confirmed on every container runtime that is claimed.
-- A pod has many containers, one for each role and each driver. Memory and start-up time are measured, not assumed.
+- A pod has many containers, one for each actor and each driver. Memory and start-up time are measured, not assumed.
 - Do not run the install that signs in to a cluster on that same cluster without the [recovery](/concepts/audit/) path, which needs no Kubernetes.
 - A `postgres` index adds a stateful dependency.

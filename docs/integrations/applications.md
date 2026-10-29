@@ -14,12 +14,12 @@ These are **client profiles**: things that sign in to sluis or ask it for a toke
 - **An application has its own sign-in.** It speaks OpenID Connect to sluis directly, or sits behind a gateway that does, and reads the `groups` claim from the token.
 - **A console that runs no sign-in of its own** is put behind a gateway with OIDC support or a reverse proxy that handles the flow and forwards a bearer token.
 - **An MCP server asks who is calling it.** An AI agent discovers sluis as the authorization server for a resource, signs in on a person's behalf with a consent page that is never silent, and presents a token whose audience is that resource. A stock server sits behind a sidecar that verifies tokens and serves the protected-resource metadata.
-- **cert-manager obtains certificates** for workloads in a cluster from the `ca` role, as an external issuer, so the cluster needs no CA key of its own.
+- **cert-manager obtains certificates** for workloads in a cluster from the `ca` actor, as an external issuer, so the cluster needs no CA key of its own.
 - **An infrastructure-as-code program gets provider tokens** (a GitHub token, a Cloudflare token) by token exchange, with the identity of its CI job, instead of a stored credential.
 
-## Integration roles
+## Integration actors
 
-None. These are client profiles. What they use is core's: the OIDC endpoints, token exchange, resources, and the [`ca`](/concepts/roles/) role.
+None. These are client profiles. What they use is core's: the OIDC endpoints, token exchange, resources, and the [`ca`](/concepts/actors/) actor.
 
 ## What sluis asks the vendor for
 
@@ -74,7 +74,7 @@ resources:
 ## v1 → v2 notes
 
 - v1 does all of this: [Argo CD](/v1/guides/sluis/connect/argocd/), [Kargo](/v1/guides/sluis/connect/kargo/), [a console with its own sign-in](/v1/guides/sluis/connect/console-app/), [gateway OIDC](/v1/guides/sluis/connect/choosing-native-or-gateway-oidc/), [MCP](/v1/guides/sluis/connect/mcp/), and [infrastructure as code](/v1/guides/sluis/connect/infrastructure-as-code/). v1's separate proxy chart was removed; a console with no flow of its own uses a gateway or an upstream proxy.
-- cert-manager as a client of the `ca` role is new: v1 gets certificates from OpenBao.
+- cert-manager as a client of the `ca` actor is new: v1 gets certificates from OpenBao.
 - Parity issues: [#820](https://github.com/truvity/sluis/issues/820) Argo CD and Kargo, [#821](https://github.com/truvity/sluis/issues/821) console applications and gateway OIDC, [#822](https://github.com/truvity/sluis/issues/822) MCP authorization, [#823](https://github.com/truvity/sluis/issues/823) the MCP resource proxy, [#790](https://github.com/truvity/sluis/issues/790) generated client secrets, [#791](https://github.com/truvity/sluis/issues/791) resources, [#792](https://github.com/truvity/sluis/issues/792) client identity documents.
 
 :::note[Proposed]

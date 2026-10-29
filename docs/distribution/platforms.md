@@ -8,15 +8,15 @@ sidebar:
 
 ## Supported distributions and architectures
 
-| Distribution | Version | systemd | Shapes |
+| Distribution | Version | systemd | Presets |
 |---|---|---|---|
 | Ubuntu | 26.04 LTS | 259 | Self-hosted servers and, once the images exist, the boards (T1, T2) |
 | Rocky Linux | Latest stable, 10.x (10.2) | 257 | Self-hosted servers and, once the images exist, the boards (T1, T2) |
-| Amazon Linux | 2023 | 252 | [T3](/shapes/aws-ec2-single/) and [T4](/shapes/aws-ec2-cluster/) |
+| Amazon Linux | 2023 | 252 | [T3](/environments/presets/#t3-ec2-single) and [T4](/environments/presets/#t4-ec2-cluster) |
 
 All of them are supported on **amd64 and arm64**. The packages come from the apt repository (Ubuntu) and the dnf repository (Rocky Linux and Amazon Linux); see [Packages](/distribution/packages/).
 
-AWS Lambda and Kubernetes do not depend on a host distribution: Lambda runs zip packages on the managed runtime, and Kubernetes runs OCI images.
+The [serverless](/environments/serverless/) and [kubernetes](/environments/kubernetes/) environments do not depend on a host distribution: Lambda runs zip packages on the managed runtime, and Kubernetes runs OCI images.
 
 ## The systemd floor
 
@@ -24,7 +24,7 @@ The systemd floor is **252**, the version in Amazon Linux 2023, which is the old
 
 ## Board images and the Ubuntu 22.04 exception
 
-The two board shapes, [T1](/shapes/single-node/) and [T2](/shapes/cluster/), run an arm64 single-board computer (2 GB RAM, eMMC). The boards run the vendor's Ubuntu 22.04 for now. This is a declared exception to the list above, not a supported platform.
+The two board presets, [T1](/environments/presets/#t1-single-board) and [T2](/environments/presets/#t2-board-cluster), run an arm64 single-board computer (2 GB RAM, eMMC). The boards run the vendor's Ubuntu 22.04 for now. This is a declared exception to the list above, not a supported platform.
 
 On Ubuntu 22.04:
 

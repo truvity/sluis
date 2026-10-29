@@ -47,7 +47,7 @@ The shape of the repository, the build, and the patterns every component follows
 | [#863](https://github.com/truvity/sluis/issues/863) | Permission manifest format and generators |
 | [#864](https://github.com/truvity/sluis/issues/864) | Configuration from Pkl to JSON Schema with strict validation |
 | [#866](https://github.com/truvity/sluis/issues/866) | systemd unit hardening baseline |
-| [#877](https://github.com/truvity/sluis/issues/877) | Test shapes harness |
+| [#877](https://github.com/truvity/sluis/issues/877) | Test presets harness |
 
 ### Phase 1: keys, identity and configuration
 
@@ -72,7 +72,7 @@ How a release is built, signed, published and installed.
 |---|---|
 | [#873](https://github.com/truvity/sluis/issues/873) | Distribution site on R2 |
 | [#874](https://github.com/truvity/sluis/issues/874) | Release signing and CI upload credentials |
-| [#875](https://github.com/truvity/sluis/issues/875) | Lambda packaging as zip per role |
+| [#875](https://github.com/truvity/sluis/issues/875) | Lambda packaging as zip per actor |
 | [#876](https://github.com/truvity/sluis/issues/876) | OCI images and Helm charts with digest-pinned images |
 | [#881](https://github.com/truvity/sluis/issues/881) | Board OS images for Ubuntu 26.04 and Rocky Linux 10.2 |
 
