@@ -10,24 +10,38 @@ T5 runs sluis as one AWS Lambda function per process role. Keys are AWS KMS keys
 
 ## Topology
 
+The shape is drawn in two steps: the request path, then the audit path.
+
+### Step 1: the request path
+
 ```mermaid
 flowchart LR
-  user["Browser, CLI,<br/>relying parties"] --> ep["API Gateway"]
+  user["Callers"] --> ep["API Gateway"]
   subgraph cn["entry function"]
-    lwa["Lambda Web Adapter"] -- "127.0.0.1:8080" --> app["entry process"]
+    lwa["Web Adapter"] --> app["entry process<br/>127.0.0.1:8080"]
   end
   ep --> lwa
-  app -- "invoke" --> signer["signer"]
-  app -- "invoke" --> policy["policy"]
-  app -- "invoke" --> others["ca, notary, audit-writer, quota"]
+  app --> signer["signer"]
+  app --> policy["policy"]
+  app --> others["other roles"]
   signer --> kms["AWS KMS"]
   others --> kms
   app --> ddb["DynamoDB"]
   others --> ddb
-  others -. "outbox" .-> q["Queue"]
-  q --> writer["audit-writer"] --> blob["Blob store"]
-  blob -. "same bucket" .-> aud["Separate audit install:<br/>audit-read and its index"]
 ```
+
+The callers are browsers, CLIs and relying parties. The web adapter is the Lambda Web Adapter; it connects to the `entry` process on `127.0.0.1:8080` inside the sandbox. Each arrow from `entry` to a role is a Lambda invoke. The other roles are `ca`, `notary`, `audit-writer` and `quota`.
+
+### Step 2: the audit path
+
+```mermaid
+flowchart LR
+  roles["Roles"] -. "outbox" .-> q["Queue"]
+  q --> writer["audit-writer"] --> blob["Blob store"]
+  blob -. "same bucket" .-> aud["Separate audit install"]
+```
+
+The other roles write their audit records to the queue. The separate audit install runs `audit-read` and its index, and reads the same bucket.
 
 ## What runs where
 
