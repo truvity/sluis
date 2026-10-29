@@ -12,13 +12,13 @@ T0 is the development shape: sluis in Docker on one workstation, with one node a
 
 ```mermaid
 flowchart LR
-  dev["Developer or CI job"] --> entry
+  dev["Developer<br/>or CI job"] --> container
   subgraph container["Docker container (one node)"]
     direction TB
     entry["entry"]
     signer["signer"]
     policy["policy"]
-    others["ca, notary, audit-writer,<br/>audit-read, quota"]
+    others["other roles"]
     keyholder["key-holder<br/>(driver)"]
     state["embedded store<br/>(driver)"]
     entry --> signer
@@ -27,10 +27,18 @@ flowchart LR
     others --> state
     entry --> state
   end
-  keyholder -. "optional: mounted Unix socket" .-> hostkh["key-holder on the host"]
-  hostkh --> pcscd["host pcscd"]
-  pcscd --> yk["YubiKey on the host"]
+  subgraph host["Workstation host"]
+    direction TB
+    hostkh["key-holder"]
+    pcscd["pcscd"]
+    yk["YubiKey"]
+    hostkh --> pcscd
+    pcscd --> yk
+  end
+  container -. "optional: socket" .-> host
 ```
+
+The other roles are `ca`, `notary`, `audit-writer`, `audit-read` and `quota`. The `key-holder` in the container can optionally reach the `key-holder` on the host through a mounted Unix socket (the dashed arrow); the host `key-holder` talks to the host's `pcscd`, which talks to the YubiKey.
 
 ## What runs where
 

@@ -55,6 +55,10 @@ Four of the six contracts only return facts. A credential minter and a provision
 1. **Core decides, the integration executes.** A minter receives a **mint grant signed by the policy role's own key**: the decision, the policy digest and the hash of the scope. It refuses a scope the grant does not cover and cannot lengthen the lifetime. A provisioner pulls a desired state **addressed by its digest** from a read-only prefix that core writes. It never asks core a question.
 2. **Business limits live in core.** Caller caps, mint rates and which group may hold which role are policy or quota, checked before the minter is called. An integration enforces only technical limits: the vendor's API rate and maximum lifetime.
 
+The mint flow is drawn in two steps.
+
+Step 1: the mint broker verifies the proof and asks policy.
+
 ```mermaid
 sequenceDiagram
   participant C as Caller
@@ -62,23 +66,34 @@ sequenceDiagram
   participant M as mint broker
   participant P as proof verifier
   participant D as policy
-  participant Q as quota
-  participant X as credential minter
-  participant A as audit
-  C->>F: request a credential (kind, scope) with a proof
+  C->>F: request credential
   F->>M: request
   M->>P: verify the proof
   P-->>M: verified subject
-  M->>D: decide mint (subject, facts, kind, scope)
-  D-->>M: decision, scope bound, ttl cap, signed mint grant
-  M->>Q: admit (operation id)
-  Q-->>M: admitted
-  M->>X: mint (kind, scope, ttl, operation id, mint grant)
-  X-->>M: credential, expiry, handle
-  M-)A: emit the mint record, never the secret
-  M-->>F: credential
-  F-->>C: credential
+  M->>D: decide mint
+  D-->>M: decision, signed grant
 ```
+
+The caller asks for a credential of a kind and a scope, with a proof. The mint broker asks policy to decide with the subject, the facts, the kind and the scope. The decision carries the scope bound, the ttl cap and the signed mint grant.
+
+Step 2: the mint broker admits the operation and the minter mints.
+
+```mermaid
+sequenceDiagram
+  participant F as CLI and CI API
+  participant M as mint broker
+  participant Q as quota
+  participant X as credential minter
+  participant A as audit
+  M->>Q: admit
+  Q-->>M: admitted
+  M->>X: mint
+  X-->>M: credential, handle
+  M-)A: emit the mint record
+  M-->>F: credential
+```
+
+Quota admits by operation id. The minter receives the kind, the scope, the ttl, the operation id and the mint grant, and returns the credential, its expiry and a handle. The emitted mint record never holds the secret. The CLI and CI API hands the credential to the caller.
 
 ## Ports
 
@@ -114,18 +129,17 @@ Tokens are signed directly with the non-extractable key on every shape; there ar
 
 ## The call graph
 
-The picture below is the graph at role granularity. A solid arrow is a synchronous ConnectRPC call; a dashed arrow is asynchronous (a queue, a tick, or a read of a store). The graph is a reviewed file, enforced by one interceptor in every process, **default deny**: a call that is not an edge is refused.
+The graph is at role granularity. A solid arrow is a synchronous ConnectRPC call; a dashed arrow is asynchronous (a queue, a tick, or a read of a store). The graph is a reviewed file, enforced by one interceptor in every process, **default deny**: a call that is not an edge is refused. It is drawn in five views: sign-in and exchange, minting and certificates, the integrations, the audit, and the ports.
+
+The callers are browsers, CLI, CI jobs, workloads, cert-manager and auditors. Each reaches the front box that serves it: the OIDC endpoints, the CLI and CI API, the console, the webhook ingress or the PKI endpoint.
+
+### View 1: sign-in and exchange
 
 ```mermaid
-flowchart TB
-  clients(["browsers, CLI, CI jobs, workloads, cert-manager, auditors"])
-
+flowchart LR
   subgraph FRONT["Front, in entry"]
     oidc["OIDC endpoints"]
     cli["CLI and CI API"]
-    con["console"]
-    hook["webhook ingress"]
-    pkiep["PKI endpoint"]
   end
 
   subgraph CORE["Identity path"]
@@ -136,21 +150,55 @@ flowchart TB
     proof["proof verifier"]
     facts["facts broker"]
     pol["policy"]
-    mint["mint broker"]
-    quota["quota"]
-    tick["tick scheduler"]
   end
 
-  subgraph CERT["Certificates"]
-    pki["PKI and SSH CA"]
-  end
+  oidc --> sess
+  oidc --> xchg
+  oidc --> issuer
+  cli --> xchg
+  xchg --> proof
+  xchg --> facts
+  xchg --> pol
+  xchg --> issuer
+  issuer --> ring
+  sess --> ring
+```
 
-  subgraph AUDIT["Audit"]
-    aw["audit writer"]
-    notary["notary"]
-    idx["audit indexer"]
-    aq["audit query"]
-  end
+### View 2: minting and certificates
+
+```mermaid
+flowchart LR
+  clients(["Callers"])
+  cli["CLI and CI API"]
+  pkiep["PKI endpoint"]
+  mint["mint broker"]
+  proof["proof verifier"]
+  facts["facts broker"]
+  pol["policy"]
+  quota["quota"]
+  pki["PKI and SSH CA"]
+
+  clients --> cli
+  clients --> pkiep
+  cli --> mint
+  mint --> proof
+  mint --> facts
+  mint --> pol
+  mint --> quota
+  pkiep --> pki
+```
+
+### View 3: the integrations
+
+```mermaid
+flowchart LR
+  oidc["OIDC endpoints"]
+  hook["webhook ingress"]
+  con["console"]
+  proof["proof verifier"]
+  facts["facts broker"]
+  mint["mint broker"]
+  tick["tick scheduler"]
 
   subgraph INT["Integrations"]
     ups["Upstream"]
@@ -161,61 +209,71 @@ flowchart TB
     notif["Notifier"]
   end
 
-  ports["ports: state, index, keys, blob, queue, lease, cloud"]
-  drivers["drivers, one per port per install"]
   ext(["external systems"])
 
-  clients --> oidc
-  clients --> cli
-  clients --> con
-  clients --> hook
-  clients --> pkiep
-  oidc --> sess
-  oidc --> xchg
-  oidc --> issuer
-  cli --> xchg
-  cli --> mint
-  xchg --> proof
-  xchg --> facts
-  xchg --> pol
-  xchg --> issuer
-  issuer --> ring
-  sess --> ring
+  oidc --> ups
   proof --> ver
   facts --> fsrc
-  oidc --> ups
-  mint --> proof
-  mint --> facts
-  mint --> pol
-  mint --> quota
   mint --> cm
   hook --> ups
   hook --> prov
   hook --> notif
   con --> prov
-  con --> aq
   tick -.-> prov
   tick -.-> fsrc
-  pkiep --> pki
-  pki --> ports
-  ring --> ports
-  notary --> ports
-  aw --> notary
-  aw -. "audit_batches" .-> idx
-  idx -. "index" .-> aq
-  CORE -. "emit" .-> aw
-  CERT -. "emit" .-> aw
-  INT -. "emit" .-> aw
-  CORE --> ports
-  INT --> ports
-  AUDIT --> ports
-  ports --> drivers
   prov --> ext
   fsrc --> ext
   cm --> ext
   ups --> ext
   notif --> ext
 ```
+
+### View 4: the audit
+
+```mermaid
+flowchart LR
+  core["Identity path"]
+  cert["PKI and SSH CA"]
+  integ["Integrations"]
+  con["console"]
+
+  subgraph AUDIT["Audit"]
+    aw["audit writer"]
+    notary["notary"]
+    idx["audit indexer"]
+    aq["audit query"]
+  end
+
+  core -.-> aw
+  cert -.-> aw
+  integ -.-> aw
+  aw --> notary
+  aw -.-> idx
+  idx -.-> aq
+  con --> aq
+```
+
+The dashed arrows into the audit writer are emits. The writer hands the indexer the `audit_batches` records, and the indexer hands audit query the `index`. The console reads the audit through audit query.
+
+### View 5: the ports
+
+```mermaid
+flowchart LR
+  core["Identity path roles"]
+  cert["PKI and SSH CA"]
+  integ["Integration roles"]
+  audit["Audit roles"]
+  ports["ports"]
+  drivers["drivers, one per<br/>port per install"]
+
+  core --> ports
+  cert --> ports
+  integ --> ports
+  audit --> ports
+  ports --> drivers
+```
+
+The ports are state, index, keys, blob, queue, lease and cloud. The identity path roles include the key ring, which reaches the ports through its drivers like every other role, and the `tick` scheduler, whose edges are in view 3.
 
 Rules the graph encodes:
 

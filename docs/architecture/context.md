@@ -12,32 +12,47 @@ At the first zoom level sluis is one box. This page says who talks to it, what t
 
 ```mermaid
 flowchart LR
-  person["People<br/>browser or CLI"]
-  robot["Robots<br/>CI jobs, workloads, services"]
-  rp["Relying parties<br/>apps and cloud APIs that trust sluis tokens"]
-  op["Operators<br/>console and CLI"]
-  aud["Auditors<br/>and independent verifiers"]
+  person["People"]
+  robot["Robots"]
+  rp["Relying parties"]
+  op["Operators"]
+  aud["Auditors"]
 
   subgraph sluis_boundary["sluis"]
-    sluis["identity and access broker<br/>OIDC, token exchange, mint, directory, audit"]
+    sluis["identity and<br/>access broker"]
   end
 
-  up["Upstream identity providers<br/>workspace directories, generic OIDC"]
-  facts["Directory and team systems<br/>facts about people and groups"]
-  vendors["Downstream systems<br/>cloud APIs, GitHub, chat workspaces"]
-  platform["Platform<br/>KMS or YubiKey, blob store, queue, state"]
+  up["Upstream identity<br/>providers"]
+  facts["Directory and<br/>team systems"]
+  vendors["Downstream<br/>systems"]
+  platform["Platform"]
 
-  person -->|"sign in, refresh, sign out"| sluis
-  robot -->|"present a workload token, exchange it"| sluis
-  rp -->|"discover, fetch keys, verify tokens"| sluis
-  op -->|"connect, manage, rotate, back up"| sluis
-  aud -->|"query and verify the audit trail"| sluis
+  person -->|"sign in, sign out"| sluis
+  robot -->|"exchange a token"| sluis
+  rp -->|"discover, verify"| sluis
+  op -->|"manage, rotate"| sluis
+  aud -->|"query, verify"| sluis
 
   sluis -->|"federates sign-in"| up
-  sluis -->|"reads and reconciles"| facts
-  sluis -->|"mints and provisions"| vendors
-  sluis -->|"keys, records, objects, messages"| platform
+  sluis -->|"reads facts"| facts
+  sluis -->|"mints, provisions"| vendors
+  sluis -->|"keys, records"| platform
 ```
+
+What each box stands for:
+
+| Box | Contents |
+| --- | -------- |
+| People | A browser or a CLI. They sign in, refresh and sign out |
+| Robots | CI jobs, workloads and services. They present a workload token and exchange it |
+| Relying parties | Apps and cloud APIs that trust sluis tokens. They discover the issuer, fetch keys and verify tokens |
+| Operators | The console and the CLI. They connect, manage, rotate and back up |
+| Auditors | Auditors and independent verifiers. They query and verify the audit trail |
+| sluis | The identity and access broker: OIDC, token exchange, mint, directory, audit |
+| Upstream identity providers | Workspace directories and generic OIDC |
+| Directory and team systems | Facts about people and groups; sluis reads and reconciles them |
+| Downstream systems | Cloud APIs, GitHub, chat workspaces; sluis mints credentials and provisions desired state |
+| Platform | KMS or YubiKey, blob store, queue, state: keys, records, objects and messages |
 
 | Actor | What they do with sluis |
 | ----- | ----------------------- |
@@ -171,58 +186,87 @@ Four things follow from the matrix, and they shape L2 and L3:
 
 ## Two sequences
 
-sluis is a single participant in both diagrams. Resources are named by class.
+sluis is a single participant in both flows. Resources are named by class. Each flow is drawn in two steps.
 
 ### A CI job exchanges its token
+
+Step 1: sluis verifies the job's token and checks the policy.
 
 ```mermaid
 sequenceDiagram
   autonumber
   participant J as CI job
   participant S as sluis
-  participant X as external: platform key set
-  participant C as config: policy
-  participant ST as state: sessions
-  participant K as key: token signing
-  participant A as audit sink
-  J->>S: POST /token, token exchange (subject_token, audience)
-  S->>X: fetch and cache the key set, verify signature, expiry, audience
-  S->>C: match owner, repository and ref to groups, check exchange limits
-  S->>ST: create the exchange session record
-  S->>K: sign an access token
-  S--)A: enqueue the exchange (success and refusal)
-  S-->>J: access token, or a refusal in fixed words plus a request id
+  participant X as platform key set
+  participant C as policy config
+  J->>S: POST /token (exchange)
+  S->>X: fetch key set, verify
+  S->>C: match groups, check limits
 ```
+
+The request is a token exchange with a `subject_token` and an `audience`. sluis fetches and caches the platform's key set, then verifies the signature, the expiry and the audience. It matches the owner, repository and ref to groups and checks the exchange limits.
+
+Step 2: sluis records the exchange, signs the token and answers.
+
+```mermaid
+sequenceDiagram
+  autonumber 4
+  participant J as CI job
+  participant S as sluis
+  participant ST as session state
+  participant K as token signing key
+  participant A as audit sink
+  S->>ST: create session record
+  S->>K: sign access token
+  S--)A: enqueue the exchange
+  S-->>J: token or refusal
+```
+
+The session record is the exchange session. The audit record covers success and refusal. The answer is an access token, or a refusal in fixed words plus a request id.
 
 No client secret is involved: the proof is the job's own token. A refused exchange answers like an unknown audience, so the caller learns nothing; the reason is only in the audit record.
 
 ### A downstream credential is minted
 
+Step 1: sluis verifies the proof and checks the grant and the caps.
+
 ```mermaid
 sequenceDiagram
-  autonumber
   participant J as Caller
   participant S as sluis
-  participant C as config: policy
-  participant ST as state: minted credentials
-  participant SE as secret: minter credential
-  participant V as external: downstream API
+  participant C as policy config
+  participant ST as minted state
   participant A as audit sink
-  J->>S: POST /token exchange, requested_token_type, audience, scope
-  S->>S: verify the proof as above
-  S->>C: does a grant cover this group, audience and scope
-  S->>ST: read the live credentials of this caller (fail closed)
+  J->>S: POST /token exchange
+  S->>S: verify the proof
+  S->>C: does a grant cover it
+  S->>ST: read live credentials
   alt grant missing or cap reached
     S--)A: enqueue the refusal
     S-->>J: access_denied
-  else within grant and caps
-    S->>SE: read the minter credential
-    S->>V: create the credential, narrowed to the grant
-    S->>ST: record the new credential id (cas)
-    S--)A: enqueue the mint, never the value
-    S-->>J: credential and expiry, shown once
   end
 ```
+
+The request is a token exchange with a `requested_token_type`, an `audience` and a `scope`. The proof is verified as above. The grant check is by group, audience and scope. The read of the caller's live credentials fails closed.
+
+Step 2: within the grant and the caps, sluis mints the credential.
+
+```mermaid
+sequenceDiagram
+  participant J as Caller
+  participant S as sluis
+  participant SE as secret
+  participant V as vendor
+  participant ST as state
+  participant A as audit
+  S->>SE: read the credential
+  S->>V: create credential
+  S->>ST: record id
+  S--)A: enqueue mint
+  S-->>J: credential, once
+```
+
+The secret is the minter credential, and the vendor is the downstream API. The credential is created narrowed to the grant. The id is recorded with a compare-and-swap (cas). The audit record never holds the value. The answer carries the credential and its expiry, shown once.
 
 At L2 this one participant becomes several: the decision is made by the policy role, and the call that holds the vendor credential is made by an integration that only carries out what core has authorized. See [Components](/architecture/components/).
 

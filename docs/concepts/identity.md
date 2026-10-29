@@ -41,36 +41,48 @@ GCP and Azure each need an algorithm other than P-384. The exception is made for
 Where the platform supplies an identity, sluis uses it and does not add a layer: the Lambda function role on Lambda. The node agent exists for the nodes where none does.
 
 :::note[Proposed]
-**Kubernetes (T6).** The identity of a role is a projected ServiceAccount token, with one audience per sluis role, mounted only into that role's container and its driver. The role's cloud driver exchanges the token with the cloud in the same way as in the sequence below (`AssumeRoleWithWebIdentity` on AWS, Workload Identity Federation on Google Cloud, a federated credential on Azure). Only the source of the token differs: the kubelet and the API server issue it, and the node agent `sluis-node` is not used on Kubernetes. The cloud role of each sluis role trusts the cluster's issuer, that role's audience, and the namespace and ServiceAccount of the install. The workload tokens are the cluster's, not sluis keys; see [Keys](/concepts/keys/).
+**Kubernetes (T6).** The identity of a role is a projected ServiceAccount token, with one audience per sluis role, mounted only into that role's container and its driver. The role's cloud driver exchanges the token with the cloud in the same way as in step 2 below (`AssumeRoleWithWebIdentity` on AWS, Workload Identity Federation on Google Cloud, a federated credential on Azure). Only the source of the token differs: the kubelet and the API server issue it, and the node agent `sluis-node` is not used on Kubernetes. The cloud role of each sluis role trusts the cluster's issuer, that role's audience, and the namespace and ServiceAccount of the install. The workload tokens are the cluster's, not sluis keys; see [Keys](/concepts/keys/).
 
 EKS Pod Identity is used only for a pod that holds a single role, because its credentials belong to the pod and not to a container. This is [OD-19](/open-decisions/#od-19); options and limits are on [Kubernetes](/shapes/kubernetes/#identity).
 :::
 
 ## A role getting AWS credentials
 
-This is how a role on an EC2 node, such as `audit-writer`, obtains AWS credentials to write to its bucket. The issuer URL and node name are examples.
+This is how a role on an EC2 node, such as `audit-writer`, obtains AWS credentials to write to its bucket. The role's AWS driver runs under the role's own uid. The issuer URL and node name are examples. The flow has two steps.
+
+### Step 1: the node agent issues a workload token
 
 ```mermaid
 sequenceDiagram
-  participant D as audit-writer<br/>(AWS driver, own uid)
+  participant D as audit-writer
   participant N as sluis-node
-  participant K as Node key<br/>(non-extractable)
-  participant S as AWS STS
-  participant B as Issuer bucket<br/>(discovery, JWKS)
-  participant A as AWS service
-
-  D->>N: workload token for audience sts.amazonaws.com<br/>(Unix socket)
-  N->>N: read caller uid from peer credentials,<br/>map uid to role
-  N->>K: sign JWT, ES384<br/>iss=https://issuer.example.org/nodes/node-1/<br/>sub=role, iat, exp
+  participant K as Node key
+  D->>N: request a token
+  N->>N: map uid to role
+  N->>K: sign the JWT
   K-->>N: signature
-  N-->>D: workload JWT (about 1 hour)
-  D->>S: AssumeRoleWithWebIdentity(role ARN, JWT)
-  S->>B: fetch discovery and JWKS (cached)
-  B-->>S: public keys
-  S->>S: verify signature, iss, aud, sub against the role trust policy
-  S-->>D: temporary AWS credentials
-  D->>A: API call with credentials
+  N-->>D: workload JWT
 ```
+
+The driver asks for a workload token for the audience `sts.amazonaws.com` over the node agent's Unix socket. The node agent reads the caller's uid from the peer credentials and maps the uid to a role. It signs a JWT with ES384 using the node key, which is non-extractable, with the claims `iss=https://issuer.example.org/nodes/node-1/`, `sub=<role>`, `iat` and `exp`. The JWT is valid for about 1 hour.
+
+### Step 2: the cloud exchanges the token for credentials
+
+```mermaid
+sequenceDiagram
+  participant D as audit-writer
+  participant S as AWS STS
+  participant B as Issuer bucket
+  participant A as AWS service
+  D->>S: AssumeRoleWithWebIdentity
+  S->>B: fetch JWKS (cached)
+  B-->>S: public keys
+  S->>S: verify against trust policy
+  S-->>D: temporary credentials
+  D->>A: API call
+```
+
+The driver calls `AssumeRoleWithWebIdentity` with the role ARN and the workload JWT. STS fetches the discovery document and the JWKS from the issuer bucket, and caches them. It verifies the signature, `iss`, `aud` and `sub` against the role's trust policy, then returns temporary AWS credentials. The driver calls the AWS service with them.
 
 The driver never holds a key. A token for a role other than the caller's cannot be requested, because the node agent decides the role from the uid and not from the request. And the IAM role's trust policy names this node's issuer and this role's `sub`, so the same token is refused for every other role.
 

@@ -12,17 +12,16 @@ T1 is the "poor man's choice": every role runs on one arm64 single-board compute
 
 ```mermaid
 flowchart LR
-  user["Browser, CLI,<br/>relying parties"] --> cf["Cloudflare edge"]
-  cf -- "tunnel" --> cfd
-  subgraph board["Single-board computer (Ubuntu 22.04 interim)"]
+  cf["Callers, through<br/>the Cloudflare edge"] -- "tunnel" --> board
+  subgraph board["Single-board computer"]
     direction TB
     cfd["cloudflared"]
     entry["entry"]
     signer["signer"]
     policy["policy"]
-    roles["ca, notary, audit-writer,<br/>audit-read, quota"]
+    roles["other roles"]
     kh["key-holder"]
-    st["state driver<br/>(single-node store)"]
+    st["state driver"]
     cfd -- "http://127.0.0.1:8080" --> entry
     entry --> signer
     entry --> policy
@@ -30,10 +29,12 @@ flowchart LR
     roles --> kh
     entry --> st
     roles --> st
+    kh -- "PC/SC" --> yk["YubiKey PIV"]
   end
-  kh -- "PC/SC" --> yk["YubiKey PIV"]
-  roles -. "sealed audit batches" .-> blob["Blob store"]
+  board -.-> blob["Blob store<br/>(sealed audit batches)"]
 ```
+
+The callers are browsers, CLIs and relying parties. The tunnel ends at `cloudflared`, which connects to `entry` on `127.0.0.1:8080`. The `key-holder` reaches the YubiKey in the board's USB port over PC/SC. The other roles are `ca`, `notary`, `audit-writer`, `audit-read` and `quota`; they use `key-holder` and the state driver, which is the single-node store. The `audit-writer` seals audit batches to the blob store.
 
 ## What runs where
 

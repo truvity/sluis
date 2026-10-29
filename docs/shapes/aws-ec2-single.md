@@ -12,13 +12,12 @@ T3 is one `t4g.nano` instance on Amazon Linux 2023. Keys are AWS KMS keys, state
 
 ```mermaid
 flowchart LR
-  user["Browser, CLI,<br/>relying parties"] --> cf["Cloudflare edge"]
-  cf -- "tunnel" --> cfd
+  cf["Callers, through<br/>the Cloudflare edge"] -- "tunnel" --> ec2
   subgraph ec2["EC2 t4g.nano (Amazon Linux 2023)"]
     direction TB
     cfd["cloudflared"]
     entry["entry"]
-    roles["signer, policy, ca, notary,<br/>audit-writer, audit-read, quota"]
+    roles["other roles"]
     na["sluis-node"]
     kmsd["kms driver"]
     ddb["dynamodb driver"]
@@ -28,10 +27,12 @@ flowchart LR
     roles --> ddb
     na -. "per-role credentials" .-> kmsd
   end
-  kmsd --> kms["AWS KMS"]
-  ddb --> dyn["DynamoDB"]
-  roles -. "sealed audit batches" .-> s3["Blob store"]
+  ec2 --> kms["AWS KMS<br/>(kms driver)"]
+  ec2 --> dyn["DynamoDB<br/>(dynamodb driver)"]
+  ec2 -.-> s3["Blob store<br/>(sealed audit batches)"]
 ```
+
+The callers are browsers, CLIs and relying parties. The tunnel ends at `cloudflared`, which connects to `entry` on `127.0.0.1:8080`. The other roles are `signer`, `policy`, `ca`, `notary`, `audit-writer`, `audit-read` and `quota`. The `kms` and `dynamodb` drivers reach AWS KMS and DynamoDB, and the `sluis-node` agent gives the `kms` driver per-role credentials. The `audit-writer` seals audit batches to the blob store.
 
 ## What runs where
 
