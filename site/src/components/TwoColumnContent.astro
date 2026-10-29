@@ -1,0 +1,25 @@
+---
+// Starlight's two-column layout (content plus a right-hand table of contents)
+// replaced by a single column. The table of contents is not a column any more:
+// PageSidebar.astro renders it as the collapsible "On this page" bar at the top
+// of the content, so the content gets the whole width beside the left sidebar.
+// Upgrade note: the default component also positions the right column and
+// narrows the main pane for it; none of that applies to one column.
+---
+
+<div class="sluis-main">
+  {Astro.locals.starlightRoute.toc && <slot name="right-sidebar" />}
+  <div class="main-pane"><slot /></div>
+</div>
+
+<style>
+  @layer starlight.core {
+    .main-pane {
+      isolation: isolate;
+      width: 100%;
+      /* The content column is left to ContentPanel: a column of --sl-content-width
+         centred in the space beside the sidebar. */
+      min-width: 0;
+    }
+  }
+</style>

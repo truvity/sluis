@@ -1,0 +1,61 @@
+/* Page layout: one wide column beside the left sidebar. Starlight's right-hand
+   "On this page" column is replaced by its dropdown at the top of the content
+   (src/components/TwoColumnContent.astro, PageSidebar.astro). */
+
+:root {
+  /* The content column. Starlight's default is 45rem, which wraps a wide table
+     heavily and wastes the screen beside it. The column is centred in the space
+     right of the sidebar. */
+  --sl-content-width: 72rem;
+  /* Reading width for running text; tables, diagrams, code and asides use the
+     whole column. */
+  --sluis-prose-width: 75ch;
+  /* Starlight sizes the page header's grid for a right-hand column
+     (--__toc-width, its own variable); there is none now. */
+  --__toc-width: 0rem;
+}
+
+/* Starlight drops the dropdown's height from the layout at 72rem, where it has
+   the right-hand column instead. The dropdown is now there at every width, so
+   the content starts below it and anchors scroll clear of it. */
+:root[data-has-toc] {
+  --sl-mobile-toc-height: 3rem;
+}
+html:root[data-has-toc] {
+  scroll-padding-top: calc(1.5rem + var(--sl-nav-height) + var(--sl-mobile-toc-height));
+}
+
+/* Line the dropdown button and its panel up with the content column's left edge
+   (the bar itself runs the full width beside the sidebar). */
+mobile-starlight-toc {
+  --sluis-toc-inset: max(
+    1rem,
+    calc((100vw - var(--sl-content-inline-start, 0px) - var(--sl-content-width)) / 2 + var(--sl-content-pad-x))
+  );
+}
+mobile-starlight-toc summary {
+  padding-inline-start: var(--sluis-toc-inset);
+}
+mobile-starlight-toc .dropdown {
+  width: min(100%, 34rem);
+  margin-inline-start: calc(var(--sluis-toc-inset) - 1rem);
+  border-radius: 0 0 0.5rem 0.5rem;
+}
+
+/* Running text keeps a comfortable measure; everything else is as wide as the column. */
+.sl-markdown-content > :is(p, ul, ol, dl, blockquote):not(.not-content) {
+  max-width: var(--sluis-prose-width);
+}
+.sl-markdown-content > :is(h2, h3, h4, h5, h6) {
+  max-width: var(--sluis-prose-width);
+}
+/* Starlight puts the heading and its anchor link in a wrapper. */
+.sl-markdown-content > .sl-heading-wrapper {
+  max-width: var(--sluis-prose-width);
+}
+
+/* The wide tables of the docs: use the column, scroll inside the table when it
+   is still too wide (Starlight makes a Markdown table a scrolling block). */
+.sl-markdown-content > table {
+  max-width: 100%;
+}
