@@ -153,7 +153,7 @@ The keys port binds a **key purpose** to a backend and refuses a backend that is
 | Key purpose | Requires | On AWS KMS | On a YubiKey (PIV) |
 | -------- | -------- | ---------- | ------------------ |
 | `token-signing` | Never exportable; used by the `signer` actor only | One `ECC_NIST_P384` key; tokens are signed directly | Slot 9c; about 8 signatures per second |
-| `ca` (X.509 and SSH) | Never exportable; used by the `ca` actor only | One `ECC_NIST_P384` key | Slots 9c and 82 |
+| `ca` (X.509 and SSH) | Never exportable; used by the `ca` actor only; one key per purpose (X.509 per trust domain, `ssh-user`, `ssh-host`) | One `ECC_NIST_P384` key per purpose | Slots 9c, 82 and 83 (proposed) |
 | `audit-log` | Never exportable; used by the audit `writer` only, through `key-holder` or a key policy | One `ECC_NIST_P384` key per log | The node's own key; a cluster keeps one log per node and peers witness it |
 | `grant` | Never exportable; used by the `policy` actor only | One `ECC_NIST_P384` key | A node key |
 | `sealing` | Wraps and unwraps; takes an encryption context | One symmetric key with encryption contexts | ECDH plus HKDF (HPKE-style) with a P-384 key in slot 9d |

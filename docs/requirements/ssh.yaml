@@ -87,11 +87,11 @@ requirements:
       - {kind: integration-test, ref: "ssh-keygen -Qf check"}
   - id: REQ-SSH-004
     area: SSH
-    statement: "sluis SHOULD support an OpenPubkey-style SSH sign-in in which the ID token carries the nonce binding and sluis signs no SSH key."
-    rationale: "A secondary mode for hosts that cannot run a CA."
-    level: SHOULD
+    statement: "An operator MAY run an OpenPubkey-style SSH sign-in next to sluis, but sluis does not provide one."
+    rationale: "v1 offered this mode; v2 uses sluis's own SSH CA only, so it is not carried over."
+    level: MAY
     origin: v1-parity
-    status: planned
+    status: out-of-scope
     runtimes: all
     standards:
       - {id: NC-07, section: "OpenPubkey", depth: Full}

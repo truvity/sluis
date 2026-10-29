@@ -93,8 +93,8 @@ requirements:
   - id: REQ-SUPPLY-009
     area: SUPPLY
     split_from: REQ-SUPPLY-004
-    statement: "Each release signing primary key MUST have its own signing subkey with an expiry."
-    rationale: "The primary key stays on the token while the subkey signs."
+    statement: "Each node's release-signing subkey MUST be bound under both OpenPGP primary keys, with an expiry."
+    rationale: "The primary keys stay on their cards while one shared subkey signs, so one signature verifies under either."
     level: MUST
     origin: design-decision
     status: planned
@@ -166,8 +166,8 @@ requirements:
       - {kind: manual, ref: "ceremony record"}
   - id: REQ-SUPPLY-012
     area: SUPPLY
-    statement: "Every release MUST be signed twice, once with each OpenPGP primary key."
-    rationale: "Two signatures survive the loss of either card."
+    statement: "A release-signing subkey MUST be revoked under both OpenPGP primary keys."
+    rationale: "gpg and gpgv ignore a revocation made under only one primary, so a verifier that holds a single certificate would still accept the subkey."
     level: MUST
     origin: design-decision
     status: planned
@@ -176,11 +176,11 @@ requirements:
       - {id: ST-83, section: "9580", depth: Full}
     features: ["#888"]
     verification:
-      - {kind: integration-test, ref: "two-signature release check"}
+      - {kind: integration-test, ref: "revocation-under-both-primaries check"}
   - id: REQ-SUPPLY-013
     area: SUPPLY
-    statement: "Either release signing fingerprint MUST verify every release."
-    rationale: "A verifier should need only one of the two fingerprints."
+    statement: "A release MUST carry one signature that verifies under either primary key's certificate."
+    rationale: "A verifier should need only one of the two certificates."
     level: MUST
     origin: design-decision
     status: planned
