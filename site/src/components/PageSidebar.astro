@@ -1,0 +1,10 @@
+---
+// Starlight's right-hand "On this page" column replaced by its own collapsible
+// dropdown (the mobile table of contents), at every width. It is fixed under the
+// header, so it stays at the top while the page scrolls, and it renders nothing
+// when the page has no table of contents (src/route-middleware.ts drops it for
+// pages with fewer than two headings).
+import MobileTableOfContents from 'virtual:starlight/components/MobileTableOfContents';
+---
+
+{Astro.locals.starlightRoute.toc && <MobileTableOfContents />}
