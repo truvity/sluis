@@ -123,6 +123,23 @@ The trust of an installation starts at two **roots**, held on ordinary YubiKeys 
 - **No key is ever copied between cards.** A key that was imported into two cards has existed in software once and has lost its attestation; a key generated on the card keeps its PIV attestation, which proves that it was made on a genuine device with those policies.
 - **Each intermediate is certified by both roots.** There is one intermediate key and two certificates, one from each card's root. Losing either card breaks no chain.
 
+### Why two roots
+
+Having several roots, and several certificates for one intermediate, is ordinary practice. Checked on 2026-10-29:
+
+- **Public CAs run several roots at once.** [Let's Encrypt](https://letsencrypt.org/certificates/) operates ISRG Root X1 (RSA 4096) and ISRG Root X2 (ECDSA P-384), and X2 also has a certificate cross-signed by X1.
+- **One intermediate can have two certificates.** Several Let's Encrypt intermediates had one certificate from ISRG Root X1 and a second, cross-signed one from an older root, so clients that trusted either root could build a chain. sluis does the same: one intermediate key, two certificates.
+- **Roots are replaced with old and new trusted together.** [RFC 4210, section 4.4](https://datatracker.ietf.org/doc/html/rfc4210) describes a root key update in which the old key stays in use until relying parties have the new one.
+- **Purposes are kept apart.** The [Chrome Root Program policy](https://googlechrome.github.io/chromerootprogram/crp/policy), section 1.3.2, wants TLS server hierarchies dedicated to that one purpose. That rule is for the web PKI, but it is the reason the sluis roots certify only sluis intermediates and nothing else.
+
+What is less common is two roots that are **both permanently active and back each other up**. The conventional design keeps one root key and copies it between hardware security modules, with the wrapping key split among several custodians (an M-of-N scheme). For example, the [YubiHSM 2 backup](https://docs.yubico.com/hardware/yubihsm-2/hsm-2-user-guide/hsm2-backup-restore.html) exports a key under a wrap key and imports it into a second device, and the wrap key can be split into shares. That design has one anchor to publish, but the copy is a key that has left the device it was born in, so the second device cannot attest where the key came from.
+
+sluis takes the other branch for two reasons: no key is ever copied, so each card keeps its PIV attestation, and losing a card breaks no chain, because the other root already certifies every intermediate. The price is two anchors to publish, document and watch, and a few client effects:
+
+- **Both roots always publish a CRL.** A client may build the path through either root, so it may ask for either list. A root that has no revocations still publishes an empty, current CRL.
+- **A server presents one chain.** The chain holds the leaf and one certificate of the intermediate, issued by one root. Do not put both certificates of the intermediate in the same chain.
+- **Path building differs between libraries.** The OpenSSL command line takes the first intermediate whose name matches and does not try the other one if that path fails; Go backtracks and tries both. The same family of bug is why OpenSSL 1.0.x broke when [a cross-signed root expired in 2021](https://openssl-library.org/post/2021-09-13-letsencryptrootcertexpire/): it preferred the chain it was sent over a valid path through its own trust store. A verifier that uses the OpenSSL command line should pass the chain it wants explicitly, or the root that matches it.
+
 ### A lost root card
 
 If a root card is lost, the procedure is:
@@ -134,7 +151,7 @@ If a root card is lost, the procedure is:
 
 ### OpenPGP release signing
 
-The same rule holds for releases. Each card has **its own OpenPGP primary key**, generated on the card, and **each primary has its own signing subkey**. **Every release is signed twice**, once with each, so either fingerprint verifies every release. A verifier needs one of the two, and losing one card removes one of the two signatures and no release.
+The same rule holds for releases. Each card has **its own OpenPGP primary key**, generated on the card, and **each primary has its own signing subkey**. **Every release is signed twice**, once with each, so either fingerprint verifies every release. A verifier needs one of the two, and losing one card removes one of the two signatures and no release. The two signatures are published as two separate files. See [Release signing](/distribution/release-signing/#why-two-primaries-and-two-signature-files) for why.
 
 ### The ceremony
 
