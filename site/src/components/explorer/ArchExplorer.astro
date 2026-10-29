@@ -1,7 +1,7 @@
 ---
 // The architecture explorer. `part` picks which piece to render, so the page can
 // put its own headings between them:
-//   toggle  the preset toggle and the presets-at-a-glance table
+//   toggle  the installation toggle and the installations-at-a-glance table
 //   legend  what the map's boxes and lines mean
 //   map     the process map, the detail panel and the flows
 //   tables  the same facts as tables, which read without script
@@ -22,7 +22,7 @@ const dflt: string = data.default_shape;
 
 {part === 'toggle' && (
   <div class="ex" data-ex-root data-default={dflt}>
-    <div class="ex-toggle ex-only-js" role="radiogroup" aria-label="Preset" data-ex-toggle hidden>
+    <div class="ex-toggle ex-only-js" role="radiogroup" aria-label="Installation" data-ex-toggle hidden>
       {models.map((m) => (
         <button type="button" role="radio" aria-checked={m.shape.id === dflt ? 'true' : 'false'} data-shape={m.shape.id} tabindex={m.shape.id === dflt ? 0 : -1}>
           <b>{m.shape.id}</b><span>{m.shape.name}</span>
@@ -31,7 +31,7 @@ const dflt: string = data.default_shape;
     </div>
     <div class="ex-table-wrap">
       <table>
-        <thead><tr><th>Preset</th><th>Hardware</th><th>Keys</th><th>State</th><th>Environment</th><th>Used for</th></tr></thead>
+        <thead><tr><th>Installation</th><th>Hardware</th><th>Keys</th><th>State</th><th>Runtime</th><th>Used for</th></tr></thead>
         <tbody>
           {models.map((m) => (
             <tr data-shape-row={m.shape.id}>
@@ -46,7 +46,7 @@ const dflt: string = data.default_shape;
         </tbody>
       </table>
     </div>
-    <p class="ex-only-js" style="font-size:var(--sl-text-sm);margin-top:.5rem">The row of the preset you picked is highlighted. Every part of this page follows the toggle.</p>
+    <p class="ex-only-js" style="font-size:var(--sl-text-sm);margin-top:.5rem">The row of the installation you picked is highlighted. Every part of this page follows the toggle.</p>
   </div>
 )}
 
@@ -106,7 +106,7 @@ const dflt: string = data.default_shape;
   <div class="ex">
     <div class="ex-table-wrap">
       <table>
-        <thead><tr><th>Process</th><th>On a bare-metal cluster (T2, T4)</th><th>Status</th></tr></thead>
+        <thead><tr><th>Process</th><th>On a bare-metal cluster (boards)</th><th>Status</th></tr></thead>
         <tbody>
           {data.cluster.map((r: any) => (
             <tr><td>{r.process}</td><td>{r.where}</td><td><span class={`ex-chip ex-chip-${r.status}`}>{data.statuses[r.status]}</span></td></tr>

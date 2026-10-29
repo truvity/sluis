@@ -15,7 +15,7 @@ sluis is not one program. It is a handful of **core actors**, each with one job,
 | **Core actors** | `entry`, `signer`, `policy`, `ca`, `quota` | `quota` is the engine of the Quota piece, which is a separate piece that can be combined with sluis in one installation and then shares its driver instances ([OD-37](/open-decisions/#od-37) and [OD-38](/open-decisions/#od-38), decided). See [Audit](/concepts/audit/#the-four-pieces). |
 | **Integration actors** | `Upstream`, `WorkloadVerifier`, `FactsSource`, `CredentialMinter`, `Provisioner`, `Notifier` | One process per integration. See [Integrations](/concepts/integrations/). |
 | **Platform** | `sluis-node`, `key-holder`, `state-owner` | `sluis-node` is the node agent; it does not run on serverless or on Kubernetes. `key-holder` (keys) and `state-owner` (state) are the two mediating drivers: see [Ports and drivers](/concepts/drivers/#the-two-mediating-drivers). |
-| **Audit actors** | `notary`, `audit-writer`, `audit-read` today; `writer`, `witness`, `indexer`, `reader` proposed | See [Audit](/concepts/audit/) and [OD-39](/open-decisions/#od-39). |
+| **Audit actors** | `writer`, `witness`, `indexer`, `reader` | There is no notary actor (agreed, [OD-39](/open-decisions/#od-39)). See [Audit](/concepts/audit/). |
 
 ## The core and audit actors
 
@@ -26,16 +26,13 @@ sluis is not one program. It is a handful of **core actors**, each with one job,
 | `policy` | The decision point. A reviewed, file-based policy maps facts to grants. It has no state and no network. It signs mint grants with its own key. | The grant key |
 | `ca` | X.509 and the SSH certificate authority. | The CA keys |
 | `quota` | Rate limits and caps, using conditional adjust on the state port. | Nothing but its own counters |
-| `notary` | Signs the heads of audit batches. | The notary key |
-| `audit-writer` | Seals audit batches and writes them to the blob store. | No signing key; it calls the notary |
-| `audit-read` | Serves audit queries from the index. | Read-only access |
+| `writer` | Receives audit records from the transport, seals them in batches and writes them to the blob store. It asks `key-holder` to sign each batch head. Exactly one per log. | The log-store credential. It never holds the log key |
+| `witness` | Co-signs the batch heads it has seen. Optional. | Its own key |
+| `indexer` | Builds the search index from the log store. Exactly one. | Read on the log store, write on the index |
+| `reader` | Serves audit queries from the index and audits every read. | Read-only access |
 | Integration actors | One process per integration, in six kinds: see [Integrations](/concepts/integrations/). | The vendor credential of that integration only |
 
-Four actors hold an authority key: `signer`, `policy`, `ca` and `notary`. Each holds a different one. `entry`, which faces the internet through the edge connector, holds none. `entry` is the one actor with a TCP listener: its public API is bound to `127.0.0.1`, and every other actor listens on Unix sockets only (see [Listeners](/architecture/listeners/)). `entry` was formerly called central.
-
-:::note[Proposed]
-The three audit actors above are proposed to be replaced by four: a **writer** that receives records and seals batches, a **witness** that co-signs batch heads, an **indexer** that builds the search index, and a **reader** that serves queries. The notary is then folded into the `key-holder` access list, or kept as a thin checker. Whether to make this change is [OD-39](/open-decisions/#od-39). The audit actors are described on [Audit](/concepts/audit/).
-:::
+Three actors use an authority key: `signer`, `policy` and `ca`. Each uses a different one. The audit `writer` uses the log key too, but only by asking `key-holder` to sign, and `key-holder`'s access list lets nobody but the writer use that key. `entry`, which faces the internet through the edge connector, holds none. `entry` is the one actor with a TCP listener: its public API is bound to `127.0.0.1`, and every other actor listens on Unix sockets only (see [Listeners](/architecture/listeners/)). `entry` was formerly called central.
 
 ## Actors and ports
 
@@ -58,30 +55,26 @@ Every actor declares which ports it requires. R means required, O optional, and 
 | `key-holder`, `state-owner` | – | – | – | – | R | – | – | O |
 | third-party app | O | – | – | – | R | – | – | – |
 
-:::note[Proposed]
 The audit actors, with the same legend (the cell marked * is the one place an actor receives from the transport instead of putting into it):
 
 | Actor | keys | state | lease | blob | transport | index | witness | cloud |
 |---|---|---|---|---|---|---|---|---|
-| audit writer | R | – | O | R | R* | – | O | O |
-| audit witness | R | R | – | R | – | – | – | – |
-| audit indexer | – | – | O | R | – | R | – | – |
-| audit reader | – | – | – | R | – | R | – | – |
-
-This is part of [OD-39](/open-decisions/#od-39).
-:::
+| `writer` | R | – | O | R | R* | – | O | O |
+| `witness` | R | R | – | R | – | – | – | – |
+| `indexer` | – | – | O | R | – | R | – | – |
+| `reader` | – | – | – | R | – | R | – | – |
 
 Every actor is a producer on the **transport** port, because every success is audited. The writer is the one consumer. Why the table looks this way is in [Audit](/concepts/audit/).
 
 ## Where an actor runs is derived
 
-There is no per-preset table that says where each actor runs. Where an actor runs is **derived from the port and driver rules** ([OD-32](/open-decisions/#od-32), decided). This holds for every actor: the core actors, the integration actors, the platform services and the Search actors. `sluis config check` enforces the rules, and each [preset](/environments/presets/) only names its default drivers.
+There is no per-installation table that says where each actor runs. Where an actor runs is **derived from the port and driver rules** ([OD-32](/open-decisions/#od-32), decided). This holds for every actor: the core actors, the integration actors, the platform services and the Search actors. `sluis config check` enforces the rules, and each [tested installation](/runtimes/installations/) only names its default drivers.
 
 The rules, applied to an actor:
 
 1. **An actor runs wherever all its required ports are reachable.** Its drivers are started by the platform next to it (a systemd service, a Lambda extension, a native sidecar) and spoken to over a Unix socket, so the actor and the driver instances of its ports share a node, a function or a pod.
 2. **The driver's requirements move the actor.** A driver that needs a long-running process or a persistent disk puts its actor where one exists. A `yubikey-piv` keys driver puts `signer`, `policy` and `ca` on a node that has the YubiKey. The same driver is refused on serverless.
-3. **Instances: exactly 1 pins the actor to one holder.** The indexer, the audit writer and the `FactsSource` reconciler run once, and with more than one node or elastic nodes they need the lease port.
+3. **Instances: exactly 1 pins the actor to one holder.** The indexer, the audit writer of each log and the `FactsSource` reconciler run once, and with more than one node or elastic nodes they need the lease port.
 4. **A single-writer driver puts its readers beside its writer.** With a `sqlite` index on a cluster there is one writer, so the reader runs on the indexer's node. With a `postgres` index the reader can run on any node that reaches the database.
 5. **Actors may share a unit under the fusion rule.** Combined pieces of an installation share driver instances, even with sluis.
 
@@ -92,7 +85,8 @@ The rules, applied to an actor:
 | `quota` | The state port with compare-and-set. It can run beside sluis or as a piece of its own |
 | Integration actors | Their state and cloud ports; one process each, started on demand where they have no standing work |
 | `sluis-node`, `key-holder`, `state-owner` | Per node, beside the hardware or the state store they front. They are not used on serverless or Kubernetes, where the platform provides the identity |
-| Writer | The blob, keys and transport ports; exactly 1 |
+| Writer | The blob, keys and transport ports; exactly 1 per log. On a cluster of boards each node runs its own writer for its own log |
+| Witness | The witness port; on a cluster, the other nodes witness a node's log |
 | Indexer, reader | The index and blob ports; the indexer is exactly 1, and a single-writer index puts the reader beside it |
 
 See [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived) for the rules as they apply to drivers.
@@ -101,7 +95,7 @@ See [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived) for t
 
 Some actors declare **instances: exactly 1**. At any moment there must be one and only one of them:
 
-- the audit writer, because its batch sequence must have no gaps or forks;
+- the audit writer, because its batch sequence must have no gaps or forks. The rule is **exactly one writer per log**, not one per installation: a cluster keeps one log per node, each with its own writer;
 - the `FactsSource` reconciler, because two reconcilers would fight over the same external state;
 - the indexer, because the search index has one writer.
 
@@ -141,18 +135,18 @@ Both halves are checked. The first means fusion never grants an actor something 
 On Kubernetes the "unit" of this rule is proposed to be the **credential scope**, which is the container, because one pod holds several actors, each with its own token audience. Read literally, a pod that holds `entry` and `signer` would break the second half. With the container as the unit, the build checks that no container that can use a key also has a listener. Which meaning of "unit" applies is [OD-18](/open-decisions/#od-18).
 :::
 
-## Actors in every environment
+## Actors on every runtime
 
-The set of actors is the same in every [environment](/environments/). What changes is how each one is run and what is behind its ports.
+The set of actors is the same on every [runtime](/runtimes/). What changes is how each one is run and what is behind its ports.
 
-| Environment | An actor is |
+| Runtime | An actor is |
 |---|---|
 | Bare-metal (a single board, a cluster of boards, a virtual machine, local Docker) | An OS user and a systemd unit (a container under local Docker); a few actors may be fused under the rule above |
 | Serverless | One function per actor |
 | Kubernetes (proposed) | A container per actor, in a node pod or an audit pod |
 
 :::note[Proposed]
-On Kubernetes an actor is a container with its own user id and its own token audience, and a pod holds several actors. This replaces one pod, with one ServiceAccount, per actor. The layout is a node pod plus a separate audit side ([OD-17](/open-decisions/#od-17)); the audit side is being redesigned as a separate audit installation ([OD-31](/open-decisions/#od-31)). See [Kubernetes](/environments/kubernetes/).
+On Kubernetes an actor is a container with its own user id and its own token audience, and a pod holds several actors. This replaces one pod, with one ServiceAccount, per actor. The layout is a node pod plus a separate audit side ([OD-17](/open-decisions/#od-17)); the audit side is being redesigned as a separate audit installation ([OD-31](/open-decisions/#od-31)). See [Kubernetes](/runtimes/kubernetes/).
 :::
 
-See [Environments](/environments/) for each environment and its presets, and [Processes](/architecture/processes/) for what runs where.
+See [Runtimes](/runtimes/) for each runtime and the tested installations, and [Processes](/architecture/processes/) for what runs where.

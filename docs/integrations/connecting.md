@@ -26,7 +26,7 @@ flowchart LR
 4. **Check.** `sluis integrations check <name>` compares what was declared with what the vendor actually granted (drift), and runs the integration as a dry run.
 5. **Enable.** Nothing acts until the integration is enabled. A dry run lists what would change.
 
-**Secrets are referenced, never inlined.** An operator secret in a configuration file is a reference such as `cred:sluis-int-github.example-org.publisher.app-key`, resolved at runtime from the credential store the environment provides ([Configuration](/concepts/configuration/)). The approver at the vendor and the operator of sluis are usually two people, which is a feature: neither alone can connect an integration.
+**Secrets are referenced, never inlined.** An operator secret in a configuration file is a reference such as `cred:sluis-int-github.example-org.publisher.app-key`, resolved at runtime through the `secrets` port, which holds sluis's own and its integrations' secrets ([Configuration](/concepts/configuration/), [Secrets and export](/concepts/secrets/)). The approver at the vendor and the operator of sluis are usually two people, which is a feature: neither alone can connect an integration.
 
 | Task | Command shape (example) | In v1 |
 |---|---|---|

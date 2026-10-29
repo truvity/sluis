@@ -77,5 +77,5 @@ Keep a break-glass path outside sluis, the cloud's own cluster access, until a p
 
 - v1 does both today: ServiceAccount tokens from any number of clusters, and the API server sign-in. See [Connect a Kubernetes cluster](/v1/guides/sluis/connect/kubernetes-cluster/) and [Call one service from another](/v1/guides/sluis/connect/service-to-service/). The person's commands are `sluisctl kubeconfig` and `sluisctl kube-token`.
 - In v2 a node's workload identity ([Identity](/concepts/identity/)) is separate from this: it is how sluis's own actors reach a cloud, not how a cluster's workloads reach sluis.
-- Kubernetes as an **environment** (running sluis in pods) is separate from this page; see [Kubernetes](/environments/kubernetes/).
+- Kubernetes as a **runtime** (running sluis in pods) is separate from this page; see [Kubernetes](/runtimes/kubernetes/).
 - Parity issues: [#784](https://github.com/truvity/sluis/issues/784) workload proofs, [#818](https://github.com/truvity/sluis/issues/818) the API server sign-in.

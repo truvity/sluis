@@ -1,10 +1,11 @@
-// Builds the architecture explorer's model, per preset, from
+// Builds the architecture explorer's model, per tested installation, from
 // src/data/explorer/architecture.yaml. Nothing here states a fact about sluis:
 // facts are in the YAML, and this file only expands them (names from the
 // runtime templates, the call graph per preset, the layout of the map).
-// Vocabulary: a "shape" in the code is a preset (T0 to T6) of an environment
-// (bare-metal, serverless, kubernetes); a "role" in the code is an actor. The
-// identifiers keep their old names; the text shown to the reader uses the new.
+// Vocabulary: a "shape" in the code is a tested installation (local, boards,
+// lambda) of a runtime (bare-metal, serverless, kubernetes); a "role" in the
+// code is an actor. The identifiers keep their old names; the text shown to
+// the reader uses the new.
 import { parse } from 'yaml';
 import { assertOpenDecision } from './od';
 import raw from '../data/explorer/architecture.yaml?raw';
@@ -25,7 +26,7 @@ export type ShapeModel = MapModel & {
 
 const LANES = ['Edge and node', 'Actors', 'Drivers', 'Backing stores', 'Integrations', 'Outside'];
 
-const ROLE_ORDER = ['policy', 'signer', 'ca', 'notary', 'quota', 'audit-writer', 'audit-read'];
+const ROLE_ORDER = ['policy', 'signer', 'ca', 'quota', 'writer', 'witness', 'indexer', 'reader'];
 const INT_ORDER = ['int-upstream', 'int-workload', 'int-facts', 'int-minter', 'int-provisioner', 'int-notifier'];
 const PORT_ROW: Record<string, number> = { keys: 1, state: 2.8, blob: 4.6, transport: 6.2 };
 
@@ -152,8 +153,8 @@ function build(shape: any): ShapeModel {
       id: p.store_node, lane: 3, row: PORT_ROW[port], cls: 'store', shared: false,
       title: bl[0], l2: bl[1], l3: p.store_title,
       detail: {
-        title: `${label(p.store_title)}: ${d.backing}`, kind: 'backing store', cls: 'store', does: `The ${port} port's backing store in this preset: ${d.backing}.`,
-        rows: [], lists: [], notes: port === 'keys' && shape.id === 'T0' ? [{ text: "A YubiKey on the host is reached through the host's pcscd socket, which lets several programs share the card." }] : [],
+        title: `${label(p.store_title)}: ${d.backing}`, kind: 'backing store', cls: 'store', does: `The ${port} port's backing store in this installation: ${d.backing}.`,
+        rows: [], lists: [], notes: port === 'keys' && shape.id === 'local' ? [{ text: "A YubiKey on the host is reached through the host's pcscd socket, which lets several programs share the card." }] : [],
       },
     });
   }
@@ -245,7 +246,7 @@ function build(shape: any): ShapeModel {
 
   return {
     id: shape.id, name: shape.name, shape, runtime: rt, nodes, edges, width, height, lanes, processes, ports,
-    intro: `Environment: ${shape.environment}. ${shape.hardware}. Keys: ${shape.keys}. State: ${shape.state}.`,
+    intro: `Runtime: ${shape.environment}. ${shape.hardware}. Keys: ${shape.keys}. State: ${shape.state}.`,
     notes: shape.notes ?? [],
   };
 
@@ -269,7 +270,7 @@ function build(shape: any): ShapeModel {
     return {
       title: r.name, kind: 'actor', cls: 'role', status: r.status, od: r.od, does: r.does, rows,
       lists: [
-        { title: 'Drivers it uses in this preset', items: usedPorts },
+        { title: 'Drivers it uses in this installation', items: usedPorts },
         { title: 'Manifest summary (illustrative)', items: r.resources },
       ],
       notes,

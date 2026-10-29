@@ -56,19 +56,27 @@ const naturalSize = Object.fromEntries(
 export default defineConfig({
   site: 'https://sluis.id',
   trailingSlash: 'always',
-  // The v2 taxonomy renamed the "shapes" pages to "environments" and merged the
-  // five bare-metal shapes into presets; "roles" became "actors". The old paths
-  // keep working. A preset keeps its short id (T0 to T6) as an anchor.
+  // The v2 taxonomy renamed the "shapes" pages to "runtimes" (bare-metal,
+  // serverless, kubernetes) and merged the five bare-metal shapes into the
+  // installations page; "roles" became "actors". The old paths keep working.
+  // Each redirect points at the final page, so nothing chains. The /environments/
+  // paths were the previous name of /runtimes/.
   redirects: {
-    '/shapes/': '/environments/',
-    '/shapes/local/': '/environments/presets/#t0-local',
-    '/shapes/single-node/': '/environments/presets/#t1-single-board',
-    '/shapes/cluster/': '/environments/presets/#t2-board-cluster',
-    '/shapes/aws-ec2-single/': '/environments/presets/#t3-ec2-single',
-    '/shapes/aws-ec2-cluster/': '/environments/presets/#t4-ec2-cluster',
-    '/shapes/aws-lambda/': '/environments/serverless/',
-    '/shapes/kubernetes/': '/environments/kubernetes/',
+    '/environments/': '/runtimes/',
+    '/environments/bare-metal/': '/runtimes/bare-metal/',
+    '/environments/serverless/': '/runtimes/serverless/',
+    '/environments/kubernetes/': '/runtimes/kubernetes/',
+    '/environments/presets/': '/runtimes/installations/',
+    '/shapes/': '/runtimes/',
+    '/shapes/local/': '/runtimes/installations/#local',
+    '/shapes/single-node/': '/runtimes/installations/',
+    '/shapes/cluster/': '/runtimes/installations/#boards',
+    '/shapes/aws-ec2-single/': '/runtimes/bare-metal/',
+    '/shapes/aws-ec2-cluster/': '/runtimes/bare-metal/',
+    '/shapes/aws-lambda/': '/runtimes/serverless/',
+    '/shapes/kubernetes/': '/runtimes/kubernetes/',
     '/concepts/roles/': '/concepts/actors/',
+    '/decisions/0003-environments-are-runtime-kinds/': '/decisions/0003-runtimes-are-runtime-kinds/',
   },
   prefetch,
   vite: {
@@ -129,7 +137,7 @@ export default defineConfig({
         { label: 'Concepts', items: [{ autogenerate: { directory: 'concepts' } }] },
         { label: 'Integrations', items: [{ autogenerate: { directory: 'integrations' } }] },
         { label: 'Architecture', items: [{ autogenerate: { directory: 'architecture' } }] },
-        { label: 'Environments', items: [{ autogenerate: { directory: 'environments' } }] },
+        { label: 'Runtimes', items: [{ autogenerate: { directory: 'runtimes' } }] },
         { label: 'Tutorials', items: [{ autogenerate: { directory: 'tutorials' } }] },
         { label: 'Distribution', items: [{ autogenerate: { directory: 'distribution' } }] },
         { label: 'Standards and conformance', items: [{ autogenerate: { directory: 'standards' } }] },

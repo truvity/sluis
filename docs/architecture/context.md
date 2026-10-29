@@ -115,7 +115,7 @@ Browser redirect routes under `/connect/<integration>/` complete the provider fl
 
 ### Audit read
 
-`audit.v1.QueryService` is reached only through the console, which forwards the call with a five-minute token minted for the signed-in person and addressed to the audit install. `401` means signed out, `403` means no grant, `502` means unreachable. Independent verification does not call sluis: an auditor fetches the sealed batches and the notary's public key and checks the chain.
+`audit.v1.QueryService` is reached only through the console, which forwards the call with a five-minute token minted for the signed-in person and addressed to the audit install. `401` means signed out, `403` means no grant, `502` means unreachable. Independent verification does not call sluis: an auditor fetches the sealed batches, the log's public key and any witness co-signatures, and checks the chain.
 
 ### Operator and automation
 
@@ -270,4 +270,4 @@ The secret is the minter credential, and the vendor is the downstream API. The c
 
 At L2 this one participant becomes several: the decision is made by the `policy` actor, and the call that holds the vendor credential is made by an integration that only carries out what core has authorized. See [Components](/architecture/components/).
 
-Next: [Components](/architecture/components/) opens the box. [Environments](/environments/) shows the same box running in each environment.
+Next: [Components](/architecture/components/) opens the box. [Runtimes](/runtimes/) shows the same box running on each runtime.

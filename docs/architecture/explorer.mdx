@@ -1,6 +1,6 @@
 ---
 title: Architecture explorer
-description: An interactive map of the sluis actor processes, drivers, sockets and flows in each preset, drawn from data files.
+description: An interactive map of the sluis actor processes, drivers, sockets and flows in each tested installation, drawn from data files.
 status: target
 tableOfContents: false
 sidebar:
@@ -10,11 +10,11 @@ import ArchExplorer from '../../site/src/components/explorer/ArchExplorer.astro'
 import OpenDecision from '../../site/src/components/explorer/OpenDecision.astro';
 import Proposed from '../../site/src/components/explorer/Proposed.astro';
 
-This is the target state, not a running system. The map below is drawn from `site/src/data/explorer/architecture.yaml`, which today is written by hand from the design. Once the [permission manifest](/architecture/) exists, the actors, drivers, call edges, users and sockets are generated from it and this page reads that instead. The vocabulary is explained under [Actors](/concepts/actors/) and [Ports and drivers](/concepts/drivers/). Each preset is an installation of one [environment](/environments/) (bare-metal, serverless or kubernetes), and the presets are listed on [Presets](/environments/presets/). Preset T6 (Kubernetes) is proposed and is not drawn here.
+This is the target state, not a running system. The map below is drawn from `site/src/data/explorer/architecture.yaml`, which today is written by hand from the design. Once the [permission manifest](/architecture/) exists, the actors, drivers, call edges, users and sockets are generated from it and this page reads that instead. The vocabulary is explained under [Actors](/concepts/actors/) and [Ports and drivers](/concepts/drivers/). Each tested installation is an installation of one [runtime](/runtimes/) (bare-metal, serverless or kubernetes), and the four are listed on [Installations](/runtimes/installations/): local, boards, lambda and kubernetes. The map draws local, boards and lambda, in the order they are delivered; kubernetes is proposed and is not drawn here.
 
-Pick a preset. The map, the tables and the flows follow it. Without script the page shows T4, the first build target, and every table below is plain HTML.
+Pick an installation. The map, the tables and the flows follow it. Without script the page shows boards, the second delivery step, and every table below is plain HTML.
 
-## Presets
+## Installations
 
 <ArchExplorer part="toggle" />
 
@@ -28,16 +28,18 @@ Select a box to see what it holds, its manifest summary and its listeners; the l
 
 ## Processes and listeners
 
-The same facts as tables, for the preset picked above. `entry`'s public API listens on TCP, bound to `127.0.0.1`, in every environment: `cloudflared` connects to that loopback port on bare-metal, and the Lambda Web Adapter does on serverless. Every other actor and driver listens on Unix sockets under `/run/sluis/` only. How Kubernetes reaches the loopback port is on [Listeners](/architecture/listeners/).
+The same facts as tables, for the installation picked above. `entry`'s public API listens on TCP, bound to `127.0.0.1`, on every runtime: `cloudflared` connects to that loopback port on bare-metal, and the Lambda Web Adapter does on serverless. Every other actor and driver listens on Unix sockets under `/run/sluis/` only. How Kubernetes reaches the loopback port is on [Listeners](/architecture/listeners/).
 
-Quota and Search are separate pieces whose placement is derived from the port and driver rules, not decided per preset: see [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived), [OD-38](/open-decisions/#od-38), [OD-33](/open-decisions/#od-33) and [OD-32](/open-decisions/#od-32).
+Quota and Search are separate pieces whose placement is derived from the port and driver rules, not decided per installation: see [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived), [OD-38](/open-decisions/#od-38), [OD-33](/open-decisions/#od-33) and [OD-32](/open-decisions/#od-32).
 
 <ArchExplorer part="tables" />
 
 ## Clusters
 
+On bare-metal with N nodes (the boards installation) each node runs the full set of processes. A cluster keeps one log per node: each node's writer drains its own spool and signs with its own log key, and the other nodes are its peer witnesses (the 2-of-3 co-signing). The rule is exactly one writer per log, not one per installation. There is no notary.
+
 <Proposed>
-On bare-metal with N nodes (the presets T2 and T4) each node runs the full set of processes. In the current draft each node's audit writer drains its own spool, and the notary co-signs batch heads 2 of 3 across the nodes, with no separate notary YubiKey. The audit writer declares exactly one instance, so an installation that shares one spool needs the lease port; placement of the audit writer is per installation.
+The index on boards is rqlite, a replicated SQLite, so the reader can run on any node. This is a proposed index driver, and its full-text support must be verified before it is relied on.
 </Proposed>
 
 <ArchExplorer part="cluster" />

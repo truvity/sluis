@@ -28,6 +28,21 @@ The [features page](/features/) lists what v1 does and where each capability sta
 
 Planned work is also tracked as [issues](https://github.com/truvity/sluis/issues) and milestones in the repository.
 
+## Delivery order
+
+The maintainer agreed this order for the tested [installations](/runtimes/installations/) on 2026-10-29. It replaces the earlier plan that made an EC2 cluster the first build target.
+
+1. **local.** Docker on a workstation, using the host's YubiKey through the host's `pcscd` and not a software key. The basic functionality and its tests are covered here first.
+2. **boards.** Three single-board computers behind a Cloudflare tunnel, a YubiKey in each node, state and index on rqlite (the rqlite index is a proposed new driver), audit records in a Cloudflare R2 bucket, the audit pieces on the same nodes, and one log per node with the other nodes as peer witnesses.
+3. **lambda.** AWS Lambda.
+4. **kubernetes,** later.
+
+EC2 is no longer a delivery target. A virtual machine is still bare-metal, so an EC2 installation stays possible, under the same rules, but it is not tested. Installations other than these four are possible and untested.
+
+Packaging follows the runtime, not a build profile: `.deb`, `.rpm` and a tarball for bare-metal, a zip per actor for serverless, and an OCI image with a Helm chart for kubernetes. `dev` is not a build.
+
+Also planned, with no issue yet: the YubiKey ceremony for the root and intermediate keys (`sluis pki` or `sluis ceremony`).
+
 ## Technical backlog
 
 Parity says what v2 must do. The technical backlog says what has to exist underneath it: the build, the process and driver patterns, the shared kits, configuration, keys and identity, packaging and distribution. All of it carries the label [`track:foundation`](https://github.com/truvity/sluis/issues?q=is%3Aissue+label%3Atrack%3Afoundation) and sits on the [v2 board](https://github.com/orgs/truvity/projects/9).
@@ -47,7 +62,7 @@ The shape of the repository, the build, and the patterns every component follows
 | [#863](https://github.com/truvity/sluis/issues/863) | Permission manifest format and generators |
 | [#864](https://github.com/truvity/sluis/issues/864) | Configuration from Pkl to JSON Schema with strict validation |
 | [#866](https://github.com/truvity/sluis/issues/866) | systemd unit hardening baseline |
-| [#877](https://github.com/truvity/sluis/issues/877) | Test presets harness |
+| [#877](https://github.com/truvity/sluis/issues/877) | Installation test harness (local, boards, lambda, kubernetes) |
 
 ### Phase 1: keys, identity and configuration
 
@@ -72,9 +87,9 @@ How a release is built, signed, published and installed.
 |---|---|
 | [#873](https://github.com/truvity/sluis/issues/873) | Distribution site on R2 |
 | [#874](https://github.com/truvity/sluis/issues/874) | Release signing and CI upload credentials |
-| [#875](https://github.com/truvity/sluis/issues/875) | Lambda packaging as zip per actor |
-| [#876](https://github.com/truvity/sluis/issues/876) | OCI images and Helm charts with digest-pinned images |
-| [#881](https://github.com/truvity/sluis/issues/881) | Board OS images for Ubuntu 26.04 and Rocky Linux 10.2 |
+| [#875](https://github.com/truvity/sluis/issues/875) | Serverless packaging: a zip per actor |
+| [#876](https://github.com/truvity/sluis/issues/876) | Kubernetes packaging: OCI images and Helm charts with digest-pinned images |
+| [#881](https://github.com/truvity/sluis/issues/881) | Board OS images for Ubuntu 26.04 and Rocky Linux 10.2 (boards installation) |
 
 ### Later
 

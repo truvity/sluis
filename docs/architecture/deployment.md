@@ -1,23 +1,23 @@
 ---
 title: Deployment
-description: "L3, enforcement per environment: how IAM, shared drivers, systemd, nftables and Landlock hold each actor to its manifest."
+description: "L3, enforcement per runtime: how IAM, shared drivers, systemd, nftables and Landlock hold each actor to its manifest."
 status: target
 sidebar:
   order: 4
 ---
 
-The [permission manifest](/architecture/#the-permission-manifest-is-the-spine) says what each actor may do. This page says what enforces it in each [environment](/environments/): [bare-metal](/environments/bare-metal/), [serverless](/environments/serverless/) and [Kubernetes](/environments/kubernetes/). The [presets](/environments/presets/) are named installations of those environments and serve as the worked examples below. The goal in every environment is the baseline that one Lambda function per actor gives for free: one actor is one identity that the resources can see, and nothing else can act as it.
+The [permission manifest](/architecture/#the-permission-manifest-is-the-spine) says what each actor may do. This page says what enforces it on each [runtime](/runtimes/): [bare-metal](/runtimes/bare-metal/), [serverless](/runtimes/serverless/) and [Kubernetes](/runtimes/kubernetes/). The four [tested installations](/runtimes/installations/) are installations of those runtimes and serve as the worked examples below. The goal on every runtime is the baseline that one Lambda function per actor gives for free: one actor is one identity that the resources can see, and nothing else can act as it.
 
 Two axes are enforced separately:
 
-- **The environment axis** decides who the process is and how the platform proves it. An environment is only the runtime kind: how processes are started and what they can rely on. How many nodes an installation has, and which outside services it uses, are not part of it (see [Ports and drivers](/concepts/drivers/#how-sluis-config-check-validates-an-installation)).
+- **The runtime axis** decides who the process is and how the platform proves it. A runtime is only the kind: how processes are started and what they can rely on. How many nodes an installation has, and which outside services it uses, are not part of it (see [Ports and drivers](/concepts/drivers/#how-sluis-config-check-validates-an-installation)).
 - **The backend axis** decides what the resource can refuse on its own. Where a backend cannot tell its callers apart, a shared driver owns the resource.
 
-## Enforcement per environment
+## Enforcement per runtime
 
 Every mechanism is generated from the manifests; none is written by hand.
 
-| Environment | Identity to cloud resources | Shared-driver ACLs | systemd sandboxing | nftables per uid | Landlock |
+| Runtime | Identity to cloud resources | Shared-driver ACLs | systemd sandboxing | nftables per uid | Landlock |
 | ----------- | --------------------------- | ------------------ | ------------------ | ---------------- | -------- |
 | **bare-metal** (a board, a virtual machine such as EC2, or local Docker) | A workload JWT per actor, issued by the node agent from the actor's uid; on a cloud VM the instance role holds almost nothing | `key-holder` and `state-owner` where the backend cannot tell callers apart; cloud IAM and KMS key policies where it can | Every unit (not in a container) | Default-deny egress with per-uid allow-lists, IMDS closed on a cloud VM, the Raft port between peers on N nodes | Per actor where the kernel has it (5.13 or later) |
 | **serverless** (AWS Lambda) | The function's execution role, one per actor. Calls between functions are authorized by a resource policy on an alias | None: IAM does the job | The platform's sandbox | Not available. A VPC route can cut `policy` off entirely | Optional, in process |
@@ -25,24 +25,23 @@ Every mechanism is generated from the manifests; none is written by hand.
 
 The number of nodes changes only the details inside a row: on N bare-metal nodes the Raft port between the `state-owner` processes is opened between peers, and one hardware key per node is used.
 
-### Presets as examples
+### Tested installations as examples
 
-The same mechanisms, read for each [preset](/environments/presets/). A preset is an environment plus a node count, the available dependencies and one driver per port.
+The same mechanisms, read for each of the four [tested installations](/runtimes/installations/). An installation is a runtime plus a node count, the available dependencies and one driver per port.
 
-| Preset | Identity to cloud resources | Shared-driver ACLs | systemd sandboxing | nftables per uid | Landlock |
-| ------ | --------------------------- | ------------- | ------------------ | ---------------- | -------- |
-| **T0 Local** (bare-metal, Docker, development) | None. Software keys; nothing is production | `state-owner` and `key-holder` optional | Not used in a container | Not used | Not used |
-| **T1 Single board** (bare-metal, one single-board computer, YubiKey) | Workload JWT per actor; cloud-free needs no cloud credential | `key-holder` for the YubiKey; `state-owner` in front of the single-node store | Every unit | Default-deny egress with per-uid allow-lists | Not on the current board image (kernel 5.10); the other layers carry the load |
-| **T2 Board cluster** (bare-metal, three boards) | As T1, one hardware key per node | As T1, plus the Raft port over mTLS between `state-owner` processes | Every unit | As T1, plus the Raft port between peers only | As T1 |
-| **T3 EC2 single** (bare-metal, a VM) | IAM role per actor, through the node agent's workload JWT; the instance role holds almost nothing | KMS key policies replace `key-holder`. DynamoDB IAM replaces `state-owner` | Every unit | IMDS closed to every uid but the node agent; egress allow-lists | Per actor |
-| **T4 EC2 cluster** (bare-metal, a VM group of three) | As T3 | KMS replaces `key-holder`; `state-owner` in front of Raft | Every unit | As T3, plus the Raft port between nodes | Per actor |
-| **T5 AWS Lambda** (serverless) | The function's execution role, one per actor. Calls between functions are authorized by resource policy on an alias | None: IAM does the job | The platform's sandbox | Not available. A VPC route can cut `policy` off entirely | Optional, in process |
-| **T6 Kubernetes, EKS** (kubernetes, proposed) | A projected ServiceAccount token per container, one audience per actor, exchanged for a cloud role. Pod Identity only for a single-actor pod | None where the cloud does it. The socket volume mounted into the permitted callers is the first lock | Pod security context per container | NetworkPolicy per pod kind. FQDN egress needs Cilium (optional). Egress is the union over the containers of a pod | Optional |
+| Installation | Identity to cloud resources | Shared-driver ACLs | systemd sandboxing | nftables per uid | Landlock |
+| ------------ | --------------------------- | ------------------ | ------------------ | ---------------- | -------- |
+| **local** (bare-metal, Docker on a workstation, development) | None. A software key or the host's YubiKey; nothing is production | `state-owner` and `key-holder` optional | Not used in a container | Not used | Not used |
+| **boards** (bare-metal, three single-board computers, a YubiKey per node) | Workload JWT per actor; no cloud credential is needed for the board-only parts | `key-holder` for each node's YubiKey; `state-owner` in front of Raft, with the Raft port over mTLS between peers | Every unit | Default-deny egress with per-uid allow-lists, plus the Raft port between peers only | Not on the current board image (kernel 5.10); the other layers carry the load |
+| **lambda** (serverless) | The function's execution role, one per actor. Calls between functions are authorized by resource policy on an alias | None: IAM does the job | The platform's sandbox | Not available. A VPC route can cut `policy` off entirely | Optional, in process |
+| **kubernetes** (kubernetes, EKS, proposed) | A projected ServiceAccount token per container, one audience per actor, exchanged for a cloud role. Pod Identity only for a single-actor pod | None where the cloud does it. The socket volume mounted into the permitted callers is the first lock | Pod security context per container | NetworkPolicy per pod kind. FQDN egress needs Cilium (optional). Egress is the union over the containers of a pod | Optional |
+
+A bare-metal node on a cloud VM (a possible installation, not a tested one) reads like boards with two differences: the node agent's workload JWT is exchanged for an IAM role per actor, so KMS key policies replace `key-holder` and DynamoDB IAM replaces `state-owner`; and the metadata service is closed to every uid but the node agent.
 
 ### Workload JWT and per-cloud exchange
 
 :::note[Proposed]
-On bare-metal nodes (the presets T1 to T4), the node agent (`sluis-node`) issues a short-lived **workload JWT per actor**. The actor's identity comes from its uid, read from the Unix socket's peer credentials. Each cloud driver (AWS, GCP, Azure) exchanges the workload JWT for that cloud's credentials:
+On bare-metal nodes, the node agent (`sluis-node`) issues a short-lived **workload JWT per actor**. The actor's identity comes from its uid, read from the Unix socket's peer credentials. Each cloud driver (AWS, GCP, Azure) exchanges the workload JWT for that cloud's credentials:
 
 | Cloud | Mechanism | Signing algorithm |
 | ----- | --------- | ----------------- |
@@ -59,21 +58,21 @@ IAM Roles Anywhere stays an AWS-only alternative. `aws_signing_helper serve` is 
 
 ### IAM per actor
 
-Each actor has its own IAM role (or Lambda function role; on Kubernetes, proposed, an IAM role that trusts the cluster's issuer and the actor's token audience), generated from its manifest. The trust relationship differs by environment; the permissions policy is the same in all of them.
+Each actor has its own IAM role (or Lambda function role; on Kubernetes, proposed, an IAM role that trusts the cluster's issuer and the actor's token audience), generated from its manifest. The trust relationship differs by runtime; the permissions policy is the same in all of them.
 
-KMS key policies name one actor's role each. On AWS there is one symmetric key (`ENCRYPT_DECRYPT`) with encryption contexts for every sealing need, and one `ECC_NIST_P384` `SIGN_VERIFY` key per authority purpose (token signing, CA, notary, grant), because KMS allows one usage per key and `Sign` takes no encryption context. In the T4 preset each node has its own notary signing key instead, so that batch heads can be co-signed 2 of 3; a shared key cannot do that, because IAM cannot restrict which message gets signed. A generated key policy for the notary key looks like this (an example; `<account-id>` and `<install>` are placeholders):
+KMS key policies name one actor's role each. On AWS there is one symmetric key (`ENCRYPT_DECRYPT`) with encryption contexts for every sealing need, and one `ECC_NIST_P384` `SIGN_VERIFY` key per authority purpose (token signing, CA, audit log, grant), because KMS allows one usage per key and `Sign` takes no encryption context. The audit log has one key per log, and a log has exactly one writer, so a cluster of nodes on AWS would have one key per node, whose peers are its witnesses; a shared key cannot be restricted that way, because IAM cannot restrict which message gets signed. A generated key policy for the audit log key looks like this (an example; `<account-id>` and `<install>` are placeholders):
 
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
-    { "Sid": "UseByNotaryRoleOnly", "Effect": "Allow",
-      "Principal": { "AWS": "arn:aws:iam::<account-id>:role/sluis-<install>-notary" },
+    { "Sid": "UseByWriterRoleOnly", "Effect": "Allow",
+      "Principal": { "AWS": "arn:aws:iam::<account-id>:role/sluis-<install>-writer" },
       "Action": ["kms:Sign", "kms:GetPublicKey", "kms:DescribeKey"], "Resource": "*" },
     { "Sid": "DenyUseByAnyoneElse", "Effect": "Deny", "Principal": { "AWS": "*" },
       "Action": ["kms:Sign", "kms:Verify", "kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey*"],
       "Resource": "*",
-      "Condition": { "ArnNotEquals": { "aws:PrincipalArn": "arn:aws:iam::<account-id>:role/sluis-<install>-notary" } } },
+      "Condition": { "ArnNotEquals": { "aws:PrincipalArn": "arn:aws:iam::<account-id>:role/sluis-<install>-writer" } } },
     { "Sid": "DenyNodeRoleAnyUse", "Effect": "Deny", "Principal": { "AWS": "*" },
       "Action": "kms:*", "Resource": "*",
       "Condition": { "ArnEquals": { "aws:PrincipalArn": "arn:aws:iam::<account-id>:role/sluis-<install>-node" } } }
@@ -152,11 +151,12 @@ Some guarantees cannot be matched without hardware isolation per process. They a
 | **Kernel or sandbox escape** | The actors share one kernel | Minimal syscalls, `NoNewPrivileges`, Landlock; accept |
 | **The node agent is a trusted base** | It can obtain credentials for every actor on its node | Keep it tiny and audited; no parsing of caller input beyond a fixed protocol |
 | **A shared driver is one door** | A compromised `key-holder` can use every key it serves while it runs; a compromised `state-owner` can read and write every record. Neither can extract the keys | One small process, no egress, fuzzed decoding, an audit record before every action |
-| **One PIN per YubiKey** | A PIV device has no per-slot caller separation. Unattended signing needs a touch policy of never, so physical theft of a powered host is use | One device per trust domain; the root pair offline |
+| **One PIN per YubiKey** | A PIV device has no per-slot caller separation. Unattended signing needs a touch policy of never, so physical theft of a powered host is use | One device per trust domain; the root pair offline, each root with its own independent key, PIN always and touch always |
+| **A compromised writer with no witness** | With no witness and no notary, a compromised audit `writer` can get a rewritten checkpoint signed through `key-holder` or its KMS key. A compliance lock still stops overwriting, but not a split view | A witness is optional, and `sluis config check` warns when there is none. A `peer` witness on a cluster, or an `external` one, exposes a split view. See [Audit](/concepts/audit/#the-witness-is-optional) |
 | **A cluster is one trust domain** | A compromised node reads replicated state | The blast radius is the install, not the estate |
 | **Shared egress address** | One NAT means no per-actor source identity at the network layer. A proxy is a software control | Make the proxy mandatory by firewall |
-| **Token-signing key in a signer's memory** | If a software ring is in use, a compromised `signer` can mint tokens until the key rotates | Direct signing with a non-extractable key on the KMS presets; rotation |
+| **Token-signing key in a signer's memory** | If a software ring is in use, a compromised `signer` can mint tokens until the key rotates | Direct signing with a non-extractable key on the AWS installations; rotation |
 | **Account or key-admin compromise** on AWS | KMS key policy cannot hide use from the account root or a key administrator | The control-plane actions are denied to every actor; break-glass use is audited |
 
-Serverless removes the first three rows: the platform attests the function and runs each in its own micro-VM. That is why the serverless environment needs no node agent.
+Serverless removes the first three rows: the platform attests the function and runs each in its own micro-VM. That is why serverless needs no node agent.
 

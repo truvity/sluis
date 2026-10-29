@@ -1,6 +1,6 @@
 ---
 title: Data
-description: "How sluis keeps records safe: one writer per record kind, separate trust classes, the state, index, blob, transport and lease ports, batches and fencing tokens."
+description: "How sluis keeps records safe: one writer per record kind, trust classes, the data ports, batches, fencing tokens, secrets and what is backed up."
 status: target
 sidebar:
   order: 7
@@ -16,14 +16,14 @@ Examples (illustrative; the full list is generated from the manifests):
 
 | Record kind | Its single writer | Why only one |
 |---|---|---|
-| Audit batch sequence | `audit-writer` | The sequence must have no gaps or forks. Purge and erasure requests go to the writer through a call and are appended by it. |
+| Audit batch sequence | The audit `writer` of that log | The sequence must have no gaps or forks, so there is exactly one writer per log. Purge and erasure requests go to the writer through a call and are appended by it. |
 | Quota balances | `quota` | Counters change by adjust only |
 | Signing ring | `signer` | The ring is the authority for token keys |
 | Sessions | `entry` | The protocol owner |
 | Directory snapshots | The facts integration that produced them | Another process holds only a cached copy with an expiry |
 | Console-set configuration | The console API | Learned and declared origins stay with their own writers |
 
-When two processes seem to need to write one record, the record is split instead: the learned fields go to the integration and the console-set fields go to the console, each with its own writer. The word **writer** by itself means this on this page, and not the audit writer.
+When two processes seem to need to write one record, the record is split instead: the learned fields go to the integration and the console-set fields go to the console, each with its own writer. The word **writer** by itself means this on this page, and not the audit `writer` actor.
 
 ## Trust classes are kept apart
 
@@ -33,7 +33,7 @@ v2 keeps records of different **trust classes** apart, in separate namespaces at
 
 1. the ring and its wrapping, used by the issuer only;
 2. software keys held by integrations (a GitHub App key, a chat token);
-3. authority keys (notary, CA), which have their own holder and are never read by the issuer.
+3. authority keys (the audit log key, the CA keys), which have their own holder and are never read by the issuer.
 
 ## Ports
 
@@ -51,7 +51,7 @@ The contract has no unconditional put. A caller changes a record only against th
 
 ### The atomic batch
 
-A **write batch** applies several writes together or none of them. The audit writer uses it to register a batch in the sequence, record the ids it deduplicated and move its cursor, so a crash cannot leave one without the others. The next number of the sequence is allocated by a compare-and-swap inside the same batch.
+A **write batch** applies several writes together or none of them. The audit `writer` uses it to register a batch in the sequence, record the ids it deduplicated and move its cursor, so a crash cannot leave one without the others. The next number of the sequence is allocated by a compare-and-swap inside the same batch.
 
 ### Conditional adjust
 
@@ -65,8 +65,15 @@ On a Raft cluster, leadership is just one named lease called `leader`. Every oth
 
 ## Where the data lives
 
-The drivers behind the ports differ by installation (see [Ports and drivers by preset](/concepts/drivers/#ports-and-drivers-by-preset)). Two choices matter for data:
+The drivers behind the ports differ by installation (see [Ports and drivers by installation](/concepts/drivers/#ports-and-drivers-by-installation)). Two choices matter for data:
 
-- **State** is the embedded single-node store on one node, **rqlite on Raft** across three nodes, and **DynamoDB** on serverless and on a single EC2 node. The Raft peer traffic is the state driver's own port over mutual TLS.
-- **Index** is `sqlite` on servers and `postgres` on Kubernetes (the `cnpg` mode, or `external` with any connection string). Serverless may run the indexer and the reader with a `postgres` index through RDS Proxy (proposed); the default of the AWS Lambda preset is no index (proposed), and `audit-read` and its index then run in a separate audit install that reads the same bucket. The search index is derived from the audit batches and can always be rebuilt from them.
+- **State** is the embedded single-node store on one node, **rqlite on Raft** across the three boards, and **DynamoDB** on serverless and on Kubernetes. The Raft peer traffic is the state driver's own port over mutual TLS.
+- **Index** is `sqlite` on a single server, and `rqlite` on a cluster of boards (proposed, so the reader can run on any node). It is `postgres` on Kubernetes (the `cnpg` mode, or `external` with any connection string). Serverless may run the indexer and the reader with a `postgres` index through RDS Proxy (proposed); the default of the lambda installation is no index (proposed), and the reader and its index then run in a separate Search installation that reads the same bucket. The search index is derived from the audit batches and can always be rebuilt from them.
 
+## Secrets
+
+Two further ports hold values that are not records. The **`secrets`** port holds whole values under addresses: sluis's own secrets and its integrations' secrets. The **`export`** port publishes a small, typed set of documents that something outside sluis may read, with file and bucket drops age-encrypted to the consumer's own recipient. sluis is not a general secrets engine. See [Secrets and export](/concepts/secrets/).
+
+## What is backed up
+
+A backup contains only authoritative state that nothing else can recreate. Sessions, refresh tokens, quota counters, learned facts and the transport spool are not in it, and a restore invalidates every session. The audit log is protected separately by its lock, its witnesses and replication. See [Backup and restore](/concepts/backup/).

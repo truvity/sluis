@@ -1,6 +1,6 @@
 ---
 title: Conformance
-description: "How sluis proves the standards it claims: the OpenID Foundation test plans v2 targets, how they run in CI per preset, and when certification is planned."
+description: "How sluis proves the standards it claims: the OpenID Foundation test plans v2 targets, how they run in CI per installation, and when certification is planned."
 status: target
 sidebar:
   order: 1
@@ -69,8 +69,8 @@ A suite module may skip because the discovery document says a feature is not ser
 The design is that conformance is a pipeline, not a ritual, because a run done by hand rots.
 
 - **The suite** is the open-source OpenID Foundation conformance suite, a self-hosted instance.
-- **Against the presets.** Each plan runs against a v2 installation, on the local preset ([T0](/environments/presets/#t0-local)) and on one cloud preset, using the [test presets harness](https://github.com/truvity/sluis/issues/877). The cloud preset runs only in a restricted private runner group ([#891](https://github.com/truvity/sluis/issues/891)) that has no pull-request trigger.
-- **When.** On pull requests that touch protocol code, against the local preset; nightly and on every release, for the full set and the cloud preset. A change that breaks a claimed plan fails CI.
+- **Against the installations.** Each plan runs against a v2 installation, on the [local](/runtimes/installations/#local) installation and on one cloud installation ([lambda](/runtimes/installations/#lambda)), using the [installation test harness](https://github.com/truvity/sluis/issues/877). The cloud installation runs only in a restricted private runner group ([#891](https://github.com/truvity/sluis/issues/891)) that has no pull-request trigger.
+- **When.** On pull requests that touch protocol code, against the local installation; nightly and on every release, for the full set and the cloud installation. A change that breaks a claimed plan fails CI.
 - **The inputs.** The harness clients and a conformance sign-in account are declared in a reviewed file. They exist only in the test installation.
 - **The outputs.** Logs and result bundles are archived per release. Result exports hold client secrets, so what is published is the plan, the variant, the version and the counts.
 - **The attended steps.** Some modules end at a page the suite cannot judge, such as an error page the issuer must show. v1 hands those screenshots to a person. Whether v2 keeps a person in that loop, or compares the page automatically, is not decided.

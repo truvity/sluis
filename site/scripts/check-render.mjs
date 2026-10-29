@@ -44,8 +44,8 @@ const shots = process.argv[3] ? resolve(process.argv[3]) : null;
 // script must have run on them.
 const EXPLORERS = ['/architecture/explorer/', '/architecture/audit-explorer/'];
 // Pages that must be in the sweep whatever else is found (a diagram on each).
-const REQUIRED = ['/concepts/', '/concepts/identity/', '/architecture/context/', '/environments/presets/',
-  '/environments/kubernetes/', '/integrations/connecting/'];
+const REQUIRED = ['/concepts/', '/concepts/identity/', '/architecture/context/', '/runtimes/installations/',
+  '/runtimes/kubernetes/', '/integrations/connecting/'];
 // The fewest pages with a diagram the sweep may find (18 when this was written).
 const MIN_DIAGRAM_PAGES = 12;
 
