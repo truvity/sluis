@@ -128,9 +128,16 @@ export default defineConfig({
       ],
       // The status badge beside each page title, its colours and the rule that
       // hides the status paragraph on the page (it stays in llms.txt). Footer
-      // is the default one plus the diagram Expand script.
-      components: { PageTitle: './src/components/PageTitle.astro', Footer: './src/components/Footer.astro' },
-      customCss: ['./src/styles/status.css', './src/styles/mermaid.css'],
+      // is the default one plus the diagram Expand script. TwoColumnContent and
+      // PageSidebar drop the right-hand "On this page" column for the dropdown
+      // at the top of the content (src/styles/layout.css sets the wide column).
+      components: {
+        PageTitle: './src/components/PageTitle.astro',
+        Footer: './src/components/Footer.astro',
+        TwoColumnContent: './src/components/TwoColumnContent.astro',
+        PageSidebar: './src/components/PageSidebar.astro',
+      },
+      customCss: ['./src/styles/layout.css', './src/styles/status.css', './src/styles/mermaid.css'],
       routeMiddleware: './src/route-middleware.ts',
       sidebar: [
         { label: 'Overview', slug: 'overview' },

@@ -1,8 +1,6 @@
 /* Shared by the two explorers. Everything uses Starlight's colour variables, so
-   both themes work. The pages are wider than a docs page: the diagram needs it. */
+   both themes work. */
 :root { --ex-gap: 1rem; --ex-font: var(--sl-font, system-ui, -apple-system, 'Segoe UI', sans-serif); --ex-mono: var(--sl-font-mono, ui-monospace, Menlo, Consolas, monospace); }
-
-:root { --sl-content-width: 70rem; }
 
 .ex { margin-block: 1.5rem; }
 .ex *, .ex *::before, .ex *::after { box-sizing: border-box; }
