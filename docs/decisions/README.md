@@ -50,3 +50,8 @@ After the first v2 release, records are append-only again: a changed mind gets a
 | [0002](0002-actors-declare-ports-placement-is-derived.md) | Actors declare ports, drivers declare requirements, and placement is derived | Accepted |
 | [0003](0003-runtimes-are-runtime-kinds.md) | Runtimes are runtime kinds; installations add nodes and dependencies; four installations are tested | Accepted |
 | [0004](0004-audit-is-four-pieces-joined-by-a-transport-port.md) | Audit is four pieces joined by a transport port; each log has exactly one writer | Accepted |
+| [0005](0005-three-zoom-levels-contracts-and-a-permission-manifest.md) | The design has three zoom levels, every component boundary is a ConnectRPC contract, and a permission manifest per actor is its spine | Accepted |
+| [0007](0007-core-is-a-few-actors-with-one-responsibility-each.md) | Core is a few actors with one responsibility each: entry, signer, policy, ca, quota | Accepted |
+| [0008](0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp.md) | Drivers are platform-started services on Unix sockets, and only the public API listens on TCP | Accepted |
+| [0010](0010-cryptography-uses-p384-by-default-with-named-exceptions.md) | Cryptography uses EC P-384 by default, in FIPS mode, with named exceptions | Accepted |
+| [0011](0011-authority-keys-sign-in-place-and-never-leave-their-store.md) | Authority keys sign in place and never leave their store | Accepted |

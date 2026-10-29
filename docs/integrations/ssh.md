@@ -6,7 +6,7 @@ sidebar:
   order: 9
 ---
 
-SSH is a **client profile** like [PostgreSQL](/integrations/postgresql/): the `ca` actor holds an SSH certificate authority key (slot 82 on a YubiKey, an ECC key on KMS), and sluis calls nothing outside.
+SSH is a **client profile** like [PostgreSQL](/integrations/postgresql/): the `ca` actor holds two SSH certificate authority keys, one for user certificates and one for host certificates (slots 82 and 83 on a YubiKey, separate ECC keys on KMS), and sluis calls nothing outside.
 
 ## What it's for
 
@@ -60,13 +60,13 @@ $ sluis ssh login --role user          # example command shape
 $ ssh ops@build.example.org
 ```
 
-For people who have no `sluis` command on the machine they work from, the alternative is **SSH sign-in with OpenID Connect**: the `opkssh` tool signs a person in at sluis, and the server verifies the ID token. It needs the verifier to accept sluis's signing algorithm, so pin ES256 or RS256 on that client's row, and set a group delimiter if the tool splits on `:`.
+People get user certificates after they sign in at sluis, if policy allows. Machines get user certificates through their workload identity. sluis's own SSH CA is the only SSH path; target machines need no YubiKey and run stock `sshd`.
 
 ## v1 → v2 notes
 
 - **v1 never signs an SSH key.** People log in with `opkssh` against sluis's OpenID provider, and machines and hosts get certificates from OpenBao's SSH CA. See [Connect SSH for people and machines](/v1/guides/sluis/connect/ssh/) and [SSH hosts](/v1/guides/sluis/connect/ssh-hosts/). The v1 commands are `sluisctl bao ssh …` and `sluisctl ssh known-hosts`.
-- In v2 the `ca` actor is an SSH CA, so sluis signs both user and host certificates. `opkssh` sign-in remains a supported client profile.
-- Parity issues: [#825](https://github.com/truvity/sluis/issues/825) `opkssh` sign-in, [#824](https://github.com/truvity/sluis/issues/824) OpenBao certificates, [#829](https://github.com/truvity/sluis/issues/829) the wrappers.
+- In v2 the `ca` actor is an SSH CA, so sluis signs both user and host certificates. `opkssh` is not carried into v2: the sluis SSH CA is the only SSH path. People get user certificates after sign-in, if policy allows.
+- Parity issues: [#825](https://github.com/truvity/sluis/issues/825) v1 `opkssh` sign-in (not carried into v2), [#824](https://github.com/truvity/sluis/issues/824) OpenBao certificates, [#829](https://github.com/truvity/sluis/issues/829) the wrappers.
 
 :::note[Proposed]
 Post-quantum SSH certificates are not offered: the Go SSH library has no ML-DSA algorithm, so a Go SSH CA cannot issue them without custom code. The command shape `sluis ssh login` is an example.

@@ -40,7 +40,7 @@ uid           sluis release signing <release@sluis.example.org>
 sub   nistp384 2026-10-01 [S] [expires: 2027-04-01]
 ```
 
-The release identity is a dedicated sluis identity with two primary keys, one on each card of a pair of YubiKeys, kept offline. Each primary key has its own signing subkey, and every release is signed twice, once with each, so either fingerprint verifies every release. The subkey that CI signs the repository metadata with expires, and a new one is published under the same primary key. Compare the primary key's fingerprint with the copy attached to the GitHub release, which is a different channel from the distribution site.
+The release identity is a dedicated sluis identity with two primary keys, one on each card of a pair of YubiKeys, kept offline. Each node holds one shared signing subkey, bound under both primaries, so every release gets one signature that verifies under either fingerprint. Until a signing installation exists, releases are signed offline with the root primaries. The subkey expires, and a new one is published under the same primary keys. Compare the primary key's fingerprint with the copy attached to the GitHub release, which is a different channel from the distribution site.
 
 :::note[Proposed]
 The channels that publish the fingerprint (keys.openpgp.org, a Web Key Directory on sluis.id, DNS, `SECURITY.md`, the GitHub release and the site) are under research; see [Release signing](/distribution/release-signing/#the-openpgp-release-key). Compare on at least two of them.
@@ -107,10 +107,12 @@ The YubiKey holds the node's keys in PIV slots. It has no symmetric keys, so sea
 |---|---|
 | `9c` | Node intermediate and signing |
 | `9d` | ECDH sealing and ring wrap |
-| `82` | SSH CA |
-| `83` to `95` | Retired sealing keys |
+| `82` | SSH user CA |
+| `83` | SSH host CA |
+| `84` | Release subkey |
+| `85` to `95` | Retired sealing keys |
 
-Slot `9e` is avoided. All keys are EC P-384. Change the default PIN and management key first, then let sluis generate the keys on the device so that they never leave it.
+This slot plan is proposed until ADR 0032 settles it. Slot `9e` is avoided. All keys are EC P-384. Change the default PIN and management key first, then let sluis generate the keys on the device so that they never leave it.
 
 ```sh
 # Example
@@ -123,6 +125,7 @@ PIN: ********
 slot 9c   generated   ECC P-384   on device
 slot 9d   generated   ECC P-384   on device
 slot 82   generated   ECC P-384   on device
+slot 83   generated   ECC P-384   on device
 node public keys written to /var/lib/sluis/node/public/
 ```
 
