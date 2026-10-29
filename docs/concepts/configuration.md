@@ -43,31 +43,33 @@ Not all data in sluis's configuration comes from the same place, and the origin 
 | Learned | Facts sluis discovers and stores | sluis, as it runs |
 | Operator secrets | Credentials | Referenced in configuration, **never inlined** |
 
-A secret is a reference such as `cred:sluis-int-github.app-key`, resolved at runtime from the credential store the environment provides. The value never appears in a file, in `explain` output, in logs or in a crash dump.
+A secret is a reference such as `cred:sluis-int-github.app-key`, resolved at runtime through the `secrets` port (see [Secrets and export](/concepts/secrets/)). The value never appears in a file, in `explain` output, in logs or in a crash dump.
 
 ## What is configured: an installation
 
 The thing an operator configures is an **installation**: one concrete deployment, made of
 
-- an **environment**, the runtime kind: bare-metal, serverless or Kubernetes (see [Environments](/environments/));
+- a **runtime**, the runtime kind: bare-metal, serverless or Kubernetes (see [Runtimes](/runtimes/));
 - the **nodes**: how many there are, which is 1, N, or elastic on serverless;
 - the **dependencies** that are available: an AWS account, a Cloudflare account, a YubiKey, a NATS service;
 - the **drivers**: one driver per port (see [Ports and drivers](/concepts/drivers/)).
 
-An example is "bare-metal, 3 nodes, an AWS account". A named, tested installation is a [preset](/environments/presets/), used in the documentation, the tutorials and the test matrix. Nodes and dependencies are properties of the installation, not of the environment.
+An example is "bare-metal, 3 nodes, an AWS account". Four installations are tested and named: [local, boards, lambda and kubernetes](/runtimes/installations/). They are used in the documentation, the tutorials and the test matrix. Any other combination that the rules allow is a possible installation, and it is not tested. Nodes and dependencies are properties of the installation, not of the runtime.
+
+The word **environment** is kept for what differs between development, staging and production.
 
 ## Layers
 
 Values come from layers. A later layer overrides an earlier one:
 
 1. **defaults**, built into the schema;
-2. **environment**, the defaults of the runtime kind (bare-metal, serverless or Kubernetes);
-3. **preset**, for example T1 Single board or T5 AWS Lambda (on Kubernetes, T6, and for development a development preset, as proposed in [OD-25](/open-decisions/#od-25));
+2. **runtime**, the defaults of the runtime kind (bare-metal, serverless or Kubernetes);
+3. **installation**, the defaults of a tested installation, for example boards or lambda;
 4. **install**, the file the operator edits;
-5. **stage overrides**, for the values that differ between a development, a staging and a production stage, including the few fields marked as tunable that a process environment variable may set.
+5. **environment overrides**, for the values that differ between development, staging and production, including the few fields marked as tunable that a process environment variable may set.
 
 :::note[Proposed]
-This order replaces the older "shape profile" layer with two layers, the environment and the preset. The layering, and the stage overrides as its last layer, are proposed.
+This order replaces the older "shape profile" layer with two layers, the runtime and the installation. The layering, and the environment overrides as its last layer, are proposed.
 :::
 
 ## Checking and explaining
@@ -81,7 +83,7 @@ sluis config explain
 
 ## Switches and authority
 
-**Operational switches stay separate from authority.** A switch changes how sluis runs: a log level, a timeout, the choice of a driver. Authority says who may do what: policy, grants, the clients that may ask for tokens. The two are different kinds of configuration with different owners and review, and a stage override can reach a switch but never authority. v1 mixed them in one policy file.
+**Operational switches stay separate from authority.** A switch changes how sluis runs: a log level, a timeout, the choice of a driver. Authority says who may do what: policy, grants, the clients that may ask for tokens. The two are different kinds of configuration with different owners and review, and an environment override can reach a switch but never authority. v1 mixed them in one policy file.
 
 ## Examples
 
@@ -95,8 +97,8 @@ A fragment of a generated JSON Schema:
   "type": "object",
   "unevaluatedProperties": false,
   "properties": {
-    "environment": { "enum": ["bare-metal", "serverless", "kubernetes"] },
-    "preset": { "enum": ["T0", "T1", "T2", "T3", "T4", "T5", "T6"] },
+    "runtime": { "enum": ["bare-metal", "serverless", "kubernetes"] },
+    "installation": { "enum": ["local", "boards", "lambda", "kubernetes"] },
     "nodes": { "type": "integer", "minimum": 1 },
     "public_url": { "type": "string", "format": "uri" },
     "drivers": {
@@ -108,16 +110,16 @@ A fragment of a generated JSON Schema:
       }
     }
   },
-  "required": ["environment", "nodes", "public_url"]
+  "required": ["runtime", "nodes", "public_url"]
 }
 ```
 
-An install file on a single board, `/etc/sluis/install.yaml`:
+An install file for the boards installation, `/etc/sluis/install.yaml`:
 
 ```yaml
-environment: bare-metal
-preset: T1
-nodes: 1
+runtime: bare-metal
+installation: boards
+nodes: 3
 public_url: https://sluis.example.com
 
 dependencies:
@@ -129,7 +131,7 @@ drivers:
 
 resources:
   keys.oidc-signing: { driver: yubikey-piv, key: oidc }
-  keys.audit-seal:   { driver: yubikey-piv, key: seal }
+  keys.audit-log:    { driver: yubikey-piv, key: log }
 
 integrations:
   github:
@@ -140,11 +142,11 @@ integrations:
 And what `sluis config explain` prints for it:
 
 ```text
-environment                   = bare-metal            install   /etc/sluis/install.yaml:1
-preset                        = T1                    install   /etc/sluis/install.yaml:2
+runtime                       = bare-metal            install   /etc/sluis/install.yaml:1
+installation                  = boards                install   /etc/sluis/install.yaml:2
 public_url                    = https://sluis.example.com  install   /etc/sluis/install.yaml:4
 drivers.yubikey-piv.instance  = shared                install   /etc/sluis/install.yaml:11
-log.level                     = debug                 stage override   SLUIS_LOG_LEVEL (tunable)
+log.level                     = debug                 environment override   SLUIS_LOG_LEVEL (tunable)
 integrations.github.app_key   = cred:sluis-int-github.app-key   install   (reference, not resolved)
 ```
 

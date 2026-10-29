@@ -10,13 +10,13 @@ An actor or driver that listens on a TCP port can be reached by anything that ca
 
 ## The rule
 
-- **`entry`'s public API listens on TCP, bound to `127.0.0.1`, in every environment.** It is the only actor that has a TCP listener. The platform's edge reaches that loopback port: `cloudflared` on bare-metal, the Lambda Web Adapter on serverless.
+- **`entry`'s public API listens on TCP, bound to `127.0.0.1`, on every runtime.** It is the only actor that has a TCP listener. The platform's edge reaches that loopback port: `cloudflared` on bare-metal, the Lambda Web Adapter on serverless.
 - **Every other actor and every driver listens on Unix sockets only**, under `/run/sluis/<actor>/`. Never a key-holding actor, never a driver, has a TCP listener.
 - **The Raft driver port over mTLS is the only TCP port between nodes.** No actor is reachable from another node.
 - **Every Unix socket is mode 0660, with a group generated from the manifest.** The group is the set of actors allowed to call the socket. The callee reads the caller's uid, gid and pid with `SO_PEERCRED`, maps the uid to an actor, and checks the call graph, default deny.
 
 :::note[Proposed]
-On Kubernetes the group cannot do this job, because supplementary groups are set for a whole pod and not for a container. The proposal is that reachability is generated from the manifest **by group on a host and by mount on Kubernetes**: each callee has its own volume for its socket directory, mounted read-only into exactly the containers that the call graph allows. The callee still maps the peer's user id to an actor and checks the call graph. The pid is not used on Kubernetes, because containers have separate PID namespaces. See [Kubernetes](/environments/kubernetes/#what-runs-where).
+On Kubernetes the group cannot do this job, because supplementary groups are set for a whole pod and not for a container. The proposal is that reachability is generated from the manifest **by group on a host and by mount on Kubernetes**: each callee has its own volume for its socket directory, mounted read-only into exactly the containers that the call graph allows. The callee still maps the peer's user id to an actor and checks the call graph. The pid is not used on Kubernetes, because containers have separate PID namespaces. See [Kubernetes](/runtimes/kubernetes/#what-runs-where).
 :::
 
 :::note[Proposed]
@@ -34,7 +34,7 @@ An example of the socket directory on one node (illustrative):
   policy/rpc.sock           group: entry, integrations
   key-holder/rpc.sock       shared driver; ACL by peer credentials
   state-owner/rpc.sock      shared driver; ACL by peer credentials
-  audit-writer/rpc.sock     group: every actor that emits
+  writer/rpc.sock           group: every actor that emits
   node/cred.sock            workload JWT; one answer per uid
 
 127.0.0.1:8080              entry's public API (TCP, loopback only)
@@ -62,34 +62,34 @@ Three details keep this safe:
 - `entry` holds no key. The actor behind the unauthenticated listener cannot sign a token or read the ring; it must ask `signer`, whose Unix socket neither `cloudflared` nor any other process outside the call graph can open.
 - `entry` binds `127.0.0.1` only, and the host firewall drops inbound traffic to every other port, so nothing but a local process reaches the listener.
 
-## Where the TCP listener is, per environment
+## Where the TCP listener is, per runtime
 
-The listener is the same in every environment. What differs is who connects to it. The presets are the worked examples.
+The listener is the same on every runtime. What differs is who connects to it. The tested installations are the worked examples.
 
-| Environment and preset | Listener | Who connects |
-| ---------------------- | -------- | ------------ |
-| bare-metal: T0 Local | `127.0.0.1:<port>` inside the container | The developer's browser or test harness, through a published port |
-| bare-metal: T1 Single board, T2 Board cluster | `127.0.0.1:<port>` | `cloudflared` on the same board |
-| bare-metal (VM): T3 EC2 single, T4 EC2 cluster | `127.0.0.1:<port>` | `cloudflared` on the same instance |
-| serverless: T5 AWS Lambda | `127.0.0.1:<port>` inside the function's sandbox | The Lambda Web Adapter, pinned at v1.1.0 and vendored into sluis's own layer. The edge in front of the function is API Gateway |
-| kubernetes: T6 EKS (proposed) | `entry` on `127.0.0.1:<port>`, bridged in the pod, as below | An edge relay in the same pod (proposed default), or `cloudflared` |
+| Runtime and installation | Listener | Who connects |
+| ------------------------ | -------- | ------------ |
+| bare-metal: local | `127.0.0.1:<port>` inside the container | The developer's browser or test harness, through a published port |
+| bare-metal: boards | `127.0.0.1:<port>` | `cloudflared` on the same board, a tunnel to the installation's public hostname |
+| bare-metal on a virtual machine (a possible installation, not a tested one) | `127.0.0.1:<port>` | `cloudflared` on the same instance |
+| serverless: lambda | `127.0.0.1:<port>` inside the function's sandbox | The Lambda Web Adapter, pinned at v1.1.0 and vendored into sluis's own layer. The edge in front of the function is API Gateway |
+| kubernetes: EKS (proposed) | `entry` on `127.0.0.1:<port>`, bridged in the pod, as below | An edge relay in the same pod (proposed default), or `cloudflared` |
 
 On serverless the loopback port is inside a micro-VM that holds only sluis's own processes. It is not reachable from the network.
 
 :::note[Proposed]
-On Kubernetes the loopback port is not reachable from outside the pod, and a gateway reaches a pod by its address. The proposal keeps the listener on `127.0.0.1` and bridges it from inside the pod, in one of two modes: a key-less edge relay on the pod address that forwards to `entry`, which is the default, or a `cloudflared` sidecar that connects to the loopback port and accepts no inbound connection. The kubelet probes `entry` with an `exec` probe, which runs inside the container's network namespace. Binding the pod address in `entry` is not proposed, because it would put an unauthenticated listener on the pod network. Details and options are on [Kubernetes](/environments/kubernetes/#edge) and in [OD-24](/open-decisions/#od-24).
+On Kubernetes the loopback port is not reachable from outside the pod, and a gateway reaches a pod by its address. The proposal keeps the listener on `127.0.0.1` and bridges it from inside the pod, in one of two modes: a key-less edge relay on the pod address that forwards to `entry`, which is the default, or a `cloudflared` sidecar that connects to the loopback port and accepts no inbound connection. The kubelet probes `entry` with an `exec` probe, which runs inside the container's network namespace. Binding the pod address in `entry` is not proposed, because it would put an unauthenticated listener on the pod network. Details and options are on [Kubernetes](/runtimes/kubernetes/#edge) and in [OD-24](/open-decisions/#od-24).
 :::
 
 ## The only port between nodes
 
-On bare-metal installations with N nodes (the presets T2 and T4) the state driver's own TCP port carries Raft traffic between the nodes. It is the only TCP port between nodes, and nothing else crosses a node boundary. The traffic runs over mTLS, and the firewall limits the port to the other nodes' addresses. No actor listens on a TCP port so that a peer could call it: an actor that needs state on another node asks its own node's state driver, and the driver talks Raft.
+On bare-metal installations with N nodes (boards is the tested one) the state driver's own TCP port carries Raft traffic between the nodes. It is the only TCP port between nodes, and nothing else crosses a node boundary. The traffic runs over mTLS, and the firewall limits the port to the other nodes' addresses. No actor listens on a TCP port so that a peer could call it: an actor that needs state on another node asks its own node's state driver, and the driver talks Raft.
 
 ## Local development and tests
 
-In the local preset (T0) the same sockets live in a runtime directory inside the container and `entry`'s loopback port is the container's own. A test harness or a developer publishes that port to the workstation to reach it from a browser. The published port is a development convenience; production installations never publish it.
+In the local installation the same sockets live in a runtime directory inside the container and `entry`'s loopback port is the container's own. A test harness or a developer publishes that port to the workstation to reach it from a browser. The published port is a development convenience; production installations never publish it.
 
 ## Related
 
 - [Processes](/architecture/processes/) shows the actors behind these sockets.
 - [Deployment](/architecture/deployment/) describes the firewall rules and sandboxing that keep the listeners narrow.
-- [Environments](/environments/) lists what each environment opens: [bare-metal](/environments/bare-metal/), [serverless](/environments/serverless/) and [Kubernetes](/environments/kubernetes/). The [presets](/environments/presets/) name the tested installations.
+- [Runtimes](/runtimes/) lists what each runtime opens: [bare-metal](/runtimes/bare-metal/), [serverless](/runtimes/serverless/) and [Kubernetes](/runtimes/kubernetes/). The [tested installations](/runtimes/installations/) are local, boards, lambda and kubernetes.

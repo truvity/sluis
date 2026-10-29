@@ -8,6 +8,18 @@ sidebar:
 
 A sluis release publishes every artifact from `https://distribution.sluis.id/`, a Cloudflare R2 bucket. GitHub Releases holds the same files as the immutable record. For how to check what you downloaded, see [Release signing](/distribution/release-signing/).
 
+## Packaging per runtime
+
+What you download depends on the [runtime](/runtimes/) you install on. There are no build profiles: the packaging is the build, and `dev` is not a build.
+
+| Runtime | Packaging |
+|---|---|
+| [bare-metal](/runtimes/bare-metal/) | `.deb` and `.rpm` packages, and a tarball |
+| [serverless](/runtimes/serverless/) | A zip per actor, with layers and extensions |
+| [kubernetes](/runtimes/kubernetes/) | An OCI image and a Helm chart |
+
+The local installation runs the bare-metal packaging in Docker.
+
 ## The R2 layout
 
 ```text
@@ -70,10 +82,10 @@ gpgkey=https://distribution.sluis.id/keys/sluis-release.asc
 
 ## Binaries
 
-Each component is a tarball for each architecture at `bin/<version>/<component>_linux_{amd64,arm64}.tar.gz`, with its `.sha256` beside it. Use a tarball when you manage the units yourself. The layout inside a package or tarball is the same:
+Each component is a tarball for each architecture at `bin/<version>/<component>_linux_{amd64,arm64}.tar.gz`, with its `.sha256` beside it. Use a tarball when you manage the units yourself. The layout inside a package or tarball is the same, and the directory that held the actors was renamed from `roles` to `actors`:
 
 ```text
-/usr/libexec/sluis/{roles,drivers,integrations,node,vendor}/<short-name>
+/usr/libexec/sluis/{actors,drivers,integrations,node,vendor}/<short-name>
 ```
 
 ## Lambda zips
@@ -84,7 +96,7 @@ Lambda is zip only, so layers and extensions combine. The zips are published und
 - `layers/`: shared layers, including the vendored Lambda Web Adapter (pinned v1.1.0), which is built into sluis's own layer and not referenced from the public AWS layer;
 - `extensions/`: the drivers that run as Lambda extensions.
 
-A function has at most five layers and 250 MB unzipped, including layers and extensions. See [Serverless](/environments/serverless/).
+A function has at most five layers and 250 MB unzipped, including layers and extensions. See [Serverless](/runtimes/serverless/).
 
 ## OCI images
 

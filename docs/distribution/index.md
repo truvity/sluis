@@ -11,12 +11,11 @@ Distribution describes what a release contains, where it is served from, and how
 ## At a glance
 
 - **One version for the whole repository.** Every artifact of a release carries the same version. A release is built with GoReleaser v2, open-source edition, which includes the Rust builds. The YubiKey driver needs cgo against pcsc-lite, so it is built in a native per-architecture CI job.
-- **Artifacts, for amd64 and arm64:**
-  - `.deb` and `.rpm` packages in signed apt and dnf repositories;
-  - binaries as tarballs;
-  - Lambda zip archives: functions, layers and extensions;
-  - multi-arch OCI images on GHCR;
-  - Helm charts as OCI artifacts, with images pinned by digest.
+- **Packaging per runtime, for amd64 and arm64:**
+  - bare-metal: `.deb` and `.rpm` packages in signed apt and dnf repositories, and a tarball;
+  - serverless: a Lambda zip per actor, with layers and extensions;
+  - kubernetes: multi-arch OCI images on GHCR and a Helm chart as an OCI artifact, with images pinned by digest.
+  - There are no build profiles. `dev` is not a build; it is how the local installation is run.
 - **Two homes.** `distribution.sluis.id` is a Cloudflare R2 bucket in the same account as the sluis.id zone. Everything is served from R2 with no redirects. GitHub Releases keeps the same files as the immutable record, with GitHub build provenance attestations.
 - **Signed every way a user checks it.** A `.sha256` per file, a signed `SHA256SUMS`, cosign keyless signatures, OpenPGP-signed apt and dnf metadata, and provenance attestations.
 - **No static upload key.** CI exchanges its GitHub OIDC token with sluis, which mints a short-lived R2 token.

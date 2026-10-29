@@ -1,6 +1,8 @@
 ---
 // The audit explorer. `part` picks the piece, so the page can put its own
 // headings between them. The facts are in src/data/explorer/audit.yaml.
+// The CSS class by-notary is the purple border of a step signed through the
+// keys driver; the class keeps its old name.
 import '../../styles/explorer.css';
 import MapView from './MapView.astro';
 import { data, shapes, statuses } from '../../lib/explorer-audit';
@@ -16,7 +18,7 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
 
 {part === 'toggle' && (
   <div class="ex" data-ex-root data-default={dflt}>
-    <div class="ex-toggle ex-only-js" role="radiogroup" aria-label="Preset" data-ex-toggle hidden>
+    <div class="ex-toggle ex-only-js" role="radiogroup" aria-label="Installation" data-ex-toggle hidden>
       {models.map((m) => (
         <button type="button" role="radio" aria-checked={m.id === dflt ? 'true' : 'false'} data-shape={m.id} tabindex={m.id === dflt ? 0 : -1}>
           <b>{m.id}</b><span>{m.name}</span>
@@ -25,7 +27,7 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
     </div>
     <div class="ex-table-wrap">
       <table>
-        <thead><tr><th>Preset</th><th>Environment</th><th>Transport</th><th>State</th><th>Notary key</th><th>Blob</th><th>Search index</th></tr></thead>
+        <thead><tr><th>Installation</th><th>Runtime</th><th>Transport</th><th>State</th><th>Log key</th><th>Witness</th><th>Blob</th><th>Search index</th></tr></thead>
         <tbody>
           {models.map((m) => (
             <tr data-shape-row={m.id}>
@@ -33,7 +35,8 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
               <td>{m.shape.environment}</td>
               <td>{m.transport.title}</td>
               <td>{m.shape.state}</td>
-              <td>{m.audit.notary_key}</td>
+              <td>{m.audit.log_key}</td>
+              <td>{m.audit.witness}</td>
               <td>{m.audit.blob}, {m.audit.lock}</td>
               <td>{m.nodes.find((n) => n.id === 'index')!.l2}</td>
             </tr>
@@ -41,7 +44,7 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
         </tbody>
       </table>
     </div>
-    <p class="ex-only-js" style="font-size:var(--sl-text-sm);margin-top:.5rem">The row of the preset you picked is highlighted. The map, the flows, the outage table and the sockets follow it.</p>
+    <p class="ex-only-js" style="font-size:var(--sl-text-sm);margin-top:.5rem">The row of the installation you picked is highlighted. The map, the flows, the outage table and the sockets follow it.</p>
   </div>
 )}
 
@@ -84,14 +87,14 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
 
 {part === 'chain' && (
   <div class="ex">
-    <div class="ex-chain" role="group" aria-label="The integrity chain, from a record to a seal">
+    <div class="ex-chain" role="group" aria-label="The integrity chain, from a record to a signed head">
       {data.chain.stages.map((s: any, i: number) => (
         <>
           {i > 0 && <span class="ex-chain-arrow" aria-hidden="true">→</span>}
-          <div class={`ex-chain-box by-${s.by}`}>
+          <div class={`ex-chain-box ${s.by === 'writer' ? 'by-writer' : 'by-notary'}`}>
             <b>{s.title}</b>
             {s.lines.map((l: string) => <span>{l}</span>)}
-            <em>by {s.by === 'writer' ? 'audit-writer' : 'notary'}</em>
+            <em>by {s.by_label ?? (s.by === 'writer' ? 'the writer' : s.by)}</em>
           </div>
         </>
       ))}
@@ -150,7 +153,7 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
   <div class="ex">
     <div class="ex-table-wrap">
       <table>
-        <thead><tr><th>Preset</th><th>Where records wait</th><th>What bounds it</th><th>How it drains</th></tr></thead>
+        <thead><tr><th>Installation</th><th>Where records wait</th><th>What bounds it</th><th>How it drains</th></tr></thead>
         <tbody>
           {models.map((m) => (
             <tr data-shape-row={m.id}>

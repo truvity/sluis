@@ -1,7 +1,7 @@
-// Builds the audit explorer's model, per preset, from src/data/explorer/audit.yaml.
+// Builds the audit explorer's model, per tested installation, from src/data/explorer/audit.yaml.
 // Ports, drivers and runtimes come from architecture.yaml so the two explorers
 // agree. Nothing here states a fact about audit. A "shape" in this file is a
-// preset (T0 to T6) of an environment; a "role" is an actor.
+// tested installation (local, boards, lambda) of a runtime; a "role" is an actor.
 import { parse } from 'yaml';
 import { assertOpenDecision } from './od';
 import raw from '../data/explorer/audit.yaml?raw';
@@ -63,7 +63,8 @@ function build(sh: any): AuditShape {
         { k: 'Identity', v: fill(rt.role.identity, { id: rid }), code: true },
         { k: 'Listens', v: rid === 'entry' ? (lambda ? 'TCP 127.0.0.1:8080 (an example port) inside the sandbox, through the Lambda Web Adapter' : 'TCP 127.0.0.1:8080 (an example port), loopback only') : fill(rt.role.listen, { id: rid }), code: true },
       ];
-      if (rid === 'notary') rows.push({ k: 'Seal key', v: au.notary_key });
+      if (rid === 'writer') rows.push({ k: 'Log key', v: au.log_key });
+      if (rid === 'witness') rows.push({ k: 'Witness', v: au.witness });
     } else if (n.port && cls === 'driver') {
       const did = sh.ports[n.port];
       const d = arch.drivers[did];
@@ -92,9 +93,9 @@ function build(sh: any): AuditShape {
         rows.push({ k: 'Records wait', v: ok.wait + (cluster ? ok.cluster_wait ?? '' : '') });
         rows.push({ k: 'Who the record is from', v: ok.caller });
         rows.push({ k: 'Instance', v: ok.instance });
-        rows.push({ k: 'Mode in this preset', v: ok.mode });
+        rows.push({ k: 'Mode in this installation', v: ok.mode_label ?? ok.mode });
       }
-      if (n.port === 'keys') rows.push({ k: 'Used here by', v: 'the notary only' });
+      if (n.port === 'keys') rows.push({ k: 'Used here by', v: 'the writer (the log key) and the witness (its own key)' });
     } else if (n.port && cls === 'store') {
       const did = sh.ports[n.port];
       const d = arch.drivers[did];
@@ -108,10 +109,10 @@ function build(sh: any): AuditShape {
       if (n.port === 'blob') {
         rows = [{ k: 'Backend', v: au.blob }, { k: 'Lock', v: `${au.lock} (which installs, and which mode, is not yet decided)` }, { k: 'Prefixes', v: 'batch objects, seals/, keys/ (the trust log)' }];
       }
-      if (n.port === 'keys') rows.push({ k: 'Notary seal key', v: au.notary_key });
+      if (n.port === 'keys') rows.push({ k: 'Log key', v: au.log_key });
       if (n.port === 'state') rows = [{ k: 'Backend', v: sh.state }, { k: 'Holds', v: 'audit_batches, cursors and dedupe, replicated; no record bodies' }];
       if (n.port === 'index') {
-        rows = [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: sh.runtime === 'lambda' ? 'None by default (proposed); a postgres index through RDS Proxy is allowed, and otherwise a separate audit install holds the search index' : 'One file per node in the current draft; where Search runs is derived from the port and driver rules' }];
+        rows = [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: au.index_placement }];
       }
     } else if (cls === 'external') {
       kind = 'outside sluis';
@@ -148,7 +149,7 @@ function build(sh: any): AuditShape {
       // The index node is an index store, not a driver.
       const d = arch.drivers[sh.ports.index];
       const bl = arch.backing_lines[`index.${sh.ports.index}`];
-      nodes.push(place({ id, lane: n.lane, row: n.row, cls: 'store', shared: false, title: 'search index', l2: bl[0], l3: bl[1], detail: { ...detail, kind: 'search index', cls: 'store', status: d.status, od: d.od, rows: [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: lambda ? 'none by default (proposed); a postgres index through RDS Proxy is allowed, and otherwise a separate audit install holds the search index' : 'one file per node in the current draft; where Search runs is derived from the port and driver rules' }], notes: [] } }));
+      nodes.push(place({ id, lane: n.lane, row: n.row, cls: 'store', shared: false, title: 'search index', l2: bl[0], l3: bl[1], detail: { ...detail, kind: 'search index', cls: 'store', status: d.status, od: d.od, rows: [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: au.index_placement }], notes: [] } }));
       nameOf[id] = 'search index';
       continue;
     }
@@ -173,7 +174,7 @@ function build(sh: any): AuditShape {
   if (au.note) noteList.push({ text: au.note, status: au.assumed ? 'proposed' : 'agreed' });
   return {
     id: sh.id, name: sh.name, nodes, edges, width, height, lanes,
-    intro: `Environment: ${sh.environment}. Transport: ${ok.short}. Keys: ${sh.keys}. State: ${sh.state}. Blob: ${au.blob}, ${au.lock}.`,
+    intro: `Runtime: ${sh.environment}. Transport: ${ok.short}. Keys: ${sh.keys}. State: ${sh.state}. Blob: ${au.blob}, ${au.lock}.`,
     notes: noteList.map((x) => (x.od ? x : { ...x, od: undefined })) as any,
     shape: sh, audit: au, transport: ok,
     ack: ok.durable,

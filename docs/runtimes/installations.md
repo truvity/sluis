@@ -1,0 +1,199 @@
+---
+title: Installations
+description: The four tested sluis installations (local, boards, lambda, kubernetes) with their default drivers; any other combination is possible but untested.
+status: target
+sidebar:
+  order: 4
+---
+
+An **installation** is one concrete deployment: a [runtime](/runtimes/), a node count, the available dependencies and one [driver](/concepts/drivers/) per port. Four installations are **tested**: they are the ones the documentation, the tutorials and the test matrix name. Each one is a choice of default drivers.
+
+| Installation | Runtime | What it is |
+|---|---|---|
+| [local](#local) | [bare-metal](/runtimes/bare-metal/) | Docker on a workstation, with the host's YubiKey |
+| [boards](#boards) | bare-metal | Three single-board computers, a YubiKey in each |
+| [lambda](#lambda) | [serverless](/runtimes/serverless/) | AWS Lambda |
+| [kubernetes](#kubernetes) | [kubernetes](/runtimes/kubernetes/) | The one tested Kubernetes installation |
+
+**Any other combination is a possible installation, allowed by the rules but not tested.** A single board, a single EC2 instance or a cluster of EC2 instances is such an installation: the rules of [Ports and drivers](/concepts/drivers/) allow it, and `sluis config check` (in the design) validates it against the requirements its drivers declare, but nobody runs it in CI. Nothing on this page forbids it. It only says what is tested.
+
+## Delivery order
+
+The installations are built in this order, which is agreed.
+
+1. **local.** Basic functionality and its tests, on a workstation, with the host's YubiKey and not a software key.
+2. **boards.** The three-board cluster.
+3. **lambda.** AWS Lambda.
+4. **kubernetes,** later.
+
+EC2 is not a delivery target. A virtual machine is still bare-metal, so the [bare-metal](/runtimes/bare-metal/#virtual-machines-ec2) page keeps what applies to it, and an EC2 installation is a possible one.
+
+## Defaults per installation
+
+A driver choice that used to be a per-shape decision now reads as "this installation's default driver": the spool on bare-metal and SQS on serverless and Kubernetes ([OD-5](/open-decisions/#od-5), [OD-22](/open-decisions/#od-22)), KMS on Kubernetes ([OD-20](/open-decisions/#od-20)), and a `postgres` index that serverless may use ([OD-12](/open-decisions/#od-12), revised). Where an actor runs is not decided per installation at all: it is derived from the port and driver rules ([OD-32](/open-decisions/#od-32)).
+
+| Installation | keys | state, lease | transport | blob | index | witness |
+|---|---|---|---|---|---|---|
+| local | yubikey-piv through the host's `pcscd` | embedded, local lock | spool | fs | sqlite | none |
+| boards | yubikey-piv, one per node | rqlite | spool | r2 | rqlite (proposed driver) | peer |
+| lambda | aws-kms | dynamodb | sqs | s3 | none (proposed) | none |
+| kubernetes | aws-kms | dynamodb, Kubernetes Lease | sqs | s3 | postgres on cnpg (proposed) | none |
+
+The key mode follows from the installation, not from a switch: a YubiKey on local and boards, KMS on lambda and kubernetes. A software key is allowed on local for development, and the code refuses it in production. The [transport](/concepts/audit/) defaults are the ones above. The `direct` and `nats-jetstream` transport drivers are supported and are the default of no installation ([OD-34](/open-decisions/#od-34)).
+
+:::note[Proposed]
+The configuration layers are: defaults, then the runtime, then the installation's defaults, then the install file, then overrides per environment (development, staging, production). Each overrides the one before. See [Configuration](/concepts/configuration/).
+:::
+
+The audit path is the one on [Audit](/concepts/audit/). Every success is audited. The emitter, a library inside each application, puts a record into the transport. The writer receives it, seals it into batches, and asks the `key-holder` to sign checkpoints; the `key-holder`'s access list lets only the writer use the log key. There is **no notary actor** ([OD-39](/open-decisions/#od-39)). The audit actors are the writer, the witness, the indexer and the reader.
+
+**The witness is optional everywhere** ([OD-36](/open-decisions/#od-36)): `sluis config check` warns when an installation has none. With no witness, and with no notary, a compromised writer can get a rewritten checkpoint signed. A compliance lock on an s3 blob still prevents overwriting objects, but it does not prevent a split view.
+
+## Choosing an installation
+
+```mermaid
+flowchart TD
+  start["What do you need?"] --> dev{"Developing or<br/>testing sluis?"}
+  dev -- yes --> local["local"]
+  dev -- no --> cloud{"Run on AWS?"}
+  cloud -- no --> boards["boards"]
+  cloud -- yes --> k8s{"Already run<br/>Kubernetes?"}
+  k8s -- yes --> kube["kubernetes"]
+  k8s -- no --> lam["lambda"]
+```
+
+- **Learning or developing:** [local](#local). It runs in Docker with the host's YubiKey.
+- **On-premises, with a spare:** [boards](#boards). Three boards run rqlite and a signing key lives on each node's YubiKey.
+- **AWS, no hosts to operate:** [lambda](#lambda). Each actor is a function.
+- **You already run a cluster:** [kubernetes](#kubernetes) (proposed). A node pod and an audit pod hold the actors, each in a container with its own token audience.
+- **Anything else** is a possible installation. Start from the nearest tested one and change drivers within the rules.
+
+## local
+
+Docker on one workstation, one node, no cluster. It is the first installation to be delivered, and the one that CI uses, together with sluis v1 for GitHub OIDC to cloud permissions. It uses the **host's YubiKey** through the host's `pcscd` ([OD-8](/open-decisions/#od-8)), not a software key. It is not for production. Runtime: [bare-metal](/runtimes/bare-metal/#local-docker).
+
+```mermaid
+flowchart LR
+  dev["Developer<br/>or CI job"] --> container
+  subgraph container["Docker container (one node)"]
+    direction TB
+    entry["entry"]
+    signer["signer"]
+    policy["policy"]
+    others["other actors"]
+    keyholder["key-holder<br/>(driver)"]
+    state["embedded store<br/>(driver)"]
+    entry --> signer
+    entry --> policy
+    signer --> keyholder
+    others --> state
+    entry --> state
+  end
+  subgraph host["Workstation host"]
+    direction TB
+    hostkh["key-holder"]
+    pcscd["pcscd"]
+    yk["YubiKey"]
+    hostkh --> pcscd
+    pcscd --> yk
+  end
+  container -- "socket" --> host
+```
+
+The other actors are `ca`, `quota` and the audit actors. The `key-holder` in the container reaches the `key-holder` on the host through a mounted Unix socket; the host `key-holder` talks to the host's `pcscd`, which talks to the YubiKey.
+
+- **Drivers:** yubikey-piv for keys, an embedded single-node store for state, a local lock for the lease, the spool for transport, a local files driver for the blob, and `sqlite` for the index. A software key (EC P-384, no production secret involved) is allowed for development and for CI jobs without hardware.
+- **Host YubiKey:** the `key-holder` runs natively on the host, talks to the host's `pcscd`, and the container mounts only the `key-holder`'s Unix socket. The host keeps using the YubiKey too, because `pcscd` lets several programs share the card. The fallback is to mount the host's `pcscd` socket into the container; then the `key-holder` ACL does not apply, and the pcsc-lite protocol versions of the image and the host must match.
+- **Verification** never trusts the index or the state, so a test can rebuild the index and still verify the chain.
+- **Edge:** `entry`'s public API listens on TCP, bound to `127.0.0.1` inside the container, and a browser or a test harness reaches it through a published port. That published port is a development convenience; no other installation publishes it. See [Listeners](/architecture/listeners/).
+
+:::note[Proposed]
+How a developer reaches `entry` with the real edge in the loop is not yet decided. One candidate is an edge-connector container (`cloudflared` with an `http://127.0.0.1:<port>` service, as on boards) next to the sluis container.
+:::
+
+- **Limits:** a software key is extractable by anyone who can read the container's filesystem, so use it for development data only. With the host's YubiKey, any process in the container that can open the mounted `key-holder` socket can ask for a signature, subject to the `key-holder` ACL. One node has one failure domain: local proves behaviour, not availability. It does not exercise the platform controls of the other installations (IAM and KMS key policies, systemd sandboxing, Cilium policy).
+
+## boards
+
+Three single-board computers (arm64, 2 GB RAM, eMMC), each with its own YubiKey, behind a Cloudflare tunnel to `sluis.example.com`. It is the second installation to be delivered. State is replicated by rqlite (Raft), and the audit pieces run on the same nodes, so they share driver instances ([OD-37](/open-decisions/#od-37)). The nodes may mix Ubuntu and Rocky Linux, because the package set is the same on both. Runtime: [bare-metal](/runtimes/bare-metal/#n-nodes), three nodes.
+
+```mermaid
+flowchart TB
+  edge["Cloudflare edge"]
+  r2["Blob store<br/>(Cloudflare R2)"]
+  subgraph n1["Node 1"]
+    cfd1["cloudflared"] -- "127.0.0.1" --> c1["entry + actors"]
+    c1 --> kh1["key-holder"] --> yk1["YubiKey 1"]
+    c1 --> r1["rqlite<br/>(state, index)"]
+    c1 --> w1["writer + spool<br/>(log 1)"]
+  end
+  subgraph n2["Node 2"]
+    cfd2["cloudflared"] -- "127.0.0.1" --> c2["entry + actors"]
+    c2 --> kh2["key-holder"] --> yk2["YubiKey 2"]
+    c2 --> r2n["rqlite<br/>(state, index)"]
+    c2 --> w2["writer + spool<br/>(log 2)"]
+  end
+  subgraph n3["Node 3"]
+    cfd3["cloudflared"] -- "127.0.0.1" --> c3["entry + actors"]
+    c3 --> kh3["key-holder"] --> yk3["YubiKey 3"]
+    c3 --> r3["rqlite<br/>(state, index)"]
+    c3 --> w3["writer + spool<br/>(log 3)"]
+  end
+  edge -- "tunnel" --> cfd1
+  edge -- "tunnel" --> cfd2
+  edge -- "tunnel" --> cfd3
+  r1 <-- "Raft, mTLS" --> r2n
+  r2n <-- "Raft, mTLS" --> r3
+  r1 <-- "Raft, mTLS" --> r3
+  w1 -.-> r2
+  w2 -.-> r2
+  w3 -.-> r2
+```
+
+- **Drivers:** yubikey-piv with one YubiKey per node and the slot plan on [bare-metal](/runtimes/bare-metal/#keys); rqlite for state and lease; the spool for transport on each node; Cloudflare R2 for the blob; and the index on rqlite. The rqlite index is a **proposed new driver**: a replicated SQLite, so the reader can run on any node. Whether rqlite supports the full-text search (FTS5) the index needs must be verified first.
+- **Keys:** a node's key is its own. No key is shared between nodes, so losing a board loses one key, not the install's. Sealing uses ECDH plus HKDF with the node's `9d` key.
+- **Audit:** the pieces run on the same nodes and share driver instances. **There is one log per node** ([the agreed rule](/concepts/audit/): exactly one writer per log, not one per installation). Each node has its own writer, spool and log key, and the other two nodes are its peer witnesses, the agreed 2-of-3 co-signing. Readers merge the logs by time. A writer asks its node's `key-holder` to sign checkpoints, and there is no notary.
+- **Identity and edge:** each node runs its own `cloudflared`, and each is its own issuer, `https://<issuer>/nodes/<node>/`. The public hostname is `sluis.example.com`.
+- **Limits and residual risk:** Raft tolerates the loss of one node of three. A node's YubiKey and PIN guard its key; physical access to a board with its key and PIN allows signing as that node, which peer witnessing limits for the audit logs but not for tokens. R2's lock can be removed by a Cloudflare account administrator, so the logs get their tamper evidence from the witnesses, not from the bucket. Mixed distributions widen what has to be tested.
+
+## lambda
+
+One Lambda function per actor, with KMS keys and DynamoDB state. It is the third installation to be delivered. The details, the request path and the audit path are on [Serverless](/runtimes/serverless/). Runtime: [serverless](/runtimes/serverless/), elastic nodes.
+
+```mermaid
+flowchart LR
+  user["Callers"] --> apigw["API Gateway"] --> entry["entry function"]
+  entry --> actors["other actor functions"]
+  actors --> kms["AWS KMS"]
+  actors --> ddb["DynamoDB"]
+  actors -. "transport" .-> sqs["SQS queue"]
+  sqs --> writer["writer function<br/>(concurrency 1)"]
+  writer --> s3["S3 blob<br/>(compliance lock)"]
+```
+
+- **Drivers:** aws-kms for keys, DynamoDB for state and lease, an SQS queue for transport (a function's disk does not outlive its sandbox), S3 for the blob. The default index is `none` (proposed): a separate installation holds the index, or the scan from the CLI is used. A `postgres` index (`rds` or `aurora` through RDS Proxy, proposed) is allowed ([OD-12](/open-decisions/#od-12), revised).
+- **Writer:** the audit writer runs with reserved concurrency 1. It asks the `key-holder` to sign checkpoints with the log key, and there is no notary.
+- **Witness:** none by default. `sluis config check` warns about it ([OD-36](/open-decisions/#od-36)); an `external` witness is the way to add one.
+- **Transport:** the direct mode needs a disk for its fallback spool ([OD-35](/open-decisions/#od-35)), so it is not available on serverless.
+- **Identity and edge:** the function's IAM role is its identity. API Gateway sits in front of `entry`, through the Lambda Web Adapter to `entry`'s loopback port.
+- **Limits:** five layers and 250 MB unzipped bound a function; cold starts; egress is not name-restricted.
+
+## kubernetes
+
+A node pod and an audit pod, a container per actor, on Amazon EKS with AWS KMS. It is delivered after the other three. It is in design and test scope now ([OD-7](/open-decisions/#od-7)), and its design is proposed. The details and the open points are on [Kubernetes](/runtimes/kubernetes/). Runtime: [kubernetes](/runtimes/kubernetes/), N nodes.
+
+- **Drivers:** aws-kms for keys ([OD-20](/open-decisions/#od-20)), DynamoDB for state ([OD-21](/open-decisions/#od-21)), Kubernetes Lease for the lease, SQS for transport for now ([OD-22](/open-decisions/#od-22)), S3 for the blob, and `postgres` on `cnpg` for the index (proposed; the `external` mode takes a connection string only).
+- **Witness:** none by default. A peer witness in the same cluster is not independent, so an `external` witness is the useful one.
+- **Identity:** projected ServiceAccount tokens, one audience per actor ([OD-19](/open-decisions/#od-19)).
+- **Edge:** an edge relay or `cloudflared` ([OD-24](/open-decisions/#od-24)).
+- **Tests:** a kind smoke test on every pull request, and a real EKS cluster nightly (proposed).
+
+## Other installations
+
+These are possible installations: allowed by the rules, not tested. They are listed because earlier versions of the design named them.
+
+- **One board.** The boards installation reduced to one node, with the embedded state, `sqlite` for the index and the blob on R2. The [single-board tutorial](/tutorials/single-node-install/) walks through it.
+- **One EC2 instance** with KMS keys, DynamoDB state, the spool and S3.
+- **Three EC2 instances** in an Auto Scaling group, with KMS keys (a key per node for the log), rqlite state, the spool and S3 ([#886](https://github.com/truvity/sluis/issues/886)).
+
+For each, `sluis config check` applies the same rules as for a tested installation. What the tests do not give is evidence that the combination keeps working from release to release.

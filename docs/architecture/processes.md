@@ -1,6 +1,6 @@
 ---
 title: Processes
-description: "L3, what runs where: the actors, the fusion rule, packaging, and the actor processes per environment, with the presets as examples."
+description: "L3, what runs where: the actors, the fusion rule, packaging, and the actor processes per runtime, with the tested installations as examples."
 status: target
 sidebar:
   order: 3
@@ -8,7 +8,7 @@ sidebar:
 
 At the third zoom level the [components](/architecture/components/) are placed into **actors**. An actor is a process with one responsibility and one credential set; it declares the [ports](/concepts/drivers/) it requires. Each actor is its own OS user and systemd unit on bare-metal, its own Lambda function on serverless, or (on Kubernetes, as proposed) its own container, so a compromise of one actor gives the attacker that actor's credentials and nothing else.
 
-Where the actors run is described per [environment](/environments/): the runtime kind that decides how processes are started and what they can rely on. The number of nodes and the outside services an installation uses belong to the installation, not to the environment. The named, tested installations are the [presets](/environments/presets/) (T0 to T6), used below as examples.
+Where the actors run is described per [runtime](/runtimes/): the kind that decides how processes are started and what they can rely on. The number of nodes and the outside services an installation uses belong to the installation, not to the runtime. The four tested installations ([local, boards, lambda and kubernetes](/runtimes/installations/)) are used below as examples.
 
 The rules the split follows:
 
@@ -17,14 +17,14 @@ The rules the split follows:
 | One credential holder per process | A process per owner, never a process per port |
 | No key beside an unauthenticated listener | An actor that can use an authority key does not parse unauthenticated internet input |
 | The decision point has no network and no state | `policy` reads a reviewed file and returns grants |
-| The audit writer can only append | Its credentials cannot overwrite or delete a blob object, and cannot sign a seal |
+| The audit writer can only append | Its credentials cannot overwrite or delete a blob object, and it never holds the log key: `key-holder` signs for it |
 | Every integration is its own actor | Started on demand where it has no standing work |
 
 ## Core actors
 
 The concept is explained on [Actors](/concepts/actors/); the ports and the shared drivers on [Ports and drivers](/concepts/drivers/); the six integration actors on [Integrations](/concepts/integrations/); the key custody behind `signer` and `ca` on [Keys](/concepts/keys/); and the audit actors on [Audit](/concepts/audit/).
 
-There are about eight core and audit actors, plus integrations. `signer` and `policy` are split out from the first slice rather than later: splitting later is what v1 deferred and never did.
+There are about nine core and audit actors, plus integrations. `signer` and `policy` are split out from the first slice rather than later: splitting later is what v1 deferred and never did.
 
 | Actor | Responsibility | Holds | Cannot |
 | ----- | -------------- | ----- | ------ |
@@ -33,15 +33,14 @@ There are about eight core and audit actors, plus integrations. `signer` and `po
 | `policy` | The decision point. Reviewed, file-based policy maps facts to grants. Signs mint grants with its own key | The grant key. No state, no network, no secrets | Reach any resource: a bad process can decide wrongly, but exfiltrates nothing |
 | `ca` | X.509 and the SSH CA | The CA keys | Sign anything outside its policy |
 | `quota` | Rate limits and caps, with conditional adjust | Its own balances and ledger | Touch identity records |
-| `notary` | Signs audit batch heads | The notary key, in a separate custody domain from the writer | Write a record |
-| `audit-writer` | Seals audit batches and writes them to the blob | No signing key; it calls `notary` | Delete or overwrite an object, or forge a seal |
-| `audit-read` | Serves audit queries from the search index. It audits every read | Read access only | Write to the evidence |
+| `writer` | Receives audit records, seals them in batches and writes them to the blob. Exactly one per log | The log-store credential. It asks `key-holder` to sign each batch head, and never holds the log key | Delete or overwrite an object, or use any key but the log key |
+| `witness` | Co-signs the batch heads it has seen. Optional | Its own key | Write a batch object |
+| `indexer` | Builds the search index from the blob. Exactly one | Read on the blob, write on the index | Write to the evidence |
+| `reader` | Serves audit queries from the search index. It audits every read | Read access only | Write to the evidence |
 
 The blast radius of each is small by construction. A compromised `entry` can ask `signer` for tokens while it runs (a signing oracle), but cannot read the key and cannot reach an integration. A compromised `signer` holds the ability to sign, not the ability to parse a request. A compromised integration reaches its own provider account and its own state.
 
-:::note[Proposed]
-The three audit actors `notary`, `audit-writer` and `audit-read` are proposed to be replaced by four: a **writer**, a **witness** that co-signs batch heads, an **indexer** and a **reader**. The notary is then folded into the `key-holder` access list, or kept as a thin checker. See [OD-39](/open-decisions/#od-39). The tables on this page use the current names.
-:::
+The audit actors are the **writer**, the **witness**, the **indexer** and the **reader**. There is no notary actor (agreed, [OD-39](/open-decisions/#od-39)): the writer asks `key-holder` to sign, and `key-holder`'s access list lets only the writer use the log key.
 
 `quota` is drawn as its own box. Quota is a separate piece of the audit design, combinable with sluis in one installation, where it shares sluis's driver instances ([OD-37](/open-decisions/#od-37) and [OD-38](/open-decisions/#od-38)). It meters by default and enforces per policy rule, which needs `state` with compare-and-set on the mint path ([OD-33](/open-decisions/#od-33)). Turning enforcement on in production still waits for the k6 load test.
 
@@ -86,23 +85,23 @@ Every component ships as its own binary. On a host that uses packages, the binar
 
 ```text
 /usr/libexec/sluis/
-  roles/          entry  signer  policy  ca  notary  audit-writer  audit-read  quota
+  actors/         entry  signer  policy  ca  quota  writer  witness  indexer  reader
   drivers/        state-owner  key-holder  <port drivers>
   integrations/   <one binary per integration>
   node/           sluis-node
   vendor/         third-party binaries that sluis starts, such as rqlite
 ```
 
-The directory names and the layout are agreed (PK-1); the binary names above are illustrative. The directory is still called `roles` in the code path, because the layout is agreed; whether to rename it to `actors` is an open follow-up. Each actor has one systemd unit, one uid, and one socket directory `/run/sluis/<actor>/`. Actors are pinned by the unit: the binary a unit starts is the only code in that process, so an actor cannot contain another actor's code. Serverless ships one zip per actor, and the Lambda Web Adapter is vendored into our own layer. Kubernetes runs one container per actor, from a multi-arch image, with the image pinned by digest.
+The directory names and the layout are agreed (PK-1), and the directory is called `actors/` (agreed; it amends the layout, which first called it `roles/`). The binary names above are illustrative. Each actor has one systemd unit, one uid, and one socket directory `/run/sluis/<actor>/`. Actors are pinned by the unit: the binary a unit starts is the only code in that process, so an actor cannot contain another actor's code. Packaging follows the runtime. Bare-metal ships a deb, an rpm and a tarball. Serverless ships one zip per actor, and the Lambda Web Adapter is vendored into our own layer. Kubernetes runs one container per actor, from a multi-arch OCI image pinned by digest, installed with a Helm chart. There is no separate development build: local is an installation, not a build.
 :::
 
 One version covers the whole repository. See [Packages](/distribution/packages/) for the artifacts, the apt and dnf repositories, and signing.
 
 Why not Go plugins: a Go `.so` shares the host's address space and so has no isolation at all; it needs the same toolchain and dependency versions as the host, so it can never be released independently; and it cannot be unloaded. Why not WebAssembly: dropped. Plugins always run out of process: a Unix socket with peer credentials locally, a Lambda invoke on AWS, HTTPS with mTLS remotely.
 
-## The actor processes in each environment
+## The actor processes on each runtime
 
-The same actors run in every environment. What changes is who starts them, what they can rely on, and how they reach each other.
+The same actors run on every runtime. What changes is who starts them, what they can rely on, and how they reach each other.
 
 | | bare-metal, 1 node | bare-metal, N nodes | serverless | kubernetes (proposed) |
 | --- | --- | --- | --- | --- |
@@ -111,7 +110,7 @@ The same actors run in every environment. What changes is who starts them, what 
 | **Node agent** | `sluis-node` | `sluis-node` on every node | None: the platform attests the function | None: the platform's token is used |
 | **Shared drivers** | `key-holder`, `state-owner` where the backend cannot tell callers apart | The same, with `state-owner` talking Raft to its peers | None: IAM does the job | None where the cloud does it |
 | **Actors that declare instances: exactly 1** | Run once | Need the lease port | Reserved concurrency of 1 may stand in for the lease | Need the lease port (the Kubernetes Lease driver) |
-| **Preset examples** | T0, T1, T3 | T2, T4 | T5 | T6 |
+| **Tested installation** | local | boards | lambda | kubernetes |
 
 ### Bare-metal, one node
 
@@ -120,9 +119,9 @@ A bare-metal node (a single-board computer, a virtual machine such as EC2, or a 
 | Group | Actors | What the group is |
 | ----- | ------ | ----------------- |
 | Front | `entry` | Parses requests and holds no key |
-| Authority | `signer`, `policy`, `ca`, `notary` | Hold or use authority keys, with no listener on the network. `policy` holds no state and has no network |
+| Authority | `signer`, `policy`, `ca` | Use authority keys, with no listener on the network. `policy` holds no state and has no network |
 | Integrations | one actor per integration | Each holds its own vendor credential (credential A, credential B) |
-| Audit | `audit-writer`, `audit-read` | Seal and read the audit chain |
+| Audit | `writer`, `witness`, `indexer`, `reader` | Write, witness, index and read the audit chain. The writer signs only through `key-holder` |
 | Shared drivers | `key-holder`, `state-owner` | One key driver and one state driver for the node |
 | Node agent | `sluis-node` | Runs as root and is small |
 
@@ -148,42 +147,42 @@ The solid line from integration A to `policy` is a decision request; the integra
 flowchart LR
   entry["entry"] --> so["state-owner"]
   quota["quota"] --> so
-  aw["audit-writer"] --> so
-  ar["audit-read"] --> so
+  aw["writer"] --> so
+  ar["reader"] --> so
   so --> db[("rqlite or Raft")]
   signer["signer"] --> kh["key-holder"]
   ca["ca"] --> kh
-  notary["notary"] --> kh
+  aw --> kh
   kh --> dev[("YubiKey")]
 ```
 
-The three actors that use an authority key reach it only through `key-holder`, and every actor that reads or writes state goes through `state-owner`.
+The actors that use a key (`signer`, `ca`, and the audit `writer` for its log key) reach it only through `key-holder`, and every actor that reads or writes state goes through `state-owner`. `policy` also uses its grant key; it is left out of the picture.
 
 #### Step 3: audit emits and the node agent
 
 ```mermaid
 flowchart LR
-  entry["entry"] -.->|"transport"| aw["audit-writer"]
+  entry["entry"] -.->|"transport"| aw["writer"]
   gh["integration A"] -.->|"transport"| aw
-  aw --> notary["notary"]
+  aw -->|"sign head"| kh["key-holder"]
   agent["sluis-node"] -.->|"workload JWT"| entry
   agent -.->|"workload JWT"| signer["signer"]
 ```
 
-Dashed lines to `audit-writer` are asynchronous emits through the transport port. The node agent dashes stand for the workload JWT it issues to every actor; the picture omits them for the other actors to stay readable.
+Dashed lines to `writer` are asynchronous emits through the transport port. The node agent dashes stand for the workload JWT it issues to every actor; the picture omits them for the other actors to stay readable.
 
 ### Bare-metal, N nodes
 
-On a three-node installation (the presets T2 and T4) every node runs this set, and the `state-owner` processes talk to each other over the Raft driver's mTLS port. The audit actors are the exception worth reading carefully. In the current draft each node's `audit-writer` drains its own spool, and the notary co-signs batch heads 2 of 3 across nodes. The writer declares **instances: exactly 1**, so an installation that does not give each node its own spool needs the lease port to elect the one writer. Where the audit writer runs is therefore a choice of the installation, described under [the audit installation](#the-audit-installation).
+On a three-node installation (the boards installation is the tested one) every node runs this set, and the `state-owner` processes talk to each other over the Raft driver's mTLS port. The audit actors are the exception worth reading carefully. A cluster keeps **one log per node**: each node's `writer` drains its own spool and signs with its own log key, and the other two nodes are its peer witnesses, which is the 2-of-3 co-signing. The rule is **exactly one writer per log**, not one per installation, so no lease is needed to elect a writer between nodes. Readers merge the logs by time. See [the audit installation](#the-audit-installation).
 
 ### Serverless
 
-On serverless the same actors are separate Lambda functions with no `sluis-node`. The platform gives each function an execution role, which is its identity. The audit writer has a reserved concurrency of 1, which stands in for the lease. The transport is an SQS queue. Search may run inside the functions with a `postgres` index, through RDS Proxy (proposed) ([OD-12](/open-decisions/#od-12), revised). The default of the AWS Lambda preset is no index (proposed), and then Search is a separate installation that reads the same blob, or a small installation uses the scan from the CLI. See [Serverless](/environments/serverless/).
+On serverless the same actors are separate Lambda functions with no `sluis-node`. The platform gives each function an execution role, which is its identity. The audit writer has a reserved concurrency of 1, which stands in for the lease. The transport is an SQS queue. Search may run inside the functions with a `postgres` index, through RDS Proxy (proposed) ([OD-12](/open-decisions/#od-12), revised). The default index of the lambda installation is none (proposed), and then Search is a separate installation that reads the same blob, or a small installation uses the scan from the CLI. See [Serverless](/runtimes/serverless/).
 
 ### Kubernetes
 
 :::note[Proposed]
-On Kubernetes the actors are containers of a node pod and of an audit pod, cut at the audit transport ([OD-17](/open-decisions/#od-17)). The audit side is being redesigned as a separate audit installation ([OD-31](/open-decisions/#od-31)). The first release targets Amazon EKS with AWS KMS ([OD-20](/open-decisions/#od-20)), and SQS is the transport for now ([OD-22](/open-decisions/#od-22)). See [Kubernetes](/environments/kubernetes/).
+On Kubernetes the actors are containers of a node pod and of an audit pod, cut at the audit transport ([OD-17](/open-decisions/#od-17)). The audit side is being redesigned as a separate audit installation ([OD-31](/open-decisions/#od-31)). The first release targets Amazon EKS with AWS KMS ([OD-20](/open-decisions/#od-20)), and SQS is the transport for now ([OD-22](/open-decisions/#od-22)). See [Kubernetes](/runtimes/kubernetes/).
 :::
 
 ## The audit installation
@@ -192,18 +191,18 @@ Audit is built from the same ports as the rest of sluis and adds one port, the w
 
 | Part | Placement | Where it is decided |
 | ---- | --------- | ------------------- |
-| Transport | Per installation: direct (`direct-unix` on the same host, `direct-mtls` between hosts) or a queue (spool, SQS, NATS JetStream). The presets use a spool on bare-metal and SQS on serverless today | [OD-34](/open-decisions/#od-34), [OD-35](/open-decisions/#od-35) |
-| Writer | Per installation. It declares instances: exactly 1 | [OD-31](/open-decisions/#od-31) |
+| Transport | Per installation: direct (`direct-unix` on the same host, `direct-mtls` between hosts) or a queue (spool, SQS, NATS JetStream). The defaults are a spool on bare-metal and SQS on serverless and Kubernetes; direct mode falls back to a local spool when the writer is down, so it needs a disk | [OD-34](/open-decisions/#od-34), [OD-35](/open-decisions/#od-35) |
+| Writer | Per installation. Exactly one writer per log; a cluster keeps one log per node | [OD-31](/open-decisions/#od-31) |
 | Blob | Per installation, with a lock mode of none, removable or compliance | |
-| Witness | Per installation, and optional or required is open | [OD-36](/open-decisions/#od-36) |
+| Witness | Per installation, and optional everywhere; `sluis config check` warns when there is none | [OD-36](/open-decisions/#od-36) |
 
 Two further pieces are separate from the log:
 
 | Piece | What it is | Where it runs |
 | --- | ---------- | ------------- |
-| **Search** | The indexer, the search index and the reader | Derived from the port and driver rules, not decided per preset: for example, with a `sqlite` index on a cluster the reader runs on the indexer's node. See [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived) and [OD-32](/open-decisions/#od-32) |
+| **Search** | The indexer, the search index and the reader | Derived from the port and driver rules, not decided per installation: for example, with a `sqlite` index on a cluster the reader runs on the indexer's node. See [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived) and [OD-32](/open-decisions/#od-32) |
 | **Quota** | The quota engine and its quota state (the state port with compare-and-set) | Derived in the same way. A separate piece, combinable with sluis, sharing its driver instances. It meters by default and enforces per policy rule. [OD-38](/open-decisions/#od-38), [OD-33](/open-decisions/#od-33) |
 
-The [audit explorer](/architecture/audit-explorer/) draws these boxes for each preset, and the [architecture explorer](/architecture/explorer/) draws the actor processes.
+The [audit explorer](/architecture/audit-explorer/) draws these boxes for each tested installation, and the [architecture explorer](/architecture/explorer/) draws the actor processes.
 
-Next: [Deployment](/architecture/deployment/) shows how each environment enforces these boundaries.
+Next: [Deployment](/architecture/deployment/) shows how each runtime enforces these boundaries.

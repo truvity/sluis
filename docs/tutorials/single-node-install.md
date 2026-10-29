@@ -1,6 +1,6 @@
 ---
 title: Install sluis on a single board
-description: Install sluis on one arm64 single-board computer with a YubiKey (preset T1, bare-metal), sign in, verify a token against the JWKS and read the audit trail.
+description: Install sluis on one arm64 single-board computer with a YubiKey (bare-metal, one node), sign in, verify a token against the JWKS and read the audit trail.
 status: target
 sidebar:
   order: 1
@@ -10,7 +10,7 @@ sidebar:
 This tutorial describes the intended experience. It can't be run yet, because sluis v2 is not released. The commands, outputs and file names are examples of what the finished product shows. Only `sluis doctor`, `sluis config check` and `sluis config explain` are named in the design; the other `sluis` subcommands below are illustrative. Every command is a subcommand of the one `sluis` binary, for operators and for users alike.
 :::
 
-You install sluis on one arm64 single-board computer with a YubiKey: preset [T1, Single board](/environments/presets/#t1-single-board), on the [bare-metal](/environments/bare-metal/) environment with one node. You finish with a running sluis at `https://sluis.example.com`, a token you have verified yourself, and the audit record of your own sign-in.
+You install sluis on one arm64 single-board computer with a YubiKey: the [boards](/runtimes/installations/#boards) installation reduced to one node, on the [bare-metal](/runtimes/bare-metal/) runtime. One board is a possible installation under the same rules as the three-board cluster, not a tested one; the steps are the ones you repeat on each board of the cluster. You finish with a running sluis at `https://sluis.example.com`, a token you have verified yourself, and the audit record of your own sign-in.
 
 ## 1. Prerequisites
 
@@ -33,14 +33,14 @@ gpg --show-keys --fingerprint sluis-release.asc
 ```
 
 ```text
-# Example output
+# Example output (the first of the two primary keys)
 pub   nistp384 2026-10-01 [SC]
       3F2A 91C4 7D0E 55B8 A6C1  0E49 7B2D 8E3F 14A0 C9D2
 uid           sluis release signing <release@sluis.example.org>
 sub   nistp384 2026-10-01 [S] [expires: 2027-04-01]
 ```
 
-The release identity is a dedicated sluis key. Its primary key is kept offline on a pair of YubiKeys. The subkey that CI signs the repository metadata with expires, and a new one is published under the same primary key. Compare the primary key's fingerprint with the copy attached to the GitHub release, which is a different channel from the distribution site.
+The release identity is a dedicated sluis identity with two primary keys, one on each card of a pair of YubiKeys, kept offline. Each primary key has its own signing subkey, and every release is signed twice, once with each, so either fingerprint verifies every release. The subkey that CI signs the repository metadata with expires, and a new one is published under the same primary key. Compare the primary key's fingerprint with the copy attached to the GitHub release, which is a different channel from the distribution site.
 
 :::note[Proposed]
 The channels that publish the fingerprint (keys.openpgp.org, a Web Key Directory on sluis.id, DNS, `SECURITY.md`, the GitHub release and the site) are under research; see [Release signing](/distribution/release-signing/#the-openpgp-release-key). Compare on at least two of them.
@@ -65,16 +65,16 @@ apt update
 apt install sluis
 ```
 
-The package installs the actors, drivers and the node agent (`sluis-node`) under `/usr/libexec/sluis/{roles,drivers,integrations,node,vendor}/<short-name>`, creates one system user per actor, and installs one systemd unit per role and driver. It enables nothing yet.
+The package installs the actors, drivers and the node agent (`sluis-node`) under `/usr/libexec/sluis/{actors,drivers,integrations,node,vendor}/<short-name>`, creates one system user per actor, and installs one systemd unit per actor and driver. It enables nothing yet.
 
 ```sh
 # Example
-ls /usr/libexec/sluis/roles
+ls /usr/libexec/sluis/actors
 ```
 
 ```text
 # Example output
-audit-read  audit-writer  ca  entry  notary  policy  quota  signer
+audit-indexer  audit-reader  audit-witness  audit-writer  ca  entry  policy  quota  signer
 ```
 
 ## 4. Run `sluis doctor`
@@ -141,12 +141,17 @@ Type the PIN and finish with Ctrl-D. The unit passes it to the `key-holder` with
 
 ## 6. Write a minimal config
 
-Configuration has five layers: defaults, the environment, the preset, your install, and stage overrides. The bare-metal environment and the T1 preset already set the key mode, the state store and the local audit spool, so the install layer holds only what is yours.
+Configuration has five layers: defaults, the runtime, the installation's defaults, your install, and overrides per environment (development, staging, production). The bare-metal runtime and the boards defaults already set the key mode and the local audit spool, so the install layer holds only what is yours, plus the two drivers that differ with one node.
 
 ```yaml
 # Example: /etc/sluis/install.yaml
-environment: bare-metal
-preset: T1
+runtime: bare-metal
+installation: boards
+nodes: 1
+state:
+  driver: embedded     # one node: no Raft
+audit:
+  index: sqlite        # one node: no replicated index
 issuer: https://sluis.example.com
 upstreams:
   - id: workforce
@@ -165,7 +170,7 @@ install -m 0600 /dev/stdin /etc/sluis/credentials/idp-client-secret
 ```
 
 :::note[Proposed]
-The location and the exact key names of the install file are not yet decided, and the rule that secrets are referenced is agreed. The five layers (defaults, environment, preset, install, stage overrides) are proposed; a stage is a development, staging or production boundary of the installation.
+The location and the exact key names of the install file are not yet decided, and the rule that secrets are referenced is agreed. The five layers (defaults, runtime, installation, install, environment overrides) are proposed; an environment is development, staging or production.
 :::
 
 ## 7. Check and explain the config
@@ -177,7 +182,11 @@ sluis config check /etc/sluis/install.yaml
 ```text
 # Example output
 ok    /etc/sluis/install.yaml validates against the schema (unevaluatedProperties: false)
+ok    drivers satisfy the runtime and the node count (bare-metal, 1 node)
+warn  audit.witness: none; with no witness a compromised writer can get a rewritten checkpoint signed
 ```
+
+The warning is expected on one node: a witness is optional, and the peer witnesses of the cluster need two or more nodes.
 
 The schema is strict: an unknown key is an error, so a typo does not silently do nothing. See what sluis will really use and where each value came from.
 
@@ -187,19 +196,20 @@ sluis config explain
 
 ```text
 # Example output
-environment            bare-metal                  install
-preset                 T1                          install
-keys.mode              yubikey                     preset
-state.driver           embedded                    preset
-audit.transport        spool                       preset
-audit.index            sqlite                      preset
+runtime                bare-metal                  install
+installation           boards                      install
+nodes                  1                           install
+keys.mode              yubikey                     installation
+state.driver           embedded                    install
+audit.transport        spool                       installation
+audit.index            sqlite                      install
 issuer                 https://sluis.example.com   install
 upstreams[0].issuer    https://idp.example.org     install
 ```
 
 ## 8. Start the units
 
-Roles and drivers are systemd units. Start the target that groups them.
+Actors and drivers are systemd units. Start the target that groups them.
 
 ```sh
 # Example
@@ -214,15 +224,15 @@ sluis-state.service         loaded active running  sluis state driver
 sluis-signer.service        loaded active running  sluis signer
 sluis-policy.service        loaded active running  sluis policy
 sluis-ca.service            loaded active running  sluis ca
-sluis-notary.service        loaded active running  sluis notary
 sluis-audit-writer.service  loaded active running  sluis audit-writer
-sluis-audit-read.service    loaded active running  sluis audit-read
+sluis-audit-indexer.service loaded active running  sluis audit-indexer
+sluis-audit-reader.service  loaded active running  sluis audit-reader
 sluis-quota.service         loaded active running  sluis quota
 sluis-entry.service         loaded active running  sluis entry
 sluis-node.service          loaded active running  sluis node agent
 ```
 
-Each unit runs as its own user. One TCP listener exists: `entry`'s public API, bound to `127.0.0.1:8080` (the port is an example). Every other actor and driver listens on a Unix socket under `/run/sluis/<role>/`.
+Each unit runs as its own user. One TCP listener exists: `entry`'s public API, bound to `127.0.0.1:8080` (the port is an example). Every other actor and driver listens on a Unix socket under `/run/sluis/<actor>/`.
 
 ```sh
 # Example
@@ -304,11 +314,11 @@ claims = jwt.decode(
 print(claims["sub"], claims["iss"])
 ```
 
-Tokens are signed with EC P-384, so the algorithm is `ES384`. The JWKS lists only public keys. The signing key is in the YubiKey and the `signer` can use it only through the `key-holder`.
+ES384 (P-384) is sluis's default, so the algorithm here is `ES384`. A client that needs another algorithm of the FAPI 2.0 set (PS256, ES256 or EdDSA) can get it where the key driver supports it; PS256 on a YubiKey takes about 2.3 s per signature. The JWKS lists only public keys. The signing key is in the YubiKey and the `signer` can use it only through the `key-holder`.
 
 ## 12. Read the audit trail
 
-Every success is audited. Your sign-in produced a record that went through the spool transport, then into a sealed batch whose head the `notary` signed.
+Every success is audited. Your sign-in produced a record that went through the spool transport, then into a sealed batch. The writer asked the `key-holder` to sign the checkpoint, and there is no notary.
 
 ```sh
 # Example
@@ -320,7 +330,7 @@ sluis audit verify
 # Example output
 2026-10-28T09:14:02Z  token.issued  sub=you@example.org  actor=signer  batch=pending
 ...
-chain ok: 1 batch, head signed by notary key 9c, 0 gaps
+chain ok: 1 batch, checkpoint signed by the log key, 0 gaps
 ```
 
 `audit verify` walks the chain from the sealed batches in the blob store. It never trusts the index or the state store, so a damaged index can't hide a missing record. See [Audit](/concepts/audit/).
@@ -328,7 +338,7 @@ chain ok: 1 batch, head signed by notary key 9c, 0 gaps
 ## 13. Next steps
 
 - Read what you installed: the [actors](/concepts/actors/), the [drivers](/concepts/drivers/) and the [keys](/concepts/keys/).
-- Add a second board and a YubiKey each, and move to the [board cluster preset](/environments/presets/#t2-board-cluster).
+- Add a second and a third board, a YubiKey each, and move to the tested [boards installation](/runtimes/installations/#boards).
 - Understand the packages and how to verify what you installed: [Packages](/distribution/packages/) and [Release signing](/distribution/release-signing/).
-- Keep the blob store off the board if you want the audit chain to outlive it; see [Limits and residual risk](/environments/presets/#t1-single-board).
+- Keep the blob store off the board if you want the audit chain to outlive it; see [Limits and residual risk](/runtimes/bare-metal/#limits-and-residual-risk).
 - Check the [open decisions](/open-decisions/) that may change the commands in this tutorial.

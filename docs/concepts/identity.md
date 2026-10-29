@@ -41,20 +41,20 @@ GCP and Azure each need an algorithm other than P-384. The exception is made for
 Where the platform supplies an identity, sluis uses it and does not add a layer: the function's role on serverless (AWS Lambda). The node agent exists for the nodes where none does.
 
 :::note[Proposed]
-**Kubernetes (T6).** The identity of an actor is a projected ServiceAccount token, with one audience per sluis actor, mounted only into that actor's container and its driver. The actor's cloud driver exchanges the token with the cloud in the same way as in step 2 below (`AssumeRoleWithWebIdentity` on AWS, Workload Identity Federation on Google Cloud, a federated credential on Azure). Only the source of the token differs: the kubelet and the API server issue it, and the node agent `sluis-node` is not used on Kubernetes. The cloud role of each sluis actor trusts the cluster's issuer, that actor's audience, and the namespace and ServiceAccount of the install. The workload tokens are the cluster's, not sluis keys; see [Keys](/concepts/keys/).
+**Kubernetes.** The identity of an actor is a projected ServiceAccount token, with one audience per sluis actor, mounted only into that actor's container and its driver. The actor's cloud driver exchanges the token with the cloud in the same way as in step 2 below (`AssumeRoleWithWebIdentity` on AWS, Workload Identity Federation on Google Cloud, a federated credential on Azure). Only the source of the token differs: the kubelet and the API server issue it, and the node agent `sluis-node` is not used on Kubernetes. The cloud role of each sluis actor trusts the cluster's issuer, that actor's audience, and the namespace and ServiceAccount of the install. The workload tokens are the cluster's, not sluis keys; see [Keys](/concepts/keys/).
 
-EKS Pod Identity is used only for a pod that holds a single actor, because its credentials belong to the pod and not to a container. This is [OD-19](/open-decisions/#od-19); options and limits are on [Kubernetes](/environments/kubernetes/#identity).
+EKS Pod Identity is used only for a pod that holds a single actor, because its credentials belong to the pod and not to a container. This is [OD-19](/open-decisions/#od-19); options and limits are on [Kubernetes](/runtimes/kubernetes/#identity).
 :::
 
 ## An actor getting AWS credentials
 
-This is how an actor on an EC2 node, such as `audit-writer`, obtains AWS credentials to write to its bucket. The actor's AWS driver runs under the actor's own uid. The issuer URL and node name are examples. The flow has two steps.
+This is how an actor on an EC2 node, such as the audit `writer`, obtains AWS credentials to write to its bucket. The actor's AWS driver runs under the actor's own uid. The issuer URL and node name are examples. The flow has two steps.
 
 ### Step 1: the node agent issues a workload token
 
 ```mermaid
 sequenceDiagram
-  participant D as audit-writer
+  participant D as writer
   participant N as sluis-node
   participant K as Node key
   D->>N: request a token
@@ -70,7 +70,7 @@ The driver asks for a workload token for the audience `sts.amazonaws.com` over t
 
 ```mermaid
 sequenceDiagram
-  participant D as audit-writer
+  participant D as writer
   participant S as AWS STS
   participant B as Issuer bucket
   participant A as AWS service

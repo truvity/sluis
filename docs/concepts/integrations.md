@@ -72,4 +72,4 @@ A client profile has no process, no credential and no manifest of its own. It is
 
 An integration declares its configuration block and the permissions it needs in a descriptor. The installer never grants more than the descriptor asks and never accepts a descriptor above the install's admission policy, for example no authority keys for a third-party plugin, and outbound access only to the hosts it declares.
 
-Because each integration is a separate process with a different user and a different credential, a compromised connector to one vendor does not reach another vendor's token. How the process is isolated in each environment is on [Environments](/environments/).
+Because each integration is a separate process with a different user and a different credential, a compromised connector to one vendor does not reach another vendor's token. How the process is isolated on each runtime is on [Runtimes](/runtimes/).

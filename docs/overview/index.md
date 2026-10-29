@@ -12,7 +12,7 @@ sluis is an open-source identity and access broker for people, robots and extern
 
 sluis is for engineers who run the identity layer of a small organisation, a platform team or a self-hosted lab, and who want it to be small, auditable and cheap to keep running.
 
-- **Operators** install it from signed packages on one single-board computer, three of them, a pair of AWS instances, or as AWS Lambda functions. The same actors and the same configuration run on every one of these installations; the named, tested ones are the [presets](/environments/presets/), on three [environments](/environments/): bare-metal, serverless and kubernetes.
+- **Operators** install it from signed packages on a workstation, on three single-board computers, as AWS Lambda functions, or on Kubernetes. The same actors and the same configuration run on every one of these installations; the four tested ones are [local, boards, lambda and kubernetes](/runtimes/installations/), on three [runtimes](/runtimes/): bare-metal, serverless and kubernetes. Any other combination the rules allow is a possible installation, not a tested one.
 - **Platform and security engineers** write the policy that says who may get which credential, and read the audit trail that says who did.
 - **Integrators** extend it with new sign-in providers, directory sources and credential minters, as separate processes, in any language that speaks ConnectRPC.
 
@@ -22,16 +22,16 @@ sluis is for engineers who run the identity layer of a small organisation, a pla
 - It **issues OIDC tokens** and **exchanges tokens** (RFC 8693): a robot or a CI job presents a token from the system it runs on and receives a sluis token for the system it wants to reach.
 - It **mints short-lived downstream credentials**: cloud API tokens, GitHub installation tokens and AWS credentials. Nothing it hands out is meant to outlive the task.
 - It **reconciles directory facts** from workspace directories, GitHub teams and chat workspaces, so that policy can say "members of this team" without sluis owning the team.
-- It **writes a tamper-evident audit trail**. Every success is recorded, sealed into batches and chained by a notary that nobody else can impersonate. See [Audit](/concepts/audit/).
+- It **writes a tamper-evident audit trail**. Every success is recorded, sealed into batches and chained, and the checkpoints are signed with a key that only the audit writer can use. See [Audit](/concepts/audit/).
 
 Behind these sits one idea: the part of sluis that holds a key is small and cannot be talked into anything, and the part that decides is separate from the part that signs. See [Actors](/concepts/actors/).
 
 ## What it does not do
 
-- **It does not store secrets.** There is no key-value store, no transit engine and no lease system for other people's secrets. Use a secrets manager for that.
+- **It is not a general secrets engine.** sluis stores its own secrets and its integrations' secrets, and publishes a small typed set of credentials for consumers to pull. It mints scoped credentials rather than storing other people's secrets: there is no general key-value store, no transit engine and no lease system for them. Use a secrets manager for that.
 - **It does not write Kubernetes objects.** sluis exports what a cluster needs and the cluster pulls it. cert-manager and trust-manager remain clients of sluis; sluis does not create their resources.
 
-These two are agreed non-goals. They keep the blast radius of a compromised sluis process to identity, not to everything a secrets manager would also hold.
+These two are agreed non-goals. They keep the blast radius of a compromised sluis process to identity, not to everything a general secrets manager would also hold.
 
 ## v1 and v2
 
@@ -57,8 +57,8 @@ Three ideas hold the design together:
 | [Concepts](/concepts/) | The model: actors, ports and drivers, integrations, keys, identity, configuration, data and audit. | [Concepts map](/concepts/) |
 | [Integrations](/integrations/) | Every system sluis connects to, what each is for, what sluis asks the vendor for, and the setup patterns for GitHub and Slack apps, Google Workspace, Cloudflare, AWS and OIDC. | [Integrations](/integrations/) |
 | [Architecture](/architecture/) | The same system at three zoom levels: context, components and processes, with the deployment and listener details and two interactive explorers. | [Architecture](/architecture/) |
-| [Environments](/environments/) | Where sluis runs: bare-metal (hosts, virtual machines, local Docker), serverless (AWS Lambda) and kubernetes, and the presets T0 to T6 that name the tested installations. | [Presets](/environments/presets/) |
-| [Tutorials](/tutorials/) | Step-by-step installs that run in CI on the supported presets. | [Single-node install](/tutorials/single-node-install/) |
+| [Runtimes](/runtimes/) | Where sluis runs: bare-metal (hosts, virtual machines, local Docker), serverless (AWS Lambda) and kubernetes, and the four tested installations (local, boards, lambda, kubernetes) with their default drivers. | [Installations](/runtimes/installations/) |
+| [Tutorials](/tutorials/) | Step-by-step installs that run in CI on the tested installations. | [Single-node install](/tutorials/single-node-install/) |
 | [Distribution](/distribution/) | Packages, release signing and supported platforms. | [Packages](/distribution/packages/) |
 | [Standards and conformance](/standards/) | The RFCs, specifications and certifications sluis uses or plans to, and the plan to prove conformance with the OpenID Foundation test plans. | [Standards register](/standards/) |
 | [Open decisions](/open-decisions/) | The points of the design the maintainer has not decided, each with options and the current lean. | [Open decisions](/open-decisions/) |
