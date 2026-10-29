@@ -109,7 +109,7 @@ shapes:
         status: agreed
       - text: "The outbox is an SQS queue here."
         status: agreed
-      - text: "Kubernetes is in design scope as T6 and is proposed, not agreed: see /shapes/kubernetes/. Its audit outbox is open (OD-22); the proposal is an SQS queue on EKS, as here."
+      - text: "Kubernetes is in design scope as T6 and is proposed, not agreed: see /shapes/kubernetes/. Its audit outbox is an SQS queue for now, as here."
         status: proposed
       - text: "The notary is a single key used only by the notary function's role. There is no co-signing; the function role is the isolation."
         status: agreed

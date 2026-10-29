@@ -16,16 +16,26 @@ sluis writes a tamper-evident audit trail. This page explains the ideas. The rol
 
 A record goes through four steps, and each step is done by a different role.
 
+The first two steps get the record to the writer.
+
 ```mermaid
 flowchart LR
   P["Any role<br/>(producer)"] -->|"1. append"| O[("Outbox")]
   O -->|"2. receive"| W["audit-writer"]
-  W -->|"3. seal batch,<br/>ask for a signature"| N["notary"]
+```
+
+The last two steps seal the batch and archive it. The index follows the chain.
+
+```mermaid
+flowchart LR
+  W["audit-writer"] -->|"3. seal"| N["notary"]
   N -->|"signed head"| W
-  W -->|"4. write batch"| B[("Blob archive")]
-  B -.->|"index follows<br/>the chain"| I[("Index")]
+  W -->|"4. write"| B[("Blob archive")]
+  B -.->|"index follows"| I[("Index")]
   I --> R["audit-read"]
 ```
+
+Step 3 seals the batch and asks the notary for a signature on its head.
 
 1. **Outbox.** A role appends the record to an **outbox** and carries on. It returns to its caller once the record is durable in the outbox, and never waits for the writer, the archive or the index. If the writer is down for an hour, requests still succeed and records queue.
 2. **Sealed batches.** The `audit-writer` takes records from the outbox, validates and de-duplicates them, and groups them into an ordered **batch**. It closes the batch with a seal over its contents and the head of the previous batch. It holds no signing key.
@@ -34,7 +44,11 @@ flowchart LR
 
 The outbox is the port a role appends to; the driver behind it decides what "durable" means: a local fsync'd spool on servers, a queue on Lambda.
 
-The audit outbox is a local spool on self-hosted shapes, co-signed in cluster mode, and an SQS queue on Lambda. On Kubernetes it is open ([OD-22](/open-decisions/#od-22)); SQS on EKS is proposed.
+The audit outbox is a local spool on self-hosted shapes, co-signed in cluster mode, and an SQS queue on Lambda. On Kubernetes it is an SQS queue for now ([OD-22](/open-decisions/#od-22)).
+
+:::caution[Open decision OD-31: Audit as a separate installation]
+The audit side is being redesigned as its own installation, connected to sluis over the network. Open: the roles of the audit installation, the transport from emitters, how an emitter authenticates, and a co-located profile for a small install. The design is not settled. The lean is that audit is its own installation, and sluis emits over TCP or a queue through an outbox.
+:::
 
 On a cluster, each node's writer drains its own spool, and the notary co-signs batch heads 2 of 3 across the nodes. How the notary signs depends on the shape:
 

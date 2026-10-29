@@ -45,8 +45,10 @@ The volume makes this affordable. On a production install, a measurement showed 
 
 See [Identity](/concepts/identity/) for how these keys are used.
 
+**Kubernetes (T6).** For now the Kubernetes shape supports AWS KMS only (EKS), and the keys are the AWS KMS keys of the layout below ([OD-20](/open-decisions/#od-20)). A cluster outside AWS has no key mode that the floor allows, and refuses to start rather than fall back to a software key.
+
 :::note[Proposed]
-**Kubernetes (T6).** On EKS the keys are the AWS KMS keys of the layout below. A cluster outside AWS has no key mode that the floor allows yet, and refuses to start rather than fall back to a software key; which mode comes first is [OD-20](/open-decisions/#od-20). The workload tokens on Kubernetes are the cluster's own ServiceAccount tokens, signed by the cluster's key with the algorithm the cluster uses. sluis neither holds nor signs them, so the P-384 rule above does not cover them. How a role gets its cloud identity from them is [OD-19](/open-decisions/#od-19). See [Kubernetes](/shapes/kubernetes/).
+The workload tokens on Kubernetes are the cluster's own ServiceAccount tokens, signed by the cluster's key with the algorithm the cluster uses. sluis neither holds nor signs them, so the P-384 rule above does not cover them. How a role gets its cloud identity from them is [OD-19](/open-decisions/#od-19). See [Kubernetes](/shapes/kubernetes/).
 :::
 
 - **The per-audience RS256 exception.** Some verifiers cannot take an elliptic-curve signature. For an audience that is configured to need RS256, sluis signs that audience's tokens with a separate RSA key, kept in its own slot or KMS key and used for nothing else. Every other audience keeps getting EC P-384 tokens. The RSA public key is published in the JWKS beside the EC keys.

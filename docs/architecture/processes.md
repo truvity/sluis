@@ -94,76 +94,65 @@ Why not Go plugins: a Go `.so` shares the host's address space and so has no iso
 
 ## One node, drawn out
 
-A self-hosted node (a single-board computer, or an EC2 instance) runs every role as its own user. Arrows are Unix-socket calls allowed by the call graph. The only thing that reaches `entry` from outside is the edge connector, and it connects to `entry`'s loopback TCP port; every other call is a Unix-socket call. See [Listeners](/architecture/listeners/).
+A self-hosted node (a single-board computer, or an EC2 instance) runs every role as its own user, in its own systemd unit. The node is drawn in three steps: the request path, the keys and the state, and the audit emits. Arrows are Unix-socket calls allowed by the call graph. The only thing that reaches `entry` from outside is the edge connector, and it connects to `entry`'s loopback TCP port; every other call is a Unix-socket call. See [Listeners](/architecture/listeners/).
+
+| Group | Roles | What the group is |
+| ----- | ----- | ----------------- |
+| Front | `entry` | Parses requests and holds no key |
+| Authority | `signer`, `policy`, `ca`, `notary` | Hold or use authority keys, with no listener on the network. `policy` holds no state and has no network |
+| Integrations | one role per integration | Each holds its own vendor credential (credential A, credential B) |
+| Audit | `audit-writer`, `audit-read` | Seal and read the audit chain |
+| Shared drivers | `key-holder`, `state-owner` | One key driver and one state driver for the node |
+| Node agent | `sluis-node` | Runs as root and is small |
+
+### Step 1: the request path
 
 ```mermaid
 flowchart LR
-  net(["Internet"])
-
-  subgraph node["One node, every box its own uid and systemd unit"]
-    cf["cloudflared<br/>outbound only"]
-
-    subgraph front["Parses requests, holds no key"]
-      entry["entry"]
-    end
-
-    subgraph authority["Hold or use authority keys, no listener on the network"]
-      signer["signer"]
-      policy["policy<br/>no state, no network"]
-      ca["ca"]
-      notary["notary"]
-    end
-
-    subgraph integ["One role per integration"]
-      gh["integration A<br/>vendor credential A"]
-      cl["integration B<br/>vendor credential B"]
-    end
-
-    subgraph auditp["Audit"]
-      aw["audit-writer"]
-      ar["audit-read"]
-    end
-
-    quota["quota"]
-
-    subgraph med["Shared drivers"]
-      kh["key-holder"]
-      so["state-owner"]
-    end
-
-    agent["sluis-node<br/>root, small"]
-    dev[("YubiKey")]
-    db[("rqlite or Raft")]
-  end
-
-  net --> cf
-  cf -->|"http://127.0.0.1:8080"| entry
-  entry --> signer
-  entry --> policy
-  entry --> quota
-  entry --> gh
-  entry --> cl
+  net(["Internet"]) --> cf["cloudflared<br/>outbound only"]
+  cf -->|"http://127.0.0.1:8080"| entry["entry"]
+  entry --> signer["signer"]
+  entry --> policy["policy"]
+  entry --> quota["quota"]
+  entry --> gh["integration A"]
+  entry --> cl["integration B"]
   gh --> policy
-  signer --> kh
-  ca --> kh
-  notary --> kh
-  kh --> dev
-  entry --> so
-  quota --> so
-  aw --> so
-  ar --> so
-  so --> db
-  entry -.-> aw
-  gh -.-> aw
-  aw --> notary
-  agent -.->|"workload JWT per role"| entry
-  agent -.->|"workload JWT per role"| signer
 ```
 
-The solid line from `gh` to `policy` is a decision request; the integration asks "may this caller have this", never the reverse. Dashed lines to `audit-writer` are asynchronous emits. The node agent dashes stand for the workload JWT it issues to every role; the picture omits them for the other roles to stay readable.
+The solid line from integration A to `policy` is a decision request; the integration asks "may this caller have this", never the reverse.
 
-On a three-node [cluster](/shapes/aws-ec2-cluster/) every node runs this set, and the `state-owner` processes talk to each other over the Raft driver's mTLS port. Each node's `audit-writer` drains its own spool, and the notary co-signs batch heads 2 of 3 across nodes. On [Lambda](/shapes/aws-lambda/) the same roles are separate functions with no sluis-node; on [Kubernetes](/shapes/kubernetes/) they are proposed to be containers of a node pod and an audit pod.
+### Step 2: keys and state
 
-Where an audit record waits before it is sealed differs by shape: a local spool on self-hosted and EC2 shapes (co-signed in cluster mode), an SQS queue on Lambda. On Kubernetes the outbox is open ([OD-22](/open-decisions/#od-22)); SQS on EKS is proposed.
+```mermaid
+flowchart LR
+  entry["entry"] --> so["state-owner"]
+  quota["quota"] --> so
+  aw["audit-writer"] --> so
+  ar["audit-read"] --> so
+  so --> db[("rqlite or Raft")]
+  signer["signer"] --> kh["key-holder"]
+  ca["ca"] --> kh
+  notary["notary"] --> kh
+  kh --> dev[("YubiKey")]
+```
+
+The three roles that use an authority key reach it only through `key-holder`, and every role that reads or writes state goes through `state-owner`.
+
+### Step 3: audit emits and the node agent
+
+```mermaid
+flowchart LR
+  entry["entry"] -.-> aw["audit-writer"]
+  gh["integration A"] -.-> aw
+  aw --> notary["notary"]
+  agent["sluis-node"] -.->|"workload JWT"| entry
+  agent -.->|"workload JWT"| signer["signer"]
+```
+
+Dashed lines to `audit-writer` are asynchronous emits. The node agent dashes stand for the workload JWT it issues to every role; the picture omits them for the other roles to stay readable.
+
+On a three-node [cluster](/shapes/aws-ec2-cluster/) every node runs this set, and the `state-owner` processes talk to each other over the Raft driver's mTLS port. Each node's `audit-writer` drains its own spool, and the notary co-signs batch heads 2 of 3 across nodes. On [Lambda](/shapes/aws-lambda/) the same roles are separate functions with no sluis-node; on [Kubernetes](/shapes/kubernetes/) they are containers of a node pod and an audit pod, cut at the audit queue ([OD-17](/open-decisions/#od-17)); the audit side is being redesigned as a separate audit installation ([OD-31](/open-decisions/#od-31)).
+
+Where an audit record waits before it is sealed differs by shape: a local spool on self-hosted and EC2 shapes (co-signed in cluster mode), an SQS queue on Lambda. On Kubernetes the outbox is an SQS queue for now ([OD-22](/open-decisions/#od-22)).
 
 Next: [Deployment](/architecture/deployment/) shows how each shape enforces these boundaries.
