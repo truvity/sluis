@@ -36,7 +36,7 @@ A request returns once its audit record is durable in the outbox, never waiting 
 
 <AuditExplorer part="outbox" />
 
-The audit outbox is a local spool on servers, co-signed in cluster mode, and an SQS queue on Lambda. Kubernetes: later. The recovery path is separate: it spools locally on every shape and never blocks.
+The audit outbox is a local spool on servers, co-signed in cluster mode, and an SQS queue on Lambda. Kubernetes (T6) is proposed, with its outbox open as [OD-22](/open-decisions/#od-22): see [Kubernetes](/shapes/kubernetes/). The recovery path is separate: it spools locally on every shape and never blocks.
 
 ## The integrity chain
 

@@ -107,8 +107,10 @@ shapes:
     notes:
       - text: "T5 ships no audit index. audit-read and its index run in a separate audit install on another shape that reads the same bucket: Kubernetes with Postgres (any connection string, for example CNPG), or a server with sqlite. A small install can run sluis audit search from the CLI, which builds a local sqlite index from the chain. The index is a rebuildable cache; the chain in the bucket is the record."
         status: agreed
-      - text: "The outbox is an SQS queue here. Kubernetes: later."
+      - text: "The outbox is an SQS queue here."
         status: agreed
+      - text: "Kubernetes is in design scope as T6 and is proposed, not agreed: see /shapes/kubernetes/. Its audit outbox is open (OD-22); the proposal is an SQS queue on EKS, as here."
+        status: proposed
       - text: "The notary is a single key used only by the notary function's role. There is no co-signing; the function role is the isolation."
         status: agreed
 

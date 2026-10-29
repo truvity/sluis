@@ -3,10 +3,15 @@
 // and assert what a reader sees. Static greps (check-built.sh) cannot tell that
 // the page script threw before it drew the diagrams; this can.
 //
+// The pages are discovered, not listed: every built dist/**/index.html that holds
+// a `pre.mermaid`, plus the explorer pages. The sweep must find at least
+// MIN_DIAGRAM_PAGES pages, and the pages in REQUIRED, so an empty or shrunken
+// sweep fails instead of passing on nothing.
+//
 // For each page, in light and in dark mode:
 //   - the page raises no exception and logs no console error;
-//   - every `pre.mermaid` ends up holding an <svg> (and the page has at least
-//     one, where it must);
+//   - every `pre.mermaid` ends up holding an <svg> (and the page has as many as
+//     its HTML says it has);
 //   - every diagram has an Expand button, the diagram text is readable (the
 //     computed font size of each SVG label times the SVG's rendered scale is at
 //     least MIN_TEXT_PX), and on the first diagram a click on Expand opens the
@@ -16,29 +21,58 @@
 // Needs Chrome or Chromium (CHROME, or google-chrome / chromium on PATH) and
 // Node 22+ (global fetch and WebSocket). No npm dependency.
 //
+// Chrome is started once, with --remote-debugging-port=0 and a fresh profile, and
+// its address is read from the "DevTools listening on ws://..." line it prints on
+// stderr. A cold Chrome on a loaded hosted runner can take far longer than a few
+// seconds to get that far, so the wait is long (LAUNCH_MS) and bounded; if Chrome
+// exits or never says so, its stderr is printed. Only the launch is retried, once,
+// never the assertions.
+//
 // usage: site/scripts/check-render.mjs [dist] [screenshot-dir]
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, extname, join, normalize, resolve } from 'node:path';
+import { dirname, extname, join, normalize, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const dist = resolve(root, process.argv[2] ?? 'site/dist');
 const shots = process.argv[3] ? resolve(process.argv[3]) : null;
 
-// path, number of diagrams required (at least), whether it is an explorer page.
-const PAGES = [
-  { path: '/concepts/', mermaid: 1 },
-  { path: '/concepts/identity/', mermaid: 1 },
-  { path: '/architecture/context/', mermaid: 1 },
-  { path: '/shapes/local/', mermaid: 1 },
-  { path: '/architecture/explorer/', explorer: true },
-  { path: '/architecture/audit-explorer/', explorer: true },
-];
+// The explorer pages are listed: they have no diagram to find, and the explorer
+// script must have run on them.
+const EXPLORERS = ['/architecture/explorer/', '/architecture/audit-explorer/'];
+// Pages that must be in the sweep whatever else is found (a diagram on each).
+const REQUIRED = ['/concepts/', '/concepts/identity/', '/architecture/context/', '/shapes/local/',
+  '/shapes/kubernetes/', '/integrations/connecting/'];
+// The fewest pages with a diagram the sweep may find (18 when this was written).
+const MIN_DIAGRAM_PAGES = 12;
+
+// Every built page whose HTML holds a pre.mermaid, with how many.
+function discover(dist) {
+  const found = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const f = join(dir, e.name);
+      if (e.isDirectory()) walk(f);
+      else if (e.name === 'index.html') {
+        const n = (readFileSync(f, 'utf8').match(/<pre\b[^>]*\bclass="[^"]*\bmermaid\b/g) ?? []).length;
+        if (n) {
+          const rel = relative(dist, dirname(f)).split(sep).join('/');
+          found.push({ path: rel ? `/${rel}/` : '/', mermaid: n });
+        }
+      }
+    }
+  };
+  walk(dist);
+  return found.sort((a, b) => a.path.localeCompare(b.path));
+}
+
 const SCHEMES = ['light', 'dark'];
 const WAIT_MS = 20000;
+// How long to wait for Chrome to print its DevTools address, per launch attempt.
+const LAUNCH_MS = 60000;
 // The smallest on-screen size, in CSS px, of any diagram text. Mermaid fits an
 // SVG to its column by default, which shrank a wide sequence diagram to 6 px.
 const MIN_TEXT_PX = 11;
@@ -50,7 +84,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 function findChrome() {
   const candidates = [process.env.CHROME, 'google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'].filter(Boolean);
   for (const c of candidates) {
-    const r = spawnSync(c, ['--version'], { encoding: 'utf8' });
+    const r = spawnSync(c, ['--version'], { encoding: 'utf8', timeout: 60000 });
     if (r.status === 0) return c;
   }
   throw new Error('no Chrome or Chromium found: set CHROME, or put google-chrome or chromium on PATH');
@@ -70,13 +104,46 @@ function serve() {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function launch(chrome, profile) {
+// Start Chrome and wait for the "DevTools listening on ws://host:port/..." line on
+// its stderr. Resolves with the child, the port and the profile directory.
+function launchOnce(chrome) {
+  const profile = mkdtempSync(join(tmpdir(), 'check-render-'));
   const child = spawn(chrome, ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--hide-scrollbars',
-    '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });
-  const portFile = join(profile, 'DevToolsActivePort');
-  for (let i = 0; i < 100 && !existsSync(portFile); i++) await sleep(100);
-  if (!existsSync(portFile)) throw new Error('Chrome never opened its debugging port');
-  return { child, port: readFileSync(portFile, 'utf8').split('\n')[0] };
+    '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--disable-extensions',
+    '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+  let err = '';
+  const t0 = Date.now();
+  return new Promise((ok, fail) => {
+    const done = (f, v) => { clearTimeout(timer); child.stderr.off('data', onData); f(v); };
+    const bad = (why) => {
+      child.kill('SIGKILL');
+      rmSync(profile, { recursive: true, force: true });
+      fail(new Error(`${why}\n--- Chrome stderr (${err.length} bytes) ---\n${err.slice(-4000) || '(empty)'}\n---`));
+    };
+    const onData = (d) => {
+      err += d;
+      const m = err.match(/DevTools listening on ws:\/\/[^:/\s]+:(\d+)\//);
+      if (m) {
+        console.log(`check-render: Chrome up in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+        done(ok, { child, port: m[1], profile });
+      }
+    };
+    const timer = setTimeout(() => bad(`Chrome did not print its DevTools address within ${LAUNCH_MS / 1000} s`), LAUNCH_MS);
+    child.stderr.on('data', onData);
+    child.on('error', (e) => { clearTimeout(timer); bad(`could not start ${chrome}: ${e.message}`); });
+    child.on('exit', (code, sig) => { if (!err.includes('DevTools listening')) { clearTimeout(timer); bad(`Chrome exited early (code ${code}, signal ${sig})`); } });
+  });
+}
+
+// One retry of the launch, with a fresh profile: a browser that never came up says
+// nothing about the page. The assertions are never retried.
+async function launch(chrome) {
+  try {
+    return await launchOnce(chrome);
+  } catch (e) {
+    console.error(`check-render: Chrome launch failed, retrying once: ${e.message}`);
+    return await launchOnce(chrome);
+  }
 }
 
 // A minimal CDP client over the page's WebSocket.
@@ -172,7 +239,7 @@ async function checkPage(cdp, base, page, scheme) {
     if (Date.now() - t0 > WAIT_MS) break;
   }
   await sleep(500); // let a late error surface
-  if (page.mermaid && (!st || st.pres.length < page.mermaid)) problems.push(`expected at least ${page.mermaid} pre.mermaid, found ${st ? st.pres.length : 'none'}`);
+  if (page.mermaid && (!st || st.pres.length < page.mermaid)) problems.push(`expected ${page.mermaid} pre.mermaid, found ${st ? st.pres.length : 'none'}`);
   if (st && st.pres.some((d) => !d)) problems.push(`${st.pres.filter((d) => !d).length} of ${st.pres.length} pre.mermaid hold no <svg>: the diagram is raw text`);
   if (page.explorer && !st?.explorer) problems.push('the explorer script did not run (no ex-js class on <html>)');
   if (st && st.buttons.some((b) => !b)) problems.push(`${st.buttons.filter((b) => !b).length} of ${st.buttons.length} pre.mermaid have no Expand button`);
@@ -213,11 +280,19 @@ async function checkPage(cdp, base, page, scheme) {
 
 const server = await serve();
 const base = `http://127.0.0.1:${server.address().port}`;
-const profile = mkdtempSync(join(tmpdir(), 'check-render-'));
 let chrome;
 let failed = 0;
 try {
-  chrome = await launch(findChrome(), profile);
+  const diagramPages = discover(dist);
+  const missing = REQUIRED.filter((p) => !diagramPages.some((d) => d.path === p));
+  if (diagramPages.length < MIN_DIAGRAM_PAGES || missing.length) {
+    console.error(`check-render: FAIL the sweep found ${diagramPages.length} page(s) with a pre.mermaid in ${dist}, expected at least ${MIN_DIAGRAM_PAGES}` +
+      (missing.length ? `; missing required: ${missing.join(', ')}` : ''));
+    process.exit(1);
+  }
+  const PAGES = [...diagramPages, ...EXPLORERS.map((path) => ({ path, explorer: true }))];
+  const tStart = Date.now();
+  chrome = await launch(findChrome());
   const target = await (await fetch(`http://127.0.0.1:${chrome.port}/json/new?about:blank`, { method: 'PUT' })).json();
   const cdp = await connect(target.webSocketDebuggerUrl);
   await cdp.send('Page.enable');
@@ -235,11 +310,12 @@ try {
     }
   }
   cdp.close();
+  console.log(`check-render: ${PAGES.length} pages (${diagramPages.length} with diagrams, ${EXPLORERS.length} explorers) x ${SCHEMES.length} schemes in ${((Date.now() - tStart) / 1000).toFixed(1)} s`);
 } finally {
   chrome?.child.kill('SIGKILL');
   server.close();
   await sleep(200);
-  rmSync(profile, { recursive: true, force: true });
+  if (chrome) rmSync(chrome.profile, { recursive: true, force: true });
 }
 if (failed) { console.error(`check-render: ${failed} page render(s) failed`); process.exit(1); }
 console.log('check-render: ok');
