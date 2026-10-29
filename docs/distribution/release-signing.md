@@ -12,7 +12,7 @@ Every sluis artifact can be checked against more than one signature, made by dif
 
 - **One version per repository.** The whole repository has one version, and every artifact of a release carries it.
 - **GoReleaser v2**, open-source edition, builds the release. Rust builds are included. The YubiKey driver builds in a native per-architecture CI job because it needs cgo against pcsc-lite.
-- **A `.sha256` per file**, and a **`SHA256SUMS`** file for the release, signed twice: a cosign signature (`.sig`) and an OpenPGP signature (`.asc`).
+- **A `.sha256` per file**, and a **`SHA256SUMS`** file for the release, signed twice: a cosign signature (`.sig`) and an OpenPGP signature (`.asc`) from each of the two release primary keys, in separate files (see [why](#why-two-primaries-and-two-signature-files)).
 - **cosign keyless signing** through GitHub OIDC. There is no long-lived cosign private key; the signature is tied to the workflow identity that ran in the repository.
 - **OpenPGP-signed apt and dnf metadata.** There are two primary keys, offline, one on each card of a pair of YubiKeys, and each release is signed once with each. CI signs with **expiring signing subkeys** certified by those primary keys. See [The OpenPGP release key](#the-openpgp-release-key).
 - **Build provenance attestations**, made by GitHub, for every artifact.
@@ -44,8 +44,8 @@ cosign verify-blob \
   --certificate SHA256SUMS.pem \
   SHA256SUMS
 
-# Example: OpenPGP
-gpg --verify SHA256SUMS.asc SHA256SUMS
+# Example: OpenPGP, with the file for the primary key you trust
+gpg --verify SHA256SUMS.first.asc SHA256SUMS
 
 sha256sum -c SHA256SUMS --ignore-missing
 ```
@@ -100,6 +100,34 @@ The OpenPGP key is a **dedicated sluis release identity**, not anyone's personal
 - **CI signs with expiring subkeys.** Each subkey is certified by its primary key. When one expires, a new subkey is published under the same primary key.
 - **The maintainer's personal key certifies each release key**, so a user who already trusts the maintainer's key has a path to the release identity.
 - **Nothing is signed before phase 2** of the [roadmap](/roadmap/). The guides and tests show how to generate each primary key on its own YubiKey, as a key ceremony, so the ceremony is something anyone can read and rehearse. The ceremony is also planned as a feature of sluis itself (`sluis pki` or `sluis ceremony`) for the keys on the cards.
+
+### Why two primaries and two signature files
+
+Several signing keys are ordinary in OpenPGP practice. Checked on 2026-10-29:
+
+- **Debian** signs a stable release's `Release` file with two keys, the archive key of the time and a per-release key, and the keyring package ships every active key. See the [archive signing keys](https://ftp-master.debian.org/keys.html), and the [SecureApt history](https://wiki.debian.org/SecureApt), where a transition signed with both the old and the new key was meant to work for clients that knew either one.
+- **Arch Linux** has five master keys, and a packager key is valid when at least three of them have signed it. See the [master keys](https://archlinux.org/master-keys/).
+- **Key transitions** keep the old and the new key valid together for a while, and the old key signs the new one. See the [Apache guide](https://infra.apache.org/key-transition.html) and the [Riseup template](https://help.riseup.net/en/security/message-security/openpgp/key-transition).
+
+sluis uses two primary keys, one on each card, because a second card that is a spare is a copy, and a copy has lost its attestation. With two primaries, each generated on its own card, either card alone can verify every release, and losing a card loses one signature and no release.
+
+The two signatures are published as **two separate detached signature files**, one per primary, not as two signatures in one file. A test found that `gpg` and `gpgv` exit with status 2 when one of two signatures in the same file comes from a key the verifier does not have. A verifier that holds only one of the two public keys would see a failure on a release that is good. With one signature per file, the verifier checks the file that matches the key it has, and that check is a clean success.
+
+:::note[Proposed]
+The names of the two signature files are not decided. The commands below use `SHA256SUMS.first.asc` and `SHA256SUMS.second.asc` as stand-ins.
+:::
+
+To check a release, a verifier needs one of the two files and the matching public key:
+
+```sh
+# Example: the verifier trusts the first primary key
+gpgv --keyring ./first-primary.gpg SHA256SUMS.first.asc SHA256SUMS
+
+# Example: the verifier trusts the second primary key
+gpgv --keyring ./second-primary.gpg SHA256SUMS.second.asc SHA256SUMS
+```
+
+A verifier that trusts both keys can check both files, and should do so when it can. One good file is enough. A bad or missing file for a key the verifier does not trust is not a reason to reject the release.
 
 :::note[Proposed]
 How a user finds and verifies the public key is under research. The plan is to use several independent channels, so one compromised channel cannot replace the key:
