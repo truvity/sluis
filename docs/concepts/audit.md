@@ -12,25 +12,20 @@ sluis writes a tamper-evident audit trail. This page explains the ideas. The act
 
 **Every success is audited.** When an actor does something for a caller, such as issuing a token, minting a credential or changing a record, it appends an audit record. Every actor is therefore a producer.
 
-## The parts
+## The four pieces
 
-Audit is built from the same [ports and drivers](/concepts/drivers/) as the rest of sluis. It defines only one port of its own, the witness.
+Audit is built from the same [ports and drivers](/concepts/drivers/) as the rest of sluis. It defines only one port of its own, the witness. It is made of **four separate pieces**. This is agreed ([OD-37](/open-decisions/#od-37) and [OD-38](/open-decisions/#od-38)).
 
-| Part | What it is | Port it uses |
+| Piece | What it is | Ports it uses |
 |---|---|---|
-| **Emitter** | A library inside every actor that appends the record | **transport**, as a producer |
-| **Transport** | How a record gets from the emitter to the writer: direct, or through a queue | **transport** |
-| **Writer** | Receives records, validates and de-duplicates them, groups them into sealed batches and writes them to the log store | transport (as the receiver), blob, keys, optionally lease and witness |
-| **Log store** | Where sealed batches are kept. It is a **blob** with a lock mode | **blob** |
-| **Witness** | Co-signs batch heads, so that a single party cannot rewrite history | **witness** |
-| **Search** | The indexer, the search index and the reader. A separate box, see below | **index**, **blob** |
-| **Quota** | The quota engine and its state. A separate box, see below | **state** (with compare-and-set) |
+| **Emitter** | A library inside each end application, configured by that application. It is not a process. It appends the record | **transport**, as a producer |
+| **Log** | The **writer**, the **blob** and the **witness**. The writer receives records, validates and de-duplicates them, groups them into sealed batches and writes them to the log store. The log store is a blob with a lock mode. The witness co-signs batch heads, so that a single party cannot rewrite history | transport (as the receiver), blob, keys, witness, optionally lease |
+| **Search** | The **indexer**, the **index** and the **reader**. The indexer builds the search index from the log store, and the reader serves queries | **index**, **blob** |
+| **Quota** | The **quota engine** and its **state**. Quota state is `state` with compare-and-set | **state** (with compare-and-set) |
 
-The emitter (a library) and the writer are decoupled by the **transport** port. This replaces the older queue port and "outbox". A writer that runs on the same node as sluis is one installation's placement, not part of the model.
+The **transport** is a port, not a piece. It is how a record gets from the emitter to the writer: direct, or through a queue. It replaces the older queue port and "outbox". A writer that runs on the same node as sluis is one installation's placement, not part of the model.
 
-:::note[Proposed]
-Audit runs its own instances of the shared drivers, under its own identities, so that a compromised sluis actor cannot reach the log store, the witness or the search index through a driver of its own. Whether to separate the instances this way is [OD-37](/open-decisions/#od-37).
-:::
+**Each piece can be its own installation.** When pieces are combined in one installation, even with sluis, they **share driver instances**. Quota is therefore a separate piece that can be combined with sluis. A combined installation does not run a second copy of a driver for each piece. Where each piece's actors run is derived from the port and driver rules, see [Where an actor runs is derived](/concepts/drivers/#where-an-actor-runs-is-derived).
 
 ## From record to trail
 
@@ -78,7 +73,7 @@ The default today is the spool on bare-metal presets, co-signed in cluster mode,
 :::caution[Open decision OD-31: Audit as a separate installation]
 The audit side is being redesigned as its own installation, connected to sluis over the network. Open: the actors of the audit installation, the transport from emitters, how an emitter authenticates, and a co-located placement for a small install. The design is not settled. The lean is that audit is its own installation, and sluis emits over a direct stream or a queue through the transport port.
 
-OD-31 is the existing audit split. [OD-32](/open-decisions/#od-32) (where Search runs), [OD-33](/open-decisions/#od-33) (quota enforcement or metering), [OD-34](/open-decisions/#od-34) (transport per preset), [OD-35](/open-decisions/#od-35) (direct mode when the writer is down), [OD-36](/open-decisions/#od-36) (witness optional or required), [OD-37](/open-decisions/#od-37) (audit's driver instances), [OD-38](/open-decisions/#od-38) (quota as a product or an actor) and [OD-39](/open-decisions/#od-39) (the audit actors) refine it.
+OD-31 is the existing audit split. Four points that refine it are decided: [OD-32](/open-decisions/#od-32) (placement is derived), [OD-33](/open-decisions/#od-33) (quota metering and enforcement), and [OD-37](/open-decisions/#od-37) and [OD-38](/open-decisions/#od-38) (the four pieces). Four remain open: [OD-34](/open-decisions/#od-34) (transport per preset), [OD-35](/open-decisions/#od-35) (direct mode when the writer is down), [OD-36](/open-decisions/#od-36) (witness optional or required) and [OD-39](/open-decisions/#od-39) (the audit actors).
 :::
 
 On a cluster, each node's writer drains its own spool, and the notary co-signs batch heads 2 of 3 across the nodes. How the notary signs depends on the preset:
@@ -95,17 +90,17 @@ On a cluster, each node's writer drains its own spool, and the notary co-signs b
 The witness port is where an independent party co-signs a head. On a board cluster the `peer` witness would let the nodes witness one another; `external` would let a party outside the installation do it; `none` is a single signer. Whether a witness is optional or required is [OD-36](/open-decisions/#od-36).
 :::
 
-## Search and Quota are separate boxes
+## Search and Quota are separate pieces
 
-Two things sit next to audit, use the same ports, and are drawn as boxes of their own. Where each runs is open.
+Two of the four pieces sit next to the log, use the same ports, and are drawn as boxes of their own.
 
-**Search** is the **indexer** (which builds the search index from the log store), the **search index** and the **reader** (which serves queries). It uses the `index` port and reads the log store as a blob. The indexer is an actor with **instances: exactly 1**, so on more than one node it needs the lease port. It is decided that Search does not run inside serverless. Where it runs otherwise (on the log host; on a separate host or Deployment; or nowhere, with the scan used instead) is [OD-32](/open-decisions/#od-32).
+**Search** is the **indexer** (which builds the search index from the log store), the **search index** and the **reader** (which serves queries). It uses the `index` port and reads the log store as a blob. The indexer is an actor with **instances: exactly 1**, so on more than one node it needs the lease port. Where Search runs is not a decision of its own: it is derived from the port and driver rules ([OD-32](/open-decisions/#od-32), decided). With a `sqlite` index on a cluster, for example, the reader runs on the indexer's node. See [Where an actor runs is derived](/concepts/drivers/#where-an-actor-runs-is-derived).
 
-**Quota** is the **quota engine** and **quota state**. Quota state is `state` with compare-and-set, shared with the rest of sluis. Whether quota enforces a cap (which needs live state) or only meters (which can be a view derived from the log) is [OD-33](/open-decisions/#od-33). Whether quota is a separate product or an actor is [OD-38](/open-decisions/#od-38).
+**Quota** is the **quota engine** and **quota state**. Quota state is `state` with compare-and-set, shared with the rest of sluis. Quota **meters by default and enforces per policy rule**, for chosen subjects or audiences ([OD-33](/open-decisions/#od-33), decided). Metering counts use. Enforcement refuses an operation over a cap, and it needs `state` with compare-and-set on the mint path. The earlier decision that strict quota comes only after the k6 load test still applies to turning enforcement on in production.
 
 ## The search index lags the chain
 
-The `audit-read` actor serves queries from a **search index**, which is a search view of the batches. The index is a convenience. It follows the chain and lags it, and it can always be rebuilt from the batches. On servers the `index` driver is `sqlite`; on Kubernetes it is `postgres`, with any connection string (for example CNPG); with `none (scan)` there is no index and queries scan the log store. Serverless ships no index: `audit-read` and its index run in a separate audit install, on Kubernetes with Postgres or on a server with `sqlite`, that reads the same bucket. A small install can run `sluis audit search` from the CLI, which builds a local `sqlite` index from the chain. The index is a rebuildable cache; the chain in the bucket is the record.
+The `audit-read` actor serves queries from a **search index**, which is a search view of the batches. The index is a convenience. It follows the chain and lags it, and it can always be rebuilt from the batches. On servers the `index` driver is `sqlite`; on Kubernetes it is `postgres` in the `cnpg` mode (proposed), or `postgres` with any connection string (`external`); with `none (scan)` there is no index and queries scan the log store. Serverless may run the indexer and the reader with a `postgres` index, through RDS Proxy (proposed) ([OD-12](/open-decisions/#od-12), revised). The default index of the AWS Lambda preset stays `none` (proposed), and a separate Search installation that reads the same bucket is another choice. See [The postgres index driver](/concepts/drivers/#the-postgres-index-driver). A small install can run `sluis audit search` from the CLI, which builds a local `sqlite` index from the chain. The index is a rebuildable cache; the chain in the bucket is the record.
 
 **Verification never trusts the index, or the state store.** To check the trail, a verifier reads the batches from the log store and the notary's signatures, and recomputes the chain itself. If the index or the state store has been tampered with, verification still passes or fails by what the log store and the notary say. The state store may sit on the write path, because the transport and a reconciler that compares the log store's listing with the batch sequence recover from its loss, and because verification does not depend on it.
 

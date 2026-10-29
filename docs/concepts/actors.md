@@ -12,7 +12,7 @@ sluis is not one program. It is a handful of **core actors**, each with one job,
 
 | Kind | Actors | Notes |
 |---|---|---|
-| **Core actors** | `entry`, `signer`, `policy`, `ca`, `quota` | Whether `quota` is a core actor or a separate product is open: [OD-38](/open-decisions/#od-38). |
+| **Core actors** | `entry`, `signer`, `policy`, `ca`, `quota` | `quota` is the engine of the Quota piece, which is a separate piece that can be combined with sluis in one installation and then shares its driver instances ([OD-37](/open-decisions/#od-37) and [OD-38](/open-decisions/#od-38), decided). See [Audit](/concepts/audit/#the-four-pieces). |
 | **Integration actors** | `Upstream`, `WorkloadVerifier`, `FactsSource`, `CredentialMinter`, `Provisioner`, `Notifier` | One process per integration. See [Integrations](/concepts/integrations/). |
 | **Platform** | `sluis-node`, `key-holder`, `state-owner` | `sluis-node` is the node agent; it does not run on serverless or on Kubernetes. `key-holder` (keys) and `state-owner` (state) are the two mediating drivers: see [Ports and drivers](/concepts/drivers/#the-two-mediating-drivers). |
 | **Audit actors** | `notary`, `audit-writer`, `audit-read` today; `writer`, `witness`, `indexer`, `reader` proposed | See [Audit](/concepts/audit/) and [OD-39](/open-decisions/#od-39). |
@@ -72,6 +72,30 @@ This is part of [OD-39](/open-decisions/#od-39).
 :::
 
 Every actor is a producer on the **transport** port, because every success is audited. The writer is the one consumer. Why the table looks this way is in [Audit](/concepts/audit/).
+
+## Where an actor runs is derived
+
+There is no per-preset table that says where each actor runs. Where an actor runs is **derived from the port and driver rules** ([OD-32](/open-decisions/#od-32), decided). This holds for every actor: the core actors, the integration actors, the platform services and the Search actors. `sluis config check` enforces the rules, and each [preset](/environments/presets/) only names its default drivers.
+
+The rules, applied to an actor:
+
+1. **An actor runs wherever all its required ports are reachable.** Its drivers are started by the platform next to it (a systemd service, a Lambda extension, a native sidecar) and spoken to over a Unix socket, so the actor and the driver instances of its ports share a node, a function or a pod.
+2. **The driver's requirements move the actor.** A driver that needs a long-running process or a persistent disk puts its actor where one exists. A `yubikey-piv` keys driver puts `signer`, `policy` and `ca` on a node that has the YubiKey. The same driver is refused on serverless.
+3. **Instances: exactly 1 pins the actor to one holder.** The indexer, the audit writer and the `FactsSource` reconciler run once, and with more than one node or elastic nodes they need the lease port.
+4. **A single-writer driver puts its readers beside its writer.** With a `sqlite` index on a cluster there is one writer, so the reader runs on the indexer's node. With a `postgres` index the reader can run on any node that reaches the database.
+5. **Actors may share a unit under the fusion rule.** Combined pieces of an installation share driver instances, even with sluis.
+
+| Actor | What decides where it runs |
+|---|---|
+| `entry` | Needs the edge connector and the transport and state ports. It is the one actor that faces the edge, and it holds no key |
+| `signer`, `policy`, `ca` | The keys port: a node with the key hardware for `yubikey-piv`, anywhere for `aws-kms` |
+| `quota` | The state port with compare-and-set. It can run beside sluis or as a piece of its own |
+| Integration actors | Their state and cloud ports; one process each, started on demand where they have no standing work |
+| `sluis-node`, `key-holder`, `state-owner` | Per node, beside the hardware or the state store they front. They are not used on serverless or Kubernetes, where the platform provides the identity |
+| Writer | The blob, keys and transport ports; exactly 1 |
+| Indexer, reader | The index and blob ports; the indexer is exactly 1, and a single-writer index puts the reader beside it |
+
+See [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived) for the rules as they apply to drivers.
 
 ## Instances: exactly 1
 

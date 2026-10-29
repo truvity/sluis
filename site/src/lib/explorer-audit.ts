@@ -111,7 +111,7 @@ function build(sh: any): AuditShape {
       if (n.port === 'keys') rows.push({ k: 'Notary seal key', v: au.notary_key });
       if (n.port === 'state') rows = [{ k: 'Backend', v: sh.state }, { k: 'Holds', v: 'audit_batches, cursors and dedupe, replicated; no record bodies' }];
       if (n.port === 'index') {
-        rows = [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: sh.runtime === 'lambda' ? 'None in this install; Search does not run inside serverless, so a separate audit install holds the search index' : 'One file per node in the current draft; where Search runs is open (OD-32)' }];
+        rows = [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: sh.runtime === 'lambda' ? 'None by default (proposed); a postgres index through RDS Proxy is allowed, and otherwise a separate audit install holds the search index' : 'One file per node in the current draft; where Search runs is derived from the port and driver rules' }];
       }
     } else if (cls === 'external') {
       kind = 'outside sluis';
@@ -148,7 +148,7 @@ function build(sh: any): AuditShape {
       // The index node is an index store, not a driver.
       const d = arch.drivers[sh.ports.index];
       const bl = arch.backing_lines[`index.${sh.ports.index}`];
-      nodes.push(place({ id, lane: n.lane, row: n.row, cls: 'store', shared: false, title: 'search index', l2: bl[0], l3: bl[1], detail: { ...detail, kind: 'search index', cls: 'store', status: d.status, od: d.od, rows: [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: lambda ? 'none in this install: Search does not run inside serverless, so a separate audit install holds the search index' : 'one file per node in the current draft; where Search runs is open (OD-32)' }], notes: [{ id: 'OD-32', text: 'Where Search runs: on the log host, a separate host or Deployment, or nowhere (the scan instead).' }] } }));
+      nodes.push(place({ id, lane: n.lane, row: n.row, cls: 'store', shared: false, title: 'search index', l2: bl[0], l3: bl[1], detail: { ...detail, kind: 'search index', cls: 'store', status: d.status, od: d.od, rows: [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: lambda ? 'none by default (proposed); a postgres index through RDS Proxy is allowed, and otherwise a separate audit install holds the search index' : 'one file per node in the current draft; where Search runs is derived from the port and driver rules' }], notes: [] } }));
       nameOf[id] = 'search index';
       continue;
     }

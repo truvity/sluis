@@ -105,7 +105,7 @@ Every driver declares what it needs from the installation. The columns are: whet
 | sqs | transport | – | – | any | AWS |
 | nats-jetstream | transport | ✓ | – | any | a NATS service (3 nodes to replicate) |
 | sqlite | index | ✓ | ✓ | one writer | – |
-| postgres | index | – | – | any | a Postgres service: self-run; on AWS: RDS or Aurora; on Kubernetes: CloudNativePG (CNPG) |
+| postgres | index | – | – | any | a Postgres service, by provisioning mode: `rds` or `aurora` on AWS, `cnpg` on Kubernetes, or `external` (a connection string only). See [The postgres index driver](#the-postgres-index-driver) |
 | none (scan) | index | – | – | any | – |
 | none | witness | – | – | any | – |
 | peer | witness | ✓ | – | 2 or more | – |
@@ -117,7 +117,7 @@ Every driver declares what it needs from the installation. The columns are: whet
 Neither the nodes nor the dependencies belong to an [environment](/environments/). The number of nodes is an attribute of an installation, and a provider is a dependency that a driver declares, such as an AWS account, a Cloudflare account, a YubiKey or a NATS service. The one exception is serverless: it always comes with a provider (AWS Lambda today), so there the provider is part of the environment.
 
 :::note[Proposed]
-The witness port, the transport drivers other than `spool` and `sqs`, and the `index` and `witness` drivers belong to the audit redesign. Their per-preset choices are open: [OD-34](/open-decisions/#od-34) (transport per preset), [OD-36](/open-decisions/#od-36) (whether a witness is optional or required) and [OD-37](/open-decisions/#od-37) (audit's own driver instances).
+The witness port, the transport drivers other than `spool` and `sqs`, and the `index` and `witness` drivers belong to the audit redesign. Their per-preset choices are open: [OD-34](/open-decisions/#od-34) (transport per preset) and [OD-36](/open-decisions/#od-36) (whether a witness is optional or required).
 :::
 
 ## Which drivers fit which environment
@@ -162,10 +162,24 @@ Legend: ✓ possible, ~ possible with the condition in the footnote, ✗ impossi
 4. The writer runs in the same pod.
 5. Producers can only send from serverless; the writer runs outside it.
 6. On one node only.
-7. Only in a Search install outside the functions.
+7. Allowed: serverless may run the indexer and the reader with a `postgres` index ([OD-12](/open-decisions/#od-12), revised). On AWS the functions reach it through RDS Proxy (proposed), and they need network access to the database.
 8. Not independent within the same cluster.
 9. There is no node agent, so the JWT has to come from the signer.
 10. Only on a cloud VM.
+
+## The postgres index driver
+
+The `index` port has one Postgres driver, `postgres`, and the driver has a **provisioning mode**. The mode says who creates the database; it does not change what the indexer and the reader do.
+
+| Mode | Where | What sluis does |
+|---|---|---|
+| `rds` or `aurora` | AWS | Provisions the database. On [serverless](/environments/serverless/) the functions reach it through RDS Proxy (proposed), so that short-lived functions do not exhaust its connections |
+| `cnpg` | [Kubernetes](/environments/kubernetes/) | Provisions a CloudNativePG (CNPG) cluster in the same cluster |
+| `external` | Anywhere | Nothing. It takes a **connection string only** and provisions nothing |
+
+`external` covers a database that someone else runs: a CNPG cluster in another Kubernetes cluster behind a load balancer, or a Postgres run on bare metal. Exposing CNPG through a load balancer is **not a driver of its own**; from sluis's side it is `external`.
+
+Serverless may run the indexer and the reader with a `postgres` index ([OD-12](/open-decisions/#od-12), revised). The T5 preset's default index stays `none`; that default is a proposal.
 
 ## Capability flags
 
@@ -181,7 +195,7 @@ Two ports carry flags that an actor can require, so that "any driver for this po
 
 An actor that stores a record which must not be changed, such as the audit log store, requires a lock mode. The installation's driver must meet it, or the installation states that it accepts the weaker mode and relies on witnesses. The audit log store is a `blob` with a lock mode; see [Audit](/concepts/audit/).
 
-**State `cas`.** The `state` port has compare-and-set. An actor that changes a record that more than one caller can reach requires it. Quota state is `state` with compare-and-set, and quota needs live state to enforce a cap ([OD-33](/open-decisions/#od-33) asks whether quota enforces or only meters). The contract has no unconditional put: see [Data](/concepts/data/).
+**State `cas`.** The `state` port has compare-and-set. An actor that changes a record that more than one caller can reach requires it. Quota state is `state` with compare-and-set. Quota meters by default and enforces per policy rule ([OD-33](/open-decisions/#od-33), decided); enforcement needs `state` with compare-and-set on the mint path. The contract has no unconditional put: see [Data](/concepts/data/).
 
 ## How `sluis config check` validates an installation
 
@@ -206,6 +220,17 @@ error  ports.state: driver "embedded" needs exactly 1 node; the installation has
 error  ports.blob: audit log store needs lock mode "removable" or stronger; driver "fs" gives "none"
 ```
 
+## Where an actor runs is derived
+
+Where an actor runs is **derived from the port and driver rules**. This is agreed ([OD-32](/open-decisions/#od-32)), and it holds for Search (the indexer and the reader) and for every sluis actor. There are no per-preset placement decisions: `sluis config check` enforces the rules, and each [preset](/environments/presets/) only names its default drivers.
+
+The rules come from the requirements table above. For example:
+
+- An actor that declares **instances: exactly 1**, such as the indexer, runs on one node, and needs the lease port when there is more than one node or the nodes are elastic.
+- With a `sqlite` index on a cluster there is one writer, so the reader runs on the indexer's node. With a `postgres` index the reader can run on any node.
+- A driver that needs a long-running process or a disk puts its actor where such a process or disk exists. It is refused on serverless.
+- An actor that requires a port reaches the driver of that port over its socket, so the two share a node, a pod or a function.
+
 The check is the only place where driver and environment meet, which is why a driver's requirements are declared once, in a table, and not in each preset.
 
 ## Ports and drivers by preset
@@ -219,16 +244,16 @@ The same actors run in every environment. The drivers behind their ports are wha
 | lease | local lock | local lock | rqlite (Raft leader lease) | dynamodb conditional write | rqlite (Raft leader lease) | dynamodb conditional write, or the platform's concurrency limit of 1 | Kubernetes Lease |
 | blob | fs | r2 | r2 | s3 | s3 | s3 | s3 |
 | transport | spool | spool | spool | spool | spool | sqs | sqs (OD-22) |
-| index | sqlite | sqlite | sqlite | sqlite | sqlite | none: a separate install holds it (OD-12 a) | postgres |
+| index | sqlite | sqlite | sqlite | sqlite | sqlite | none (proposed default); postgres through RDS Proxy is allowed (OD-12) | postgres on cnpg (proposed) |
 | witness | none | none | peer (proposed) | none | none | none | none |
 | cloud | web identity (node agent); aws, gcp, azure as configured | web identity, as configured | web identity, as configured | web identity | web identity | platform role | web identity or pod identity (OD-19) |
 
 The keys, state and index choices follow the agreed presets. T0 may use the host's YubiKey: the `key-holder` runs natively on the host and talks to the host's `pcscd`, and the container mounts only the `key-holder`'s Unix socket, so the host keeps using the key. The fallback is to mount the host's `pcscd` socket into the container, with the risk that the pcsc-lite protocol versions must match.
 
-Each preset's driver choice is the reading of an older decision: [OD-5](/open-decisions/#od-5) put the spool on bare-metal presets and SQS on serverless, [OD-22](/open-decisions/#od-22) put SQS on Kubernetes, [OD-20](/open-decisions/#od-20) put KMS on Kubernetes, and [OD-12](/open-decisions/#od-12) (a) keeps the index out of serverless. The key mode follows the same pattern: KMS on AWS presets, a YubiKey on board presets, a software key only on T0.
+Each preset's driver choice is the reading of an older decision: [OD-5](/open-decisions/#od-5) put the spool on bare-metal presets and SQS on serverless, [OD-22](/open-decisions/#od-22) put SQS on Kubernetes, [OD-20](/open-decisions/#od-20) put KMS on Kubernetes, and [OD-12](/open-decisions/#od-12), as revised, lets serverless run the indexer and the reader with a `postgres` index while the T5 default stays `none`. The key mode follows the same pattern: KMS on AWS presets, a YubiKey on board presets, a software key only on T0.
 
 :::note[Proposed]
-The blob, transport, lease, witness and cloud rows are the working design and are not settled preset by preset. The transport per preset is [OD-34](/open-decisions/#od-34); where the search index runs is [OD-32](/open-decisions/#od-32).
+The blob, transport, lease, witness and cloud rows are the working design and are not settled preset by preset. The transport per preset is [OD-34](/open-decisions/#od-34). The index defaults of T5 (`none`) and T6 (`postgres` on `cnpg`) are proposals.
 :::
 
 The only inter-node traffic is the state driver's own Raft port, over mutual TLS. It is the only TCP port between nodes.
