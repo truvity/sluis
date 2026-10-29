@@ -1,0 +1,79 @@
+---
+// The filter above the overview table: area, level, status, origin, runtime, a text search and
+// the switch that hides the account-hosting areas whose scope is open. It filters the rows of
+// the table marked data-rq-table and the area rows marked data-rq-area; the choices are also
+// read from the query string (?level=MUST&status=planned&hide-open=1) so a view can be shared.
+import { catalogue } from '../../lib/requirements';
+
+const c = catalogue();
+const v = c.vocabulary;
+const fields = [
+  ['area', 'Area', c.areas.map((a) => a.code)],
+  ['level', 'Level', v.level],
+  ['status', 'Status', v.status],
+  ['origin', 'Origin', v.origin],
+  ['runtimes', 'Runtime', ['all', ...v.runtimes]],
+] as const;
+---
+
+<form class="rq-filter" data-rq-filter aria-label="Filter the requirements" onsubmit="return false">
+  {fields.map(([key, label, values]) => (
+    <label>
+      <span>{label}</span>
+      <select name={key}>
+        <option value="">Any</option>
+        {values.map((x) => <option value={x}>{x}</option>)}
+      </select>
+    </label>
+  ))}
+  <label class="rq-search">
+    <span>Search</span>
+    <input type="search" name="q" placeholder="id or words" autocomplete="off" />
+  </label>
+  <label class="rq-check">
+    <input type="checkbox" name="hide-open" />
+    <span>Hide the account-hosting areas (scope open)</span>
+  </label>
+  <p class="rq-count" aria-live="polite" data-rq-count></p>
+</form>
+
+<script>
+  const form = document.querySelector<HTMLFormElement>('[data-rq-filter]');
+  const table = document.querySelector<HTMLTableElement>('[data-rq-table]');
+  if (form && table) {
+    const rows = [...table.tBodies[0].rows];
+    const areaRows = [...document.querySelectorAll<HTMLElement>('[data-rq-area]')];
+    const counter = form.querySelector<HTMLElement>('[data-rq-count]')!;
+    const text = new Map(rows.map((r) => [r, (r.cells[0].textContent + ' ' + r.cells[1].textContent).toLowerCase()]));
+    const keys = ['area', 'level', 'status', 'origin', 'runtimes'] as const;
+    const field = (n: string) => form.elements.namedItem(n) as HTMLInputElement | HTMLSelectElement;
+
+    const apply = () => {
+      const want = Object.fromEntries(keys.map((k) => [k, field(k).value]));
+      const q = field('q').value.trim().toLowerCase();
+      const hideOpen = (field('hide-open') as HTMLInputElement).checked;
+      let shown = 0;
+      for (const r of rows) {
+        const ok =
+          keys.every((k) => !want[k] || r.dataset[k] === want[k] || (k === 'runtimes' && r.dataset[k]!.split(' ').includes(want[k]))) &&
+          !(hideOpen && r.dataset.scopeOpen !== undefined) &&
+          (!q || q.split(/\s+/).every((w) => text.get(r)!.includes(w)));
+        r.hidden = !ok;
+        if (ok) shown++;
+      }
+      for (const a of areaRows) a.hidden = hideOpen && a.dataset.scopeOpen !== undefined;
+      counter.textContent = `Showing ${shown} of ${rows.length} requirements.`;
+      const p = new URLSearchParams();
+      for (const k of keys) if (want[k]) p.set(k, want[k]);
+      if (q) p.set('q', q);
+      if (hideOpen) p.set('hide-open', '1');
+      history.replaceState(null, '', p.size ? `?${p}${location.hash}` : location.pathname + location.hash);
+    };
+
+    const start = new URLSearchParams(location.search);
+    for (const k of [...keys, 'q']) if (start.has(k)) field(k).value = start.get(k)!;
+    (field('hide-open') as HTMLInputElement).checked = start.get('hide-open') === '1';
+    form.addEventListener('input', apply);
+    apply();
+  }
+</script>

@@ -1,0 +1,100 @@
+/* The generated requirements pages. Only Starlight's colour and type variables are used, so
+   light and dark both work. Wider than a docs page: the tables need the room. */
+:root { --sl-content-width: 70rem; }
+
+.rq-nav { display: flex; flex-wrap: wrap; gap: .25rem .5rem; margin: 0 0 1.25rem; padding: 0; }
+.rq-nav a { padding: .25rem .75rem; border: 1px solid var(--sl-color-gray-5); border-radius: 1em; font-size: var(--sl-text-sm);
+  color: var(--sl-color-text); text-decoration: none; background: var(--sl-color-bg-nav); }
+.rq-nav a:hover { border-color: var(--sl-color-accent); }
+.rq-nav a[aria-current='page'] { border-color: var(--sl-color-accent); background: var(--sl-color-accent-low); color: var(--sl-color-white); }
+
+.rq-jump { font-size: var(--sl-text-sm); color: var(--sl-color-gray-2); }
+.rq-scope { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: flex-start; margin: 1rem 0; padding: .75rem 1rem;
+  border: 1px solid var(--sl-color-orange); border-radius: .5rem; background: var(--sl-color-orange-low); }
+.rq-scope p { margin: 0; flex: 1 1 24rem; font-size: var(--sl-text-sm); }
+
+/* badges and chips */
+.rq-badge, .rq-chip { display: inline-block; padding: 0 .55em; border: 1px solid var(--sl-color-gray-4); border-radius: 1em;
+  font-size: var(--sl-text-xs); line-height: 1.7; white-space: nowrap; color: var(--sl-color-gray-2); background: var(--sl-color-bg-nav); text-decoration: none; }
+.rq-chips { line-height: 2; }
+.rq-chips .rq-chip { margin: 0 .25rem .25rem 0; }
+a.rq-chip:hover { border-color: var(--sl-color-accent); color: var(--sl-color-white); }
+.rq-level-must { border-color: var(--sl-color-blue); color: var(--sl-color-blue-high); background: var(--sl-color-blue-low); }
+.rq-level-should { border-color: var(--sl-color-purple); color: var(--sl-color-purple-high); background: var(--sl-color-purple-low); }
+.rq-level-may { border-style: dashed; }
+.rq-status-planned { border-color: var(--sl-color-green); color: var(--sl-color-green-high); background: var(--sl-color-green-low); }
+.rq-status-partial { border-color: var(--sl-color-orange); color: var(--sl-color-orange-high); background: var(--sl-color-orange-low); }
+.rq-status-open { border-color: var(--sl-color-red); color: var(--sl-color-red-high); background: var(--sl-color-red-low); }
+.rq-status-out-of-scope, .rq-status-withdrawn { border-style: dashed; }
+.rq-scope-badge { border-color: var(--sl-color-orange); color: var(--sl-color-orange-high); background: var(--sl-color-orange-low); font-weight: 600; }
+.rq-depth-partial { border-style: dashed; }
+.rq-decision { border-color: var(--sl-color-red); color: var(--sl-color-red-high); }
+.rq-gap { border-color: var(--sl-color-orange); color: var(--sl-color-orange-high); }
+.rq-none, .rq-note, .rq-why { color: var(--sl-color-gray-3); font-size: var(--sl-text-xs); }
+
+/* tables */
+.rq-table-wrap { overflow-x: auto; max-width: 100%; border: 1px solid var(--sl-color-gray-5); border-radius: .5rem; margin-block: 1rem; }
+.rq-table { border-collapse: collapse; width: 100%; font-size: var(--sl-text-sm); margin: 0; }
+.rq-table th, .rq-table td { padding: .45rem .6rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--sl-color-gray-5); }
+.rq-table thead th { font-size: var(--sl-text-xs); text-transform: uppercase; letter-spacing: .04em; color: var(--sl-color-gray-3); background: var(--sl-color-bg-nav); white-space: nowrap; }
+.rq-table tbody tr:last-child td { border-bottom: 0; }
+.rq-table tr[hidden] { display: none; }
+.rq-table p { margin: 0; }
+.rq-table p + p { margin-top: .25rem; }
+.rq-id { white-space: nowrap; font-family: var(--sl-font-mono); font-size: var(--sl-text-xs); }
+.rq-statement { min-width: 18rem; }
+.rq-meta { margin-top: .25rem; }
+.rq-trace { min-width: 11rem; }
+.rq-table tr:target > td { background: var(--sl-color-accent-low); }
+.rq-ver { margin: 0; padding: 0; list-style: none; font-size: var(--sl-text-xs); }
+.rq-ver li { margin: 0 0 .25rem; }
+.rq-table [id] { scroll-margin-top: calc(var(--sl-nav-height, 3.5rem) + 1rem); }
+
+/* the small count tables on the overview */
+.rq-grid { align-items: start; display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; }
+.rq-mini { border-collapse: collapse; width: 100%; font-size: var(--sl-text-sm); }
+.rq-mini caption { text-align: left; font-weight: 600; padding-bottom: .25rem; }
+.rq-mini th, .rq-mini td { padding: .15rem .4rem .15rem 0; text-align: left; border: 0; }
+.rq-barcell { width: 40%; }
+.rq-bar { display: block; height: .6rem; min-width: 2px; border-radius: .3rem; background: var(--sl-color-accent); }
+
+/* filter */
+.rq-filter { display: flex; flex-wrap: wrap; gap: .75rem 1rem; align-items: flex-end; margin: 1rem 0; padding: .75rem 1rem;
+  border: 1px solid var(--sl-color-gray-5); border-radius: .5rem; background: var(--sl-color-bg-nav); position: sticky; top: var(--sl-nav-height, 3.5rem); z-index: 3; }
+.rq-filter label { display: grid; gap: .15rem; font-size: var(--sl-text-xs); color: var(--sl-color-gray-2); }
+.rq-filter select, .rq-filter input[type='search'] { font: inherit; font-size: var(--sl-text-sm); padding: .3rem .4rem; color: var(--sl-color-text);
+  background: var(--sl-color-bg); border: 1px solid var(--sl-color-gray-4); border-radius: .35rem; min-width: 7rem; }
+.rq-filter .rq-check { display: flex; align-items: center; gap: .4rem; font-size: var(--sl-text-sm); color: var(--sl-color-text); }
+.rq-count { margin: 0; flex-basis: 100%; font-size: var(--sl-text-sm); color: var(--sl-color-gray-2); }
+.rq-filter :focus-visible, .rq-tabs :focus-visible { outline: 3px solid var(--sl-color-accent-high); outline-offset: 2px; }
+
+/* matrix tabs */
+.rq-tabs { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+.rq-tabs[hidden] { display: none; }
+.rq-tabs button { margin: 0; font: inherit; font-size: var(--sl-text-sm); cursor: pointer; padding: .35rem .8rem; color: var(--sl-color-text);
+  background: var(--sl-color-bg-nav); border: 2px solid var(--sl-color-gray-5); border-radius: .5rem; }
+.rq-tabs button[aria-selected='true'] { border-color: var(--sl-color-accent); background: var(--sl-color-accent-low); }
+.rq-view[hidden] { display: none; }
+
+.rq-details { margin-block: .5rem; }
+.rq-details summary { cursor: pointer; }
+.rq-list { font-size: var(--sl-text-sm); }
+.rq-list li { margin-block: .3rem; }
+.rq-glossary dt { font-weight: 600; margin-top: .5rem; }
+.rq-glossary dd { margin: 0 0 0 1rem; }
+.rq-pager { display: flex; justify-content: space-between; margin-top: 1.5rem; }
+
+/* narrow screens: a row becomes a card, each cell labelled */
+@media (max-width: 50rem) {
+  .rq-table-wrap { border: 0; overflow-x: visible; }
+  .rq-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .rq-table, .rq-table tbody, .rq-table tr, .rq-table td { display: block; width: 100%; }
+  .rq-table tr { margin-bottom: .75rem; border: 1px solid var(--sl-color-gray-5); border-radius: .5rem; padding: .25rem 0; }
+  .rq-table tr[hidden] { display: none; }
+  .rq-table td { border: 0; padding: .25rem .75rem; }
+  .rq-table td::before { content: attr(data-label); display: block; font-size: var(--sl-text-xs); text-transform: uppercase; letter-spacing: .04em; color: var(--sl-color-gray-3); }
+  .rq-statement { min-width: 0; }
+  .rq-filter { position: static; }
+  .rq-filter label { flex: 1 1 8rem; }
+  .rq-filter select, .rq-filter input[type='search'] { width: 100%; }
+}

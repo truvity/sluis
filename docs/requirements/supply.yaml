@@ -1,0 +1,193 @@
+# SUPPLY: Release and supply chain
+schema: 1
+area: SUPPLY
+requirements:
+  - id: REQ-SUPPLY-001
+    area: SUPPLY
+    statement: "Release artifacts MUST be signed."
+    rationale: "Users verify what they install."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-83, section: "9580", depth: Full}
+      - {id: ST-84, section: "sigstore", depth: Full}
+    features: ["#848", "#874"]
+    verification:
+      - {kind: integration-test, ref: "signature check"}
+  - id: REQ-SUPPLY-007
+    area: SUPPLY
+    split_from: REQ-SUPPLY-001
+    statement: "The verification procedure for release signatures MUST be published."
+    rationale: "Users verify what they install."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-83, section: "9580", depth: Full}
+      - {id: ST-84, section: "sigstore", depth: Full}
+    features: ["#848", "#874"]
+    verification:
+      - {kind: integration-test, ref: "verify-from-docs test"}
+  - id: REQ-SUPPLY-002
+    area: SUPPLY
+    statement: "Releases MUST carry build provenance."
+    rationale: "Provenance proves the build."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-85, section: "1", depth: Full}
+      - {id: ST-86, section: "1", depth: Partial}
+    features: ["#848"]
+    verification:
+      - {kind: integration-test, ref: "slsa-verifier"}
+  - id: REQ-SUPPLY-008
+    area: SUPPLY
+    split_from: REQ-SUPPLY-002
+    statement: "The provenance level of a release MUST be stated."
+    rationale: "Provenance proves the build."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-85, section: "1", depth: Full}
+      - {id: ST-86, section: "1", depth: Partial}
+    features: ["#848"]
+    manual_reason: "A statement in the release notes is checked by reading it."
+    verification:
+      - {kind: manual, ref: "release notes check"}
+  - id: REQ-SUPPLY-003
+    area: SUPPLY
+    statement: "Releases MUST include a software bill of materials in a standard format."
+    rationale: "Dependency transparency."
+    level: MUST
+    origin: v1-parity
+    status: partial
+    runtimes: all
+    standards:
+      - {id: ST-87, section: "1", depth: Full}
+    features: ["#848"]
+    gap: register-gap
+    verification:
+      - {kind: integration-test, ref: "SBOM validator"}
+  - id: REQ-SUPPLY-004
+    area: SUPPLY
+    statement: "Each release signing primary key MUST be generated on a hardware token under a documented ceremony."
+    rationale: "The primary key must stay offline."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-83, section: "9580", depth: Full}
+      - {id: NC-10, section: "OpenPGP card", depth: Full}
+    features: ["#888"]
+    verification:
+      - {kind: manual, ref: "ceremony guide"}
+      - {kind: integration-test, ref: "dry-run"}
+  - id: REQ-SUPPLY-009
+    area: SUPPLY
+    split_from: REQ-SUPPLY-004
+    statement: "Each release signing primary key MUST have its own signing subkey with an expiry."
+    rationale: "The primary key stays on the token while the subkey signs."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-83, section: "9580", depth: Full}
+      - {id: NC-10, section: "OpenPGP card", depth: Full}
+    features: ["#888"]
+    verification:
+      - {kind: integration-test, ref: "subkey expiry test"}
+  - id: REQ-SUPPLY-005
+    area: SUPPLY
+    statement: "The public release keys SHOULD be published through several independent channels."
+    rationale: "One channel is a single point of trust."
+    level: SHOULD
+    origin: design-decision
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-68, section: "7929", depth: Full}
+      - {id: ST-83, section: "9580", depth: Full}
+    features: ["#889"]
+    gap: register-gap
+    verification:
+      - {kind: manual, ref: "channel consistency check"}
+  - id: REQ-SUPPLY-006
+    area: SUPPLY
+    statement: "Changes to authentication, token, key and audit code MUST require two human approvals including a security owner."
+    rationale: "Review is a control."
+    level: MUST
+    origin: security-review
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["design"]
+    gap: proposed-design
+    manual_reason: "The rule is a repository setting; the evidence is the setting itself."
+    verification:
+      - {kind: manual, ref: "repository settings"}
+  - id: REQ-SUPPLY-010
+    area: SUPPLY
+    statement: "Release signing MUST use two OpenPGP primary keys, one on each hardware token of a pair."
+    rationale: "One primary per card keeps each card's attestation."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-83, section: "9580", depth: Full}
+      - {id: NC-10, section: "OpenPGP card", depth: Full}
+    features: ["#888"]
+    verification:
+      - {kind: manual, ref: "ceremony guide"}
+      - {kind: integration-test, ref: "dry-run"}
+  - id: REQ-SUPPLY-011
+    area: SUPPLY
+    statement: "An OpenPGP primary key MUST NOT be copied between hardware tokens."
+    rationale: "A copied primary key loses its attestation."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-10, section: "OpenPGP card", depth: Full}
+    features: ["#888"]
+    manual_reason: "Non-copying of a key is evidenced by the ceremony record and the token attestations."
+    verification:
+      - {kind: manual, ref: "ceremony record"}
+  - id: REQ-SUPPLY-012
+    area: SUPPLY
+    statement: "Every release MUST be signed twice, once with each OpenPGP primary key."
+    rationale: "Two signatures survive the loss of either card."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-83, section: "9580", depth: Full}
+    features: ["#888"]
+    verification:
+      - {kind: integration-test, ref: "two-signature release check"}
+  - id: REQ-SUPPLY-013
+    area: SUPPLY
+    statement: "Either release signing fingerprint MUST verify every release."
+    rationale: "A verifier should need only one of the two fingerprints."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-83, section: "9580", depth: Full}
+      - {id: ST-68, section: "7929", depth: Partial}
+    features: ["#888", "#889"]
+    verification:
+      - {kind: integration-test, ref: "verify-with-either-key test"}

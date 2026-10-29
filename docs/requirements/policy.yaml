@@ -1,0 +1,103 @@
+# POLICY: Policy
+schema: 1
+area: POLICY
+requirements:
+  - id: REQ-POLICY-001
+    area: POLICY
+    statement: "sluis MUST validate the policy document against its schema at load."
+    rationale: "A misread policy is an authorization bug."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Full}
+    features: ["#786", "#846"]
+    verification:
+      - {kind: test-vectors, ref: "JSON-Schema-Test-Suite"}
+  - id: REQ-POLICY-005
+    area: POLICY
+    split_from: REQ-POLICY-001
+    statement: "sluis MUST refuse to start on a policy violation, with an error that names the offending path."
+    rationale: "A misread policy is an authorization bug."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Full}
+    features: ["#786", "#846"]
+    verification:
+      - {kind: integration-test, ref: "load-refusal tests"}
+  - id: REQ-POLICY-002
+    area: POLICY
+    statement: "A request MUST be denied unless a policy grant explicitly allows it."
+    rationale: "Deny by default is the base of least privilege."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["#786", "#787"]
+    verification:
+      - {kind: integration-test, ref: "policy tests (allow, deny)"}
+  - id: REQ-POLICY-006
+    area: POLICY
+    split_from: REQ-POLICY-002
+    statement: "Grant names MUST follow the declared vocabulary, with wildcards matching only where the vocabulary allows."
+    rationale: "Deny by default is the base of least privilege."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["#786", "#787"]
+    verification:
+      - {kind: integration-test, ref: "policy tests (wildcard)"}
+      - {kind: test-vectors, ref: "policy corpus"}
+  - id: REQ-POLICY-003
+    area: POLICY
+    statement: "The policy engine MUST evaluate a policy language with a published grammar and a corpus of conformance cases."
+    rationale: "A decision engine that fails open is a bypass."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-12, section: "Cedar", depth: Full}
+    features: ["#892", "#852"]
+    decisions: ["OD-10"]
+    verification:
+      - {kind: test-vectors, ref: "policy-language corpus"}
+  - id: REQ-POLICY-007
+    area: POLICY
+    split_from: REQ-POLICY-003
+    statement: "The policy engine MUST fail closed when it cannot evaluate."
+    rationale: "A decision engine that fails open is a bypass."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-12, section: "Cedar", depth: Full}
+    features: ["#892", "#852"]
+    decisions: ["OD-10"]
+    verification:
+      - {kind: integration-test, ref: "fail-closed test"}
+  - id: REQ-POLICY-004
+    area: POLICY
+    statement: "A change to policy that weakens a recorded assurance rule, adds an exchange grant or widens a sector MUST require an approval attestation from a second person."
+    rationale: "Risky changes need two people."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-49, section: "7", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "attestation tests"}
+      - {kind: manual, ref: "process review"}

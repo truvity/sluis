@@ -1,0 +1,45 @@
+# DB: Database access
+schema: 1
+area: DB
+requirements:
+  - id: REQ-DB-001
+    area: DB
+    statement: "sluis SHOULD issue short-lived client certificates for PostgreSQL authentication where the server accepts a configured client CA."
+    rationale: "Short-lived certificates avoid database passwords."
+    level: SHOULD
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "5280", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "psql certificate login test"}
+  - id: REQ-DB-002
+    area: DB
+    statement: "Where a database service does not accept a client CA, sluis MUST support the service's native IAM token as the credential."
+    rationale: "Managed databases differ in supported auth."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-46, section: "1", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "IAM-token login test"}
+  - id: REQ-DB-003
+    area: DB
+    statement: "sluis MUST NOT store long-lived database passwords for operators or applications."
+    rationale: "A stored password defeats short-lived credentials."
+    level: MUST
+    origin: design-decision
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["design"]
+    gap: proposed-design
+    manual_reason: "Absence of stored passwords is established by a review of every storage location, which no black-box test can cover."
+    verification:
+      - {kind: manual, ref: "storage scan"}

@@ -1,0 +1,25 @@
+---
+// The frame of every generated requirements page: Starlight's page, the stylesheet
+// and a row of links between the four views.
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import '../../styles/requirements.css';
+
+interface Props { title: string; description: string; current?: 'overview' | 'matrix' | 'coverage' | 'area'; jump?: [string, string][] }
+const { title, description, current = 'area', jump = [] } = Astro.props;
+const links = [
+  ['overview', '/requirements/', 'Overview and areas'],
+  ['matrix', '/requirements/matrix/', 'Matrix'],
+  ['coverage', '/requirements/coverage/', 'Coverage'],
+] as const;
+---
+
+<StarlightPage frontmatter={{ title, description, status: 'target', tableOfContents: false }}>
+  <nav class="rq-nav" aria-label="Requirements views">
+    {links.map(([key, href, label]) => <a href={href} aria-current={current === key ? 'page' : undefined}>{label}</a>)}
+    <a href="/requirements.json">requirements.json</a>
+  </nav>
+  {jump.length > 0 && (
+    <p class="rq-jump">On this page: {jump.map(([id, label], i) => <>{i > 0 && ' \u00b7 '}<a href={`#${id}`}>{label}</a></>)}</p>
+  )}
+  <slot />
+</StarlightPage>

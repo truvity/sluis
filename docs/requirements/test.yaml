@@ -1,0 +1,122 @@
+# TEST: Conformance and test strategy
+schema: 1
+area: TEST
+requirements:
+  - id: REQ-TEST-001
+    area: TEST
+    statement: "sluis MUST pass the OpenID conformance plans for configuration, basic, RP-initiated logout and back-channel logout before an endpoint is enabled in the production profile."
+    rationale: "Official suites define correct behaviour."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-104, section: "1", depth: Full}
+      - {id: ST-41, section: "1", depth: Partial}
+    features: ["#850"]
+    verification:
+      - {kind: conformance-suite, ref: "OIDF Config OP"}
+      - {kind: conformance-suite, ref: "OIDF Basic OP"}
+      - {kind: conformance-suite, ref: "OIDF RP-Initiated Logout OP"}
+      - {kind: conformance-suite, ref: "OIDF BCL OP"}
+  - id: REQ-TEST-002
+    area: TEST
+    statement: "sluis SHOULD pass the OpenID conformance plans for the relying-party role for every upstream connector kind."
+    rationale: "Upstream login is relying-party code."
+    level: SHOULD
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-104, section: "1", depth: Full}
+      - {id: ST-28, section: "3", depth: Full}
+    features: ["#850"]
+    gap: stakeholder-only
+    verification:
+      - {kind: conformance-suite, ref: "OIDF RP plans"}
+  - id: REQ-TEST-003
+    area: TEST
+    statement: "sluis MAY pass the FAPI 2.0 security profile and message signing plans for profiles that claim them."
+    rationale: "Certification of the high-assurance profile."
+    level: MAY
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-37, section: "1", depth: Full}
+      - {id: ST-38, section: "1", depth: Full}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: conformance-suite, ref: "FAPI2-SP"}
+      - {kind: conformance-suite, ref: "FAPI2-MS"}
+  - id: REQ-TEST-004
+    area: TEST
+    statement: "Every driver of a port MUST pass the same behavioural suite of that port."
+    rationale: "Drivers must be interchangeable."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-103, section: "1", depth: Full}
+    features: ["#851"]
+    verification:
+      - {kind: conformance-suite, ref: "port suite"}
+  - id: REQ-TEST-005
+    area: TEST
+    statement: "A release gate MUST run an automated negative test for every refused input."
+    rationale: "Refusals are requirements."
+    level: MUST
+    origin: security-review
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["#850"]
+    verification:
+      - {kind: integration-test, ref: "negative test registry"}
+  - id: REQ-TEST-008
+    area: TEST
+    split_from: REQ-TEST-005
+    statement: "A negative test MUST NOT be relaxed to pass."
+    rationale: "Refusals are requirements."
+    level: MUST
+    origin: security-review
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    features: ["#850"]
+    manual_reason: "The rule governs how tests are changed and is evidenced by review of the change history."
+    verification:
+      - {kind: manual, ref: "test-change review"}
+  - id: REQ-TEST-006
+    area: TEST
+    statement: "Shared test vectors MUST be used by all language kits, including Wycheproof-style edge cases for signatures."
+    rationale: "One source of truth across languages."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-106, section: "1", depth: Full}
+      - {id: ST-103, section: "1", depth: Full}
+    features: ["#861", "#869"]
+    verification:
+      - {kind: test-vectors, ref: "Wycheproof"}
+      - {kind: test-vectors, ref: "kit vectors"}
+  - id: REQ-TEST-007
+    area: TEST
+    statement: "Inspection reads, seeding, a software authenticator and a test clock MUST be compiled only into test builds."
+    rationale: "End-to-end tests need controllable fixtures."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: stakeholder-only
+    verification:
+      - {kind: integration-test, ref: "production-build symbol test"}

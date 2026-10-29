@@ -1,0 +1,241 @@
+# CIAM: Customer account hosting: scope and boundaries (open scope)
+schema: 1
+area: CIAM
+requirements:
+  - id: REQ-CIAM-001
+    area: CIAM
+    statement: "An installation MAY host end-user accounts."
+    rationale: "Hosting accounts is a product decision."
+    level: MAY
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "5", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "account hosting switch test"}
+  - id: REQ-CIAM-010
+    area: CIAM
+    split_from: REQ-CIAM-001
+    statement: "A hosted account record MUST have a closed schema."
+    rationale: "Hosting accounts is a product decision."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "5", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "schema closure test"}
+  - id: REQ-CIAM-011
+    area: CIAM
+    split_from: REQ-CIAM-001
+    statement: "A hosted account MUST be in exactly one of the states pending, live, disabled, suspended or deleted."
+    rationale: "Hosting accounts is a product decision."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "5", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "state machine tests"}
+  - id: REQ-CIAM-002
+    area: CIAM
+    statement: "Account creation MUST NOT be possible for a product on a person's behalf."
+    rationale: "Consent for account creation belongs to the person."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "5", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "negative test"}
+  - id: REQ-CIAM-003
+    area: CIAM
+    statement: "An installation MAY keep a registry of sectors, each with its own non-rotating key for pairwise subjects."
+    rationale: "Pairwise subjects need a key per sector."
+    level: MAY
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "8.1", depth: Partial}
+      - {id: NC-06, section: "2104", depth: Full}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: test-vectors, ref: "own subject vectors"}
+  - id: REQ-CIAM-004
+    area: CIAM
+    statement: "A consent gate for a delegated agent MUST show one page that names the scopes and the offline-access sentence."
+    rationale: "Consent is local to the entity."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.2.4", depth: Partial}
+      - {id: ST-25, section: "auth", depth: Partial}
+    features: ["#794"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "consent flow tests"}
+  - id: REQ-CIAM-012
+    area: CIAM
+    split_from: REQ-CIAM-004
+    statement: "Consent for a delegated agent MUST be recorded outside the central installation."
+    rationale: "Consent is local to the entity."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.2.4", depth: Partial}
+      - {id: ST-25, section: "auth", depth: Partial}
+    features: ["#794"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "consent record location test"}
+  - id: REQ-CIAM-005
+    area: CIAM
+    statement: "A refresh of an offline grant MUST re-check the consent status."
+    rationale: "Fast revocation is the control."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "6", depth: Full}
+      - {id: ST-11, section: "2", depth: Full}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "consent re-check test"}
+  - id: REQ-CIAM-013
+    area: CIAM
+    split_from: REQ-CIAM-005
+    statement: "A revoked consent MUST end the grant."
+    rationale: "Fast revocation is the control."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "6", depth: Full}
+      - {id: ST-11, section: "2", depth: Full}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "consent revocation test"}
+  - id: REQ-CIAM-006
+    area: CIAM
+    statement: "sluis MAY transmit shared signals about session and credential changes to registered receivers over a standard framework."
+    rationale: "Receivers want push notification."
+    level: MAY
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-26, section: "1", depth: Full}
+      - {id: NC-03, section: "8417", depth: Full}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: conformance-suite, ref: "SSF plans"}
+  - id: REQ-CIAM-007
+    area: CIAM
+    statement: "Recovery codes MUST be stored only as keyed hashes."
+    rationale: "A recovery path must not be the weakest path."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "recovery code storage scan"}
+  - id: REQ-CIAM-014
+    area: CIAM
+    split_from: REQ-CIAM-007
+    statement: "A recovery MUST impose a cool-down that limits the assurance of the resulting session."
+    rationale: "A recovery path must not be the weakest path."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "recovery cool-down tests"}
+  - id: REQ-CIAM-008
+    area: CIAM
+    statement: "sluis MUST NOT offer a reset by e-mail."
+    rationale: "Resets are account-takeover paths."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "route list negative test"}
+  - id: REQ-CIAM-015
+    area: CIAM
+    split_from: REQ-CIAM-008
+    statement: "sluis MUST NOT offer an anonymous reset endpoint."
+    rationale: "Resets are account-takeover paths."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "route list negative test"}
+  - id: REQ-CIAM-016
+    area: CIAM
+    split_from: REQ-CIAM-008
+    statement: "sluis MUST NOT offer a reset by support staff."
+    rationale: "Resets are account-takeover paths."
+    level: MUST
+    origin: stakeholder-ciam
+    status: open
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    gap: account-hosting-scope
+    verification:
+      - {kind: integration-test, ref: "administrative catalogue negative test"}
+  - id: REQ-CIAM-009
+    area: CIAM
+    statement: "sluis MUST NOT act as strong customer authentication of a regulated entity or verify transaction-text signatures."
+    rationale: "A boundary on claims."
+    level: MUST
+    origin: stakeholder-ciam
+    status: out-of-scope
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "1", depth: Partial}
+    features: ["design"]
+    manual_reason: "A statement of the product boundary is checked by reading the documentation."
+    verification:
+      - {kind: manual, ref: "documentation review"}

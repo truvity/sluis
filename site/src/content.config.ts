@@ -44,7 +44,7 @@ export const collections = {
   docs: defineCollection({
     loader: glob({
       base: 'src/content/docs',
-      pattern: ['**/[^_]*.{md,mdx}', '!decisions/**'],
+      pattern: ['**/[^_]*.{md,mdx}', '!decisions/**', '!requirements/**'],
     }),
     schema: docsSchema({ extend: z.object({ status: z.enum(PAGE_STATUSES), badge: z.boolean().default(true) }) }),
   }),

@@ -1,0 +1,185 @@
+# DEPLOY: Deployment and packaging
+schema: 1
+area: DEPLOY
+requirements:
+  - id: REQ-DEPLOY-001
+    area: DEPLOY
+    statement: "sluis MUST run in three runtimes: bare-metal, serverless and kubernetes."
+    rationale: "One model, three runtimes."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["#842", "#843"]
+    decisions: ["OD-32"]
+    verification:
+      - {kind: integration-test, ref: "test installations per runtime"}
+  - id: REQ-DEPLOY-008
+    area: DEPLOY
+    split_from: REQ-DEPLOY-001
+    statement: "Each installation MUST be validated against the capabilities of its runtime."
+    rationale: "One model, three runtimes."
+    level: MUST
+    origin: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    features: ["#842", "#843"]
+    decisions: ["OD-32"]
+    verification:
+      - {kind: integration-test, ref: "runtime capability validation test"}
+  - id: REQ-DEPLOY-002
+    area: DEPLOY
+    statement: "Release packaging for bare-metal MUST be deb, rpm and tarball."
+    rationale: "Native packaging per platform."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal"]
+    standards:
+      - {id: NC-09, section: "OCI", depth: Full}
+    features: ["#875", "#876"]
+    verification:
+      - {kind: integration-test, ref: "package install tests"}
+  - id: REQ-DEPLOY-009
+    area: DEPLOY
+    split_from: REQ-DEPLOY-002
+    statement: "Release packaging for serverless MUST be a zip per actor."
+    rationale: "Native packaging per platform."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["serverless"]
+    standards:
+      - {id: NC-09, section: "OCI", depth: Full}
+    features: ["#875", "#876"]
+    verification:
+      - {kind: integration-test, ref: "package install tests"}
+  - id: REQ-DEPLOY-010
+    area: DEPLOY
+    split_from: REQ-DEPLOY-002
+    statement: "Release packaging for kubernetes MUST be an OCI image and a Helm chart."
+    rationale: "Native packaging per platform."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["kubernetes"]
+    standards:
+      - {id: NC-09, section: "OCI", depth: Full}
+    features: ["#875", "#876"]
+    verification:
+      - {kind: integration-test, ref: "package install tests"}
+  - id: REQ-DEPLOY-003
+    area: DEPLOY
+    statement: "Actors on one host MUST communicate over Unix sockets with peer credential checks."
+    rationale: "Only the edge is exposed."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal"]
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["#862"]
+    verification:
+      - {kind: integration-test, ref: "socket test"}
+  - id: REQ-DEPLOY-011
+    area: DEPLOY
+    split_from: REQ-DEPLOY-003
+    statement: "The public API MUST listen on loopback only."
+    rationale: "Only the edge is exposed."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal"]
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["#862"]
+    verification:
+      - {kind: integration-test, ref: "bind test"}
+  - id: REQ-DEPLOY-004
+    area: DEPLOY
+    statement: "The only TCP traffic between nodes MUST be the consensus protocol over mutual TLS."
+    rationale: "A small network surface."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal"]
+    standards:
+      - {id: ST-81, section: "8446", depth: Full}
+    features: ["#847", "#887"]
+    decisions: ["OD-4"]
+    verification:
+      - {kind: integration-test, ref: "network scan"}
+      - {kind: integration-test, ref: "mTLS test"}
+  - id: REQ-DEPLOY-005
+    area: DEPLOY
+    statement: "Service units MUST run with a hardened sandbox."
+    rationale: "Least privilege on the host."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal"]
+    standards:
+      - {id: ST-88, section: "1", depth: Partial}
+    features: ["#866"]
+    verification:
+      - {kind: integration-test, ref: "systemd-analyze baseline check"}
+  - id: REQ-DEPLOY-012
+    area: DEPLOY
+    split_from: REQ-DEPLOY-005
+    statement: "Service units MUST run without root privileges."
+    rationale: "Least privilege on the host."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["bare-metal"]
+    standards:
+      - {id: ST-88, section: "1", depth: Partial}
+    features: ["#866"]
+    verification:
+      - {kind: integration-test, ref: "process-owner test"}
+  - id: REQ-DEPLOY-006
+    area: DEPLOY
+    statement: "Container images and charts MUST be referenced by digest."
+    rationale: "Tags are mutable."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: ["kubernetes"]
+    standards:
+      - {id: NC-09, section: "OCI", depth: Full}
+      - {id: ST-84, section: "cosign", depth: Partial}
+    features: ["#876"]
+    verification:
+      - {kind: integration-test, ref: "digest-pin lint"}
+  - id: REQ-DEPLOY-007
+    area: DEPLOY
+    statement: "Tested installations MUST be exactly the declared set: local, boards, lambda and kubernetes."
+    rationale: "Honesty about test coverage."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-104, section: "1", depth: Full}
+    features: ["#877"]
+    verification:
+      - {kind: integration-test, ref: "test matrix"}
+  - id: REQ-DEPLOY-013
+    area: DEPLOY
+    split_from: REQ-DEPLOY-007
+    statement: "Any other installation combination MUST be documented as untested."
+    rationale: "Honesty about test coverage."
+    level: MUST
+    origin: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-104, section: "1", depth: Full}
+    features: ["#877"]
+    manual_reason: "A statement in the documentation is checked by reading it."
+    verification:
+      - {kind: manual, ref: "documentation review"}

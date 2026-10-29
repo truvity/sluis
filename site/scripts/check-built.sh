@@ -12,7 +12,8 @@ bad() { echo "check-built: $*" >&2; fail=1; }
 
 for f in index.html 404.html llms.txt llms-full.txt sitemap-index.xml robots.txt \
          overview/index.html architecture/index.html architecture/context/index.html \
-         decisions/index.html roadmap/index.html contributing/index.html; do
+         decisions/index.html roadmap/index.html contributing/index.html \
+         requirements/index.html requirements/matrix/index.html requirements/coverage/index.html requirements.json; do
   [ -s "$dist/$f" ] || bad "missing or empty: $f"
 done
 
