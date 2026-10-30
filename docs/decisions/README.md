@@ -52,9 +52,9 @@ A rewritten record says so in one line under its proposal link, with the date. O
 | [0003](0003-runtimes-are-runtime-kinds.md) | Runtimes are runtime kinds; installations add nodes and dependencies; four installations are tested | Accepted |
 | [0004](0004-audit-is-four-pieces-joined-by-a-transport-port.md) | Audit is four pieces joined by a transport port; each log has exactly one writer | Accepted |
 | [0005](0005-three-zoom-levels-contracts-and-a-permission-manifest.md) | The design has three zoom levels, every component boundary is a ConnectRPC contract, and a permission manifest per actor is its spine | Accepted |
-| [0007](0007-core-is-a-few-actors-with-one-responsibility-each.md) | Core is a few actors with one responsibility each: entry, signer, policy and ca, with quota beside them | Accepted |
+| [0007](0007-core-is-a-few-actors-with-one-responsibility-each.md) | Core is a few actors with one responsibility each: a slim entry, session, console, exchange, signer, policy, ca and ssh-ca, with quota beside them | Accepted |
 | [0008](0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp.md) | Drivers are platform-started services on Unix sockets, and only the public API listens on TCP | Accepted |
-| [0009](0009-one-installation-per-boundary.md) | There is one installation per boundary, and a boundary is an environment or a regulated entity | Accepted |
+| [0009](0009-one-installation-per-boundary.md) | Boundaries are environments, companies and products on an isolation ladder, and a boundary on its own runtime is an installation federated by declared trust | Accepted |
 | [0010](0010-cryptography-uses-p384-by-default-with-named-exceptions.md) | Cryptography uses EC P-384 by default, in FIPS mode, with named exceptions | Accepted |
 | [0011](0011-authority-keys-sign-in-place-and-never-leave-their-store.md) | Authority keys sign in place and never leave their store | Accepted |
 | [0012](0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials.md) | Machine identity follows SPIFFE: proofs are exchanged for short-lived credentials | Proposed |
@@ -65,6 +65,6 @@ A rewritten record says so in one line under its proposal link, with the date. O
 | [0017](0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite.md) | State is one port with compare-and-set; one writer owns each record kind; clusters replicate with rqlite | Accepted |
 | [0029](0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime.md) | One repository, one version, one release train, and packaging follows the runtime | Accepted |
 | [0033](0033-database-access-uses-short-lived-credentials.md) | Database access uses short-lived credentials | Accepted |
-| [0038](0038-the-local-installation-is-docker-compose-with-one-container-per-actor.md) | The local installation is Docker Compose with one container per actor and minimal drivers | Accepted |
+| [0038](0038-the-local-installation-is-docker-compose-with-one-container-per-actor.md) | The local installation is Docker Compose with one container per actor, the published images and minimal drivers | Accepted |
 | [0039](0039-delivery-goes-local-first-then-boards-lambda-and-kubernetes-in-parallel.md) | Delivery goes local first, then boards, lambda and kubernetes in parallel | Accepted |
 | [0048](0048-passkeys-step-up-and-device-login.md) | Passkeys, step-up and device login | Proposed |
