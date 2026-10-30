@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-10-29
 
-Decided by the maintainer. Proposal: [issue #902](https://github.com/truvity/sluis/issues/902). Rewritten in place on 2026-10-29 during the v2 design phase (see "Design phase" in the decisions README). The earlier slug was `0003-environments-are-runtime-kinds`.
+Decided by the maintainer. Proposal: [issue #902](https://github.com/truvity/sluis/issues/902). Rewritten in place on 2026-10-29 during the v2 design phase (see "Design phase" in the decisions README). The earlier slug was `0003-environments-are-runtime-kinds`. The delivery-order bullet was edited in place on 2026-10-30 to follow ADR 0039.
 
 ## Context
 
@@ -26,16 +26,16 @@ Seven named installations were also too many to build and test. The maintainer c
 - **An installation is one concrete deployment:** runtime, nodes, available dependencies and one driver per port. For example: "bare-metal, 3 nodes, AWS account".
 - **Four installations are tested.** They are the ones we build, document and keep in the test matrix:
   - **local**: bare-metal, 1 node. Docker on a workstation, using the host's hardware key through the host's smart-card service. Not a software key.
-  - **boards**: bare-metal, 3 nodes. Three single-board computers (arm64, 2 GB RAM, eMMC), a hardware key in each node and a tunnel to the public hostname (`sluis.example.com` in docs). State and lease on rqlite. The index on rqlite, a proposed driver (a replicated SQLite, so the reader can run on any node; its full-text support still has to be verified). Blob on R2, spool transport. The audit pieces run on the same nodes and share driver instances. Each node keeps its own log with the other nodes as peer witnesses ([0004](/decisions/0004-audit-is-four-pieces-joined-by-a-transport-port/)).
-  - **lambda**: serverless on AWS. KMS for keys, DynamoDB for state and lease, SQS for transport, S3 for blob. The default index is `none` (a proposal). The writer is held to one instance by reserved concurrency.
-  - **kubernetes**: KMS, DynamoDB, SQS, S3 and the Kubernetes Lease. The index is postgres on CloudNativePG (proposed).
+  - **boards**: bare-metal, 3 nodes. Three single-board computers (arm64, 2 GB RAM, eMMC), a hardware key in each node and a tunnel to the public hostname (`sluis.example.com` in docs). State and lease on rqlite. The index driver is decided in ADR 0022. Blob on R2, spool transport. The audit pieces run on the same nodes and share driver instances. Each node keeps its own log with the other nodes as peer witnesses ([0004](/decisions/0004-audit-is-four-pieces-joined-by-a-transport-port/)).
+  - **lambda**: serverless on AWS. KMS for keys, DynamoDB for state and lease, SQS for transport, S3 for blob. The index driver is decided in ADR 0022. The writer is held to one instance by reserved concurrency.
+  - **kubernetes**: KMS, DynamoDB, SQS, S3 and the Kubernetes Lease. The index driver is decided in ADR 0022; the pod layout and chart in ADRs 0046 and 0047.
 
   Any other combination is a possible installation: the rules allow it and `sluis config check` accepts it, but we do not test it.
 - **There are no presets.** The earlier ids T0 to T6 are retired. Visible text uses the four names above.
-- **Delivery order.** First local, to cover the basic functionality and its tests. Then boards. Then lambda. Kubernetes comes later.
+- **Delivery order.** Minimal local first, then boards, lambda and kubernetes in parallel ([0039](/decisions/0039-delivery-goes-local-first-then-boards-lambda-and-kubernetes-in-parallel/)).
 - **Packaging follows the runtime.** Bare-metal ships a deb, an rpm and a tarball. Serverless ships a zip per actor. Kubernetes ships an OCI image and a Helm chart. `dev` is an installation, not a build.
 - **Labels follow.** `runtime:bare-metal`, `runtime:serverless` and `runtime:kubernetes` mark the runtime. `install:local`, `install:boards`, `install:lambda` and `install:kubernetes` mark a tested installation.
-- **Proposed, not decided:** configuration layers are ordered defaults, runtime, installation, environment overrides. This replaces the "shape profile".
+- Configuration layers are ordered defaults, runtime, install file, environment overrides. This replaces the "shape profile". "Installation" is not a configuration key: the install file is the installation, and the tested installations ship as example install files.
 
 ## Consequences
 
@@ -47,8 +47,8 @@ Seven named installations were also too many to build and test. The maintainer c
 - Local development uses a real hardware key, so contributors need one for the full local installation.
 - Older driver choices read as "this installation's default": spool on boards, SQS on lambda and kubernetes, a cloud key service on AWS, a hardware key on boards. Their reasoning is unchanged.
 - Local Docker and virtual machines share a runtime with physical nodes. Where they differ, the difference is a driver requirement, not a new runtime.
-- Several driver choices above are proposals (the rqlite index, the `none` index on lambda, postgres on CloudNativePG). Config code and docs must mark them until they are decided.
-- The layer order is a proposal and is marked so until it is decided.
+- The index driver of each tested installation is decided in ADR 0022.
+
 
 ## Roads not taken
 
