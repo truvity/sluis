@@ -1,6 +1,6 @@
 ---
 title: Platforms
-description: The distributions and architectures sluis v2 supports, the systemd floor of 252, the interim board exception, the FIPS builds and the signing algorithms.
+description: The distributions and architectures sluis v2 supports, the systemd floor of 252, the interim board exception, FIPS and the signing algorithms.
 status: target
 sidebar:
   order: 3
@@ -33,16 +33,11 @@ On Ubuntu 22.04:
 
 **Backlog:** building Ubuntu 26.04 and Rocky Linux 10.2 board images. The image sources will live in a separate public repository. When those images exist the exception ends and the floor applies to boards.
 
-## FIPS builds
+## FIPS
 
-- **Default build.** FIPS mode is on by default. It runs Go's FIPS 140-3 module in `fips140=on` mode, using the latest module. In this mode TLS refuses X25519 and ChaCha20, and key generation runs pairwise consistency tests. Both behaviours are acceptable for sluis.
-- **Certified build.** A separately pinned build uses the CMVP-certified module, certificate #5247, module v1.0.0, for installs that need the certificate.
-- **BoringCrypto is not used.**
-- **Rust components** follow the same rule with `aws-lc-rs` in FIPS mode, and the certified build pins a certified module for them too ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)). The exact certified pin is settled by a spike before the first code.
-
-:::note[Proposed]
-How the certified build is named and delivered (its own repository path, tarballs or both) is not yet decided.
-:::
+- **No FIPS build in v2.0.** There is no FIPS mode and no certified build. Every platform above gets the same build: Go without forced FIPS mode, and Rust with current crates and rustls ([ADR 0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/)).
+- **The algorithms stay within the FIPS-approved set**, so a FIPS build variant can be added later as a build option when a customer needs it. The variant gets its own build design, name and delivery when it is added.
+- **BoringCrypto is not used**, in this build or in the variant.
 
 ## Algorithms across platforms
 

@@ -55,7 +55,7 @@ A rewritten record says so in one line under its proposal link, with the date. O
 | [0007](0007-core-is-a-few-actors-with-one-responsibility-each.md) | Core is a few actors with one responsibility each: a slim entry, session, console, exchange, signer, policy, ca and ssh-ca, with quota beside them | Accepted |
 | [0008](0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp.md) | Drivers are platform-started services on Unix sockets, and only the public API listens on TCP | Accepted |
 | [0009](0009-one-installation-per-boundary.md) | Boundaries are environments, companies and products on an isolation ladder, and a boundary on its own runtime is an installation federated by declared trust | Accepted |
-| [0010](0010-cryptography-uses-p384-by-default-with-named-exceptions.md) | Cryptography uses EC P-384 by default, in FIPS mode, with named exceptions | Accepted |
+| [0010](0010-cryptography-uses-p384-by-default-with-named-exceptions.md) | Cryptography uses EC P-384 by default, stays within the FIPS-approved algorithms, with named exceptions | Accepted |
 | [0011](0011-authority-keys-sign-in-place-and-never-leave-their-store.md) | Authority keys sign in place and never leave their store | Accepted |
 | [0012](0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials.md) | Machine identity follows SPIFFE: proofs are exchanged for short-lived credentials | Accepted |
 | [0013](0013-ca-and-ssh-ca-are-the-certificate-authorities-and-ssh-uses-only-sluis-own-ca.md) | The ca and ssh-ca actors are the X.509 and SSH certificate authorities, and SSH uses only sluis's own CA | Accepted |

@@ -49,7 +49,7 @@ The language of each executable is fixed from a set of **spikes**, run before th
 | Spike | What it settles |
 |---|---|
 | [S1](https://github.com/truvity/sluis/issues/939) | Connect for Rust over Unix sockets: interoperation with connect-go in both directions, peer credentials, the default-deny interceptor, streaming |
-| [S2](https://github.com/truvity/sluis/issues/940) | FIPS with `aws-lc-rs`: builds for amd64 and arm64, a certified module pin, the AWS SDK for Rust in FIPS mode |
+| [S2](https://github.com/truvity/sluis/issues/940) | FIPS with `aws-lc-rs`: builds for amd64 and arm64, a certified module pin, the AWS SDK for Rust in FIPS mode. **Done** (2026-10-30): passed with conditions. With no FIPS build in v2.0 (decided 2026-10-31), its result is kept for a later FIPS variant |
 | [S3](https://github.com/truvity/sluis/issues/941) | A slim `entry` prototype in both languages: latency, memory, Lambda cold start and size, and a day of fuzzing |
 | [S4](https://github.com/truvity/sluis/issues/942) | `key-holder` through PKCS#11 (`cryptoki` with `ykcs11`): every algorithm and slot on [Keys](/concepts/keys/), concurrent callers, PIN handling |
 | [S5](https://github.com/truvity/sluis/issues/943) | The memory budget on the boards: each actor and driver under load, in each language, against the 2 GB budget |
@@ -101,7 +101,6 @@ Key custody, the port library and its generator, the slim `entry` and the other 
 |---|---|
 | [#865](https://github.com/truvity/sluis/issues/865) | Pkl to JSON Schema generator as a separate open-source tool |
 | [#867](https://github.com/truvity/sluis/issues/867) | `sluis doctor` platform checks |
-| [#868](https://github.com/truvity/sluis/issues/868) | FIPS builds with the Go FIPS 140-3 module |
 | [#869](https://github.com/truvity/sluis/issues/869) | JOSE package and per-language verification demos |
 | [#888](https://github.com/truvity/sluis/issues/888) | Release OpenPGP key ceremony on two YubiKeys (guide and tests) |
 | [#892](https://github.com/truvity/sluis/issues/892) | Policy actor in Rust with Cedar (cedar-policy crate) |
@@ -168,11 +167,12 @@ The board drivers and Garage, federation, host enrolment and SSH, the conformanc
 
 ### Later
 
-After the first release or after v2 parity: FAPI 2.0, CIBA, ACME, device login (postponed), other clouds and other stores.
+After the first release or after v2 parity: FAPI 2.0, CIBA, ACME, device login (postponed), a FIPS build variant, other clouds and other stores.
 
 | Issue | Item |
 |---|---|
 | [#855](https://github.com/truvity/sluis/issues/855) | Device login for sluisctl (RFC 8628 device authorization grant) |
+| [#868](https://github.com/truvity/sluis/issues/868) | A FIPS build variant, when a customer needs it; v2.0 has no FIPS build (decided 2026-10-31) |
 | [#871](https://github.com/truvity/sluis/issues/871) | GCP Workload Identity Federation exchange |
 | [#872](https://github.com/truvity/sluis/issues/872) | Azure Entra federated credential exchange |
 | [#882](https://github.com/truvity/sluis/issues/882) | Site explorers read the permission manifest |
