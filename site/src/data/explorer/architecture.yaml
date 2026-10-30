@@ -13,7 +13,8 @@
 # that reads them does not change: `shapes` lists the tested installations,
 # `roles` lists the actors, `environment` names the runtime kind, and
 # `runtimes` are the runtime templates. Kubernetes is a tested installation too
-# but is not drawn here yet; the delivery order is local, boards, lambda.
+# but is not drawn here yet; the delivery order is local first, then boards,
+# lambda and kubernetes in parallel.
 
 default_shape: boards
 
@@ -38,9 +39,9 @@ shapes:
     ports: { keys: yubikey, state: embedded, blob: s3, transport: spool, index: sqlite }
     keys: the host's YubiKey, through a key-holder on the host (a software key stays possible for tests)
     state: embedded single-node store
-    use: Development and CI. The first delivery step.
+    use: Development and CI. Delivered first, until v2 can replace v1.
     notes:
-      - text: "key-holder runs natively on the host and talks to the host's pcscd. The container mounts only key-holder's Unix socket, and the host keeps using the YubiKey. The fallback is to mount the host pcscd socket into the container, with the risk that the pcsc-lite protocol versions must match."
+      - text: "The key-holder container uses the host's pcscd socket, mounted into it; the host keeps using the YubiKey, and the pcsc-lite protocol versions of the image and the host must match. The fallback is to run key-holder natively on the host, so that the containers mount only its Unix socket."
         status: agreed
       - text: "The log store is a local S3-compatible store with no object lock, so tamper evidence depends on a witness. The witness is optional, and sluis config check warns when there is none."
         status: agreed
@@ -55,7 +56,7 @@ shapes:
     ports: { keys: yubikey, state: rqlite, blob: r2, transport: spool, index: rqlite_index }
     keys: One YubiKey per node
     state: rqlite (Raft) across three nodes
-    use: Integration tests and tutorials. The second delivery step; a Cloudflare tunnel serves sluis.example.com.
+    use: Integration tests and tutorials. Built in parallel with lambda and kubernetes after local; a Cloudflare tunnel serves sluis.example.com.
     notes:
       - text: "The audit pieces run on the same nodes as sluis, so they share driver instances. Each node has its own writer, spool and log key, and the other two nodes are its peer witnesses (the 2-of-3 co-signing). Readers merge the logs by time. The rule is exactly one writer per log."
         status: agreed
@@ -76,7 +77,7 @@ shapes:
     ports: { keys: aws, state: aws, blob: s3, transport: sqs, index: remote }
     keys: AWS KMS
     state: DynamoDB
-    use: Integration tests and tutorials. The third delivery step.
+    use: Integration tests and tutorials. Built in parallel with boards and kubernetes after local.
     notes:
       - text: "The default index here is none (proposed). Serverless may run the indexer and the reader with a postgres index, through RDS Proxy (proposed). With no index, the reader and its search index run in a separate Search installation that reads the same bucket: on Kubernetes with Postgres (cnpg, or external with a connection string), or on a server with sqlite. Where Search runs is derived from the port and driver rules. A small install can run sluis audit search from the CLI, which builds a local sqlite index from the chain. The search index is a rebuildable cache; the chain in the blob is the record."
         status: agreed

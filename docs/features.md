@@ -127,7 +127,7 @@ The console, backup and restore, telemetry, and the audit trail.
 
 ## Deployment
 
-Runtimes, packaging, configuration and release. v2 is delivered on its tested [installations](/runtimes/installations/) in this order: local, boards, lambda, and kubernetes later. Packaging follows the runtime: `.deb`, `.rpm` and a tarball for bare-metal, a zip per actor for serverless, and an OCI image with a Helm chart for kubernetes.
+Runtimes, packaging, configuration and release. v2 is delivered on its tested [installations](/runtimes/installations/) in this order: local first, then boards, lambda and kubernetes in parallel. Packaging follows the runtime: `.deb`, `.rpm` and a tarball for bare-metal, a zip per actor for serverless, and an OCI image with a Helm chart for kubernetes.
 
 | Feature | What it does | v1 documentation | v2 status |
 |---|---|---|---|
