@@ -27,7 +27,7 @@ Distribution describes what a release contains, where it is served from, and how
 |---|---|
 | [Packages](/distribution/packages/) | The R2 layout, apt and dnf setup, binaries, Lambda zips, OCI images and Helm charts |
 | [Release signing](/distribution/release-signing/) | How artifacts are signed, how to verify each type, and how CI uploads |
-| [Platforms](/distribution/platforms/) | Supported distributions, architectures, the systemd floor, board images and FIPS builds |
+| [Platforms](/distribution/platforms/) | Supported distributions, architectures, the systemd floor, board images and FIPS |
 
 ## Why R2 and no redirects
 

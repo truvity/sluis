@@ -242,13 +242,11 @@ The vendor kernel 5.10 that the boards run for now makes `sluis doctor` warn on 
 
 ## FIPS
 
-The **default build** runs Go's FIPS 140-3 module in `fips140=on` mode, using the latest module. That refuses X25519 and ChaCha20 in TLS and runs pairwise consistency tests when keys are generated, and both are acceptable for sluis.
+sluis v2.0 has **no FIPS mode and no certified build** (decided 2026-10-31, [ADR 0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/)). Go builds without forcing FIPS mode, and the Rust components use current crates and rustls with no FIPS pin. sluis v2.0 makes no FIPS 140-3 claim.
 
-A **separate build** pins the CMVP-certified module (certificate #5247, module v1.0.0) for installs that need the certificate itself.
+What is kept is a rule: **every algorithm stays within the FIPS-approved set.** sluis signs with P-384 ECDSA, seals with AES-256-GCM using a nonce that the library generates, derives with HKDF-SHA384 and hashes with SHA-384. The exceptions are the ones named on this page: PS256, ES256 and RSA where an audience or a cloud requires them, and Ed25519 where a protocol requires it, such as NATS. A format that fixes its own algorithm, such as age for backups and export drops, is followed as it is.
 
-The Rust components follow the same rule with `aws-lc-rs` in FIPS mode, and the certified build pins a certified module for them too ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)).
-
-BoringCrypto is not used.
+The rule is there so that a **FIPS build variant** can be added later as a build option, when a customer needs it. That is likely after AWS-LC 4 is certified, which lifts the old pin that a certified Rust build would need today. In that variant, Go runs its FIPS 140-3 module and the Rust components use `aws-lc-rs` in FIPS mode ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)). The variant gets its own build design when it is added. BoringCrypto is not used.
 
 ## JOSE
 
