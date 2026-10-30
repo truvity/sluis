@@ -54,7 +54,7 @@ The thing an operator configures is an **installation**: one concrete deployment
 - the **dependencies** that are available: an AWS account, a Cloudflare account, a YubiKey, a NATS service;
 - the **drivers**: one driver per port (see [Ports and drivers](/concepts/drivers/)).
 
-An example is "bare-metal, 3 nodes, an AWS account". Four installations are tested and named: [local, boards, lambda and kubernetes](/runtimes/installations/). They are used in the documentation, the tutorials and the test matrix. Any other combination that the rules allow is a possible installation, and it is not tested. Nodes and dependencies are properties of the installation, not of the runtime.
+An example is "bare-metal, 3 nodes, an AWS account". Four installations are tested and named: [local, boards, lambda and kubernetes](/runtimes/installations/). They ship as **example configuration files** used by the documentation, the tutorials and the test matrix; an operator copies one as a starting point. "Installation" is not a configuration key: the install file *is* the installation. Any other combination that the rules allow is a possible installation, and it is not tested. Nodes and dependencies are properties of the installation, not of the runtime.
 
 The word **environment** is kept for what differs between development, staging and production.
 
@@ -64,12 +64,11 @@ Values come from layers. A later layer overrides an earlier one:
 
 1. **defaults**, built into the schema;
 2. **runtime**, the defaults of the runtime kind (bare-metal, serverless or Kubernetes);
-3. **installation**, the defaults of a tested installation, for example boards or lambda;
-4. **install**, the file the operator edits;
-5. **environment overrides**, for the values that differ between development, staging and production, including the few fields marked as tunable that a process environment variable may set.
+3. **install**, the file the operator edits (often started from one of the example files);
+4. **environment overrides**, for the values that differ between development, staging and production, including the few fields marked as tunable that a process environment variable may set.
 
 :::note[Proposed]
-This order replaces the older "shape profile" layer with two layers, the runtime and the installation. The layering, and the environment overrides as its last layer, are proposed.
+This order replaces the older "shape profile" layer with the runtime layer; the tested installations are example files, not a layer. The layering, and the environment overrides as its last layer, are proposed.
 :::
 
 ## Checking and explaining
@@ -98,7 +97,6 @@ A fragment of a generated JSON Schema:
   "unevaluatedProperties": false,
   "properties": {
     "runtime": { "enum": ["bare-metal", "serverless", "kubernetes"] },
-    "installation": { "enum": ["local", "boards", "lambda", "kubernetes"] },
     "nodes": { "type": "integer", "minimum": 1 },
     "public_url": { "type": "string", "format": "uri" },
     "drivers": {
@@ -118,7 +116,6 @@ An install file for the boards installation, `/etc/sluis/install.yaml`:
 
 ```yaml
 runtime: bare-metal
-installation: boards
 nodes: 3
 public_url: https://sluis.example.com
 
@@ -143,9 +140,8 @@ And what `sluis config explain` prints for it:
 
 ```text
 runtime                       = bare-metal            install   /etc/sluis/install.yaml:1
-installation                  = boards                install   /etc/sluis/install.yaml:2
-public_url                    = https://sluis.example.com  install   /etc/sluis/install.yaml:4
-drivers.yubikey-piv.instance  = shared                install   /etc/sluis/install.yaml:11
+public_url                    = https://sluis.example.com  install   /etc/sluis/install.yaml:3
+drivers.yubikey-piv.instance  = shared                install   /etc/sluis/install.yaml:10
 log.level                     = debug                 environment override   SLUIS_LOG_LEVEL (tunable)
 integrations.github.app_key   = cred:sluis-int-github.app-key   install   (reference, not resolved)
 ```

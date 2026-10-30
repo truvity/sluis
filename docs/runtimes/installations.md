@@ -42,7 +42,7 @@ A driver choice that used to be a per-shape decision now reads as "this installa
 The key mode follows from the installation, not from a switch: a YubiKey on local and boards, KMS on lambda and kubernetes. A software key is allowed on local for development, and the code refuses it in production. The [transport](/concepts/audit/) defaults are the ones above. The `direct` and `nats-jetstream` transport drivers are supported and are the default of no installation ([OD-34](/open-decisions/#od-34)).
 
 :::note[Proposed]
-The configuration layers are: defaults, then the runtime, then the installation's defaults, then the install file, then overrides per environment (development, staging, production). Each overrides the one before. See [Configuration](/concepts/configuration/).
+The configuration layers are: defaults, then the runtime, then the install file, then overrides per environment (development, staging, production). Each overrides the one before. The four tested installations ship as example install files to start from; "installation" is not a configuration key. See [Configuration](/concepts/configuration/).
 :::
 
 The audit path is the one on [Audit](/concepts/audit/). Every success is audited. The emitter, a library inside each application, puts a record into the transport. The writer receives it, seals it into batches, and asks the `key-holder` to sign checkpoints; the `key-holder`'s access list lets only the writer use the log key. There is **no notary actor** ([OD-39](/open-decisions/#od-39)). The audit actors are the writer, the witness, the indexer and the reader.
