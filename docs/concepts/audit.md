@@ -55,11 +55,13 @@ flowchart LR
 ```
 
 1. **Transport.** An actor hands the record to the **transport** and carries on. In **queue** mode it returns to its caller once the record is durable in the queue, and never waits for the writer, the log store or the index. If the writer is down for an hour, requests still succeed and records queue. In **direct** mode the emitter streams the record to the writer; when the writer is down, the emitter falls back to a local spool (see [The transport](#the-transport)).
-2. **Sealed batches.** The writer takes records from the transport, validates and de-duplicates them, and groups them into an ordered **batch**. It closes the batch with a seal over its contents and the head of the previous batch.
+2. **Sealed batches.** The writer takes records from the transport, validates and de-duplicates them, and groups them into an ordered **batch**. A batch is sealed at **256 records or 5 seconds** after its first record, whichever comes first, and an empty batch is never sealed. Each batch ends with a **seal entry** that records its count, the writer instance and the observed clock offset, inside the tree, so the witnesses cosign it ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)).
 3. **The signed head and the hash chain.** The writer asks `key-holder` to sign the batch head with the log key. It never holds the key itself, and `key-holder`'s access list lets only the writer use the log key. The signature on a head that includes the previous signed head forms a **hash chain**: removing, reordering or altering a batch breaks every head after it. On AWS the same job is done by the key policy: it names the writer's role and no other.
 4. **Log store.** The batch is written to the blob store, with the lock mode that its blob driver gives. The log store is a `blob` whose lock mode matters: the `s3-compatible` driver locks in compliance mode on AWS S3 and in a mode that an account administrator can remove on Cloudflare R2; Garage, the boards' blob store, and `fs` have no lock at all, so tamper evidence there depends on witnesses. Every batch object is created with `If-None-Match: *`, so an object that exists is never written again. See [capability flags](/concepts/drivers/#capability-flags).
 
 The **witness** co-signs batch heads it has seen, so that the writer alone cannot choose which history an auditor sees. It is optional (see [The witness is optional](#the-witness-is-optional)).
+
+**Duplicates and blocking emits.** Delivery is at least once. Each record carries a UUIDv7 id (RFC 9562) set by the emitter, and the writer remembers ids for 14 days, the longest retention of a supported queue; a record older than that is quarantined and reported, not written, until an operator releases it. Credential and administrative changes use a **blocking emit**, which returns once the record is durable in the transport: accepted by the queue, acknowledged by the writer, or fsync'd to the spool. If that fails, the change fails ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)).
 
 ## Exactly one writer per log
 
@@ -69,7 +71,7 @@ The rule is **exactly one writer per log**, not one per installation. A log is t
 
 **On serverless the writer runs with a reserved concurrency of 1 on a standard SQS queue** (decided 2026-10-30). An event source mapping starts at a concurrency of 2, so the limit throttles it, and throttled messages return to the queue. Correctness comes from the create-if-absent fence, not from the limit. The cost of the throttling is measured at the Lambda step ([ADR 0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)).
 
-**A cluster keeps one log per node.** Each node has its own writer, its own spool and its own log key. The other nodes are that log's **peer witnesses**, which is the 2-of-3 co-signing on a three-node cluster. Readers merge the logs by time. No writer reads another node's spool, so there is nothing to elect and **no writer lease is needed**, and when one node is down the other nodes keep writing their own logs.
+**A cluster keeps one log per node.** Each node has its own writer, its own spool and its own log key. The other nodes are that log's **peer witnesses**, which is the 2-of-3 co-signing on a three-node cluster. Readers merge the logs by the time each record was recorded, keeping each log's own order, and claim no order across logs closer than the clock offsets the seals record. No writer reads another node's spool, so there is nothing to elect and **no writer lease is needed**, and when one node is down the other nodes keep writing their own logs.
 
 | Installation | Log key | Witness |
 |---|---|---|
@@ -110,9 +112,8 @@ The installation defaults stay as they are ([OD-34](/open-decisions/#od-34)): th
 **Audit is its own installation**, connected to sluis over the network, and sluis emits over a direct stream or a queue through the transport port ([OD-31](/open-decisions/#od-31), decided 2026-10-30). The actors are decided (no notary), and an emitter is authenticated by the transport driver's own layer (above). The points that refine it are decided too: [OD-32](/open-decisions/#od-32) (placement is derived), [OD-33](/open-decisions/#od-33) (quota metering and enforcement), [OD-34](/open-decisions/#od-34) to [OD-36](/open-decisions/#od-36) (the transport defaults, direct mode, and the optional witness), [OD-37](/open-decisions/#od-37) and [OD-38](/open-decisions/#od-38) (the four pieces) and [OD-39](/open-decisions/#od-39) (the audit actors).
 
 - **The co-located profile** for a small install shares the installation's driver instances, as combined pieces do ([OD-37](/open-decisions/#od-37)). The defence-in-depth layers stay per actor, unchanged: each audit actor still has its own scope, its own backend identity and, at L3 and above, its own store ([Defence in depth](/concepts/drivers/#defence-in-depth)).
-- **A separate audit installation runs its own `entry`** ([OD-26](/open-decisions/#od-26), decided 2026-10-30). A console of another installation calls it with a short-lived token.
-- **Audit gets the same split as sluis** (the decided direction; the details are for the audit records): a slim router `entry`, the API, which is the `reader`, and a console of its own.
-- **On the boards the log lives on Garage, with an off-site copy on R2.** Garage has no lock (lock mode `none`), so the peer witnesses carry the log's tamper evidence ([Ports and drivers](/concepts/drivers/#garage)).
+- **Every audit installation has its own front** ([OD-26](/open-decisions/#od-26), [ADR 0062](/decisions/0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own/)): a slim router `entry`, the API, which is the `reader`, and a console of its own. See [The audit front](#the-audit-front).
+- **On the boards the log lives on Garage, with an off-site copy on R2.** Garage has no lock (lock mode `none`), so the peer witnesses carry the log's tamper evidence ([Ports and drivers](/concepts/drivers/#garage)). An **hourly job** of the audit installation, a timer and not the writer, copies new log objects to R2, create-if-absent. The writer never touches R2, and an R2 outage delays the copy, never the log; the price is that up to an hour of log has no off-site copy ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/), [issue #984](https://github.com/truvity/sluis/issues/984)).
 
 ## The formats are the C2SP ones
 
@@ -124,19 +125,44 @@ sluis follows published specifications and invents no format for the log (agreed
 - **The `ca` actor** logs every X.509 certificate it issues in a C2SP `static-ct-api` log, which is witnessed in the same way.
 - **`mtc-tlog`** is adopted later, when Merkle Tree Certificates arrive, with the post-quantum track (parked).
 
-The rows are in the [standards register](/standards/#transparency-and-audit). Records themselves stay canonical JSON (RFC 8785).
+The rows are in the [standards register](/standards/#transparency-and-audit). A record's hash is computed over its canonical JSON form (RFC 8785).
+
+**The layout.** Each log has one prefix, `audit/<boundary>/<log>/`, with the `tlog-tiles` paths below it. Every checkpoint is also written once to `checkpoints/<size>`, create-if-absent, so the full checkpoint history survives on a store with no versioning; the `checkpoint` object that the format rewrites is a convenience pointer. Catalogues and schemas are written once below `audit/<boundary>/catalogue/`. A checkpoint's origin line is `<installation host>/audit/<boundary>/<log>` ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)).
+
+:::note[Open: the record format]
+The format of an audit record is not decided yet. The maintainer wants a standards-based format, and OCSF is being researched; the point is tracked in [issue #910](https://github.com/truvity/sluis/issues/910), and [ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/) stays Proposed until it is settled. The rules on this page hold whatever the format is.
+:::
 
 ## The witness is optional
 
 The witness port is where an independent party co-signs a head. `peer` lets the nodes of a cluster witness one another; `external` lets a party outside the installation do it; `none` is a single signer.
 
-A witness is **optional everywhere** ([OD-36](/open-decisions/#od-36)). `sluis config check` warns when an installation has none.
+A witness is **optional everywhere** ([OD-36](/open-decisions/#od-36)). `sluis config check` warns when an installation has none. In production, a log without a compliance lock needs one (see [Lock modes, retention and legal holds](#lock-modes-retention-and-legal-holds)).
+
+**The cadence.** The writer asks every witness to cosign each new checkpoint, at most once per witness every 5 seconds. When the log is idle, it asks again for the latest checkpoint every 5 minutes, so a reader can tell a quiet log from a writer that stopped publishing ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)).
 
 :::caution[The risk of no witness]
 With no witness and no notary, a compromised writer can get a rewritten checkpoint signed: it asks `key-holder` for a signature over a history it changed, and nobody else has seen the old one. A compliance lock on `s3` still prevents overwriting objects that were already written, but it does not prevent a **split view**, in which the writer shows one history to one reader and another history to the next. Only a witness that has co-signed the original head can expose a split view. On R2 the lock can be removed by an account administrator, and on `fs` there is no lock, so there the witness is the only protection. An installation that runs without a witness accepts this risk.
 :::
 
 There is no separate notary to take this role (agreed, [OD-39](/open-decisions/#od-39)). The notary was a second actor that signed what the writer wrote. It is replaced by the access list of `key-holder` (or by the key policy on AWS), which lets only the writer use the log key, and by the witness for what the writer alone cannot prove.
+
+## Lock modes, retention and legal holds
+
+The lock mode comes from the blob backend: `compliance` on AWS S3, `removable` on Cloudflare R2, `none` on Garage and on `fs` ([capability flags](/concepts/drivers/#capability-flags)). `sluis config check` reports it, and applies one rule ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)):
+
+- **A production log needs a `compliance` lock, or a weaker lock mode plus a witness** (`peer` or `external`). The check refuses anything else in a production boundary, and warns in development and staging. The boards pass with their peer witnesses; a single-node production installation on `fs` needs an `external` witness.
+- **Each log declares its retention, and a production log must.** There is no built-in default. A compliance store applies it as per-object retention, which can only be extended; R2 applies it as the bucket lock rule; Garage and `fs` use a lifecycle rule or an expiry sweeper, whose credential may delete expired objects only and is the one delete right on the log. A trial in governance mode before compliance is recommended, not enforced.
+- **Legal holds stay outside sluis.** A hold is placed and lifted with the store's own means, under cloud IAM or a break-glass role, and recorded as an audit record under the name of the person who did it. sluis neither sets nor checks holds, so **nothing in sluis stops a company-key shred during a hold**: the shred procedure must check for a standing hold first, and on a store without a hold flag expiry has to be suspended for the held range by hand.
+
+## Companies, encryption and erasure
+
+There is one audit log per environment boundary, and each company is a reader tenant of it with its **own audit tenant key** ([ADR 0009](/decisions/0009-one-installation-per-boundary/)).
+
+- **Each entry is an envelope in clear plus the record, encrypted with HPKE to the company's key.** The envelope holds the record id, its times, the boundary, the company, the action class, the outcome and the actor kind; the record itself is encrypted with a data key per (company, batch), sealed to the company's public key, so the writer cannot read back what it wrote. A machine-plane record is encrypted to the boundary's own audit key.
+- **The tree hashes the whole entry, ciphertext included.** A company that leaves has its slice exported and its key crypto-shredded; its records stay in the log, still verifiable, and nobody can read them again.
+- **The operator's own view of a company's records is the envelope:** the class, the outcome and rotating pseudonyms.
+- **The erasure of one person is met by the pseudonym.** Records carry no names or e-mail addresses, and an external actor is a keyed pseudonym; the mapping from a pseudonym to the person lives outside the log, and erasure deletes it. There are no per-subject keys in 2.0.
 
 ## Search and Quota are separate pieces
 
@@ -146,11 +172,34 @@ Two of the four pieces sit next to the log, use the same ports, and are drawn as
 
 **Quota** is the **quota engine** and **quota state**. Quota state is `state` with compare-and-set, shared with the rest of sluis. Quota **meters by default and enforces per policy rule**, for chosen subjects or audiences ([OD-33](/open-decisions/#od-33), decided). Metering counts use. Enforcement refuses an operation over a cap, and it needs `state` with compare-and-set on the mint path. The earlier decision that strict quota comes only after the k6 load test still applies to turning enforcement on in production.
 
+Quota's API is decided in [ADR 0023](/decisions/0023-quotas-api-is-idempotent-and-its-data-follows-the-origin-model/):
+
+- **Every call that changes something is idempotent** by a canonical `request_id` field, which `entry` also fills from an `Idempotency-Key` header. An id is scoped to the calling client and the method and remembered for 24 hours, and rebuilt from the log after a restore.
+- **`Admit` reserves an amount with a time to live** (declared per rule, 5 minutes by default), `Confirm` settles the actual amount, `Cancel` releases it, and an expired reservation is released and counted as expired.
+- **`TopUp` takes positive amounts only,** from declared clients; corrections and refunds are an `Adjust` call with a reason, and a refund names the event it refunds and cannot exceed it.
+- **Amounts are signed 64-bit integers** in a declared unit. A balance belongs to a declared **account** in a boundary and company. Only quota's own records carry an effect on a balance; application records carry meters only.
+- **A limit is a rate** (a token bucket per second or minute) **or a cap per calendar day or month in UTC.** Enforcement is strict only in 2.0, and an enforcing rule must declare what happens when its balance runs out and when quota is unreachable: there is no default.
+
 ## The search index lags the chain
 
-The `reader` serves queries from a **search index**, which is a search view of the batches. The index is a convenience. It follows the chain and lags it, and it can always be rebuilt from the batches. On servers the `index` driver is `sqlite`; on a cluster of boards a replicated index on `rqlite` is proposed, so that the reader can run on any node (the full-text support has to be verified first); on Kubernetes it is `postgres` in the `cnpg` mode (proposed), or `postgres` with any connection string (`external`); with `none (scan)` there is no index and queries scan the log store. Serverless may run the indexer and the reader with a `postgres` index, through RDS Proxy (proposed) ([OD-12](/open-decisions/#od-12), revised). The default index of the lambda installation stays `none` (proposed), and a separate Search installation that reads the same bucket is another choice. See [The postgres index driver](/concepts/drivers/#the-postgres-index-driver). A small install can run `sluis audit search` from the CLI, which builds a local `sqlite` index from the chain. The index is a rebuildable cache; the chain in the bucket is the record.
+The `reader` serves queries from a **search index**, which is a search view of the batches. The index is a convenience. It follows the signed checkpoints of each log and lags them by a few seconds, and it can always be rebuilt from the log ([ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)). The default index of each tested installation is `sqlite` on local, `rqlite` on the boards (so that the reader can run on any node; the board spike confirms it, with `sqlite` as the fallback), `postgres` on Aurora on lambda, and `postgres` in the `cnpg` mode on Kubernetes. `postgres` also takes any connection string (`external`), and with `none (scan)` there is no index and queries scan the log store. Serverless functions reach Postgres through RDS Proxy with IAM authentication, one database role per actor kind. See [The postgres index driver](/concepts/drivers/#the-postgres-index-driver).
+
+**What the index holds.** Fixed columns for the core fields (time, log, boundary, company, action, outcome, actor, subject pseudonym, target, request id, trace id), whose source fields are mapped from the record format; a typed attribute table for what the catalogue marks filterable or facetable; the record once; and one full-text table over what the catalogue marks searchable. Full text is word search without stemming, the same on every driver. There is one index per boundary with a company column: the indexer is a declared reader of each company's key, the reader filters every query by the caller's grant, and a shred purges that company's rows. A rebuild builds a new generation beside the serving one and switches to it atomically.
+
+**What the reader offers.** Search with a closed filter grammar and free text, facets, a get that returns a record with its inclusion proof against a cosigned checkpoint, exports as JSON Lines behind a short-lived signed URL, and a tail as a repeated search; all unary Connect calls. Every call is authorised by a grant from `policy`, which becomes a mandatory filter of the query, and every read is itself audited. A small install can run `sluis audit search` from the CLI, which builds a local `sqlite` index from the chain. The index is a rebuildable cache; the chain in the bucket is the record.
 
 **Verification never trusts the index, or the state store.** To check the trail, a verifier reads the batches from the log store, the signed heads and any witness co-signatures, and recomputes the chain itself. If the index or the state store has been tampered with, verification still passes or fails by what the log store and the signatures say. The state store may sit on the write path, because the transport and a reconciler that compares the log store's listing with the batch sequence recover from its loss, and because verification does not depend on it.
+
+## The audit front
+
+Every audit installation has a front of its own, also when the audit pieces are combined with sluis ([ADR 0062](/decisions/0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own/), [issue #985](https://github.com/truvity/sluis/issues/985)):
+
+- **A slim `entry` of its own, on its own host.** It is the same executable as sluis's, with the routes of the audit contracts, and it holds nothing. The host is a sibling of the boundary's host, `sluis-audit.<env>.example.com` beside `sluis.<env>.example.com`, so it inherits no cookie scope, and every passkey verifier's allow-list names it. A combined installation therefore has two fronts and two hosts.
+- **The `reader` is the API.**
+- **Its own `session` and `console` actors,** the same executables as sluis's. `session` is an OpenID Connect client of the environment's issuer and holds the browser session as an HttpOnly cookie; `console` routes the few writes, such as a rebuild of the index, to the actor that owns them. The front accepts only the issuer of the environment whose log it holds.
+- **A console bundle of its own,** built on the same release train as the sluis console. It shows search, records with their proofs, exports, and the log's health: checkpoint age, witness cosignatures, index lag and the lag of the off-site copy. A company sees its own records, an operator the envelope, a reviewer what a grant names.
+- **Another installation's console calls the audit front** with an exchanged token (RFC 8693) whose `aud` is the audit client id, valid for at most 5 minutes and bound to the console's X.509-SVID by mutual TLS.
+- **Without the front,** `sluis audit verify` and `sluis audit read` work from the bucket alone with read-only cloud credentials; a payload decrypts only for a caller who may unwrap the company's key.
 
 ## Recovery does not block on audit
 

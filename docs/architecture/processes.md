@@ -202,7 +202,7 @@ Audit is built from the same ports as the rest of sluis and adds one port, the w
 | ---- | --------- | ------------------- |
 | Transport | Per installation: direct (`direct-unix` on the same host, `direct-mtls` between hosts) or a queue (spool, SQS, NATS JetStream). The defaults are a spool on bare-metal and SQS on serverless and Kubernetes; direct mode falls back to a local spool when the writer is down, so it needs a disk | [OD-34](/open-decisions/#od-34), [OD-35](/open-decisions/#od-35) |
 | Writer | Per installation. Exactly one writer per log; a cluster keeps one log per node | [OD-31](/open-decisions/#od-31) |
-| Blob | Per installation, with a lock mode of none, removable or compliance | |
+| Blob | Per installation, with a lock mode of none, removable or compliance. A production log needs compliance, or a weaker mode plus a witness | [ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/) |
 | Witness | Per installation, and optional everywhere; `sluis config check` warns when there is none | [OD-36](/open-decisions/#od-36) |
 
 Two further pieces are separate from the log:
@@ -211,6 +211,8 @@ Two further pieces are separate from the log:
 | --- | ---------- | ------------- |
 | **Search** | The indexer, the search index and the reader | Derived from the port and driver rules, not decided per installation: for example, with a `sqlite` index on a cluster the reader runs on the indexer's node. See [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived) and [OD-32](/open-decisions/#od-32) |
 | **Quota** | The quota engine and its quota state (the state port with compare-and-set) | Derived in the same way. A separate piece, combinable with sluis, sharing its driver instances. It meters by default and enforces per policy rule. [OD-38](/open-decisions/#od-38), [OD-33](/open-decisions/#od-33) |
+
+**The audit front.** Every audit installation, also one combined with sluis, has a front of its own: a slim `entry` on its own host, the `reader` as its API, and its own `session` and `console` actors, which are the same executables as sluis's, with an audit console bundle of its own ([ADR 0062](/decisions/0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own/)).
 
 The [audit explorer](/architecture/audit-explorer/) draws these boxes for each tested installation, and the [architecture explorer](/architecture/explorer/) draws the actor processes.
 

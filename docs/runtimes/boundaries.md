@@ -71,7 +71,7 @@ A call from one boundary to another is **mutual TLS with SPIFFE IDs** ([Machine 
 The runbook exists from the first day:
 
 1. disconnect the company's boundary;
-2. export its audit tenant key, then crypto-shred it;
+2. check that no legal hold covers its audit records, because holds are kept outside sluis and nothing in sluis stops the shred ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)); then export its audit tenant key and crypto-shred it;
 3. re-issue its workloads under the new CA;
 4. remove its person links.
 
@@ -88,6 +88,7 @@ Each environment has its own issuer, and so does a product boundary when it exis
 - **A boundary has no sign-in of its own.** It runs its own slim `entry@<boundary>`, and the group issuer is its upstream. Single sign-on is transparent; a passkey tap is asked for only where that boundary's policy wants fresh MFA.
 - **The CLI signs in once.** `sluis login` signs in at the front, and the CLI then exchanges tokens silently at each boundary's own token endpoint. The front never sees a boundary's tokens.
 - **One passkey for every issuer.** `sluis.<env>.example.com` is not under `sluis.example.com`, so the passkey's relying-party id is the registrable parent (`example.com`), and every verifier checks a strict allow-list of origins: the sluis hosts only.
+- **The audit front has a host of its own.** An environment's audit log is read through its own front at `sluis-audit.<env>.example.com`, a sibling of `sluis.<env>.example.com`, so it inherits no cookie scope from the boundary host; it is on every verifier's allow-list. The front accepts only that environment's issuer, and its `session` is an OpenID Connect client of it ([ADR 0062](/decisions/0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own/)).
 
 ### Token claims
 
@@ -120,7 +121,7 @@ The choices below are the reference for a federation of several companies and en
 | Process level | Every environment on AWS runs at L2 or above |
 | State | One engine with a prefix per boundary, replaced by a store of its own at L3 and above |
 | Policy | One source, compiled per environment, with a grant key per environment. **Company ceilings** are Cedar `forbid` guards |
-| Audit | A log per environment. A company reads it as a tenant with its own key |
+| Audit | A log per environment, with its own front. A company reads it as a tenant with its own key, which the log encrypts its records to ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)) |
 | Console | Delegation per company, plus an environment scope for machine-plane records |
 | Integrations | One process per vendor tenant |
 | Trust bundles | One per environment. Issuance is bound to the requester |

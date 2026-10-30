@@ -34,7 +34,7 @@ The maintainer agreed this order for the tested [installations](/runtimes/instal
 
 1. **local first.** Docker Compose on a workstation, one container per actor, with the minimal drivers: embedded SQLite state, a SQLite index, a files blob, a local lock, and a spool or direct transport. Keys are software keys in CI and the host's YubiKey on a workstation. This step runs until v2 can replace v1, and it includes the enablers of the target architecture.
 2. **Then boards, lambda and kubernetes in parallel,** built and tested in parallel.
-   - **boards.** Three single-board computers behind a Cloudflare tunnel, a YubiKey in each node, state and index on rqlite (the rqlite index is a proposed new driver), audit records on Garage, an S3-compatible store on the boards, with an off-site R2 copy of the audit log (after the Garage spike, [#982](https://github.com/truvity/sluis/issues/982)), the audit pieces on the same nodes, and one log per node with the other nodes as peer witnesses.
+   - **boards.** Three single-board computers behind a Cloudflare tunnel, a YubiKey in each node, state and index on rqlite ([ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)), audit records on Garage, an S3-compatible store on the boards, with an hourly off-site R2 copy of the audit log (after the Garage spike, [#982](https://github.com/truvity/sluis/issues/982); the copy is [#984](https://github.com/truvity/sluis/issues/984)), the audit pieces on the same nodes, and one log per node with the other nodes as peer witnesses.
    - **lambda.** AWS Lambda.
    - **kubernetes.** The one tested Kubernetes installation.
 
@@ -62,7 +62,7 @@ One more spike comes before the boards' blob store, not before step 1: **Garage 
 
 ## Architecture decision records
 
-The records are on [Decisions](/decisions/), with their status. During the design phase the maintainer may rewrite them in place; on 2026-10-30 every record was realigned to one set of decisions. The audit records come next as their own batch, including the audit installation's front: a slim router `entry`, the API (`reader`) and its own console ([#985](https://github.com/truvity/sluis/issues/985)).
+The records are on [Decisions](/decisions/), with their status. During the design phase the maintainer may rewrite them in place; on 2026-10-30 every record was realigned to one set of decisions. The audit records followed on 2026-10-31: the log ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/), Proposed while the record format stays open in [#910](https://github.com/truvity/sluis/issues/910)), search ([ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)), quota ([ADR 0023](/decisions/0023-quotas-api-is-idempotent-and-its-data-follows-the-origin-model/)) and the audit installation's front ([ADR 0062](/decisions/0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own/), built in [#985](https://github.com/truvity/sluis/issues/985)).
 
 ## Technical backlog
 
