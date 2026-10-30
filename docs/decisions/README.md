@@ -41,6 +41,7 @@ Every record has these parts, in this order:
 
 v2 is a clean start. During the v2 design phase, before the first v2 release, the maintainer may rewrite accepted records in place. The rule "Never edit history" above is waived for this period only, and the earlier text stays in git history. A rewritten record keeps its number and its proposal issue link. It may change its slug and title when the decision changed, and the slug change is then listed in the pull request so the site can redirect it.
 After the first v2 release, records are append-only again: a changed mind gets a new record, as the rules above say.
+A rewritten record says so in one line under its proposal link, with the date. On 2026-10-30 the maintainer had every record realigned to one vocabulary and one set of decisions (the realignment pass): records were rewritten where they contradicted the decisions or each other. No merged record was merged into another or removed, and no slug changed; the planned records 0018 to 0020, never written, were folded into 0004 and their numbers are not used.
 
 ## Index
 
@@ -51,13 +52,14 @@ After the first v2 release, records are append-only again: a changed mind gets a
 | [0003](0003-runtimes-are-runtime-kinds.md) | Runtimes are runtime kinds; installations add nodes and dependencies; four installations are tested | Accepted |
 | [0004](0004-audit-is-four-pieces-joined-by-a-transport-port.md) | Audit is four pieces joined by a transport port; each log has exactly one writer | Accepted |
 | [0005](0005-three-zoom-levels-contracts-and-a-permission-manifest.md) | The design has three zoom levels, every component boundary is a ConnectRPC contract, and a permission manifest per actor is its spine | Accepted |
-| [0007](0007-core-is-a-few-actors-with-one-responsibility-each.md) | Core is a few actors with one responsibility each: entry, signer, policy, ca, quota | Accepted |
+| [0007](0007-core-is-a-few-actors-with-one-responsibility-each.md) | Core is a few actors with one responsibility each: entry, signer, policy and ca, with quota beside them | Accepted |
 | [0008](0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp.md) | Drivers are platform-started services on Unix sockets, and only the public API listens on TCP | Accepted |
 | [0009](0009-one-installation-per-boundary.md) | There is one installation per boundary, and a boundary is an environment or a regulated entity | Accepted |
 | [0010](0010-cryptography-uses-p384-by-default-with-named-exceptions.md) | Cryptography uses EC P-384 by default, in FIPS mode, with named exceptions | Accepted |
 | [0011](0011-authority-keys-sign-in-place-and-never-leave-their-store.md) | Authority keys sign in place and never leave their store | Accepted |
 | [0014](0014-policy-is-written-in-cedar-and-evaluated-by-a-rust-actor.md) | Policy is written in Cedar and evaluated by a Rust policy actor | Accepted |
 | [0015](0015-configuration-is-defined-once-in-pkl-and-shipped-as-json-schema.md) | Configuration is defined once in Pkl and shipped as JSON Schema | Accepted |
+| [0016](0016-data-has-an-origin-and-a-sensitivity.md) | Data has an origin and a sensitivity | Accepted |
 | [0017](0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite.md) | State is one port with compare-and-set; one writer owns each record kind; clusters replicate with rqlite | Accepted |
 | [0029](0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime.md) | One repository, one version, one release train, and packaging follows the runtime | Accepted |
 | [0038](0038-the-local-installation-is-docker-compose-with-one-container-per-actor.md) | The local installation is Docker Compose with one container per actor and minimal drivers | Accepted |

@@ -12,7 +12,8 @@ sluis is not one program. It is a handful of **core actors**, each with one job,
 
 | Kind | Actors | Notes |
 |---|---|---|
-| **Core actors** | `entry`, `signer`, `policy`, `ca`, `quota` | `quota` is the engine of the Quota piece, which is a separate piece that can be combined with sluis in one installation and then shares its driver instances ([OD-37](/open-decisions/#od-37) and [OD-38](/open-decisions/#od-38), decided). See [Audit](/concepts/audit/#the-four-pieces). |
+| **Core actors** | `entry`, `signer`, `policy`, `ca` | Four actors with one responsibility each ([ADR 0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/)). |
+| **Quota** | `quota` | Not a core actor: `quota` is the engine of the Quota piece, which is a separate piece that can be combined with sluis in one installation and then shares its driver instances ([OD-37](/open-decisions/#od-37) and [OD-38](/open-decisions/#od-38), decided). See [Audit](/concepts/audit/#the-four-pieces). |
 | **Integration actors** | `Upstream`, `WorkloadVerifier`, `FactsSource`, `CredentialMinter`, `Provisioner`, `Notifier` | One process per integration. See [Integrations](/concepts/integrations/). |
 | **Platform** | `sluis-node`, `key-holder`, `state-owner` | `sluis-node` is the node agent; it does not run on serverless or on Kubernetes. `key-holder` (keys) and `state-owner` (state) are the two mediating drivers: see [Ports and drivers](/concepts/drivers/#the-two-mediating-drivers). |
 | **Audit actors** | `writer`, `witness`, `indexer`, `reader` | There is no notary actor (agreed, [OD-39](/open-decisions/#od-39)). See [Audit](/concepts/audit/). |
@@ -21,11 +22,11 @@ sluis is not one program. It is a handful of **core actors**, each with one job,
 
 | Actor | Responsibility | Holds |
 |---|---|---|
-| `entry` | The OIDC protocol: sign-in, sessions, token exchange and the console API. It sits behind the edge connector. | No key |
+| `entry` | The OIDC protocol: sign-in, sessions, token exchange, and the console API as the browser's backend. It sits behind the edge connector. | No key |
 | `signer` | Holds the signing ring and signs tokens under a signing policy. It is not a pure signing oracle. | The token-signing keys |
-| `policy` | The decision point. A reviewed, file-based policy maps facts to grants. It has no state and no network. It signs mint grants with its own key. | The grant key |
+| `policy` | The decision point. A declared Cedar policy, plus template-linked policies within a declared delegation policy, maps facts to grants. It has no state and no network. It signs mint grants with its own key. | The grant key |
 | `ca` | X.509 and the SSH certificate authority. | The CA keys |
-| `quota` | Rate limits and caps, using conditional adjust on the state port. | Nothing but its own counters |
+| `quota` | Rate limits, caps and metering, on the state port with compare-and-set. The engine of the Quota piece, not a core actor. | No key. It writes quota balances (issued records) and meters (derived) |
 | `writer` | Receives audit records from the transport, seals them in batches and writes them to the blob store. It asks `key-holder` to sign each batch head. Exactly one per log. | The log-store credential. It never holds the log key |
 | `witness` | Co-signs the batch heads it has seen. Optional. | Its own key |
 | `indexer` | Builds the search index from the log store. Exactly one. | Read on the log store, write on the index |
@@ -33,6 +34,8 @@ sluis is not one program. It is a handful of **core actors**, each with one job,
 | Integration actors | One process per integration, in six kinds: see [Integrations](/concepts/integrations/). | The vendor credential of that integration only |
 
 Three actors use an authority key: `signer`, `policy` and `ca`. Each uses a different one. The audit `writer` uses the log key too, but only by asking `key-holder` to sign, and `key-holder`'s access list lets nobody but the writer use that key. `entry`, which faces the internet through the edge connector, holds none. `entry` is the one actor with a TCP listener: its public API is bound to `127.0.0.1`, and every other actor listens on Unix sockets only (see [Listeners](/architecture/listeners/)). `entry` was formerly called central.
+
+**The console.** The console API lives in `entry`, which is the browser's backend: the session is an HttpOnly cookie, and the browser holds no token. An operator-set write that arrives there is routed to the actor that owns the record kind, which validates it; the manifest says which kinds accept operator-set writes, and `state-owner` refuses any other writer ([ADR 0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/), [ADR 0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)). The console's single-page application is a separate artifact, served on the same origin by each runtime's static host.
 
 ## Actors and ports
 

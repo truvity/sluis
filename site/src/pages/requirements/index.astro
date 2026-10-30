@@ -5,7 +5,7 @@ import Filter from '../../components/requirements/Filter.astro';
 import { areaPath, catalogue, count, SOURCE, STATUS_HINT } from '../../lib/requirements';
 
 const c = catalogue();
-const by = (key: 'level' | 'status' | 'origin') => c.vocabulary[key].map((k) => [k, count(c.reqs, (r) => r[key]).get(k) ?? 0] as const);
+const by = (key: 'level' | 'status' | 'source') => c.vocabulary[key].map((k) => [k, count(c.reqs, (r) => r[key]).get(k) ?? 0] as const);
 const perArea = (code: string, f: (r: (typeof c.reqs)[number]) => boolean) => c.areaByCode.get(code)!.reqs.filter(f).length;
 const core = c.reqs.filter((r) => !c.areaByCode.get(r.area)!.scopeOpen).length;
 const open = c.reqs.length - core;
@@ -38,7 +38,7 @@ const open = c.reqs.length - core;
 
   <h2 id="counts">Counts</h2>
   <div class="rq-grid">
-    {(['level', 'status', 'origin'] as const).map((key) => (
+    {(['level', 'status', 'source'] as const).map((key) => (
       <table class="rq-mini">
         <caption>By {key}</caption>
         <tbody>

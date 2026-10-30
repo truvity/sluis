@@ -7,7 +7,7 @@ requirements:
     statement: "A public client that presents a client secret MUST be refused with invalid_client."
     rationale: "A secret in a public client is a configuration error that must be visible."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -20,7 +20,7 @@ requirements:
     statement: "A confidential client MUST authenticate with its registered method, form-URL-decoded where the method is basic authentication."
     rationale: "Secrets with reserved characters must work."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -35,7 +35,7 @@ requirements:
     statement: "Generated client secrets MUST come from a cryptographic random source."
     rationale: "Predictable or leaked secrets defeat client authentication."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -51,7 +51,7 @@ requirements:
     statement: "Client secrets MUST be compared in constant time."
     rationale: "Predictable or leaked secrets defeat client authentication."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -66,7 +66,7 @@ requirements:
     statement: "A client secret MUST be replaceable with an overlap window in which the old and the new secret both authenticate."
     rationale: "Rotation without an overlap forces a coordinated outage."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -80,7 +80,7 @@ requirements:
     statement: "sluis SHOULD support private_key_jwt client authentication."
     rationale: "Asymmetric client authentication removes shared secrets."
     level: SHOULD
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: planned
     runtimes: all
     standards:
@@ -96,7 +96,7 @@ requirements:
     statement: "A client assertion SHOULD be refused unless iss and sub equal the client and aud equals the issuer."
     rationale: "Asymmetric client authentication removes shared secrets."
     level: SHOULD
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: planned
     runtimes: all
     standards:
@@ -112,7 +112,7 @@ requirements:
     statement: "A client assertion SHOULD have a lifetime of at most 60 seconds."
     rationale: "A short lifetime limits replay."
     level: SHOULD
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: planned
     runtimes: all
     standards:
@@ -127,7 +127,7 @@ requirements:
     statement: "A client assertion SHOULD carry a jti that is accepted once."
     rationale: "Asymmetric client authentication removes shared secrets."
     level: SHOULD
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: planned
     runtimes: all
     standards:
@@ -141,7 +141,7 @@ requirements:
     statement: "A client MUST be of exactly one type from a closed set."
     rationale: "A closed model prevents contradictory configuration."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -155,7 +155,7 @@ requirements:
     statement: "The loader MUST refuse a combination of capabilities that the client type forbids."
     rationale: "A closed model prevents contradictory configuration."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -168,7 +168,7 @@ requirements:
     statement: "A revoked or deleted client MUST receive invalid_client on its next request."
     rationale: "Revocation must be prompt."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -181,7 +181,7 @@ requirements:
     statement: "sluis MUST accept a client identifier that is an https URL only after fetching its metadata document through an SSRF-safe fetcher from an allow-listed origin."
     rationale: "Metadata documents mint trust and must be constrained."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -196,7 +196,7 @@ requirements:
     statement: "sluis MUST NOT offer open dynamic client registration."
     rationale: "Open registration mints trust to anyone."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: out-of-scope
     runtimes: all
     standards:
@@ -210,7 +210,7 @@ requirements:
     statement: "sluis MAY issue tokens to machine clients through the client credentials grant, to one resource from the client's declared list, without a refresh token."
     rationale: "Some external systems speak only this grant."
     level: MAY
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -225,7 +225,7 @@ requirements:
     statement: "Runtime-created machine clients MUST register a public key only."
     rationale: "Stored shared secrets are theft targets."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -240,7 +240,7 @@ requirements:
     statement: "sluis MUST NOT generate or store a shared secret for a runtime-created machine client."
     rationale: "Stored shared secrets are theft targets."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -254,7 +254,7 @@ requirements:
     statement: "Custom scopes MUST be declared in policy."
     rationale: "Dropping a scope hides a failure."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -269,7 +269,7 @@ requirements:
     statement: "A request for an unknown scope MUST fail with invalid_scope instead of being dropped."
     rationale: "Dropping a scope hides a failure."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -283,7 +283,7 @@ requirements:
     statement: "A resource server that delegates authorization to sluis MUST be able to publish protected resource metadata that names sluis as its authorization server."
     rationale: "Clients discover the authorization server from the resource."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -298,7 +298,7 @@ requirements:
     statement: "sluis MUST implement the pinned revision of the MCP authorization specification for agent clients, using protected resource metadata, authorization server metadata, resource indicators and client metadata documents."
     rationale: "Agent clients depend on a specific revision of this specification."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -315,7 +315,7 @@ requirements:
     statement: "sluis MAY support mutual-TLS client authentication and certificate-bound access tokens for systems outside the platform."
     rationale: "Some external systems can use only client certificates."
     level: MAY
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:

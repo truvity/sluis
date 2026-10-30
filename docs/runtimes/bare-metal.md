@@ -92,6 +92,8 @@ Docker on a workstation is the development and CI form of bare-metal, one node: 
 - `entry`'s public API listens on TCP, bound to `127.0.0.1` (the port is configuration; `8080` is an example). Every other actor and every driver listens on a Unix socket under `/run/sluis/<actor>/`. See [Listeners](/architecture/listeners/).
 - `cloudflared` is the edge connector on the boards installation. It connects to `entry`'s loopback port and makes outbound connections only, so the node opens no inbound port for sluis. It holds no key and has no access to any other actor's socket. With several nodes, each runs its own `cloudflared`, so the edge has one connector per node and survives the loss of one.
 
+- **The console.** `entry` serves the console's single-page application from a directory on the node, on the same origin as its API. The bundle is a separate artifact of the release ([Packages](/distribution/packages/)).
+
 :::note[Proposed]
 `cloudflared` as the edge connector on EC2 installations is a proposal, not a decision. The listener rule itself (only `entry`'s public API is reachable from outside, on `127.0.0.1`) is agreed; the choice of connector is not final.
 :::

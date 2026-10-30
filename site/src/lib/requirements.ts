@@ -9,7 +9,7 @@ export interface StandardRef { id: string; section?: string; depth: 'Full' | 'Pa
 export interface Verification { kind: 'conformance-suite' | 'test-vectors' | 'integration-test' | 'manual'; ref: string; suite?: string }
 export interface Req {
   id: string; area: string; split_from?: string; statement: string; rationale: string;
-  level: 'MUST' | 'SHOULD' | 'MAY'; origin: string; status: string; runtimes: 'all' | string[];
+  level: 'MUST' | 'SHOULD' | 'MAY'; source: string; status: string; runtimes: 'all' | string[];
   standards: StandardRef[]; features: string[]; decisions?: string[]; verification: Verification[];
   gap?: string; manual_reason?: string; superseded_by?: string[];
 }
@@ -40,7 +40,7 @@ const read = (name: string) => parse(readFileSync(resolve(dir, name), 'utf8'));
 
 export interface Catalogue {
   title: string; checked: string; gaps: Record<string, string>; glossary: Record<string, string>;
-  vocabulary: { level: string[]; origin: string[]; status: string[]; runtimes: string[]; verification: string[]; depth: string[] };
+  vocabulary: { level: string[]; source: string[]; status: string[]; runtimes: string[]; verification: string[]; depth: string[] };
   areas: Area[]; areaByCode: Map<string, Area>; reqs: Req[]; byId: Map<string, Req>;
   standards: Standard[]; standardById: Map<string, Standard>;
 }
@@ -88,7 +88,7 @@ export function exportJson() {
       requirements: c.reqs.length,
       level: Object.fromEntries(count(c.reqs, (r) => r.level)),
       status: Object.fromEntries(count(c.reqs, (r) => r.status)),
-      origin: Object.fromEntries(count(c.reqs, (r) => r.origin)),
+      source: Object.fromEntries(count(c.reqs, (r) => r.source)),
     },
     areas: c.areas.map((a) => ({ code: a.code, title: a.title, scopeOpen: a.scopeOpen, requirements: a.reqs.length })),
     standards: c.standards,

@@ -41,7 +41,7 @@ Each App asks GitHub for the least that its job needs. One App does one job; slu
 
 The workload verifier asks GitHub for nothing. It reads the public key set that GitHub publishes for Actions tokens.
 
-Egress is limited to `api.github.com` (and GitHub's token issuer for the key set). The App private keys are operator secrets: they are referenced in configuration as `cred:` values and never inlined.
+Egress is limited to `api.github.com` (and GitHub's token issuer for the key set). The App private keys are vendor-issued secrets in sluis's own store: configuration names them as `cred:` values and never inlines them.
 
 ## What policy controls
 
@@ -67,7 +67,7 @@ An example, with the flow in [the setup patterns](/integrations/connecting/#gith
 1. Declare the organisation and the Apps you want, with their permissions.
 2. Run `sluis integrations connect github --org example-org --app publisher`. sluis prints a link; an organisation owner opens it and confirms the manifest with one click.
 3. The owner picks the repositories on GitHub's install page.
-4. sluis stores the App's private key as a credential and records the App id and installation as learned data.
+4. sluis stores the App's private key as a vendor-issued secret and records the App id and installation as issued records (pins).
 5. Write the grants in the policy, and run a dry-run pass for the teams before you enable the organisation.
 
 ```yaml
@@ -83,7 +83,7 @@ integrations:
           permissions: { contents: write, pull_requests: write }
         - id: org                        # the organisation App
           permissions: { members: write, organization_administration: read }
-      # the private keys are learned at connect time and held as credentials:
+      # the private keys are issued by GitHub at connect time and held as credentials:
       #   cred:sluis-int-github.example-org.publisher.app-key
 ```
 

@@ -1,9 +1,10 @@
-# 0007 — Core is a few actors with one responsibility each: entry, signer, policy, ca, quota
+# 0007 — Core is a few actors with one responsibility each: entry, signer, policy and ca, with quota beside them
 
 **Status:** Accepted
 **Date:** 2026-10-30
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
+Rewritten in place on 2026-10-30 (realignment pass).
 
 ## Context
 
@@ -18,21 +19,27 @@ Some processes must also run exactly once. Two audit writers on one log cannot k
 ### Actors, split from the first slice
 
 - **An actor is a process with one responsibility.** It declares the ports it requires ([0002](/decisions/0002-actors-declare-ports-placement-is-derived/)). The word replaces "role" and "process role".
-- **The core has five actors; quota is the engine of a separate piece ([0004](/decisions/0004-audit-is-four-pieces-joined-by-a-transport-port/)).**
+- **The core has four actors. Beside them, `quota` is the engine of the Quota piece ([0004](/decisions/0004-audit-is-four-pieces-joined-by-a-transport-port/)).**
 
   | Actor | Responsibility | Holds |
   |---|---|---|
-  | `entry` | The OIDC protocol: sign-in, sessions, token exchange and the console API. It sits behind the edge connector. | No key |
+  | `entry` | The OIDC protocol: sign-in, sessions, token exchange, and the console API as the browser's backend. It sits behind the edge connector. | No key |
   | `signer` | Holds the signing ring and signs tokens under a signing policy. It is not a pure signing oracle. | The token-signing keys |
-  | `policy` | The decision point. A reviewed, file-based policy maps facts to grants. It has no state and no network. It signs mint grants with its own key. | The grant key |
+  | `policy` | The decision point. A declared Cedar policy maps facts to grants ([0014](/decisions/0014-policy-is-written-in-cedar-and-evaluated-by-a-rust-actor/)). It has no state and no network. It signs mint grants with its own key. | The grant key |
   | `ca` | X.509 and the SSH certificate authority. | The CA keys |
-  | `quota` | Rate limits and caps, using conditional adjust on the state port. | Its counters (the quota state) |
+  | `quota` | Rate limits, caps and metering, on the state port with compare-and-set. Not a core actor: the engine of the Quota piece. | No key. It writes quota balances (issued) and meters (derived) ([0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)) |
 
 - **The central actor is named `entry`** (`sluis-entry`). It was called central in earlier drafts.
 - **`signer` and `policy` are split from the first slice.** They are not left for later.
 - **Quota is a separate piece that can be combined with sluis.** Its actor, `quota`, is the engine of that piece, and the quota state is the `state` port with compare-and-set ([0004](/decisions/0004-audit-is-four-pieces-joined-by-a-transport-port/)). When combined with sluis in one installation, it shares sluis's driver instances. Quota meters by default, and a policy rule can enforce it for chosen subjects or audiences.
-- **The other actors are named elsewhere.** Integration actors return facts or carry out effects core has authorised. Platform actors are the node agent and the two shared drivers `key-holder` and `state-owner`.
+- **The other actors are named elsewhere.** Integration actors return facts or carry out effects core has authorised. Platform actors are the node agent and the two shared drivers `key-holder` and `state-owner` ([0002](/decisions/0002-actors-declare-ports-placement-is-derived/)).
 - **The audit actors are writer, witness, indexer and reader.** There is no notary actor. The writer asks `key-holder` to sign checkpoints, and the access list of `key-holder` lets only the writer use the log key ([0004](/decisions/0004-audit-is-four-pieces-joined-by-a-transport-port/)).
+
+### The console
+
+- **The console API lives in `entry`, which is the browser's backend.** The session is an HttpOnly cookie. There are no tokens in the browser.
+- **Operator-set writes are done by the owning actor.** The console API routes a write to the actor that owns the record kind, and that actor validates it with its own logic. The manifest declares which kinds accept operator-set writes, and `state-owner` refuses any other writer ([0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)). `entry` therefore gains no write access to other actors' records.
+- **The console's single-page application is a separate artifact.** It is deployable on its own and served same-origin by each runtime's static host: a directory that `entry` serves on bare-metal, the bucket behind the API gateway on serverless, and a static container behind the ingress on Kubernetes ([0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)).
 
 ### One credential holder per unit
 
@@ -63,7 +70,8 @@ The Kubernetes meaning of a unit will be decided in ADR 0046.
 - The split is made once, in the first slice. v1 deferred the same split and never made it.
 - The fusion rule is a tested property of every installation. The generator of the manifests must produce the union for a fused unit, and a check must fail the build when a unit holds a key beside a listener.
 - `instances: exactly 1` turns a deployment trap (two writers, two reconcilers) into a requirement the tools check: `sluis config check` is where an installation with several nodes and no lease driver for such an actor is caught.
-- Every actor is a producer on the transport port, because every success is audited. Splitting the core into five actors multiplies audit producers, not audit writers.
+- Every actor is a producer on the transport port, because every success is audited. Splitting the core into actors multiplies audit producers, not audit writers.
+- Routing operator-set writes to the owning actor keeps `entry` without write access to other actors' records, and every owning actor needs its own validation and tests for the writes it accepts. A flaw in the single-page application reaches no token, because the browser holds none.
 - Quota can run next to sluis and use its state and driver instances. Enforcement makes the mint path depend on that state, so its availability then affects minting.
 - Dropping the notary leaves one fewer actor to run. The protection of the log key rests on the access list of `key-holder`, which needs tests ([0004](/decisions/0004-audit-is-four-pieces-joined-by-a-transport-port/)).
 - Docs, labels and file paths that said "role" say "actor". The directory of the actors' executables is named `actors`.

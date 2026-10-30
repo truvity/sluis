@@ -164,7 +164,7 @@ upstreams:
       credential: idp-client-secret   # referenced, never inlined
 ```
 
-The client secret is an operator secret. The config names a credential, and the secret itself is provided as a file.
+The client secret is referenced from declared configuration: the config names a credential, and the secret itself is provided as a file.
 
 ```sh
 # Example

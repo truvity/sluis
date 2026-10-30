@@ -7,7 +7,7 @@ requirements:
     statement: "A library that verifies tokens MUST pin the expected algorithm."
     rationale: "These are the failures of real token verifiers."
     level: MUST
-    origin: standard
+    source: standard
     status: partial
     runtimes: all
     standards:
@@ -24,7 +24,7 @@ requirements:
     statement: "A library that verifies tokens MUST reject alg none and algorithm confusion."
     rationale: "These are the failures of real token verifiers."
     level: MUST
-    origin: standard
+    source: standard
     status: partial
     runtimes: all
     standards:
@@ -41,7 +41,7 @@ requirements:
     statement: "A library that verifies tokens MUST verify typ, iss and aud."
     rationale: "These are the failures of real token verifiers."
     level: MUST
-    origin: standard
+    source: standard
     status: partial
     runtimes: all
     standards:
@@ -58,7 +58,7 @@ requirements:
     statement: "sluis MUST pass a review against every recommendation of the OAuth security best current practice before a release."
     rationale: "A checklist pass closes the gap between intent and behaviour."
     level: MUST
-    origin: standard
+    source: standard
     status: partial
     runtimes: all
     standards:
@@ -74,7 +74,7 @@ requirements:
     statement: "Each recommendation of the OAuth security best current practice MUST map to a test."
     rationale: "A checklist pass closes the gap between intent and behaviour."
     level: MUST
-    origin: standard
+    source: standard
     status: partial
     runtimes: all
     standards:
@@ -88,7 +88,7 @@ requirements:
     statement: "A state-changing endpoint MUST check that a present Origin header is in the endpoint's exact allow-list."
     rationale: "Same-site sibling origins are not trusted."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -102,7 +102,7 @@ requirements:
     statement: "A state-changing endpoint MUST refuse Sec-Fetch-Site other than same-origin."
     rationale: "Same-site sibling origins are not trusted."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -116,7 +116,7 @@ requirements:
     statement: "A state-changing endpoint MUST require a CSRF token when neither header is present."
     rationale: "Same-site sibling origins are not trusted."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -129,7 +129,7 @@ requirements:
     statement: "Every page MUST be sent with a restrictive content security policy, HSTS with includeSubDomains, no-referrer, nosniff and frame-ancestors none."
     rationale: "Browser headers are the second line of defence."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -142,7 +142,7 @@ requirements:
     statement: "The endpoint that lists a caller's grants MUST list only clients and presets that the caller's groups admit."
     rationale: "A grant list is an information disclosure."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -155,7 +155,7 @@ requirements:
     statement: "Authentication, token and recovery endpoints MUST be rate-limited per account, factor and source, with a progressive delay."
     rationale: "Throttling stops guessing; global lock-out is a denial of service."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -169,7 +169,7 @@ requirements:
     statement: "Authentication, token and recovery endpoints MUST NOT apply a global lock-out."
     rationale: "A global lock-out is a denial of service."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -182,7 +182,7 @@ requirements:
     statement: "Fuzz targets MUST exist for authorization and token parameter parsing, token and signature parsing, WebAuthn response handling and policy loading."
     rationale: "Parsers fail on unexpected inputs."
     level: MUST
-    origin: standard
+    source: standard
     status: planned
     runtimes: all
     standards:
@@ -195,7 +195,7 @@ requirements:
     statement: "Cryptographic primitives and protocol parsers MUST come from approved, maintained libraries."
     rationale: "Home-made crypto is the main risk."
     level: MUST
-    origin: standard
+    source: standard
     status: planned
     runtimes: all
     standards:
@@ -210,7 +210,7 @@ requirements:
     statement: "sluis MUST NOT implement its own cryptographic primitives or protocol parsers."
     rationale: "Home-made crypto is the main risk."
     level: MUST
-    origin: standard
+    source: standard
     status: planned
     runtimes: all
     standards:
@@ -224,7 +224,7 @@ requirements:
     statement: "A threat model and its negative tests MUST exist before code is merged for the authentication, federation, exchange and administration surfaces."
     rationale: "Independent tests find different bugs."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -239,7 +239,7 @@ requirements:
     statement: "The negative tests of a surface MUST be written by someone other than the code's author."
     rationale: "Independent tests find different bugs."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -253,7 +253,7 @@ requirements:
     statement: "An administrative surface MUST NOT be reachable on the public listener."
     rationale: "Operator doors do not belong on the internet."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -266,7 +266,7 @@ requirements:
     statement: "Tokens of one installation MUST NOT be accepted by another installation's token endpoint, introspection or exchange."
     rationale: "Cross-installation replay breaks isolation."
     level: MUST
-    origin: standard
+    source: standard
     status: planned
     runtimes: all
     standards:

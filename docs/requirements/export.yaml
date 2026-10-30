@@ -7,7 +7,7 @@ requirements:
     statement: "sluis MUST publish only a small typed set of public or per-consumer documents."
     rationale: "An export is a disclosure."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -22,7 +22,7 @@ requirements:
     statement: "Each export MUST be authorised."
     rationale: "An export is a disclosure."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -36,7 +36,7 @@ requirements:
     statement: "Each export MUST be recorded in the audit log."
     rationale: "An export is a disclosure."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -49,7 +49,7 @@ requirements:
     statement: "A file-drop or bucket-drop export that contains a secret MUST be age-encrypted to the consumer's own recipient."
     rationale: "The consumer, not sluis, decrypts."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -64,7 +64,7 @@ requirements:
     statement: "sluis MUST hold only the public recipient of an export consumer."
     rationale: "The consumer, not sluis, decrypts."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -78,7 +78,7 @@ requirements:
     statement: "The export documentation SHOULD describe an age recipient whose identity is held on the consumer's hardware token."
     rationale: "The consumer decrypts with a key that sluis never sees."
     level: SHOULD
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:

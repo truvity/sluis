@@ -7,7 +7,7 @@ requirements:
     statement: "An account record MUST hold authentication facts only."
     rationale: "A registry of authentication facts keeps identity-verification results and product data out of the account store."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -21,7 +21,7 @@ requirements:
     statement: "An account identifier MUST be random, 128 bits long and immutable."
     rationale: "A random identifier reveals nothing and cannot be guessed."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -35,7 +35,7 @@ requirements:
     statement: "The account decoder MUST refuse a record that contains an unknown field."
     rationale: "Closed decoding stops attributes from creeping in."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -49,7 +49,7 @@ requirements:
     statement: "The e-mail address of a personal account MUST be unique by a normalised comparison key."
     rationale: "Two accounts for one mailbox would split a person's identity."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -63,7 +63,7 @@ requirements:
     statement: "Two concurrent registrations of the same e-mail address MUST produce exactly one account."
     rationale: "A race must not create duplicates."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -77,7 +77,7 @@ requirements:
     statement: "Two registrations whose e-mail addresses differ only in the case of the local part MUST produce one account."
     rationale: "Case variants name the same mailbox in practice."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -91,7 +91,7 @@ requirements:
     statement: "The e-mail address of a corporate account MUST be treated as unverified display data."
     rationale: "The organisation, not the mailbox, vouches for a corporate identity."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -105,7 +105,7 @@ requirements:
     statement: "The e-mail address of a corporate account MUST NOT be required to be unique."
     rationale: "Two corporate accounts of different organisations may share an address."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -119,7 +119,7 @@ requirements:
     statement: "A storage key MUST NOT contain an e-mail address in clear."
     rationale: "Storage keys leak into logs and backups."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -133,7 +133,7 @@ requirements:
     statement: "A write that spans several account records MUST be a sequence of idempotent steps with a recovery marker."
     rationale: "Without transactions a crash must leave a repairable state."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -147,7 +147,7 @@ requirements:
     statement: "Account state transitions MUST be limited to those of the defined state machine."
     rationale: "Every gate depends on one unambiguous standing."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -161,7 +161,7 @@ requirements:
     statement: "An undefined account state transition MUST be refused with failed_precondition."
     rationale: "A refused transition must be distinguishable from a failure."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -175,7 +175,7 @@ requirements:
     statement: "A sign-in MUST complete only for a live account that has no security hold."
     rationale: "A held or suspended account must not obtain tokens."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -189,7 +189,7 @@ requirements:
     statement: "A hub account MUST have the class personal or corporate."
     rationale: "Resource servers gate products by class."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -203,7 +203,7 @@ requirements:
     statement: "The path that creates an account MUST set its class: personal for self-registration and corporate for organisation just-in-time provisioning."
     rationale: "The creating path is the evidence for the class."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -217,7 +217,7 @@ requirements:
     statement: "The class of an account MUST change only through an administrative operation."
     rationale: "A silent class change would move a person between product audiences."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -231,7 +231,7 @@ requirements:
     statement: "The account class MUST be released as a claim only to clients whose release list includes it."
     rationale: "Minimal disclosure applies to the class claim too."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -245,7 +245,7 @@ requirements:
     statement: "A corporate account MUST NOT have a passkey."
     rationale: "An employer identity provider must never become a way into a personal account."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -259,7 +259,7 @@ requirements:
     statement: "A corporate account MUST NOT have recovery codes."
     rationale: "Recovery of a corporate account belongs to its organisation."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -273,7 +273,7 @@ requirements:
     statement: "A corporate account MUST sign in only through its linked organisation connection."
     rationale: "A sign-in through another connection would be an account-linking attack."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -287,7 +287,7 @@ requirements:
     statement: "Accounts MUST be created only by self-registration, organisation just-in-time provisioning, workforce staff operations, the cohort import or test seeding."
     rationale: "A closed list of creation paths makes consent auditable."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -301,7 +301,7 @@ requirements:
     statement: "The administrative interface MUST NOT offer an operation that creates a personal account on a person's behalf, except the cohort import."
     rationale: "Consent to the terms and the first factor must come from the person."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -315,7 +315,7 @@ requirements:
     statement: "The hub MUST read account data only through the methods of the accounts module."
     rationale: "One boundary keeps the credential store from leaking into the hub."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -329,7 +329,7 @@ requirements:
     statement: "Requests from the hub to the accounts module MUST NOT carry a client identifier, a sector or an entity identifier."
     rationale: "The credential boundary must not be able to build a person-to-entity graph."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -343,7 +343,7 @@ requirements:
     statement: "The account standing method MUST return no personal data."
     rationale: "Standing is needed on every request and must stay out of storage."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -357,7 +357,7 @@ requirements:
     statement: "The hub MUST NOT write personal data to storage, including session and held records."
     rationale: "The hub keeps personal data only in request memory."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -371,7 +371,7 @@ requirements:
     statement: "The hub MAY cache an account standing for a bounded hold window to survive an outage of the accounts module."
     rationale: "A short cache keeps degraded operation possible."
     level: MAY
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -385,7 +385,7 @@ requirements:
     statement: "A held standing record MUST contain no e-mail address and no name."
     rationale: "A cached standing must not become a personal-data store."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -399,7 +399,7 @@ requirements:
     statement: "A disable, a suspension or a security hold MUST take effect immediately, whatever the hold window."
     rationale: "A cached live standing must not survive a disable."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -413,7 +413,7 @@ requirements:
     statement: "The hub MUST end the sessions of a disabled account and broadcast to the context installations before the disable intent completes."
     rationale: "Containment must be complete when the operator is told it is done."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -427,7 +427,7 @@ requirements:
     statement: "During an outage of the accounts module and inside the hold window, a refresh or an exchange MUST be answered from the held record."
     rationale: "Degraded operation keeps signed-in people working."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -441,7 +441,7 @@ requirements:
     statement: "During an outage of the accounts module, an ID token MUST be issued without profile claims."
     rationale: "The profile cannot be read, so it must not be invented or cached."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -455,7 +455,7 @@ requirements:
     statement: "During an outage of the accounts module, an account never seen before MUST be refused."
     rationale: "An unknown standing cannot be assumed live."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -469,7 +469,7 @@ requirements:
     statement: "A non-live account MUST be refused at hub sign-in with the uniform refusal page."
     rationale: "Disable is a security control, not a hint."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -483,7 +483,7 @@ requirements:
     statement: "A non-live account MUST be refused at refresh with invalid_grant."
     rationale: "A refresh must not outlive the account's standing."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -497,7 +497,7 @@ requirements:
     statement: "A non-live account MUST be refused at every context leg."
     rationale: "A context must not sign in an account the hub has disabled."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -511,7 +511,7 @@ requirements:
     statement: "A non-live account MUST be refused at token exchange."
     rationale: "An exchange must not extend the reach of a disabled account."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -525,7 +525,7 @@ requirements:
     statement: "A non-live account MUST be refused at federated sign-in through an organisation connection, on a sluis error page."
     rationale: "The relying party must not learn why a person was refused."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -539,7 +539,7 @@ requirements:
     statement: "A context installation MUST end all sessions and consent-bound grants of an account when it receives the account-wide logout token."
     rationale: "A context learns of a disable only through the logout broadcast."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -553,7 +553,7 @@ requirements:
     statement: "A context refresh for a disabled account MUST fail with invalid_grant within 5 seconds of the disable intent returning."
     rationale: "The bound makes disable measurable."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -567,7 +567,7 @@ requirements:
     statement: "Every ceremony of the accounts module MUST end with a signed assertion for the hub."
     rationale: "One assertion format serves every factor source."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -581,7 +581,7 @@ requirements:
     statement: "The assertion MUST be signed with a non-extractable named key."
     rationale: "The hub's trust stays rooted in a key that cannot be copied."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -596,7 +596,7 @@ requirements:
     statement: "An assertion MUST NOT be valid for longer than 60 seconds."
     rationale: "A short lifetime limits replay."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -610,7 +610,7 @@ requirements:
     statement: "The assertion outcome MUST be one of authenticated, registered, enrolled, federate, cancelled, unmet or refused."
     rationale: "A closed outcome set makes the hub's mapping exhaustive."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -624,7 +624,7 @@ requirements:
     statement: "The hub MUST verify the signature of an assertion against a pinned key identifier."
     rationale: "An unpinned key identifier would let a new key sign in."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -639,7 +639,7 @@ requirements:
     statement: "The hub MUST verify the issuer, audience, nonce and times of an assertion."
     rationale: "Each claim closes a different substitution attack."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -654,7 +654,7 @@ requirements:
     statement: "The hub MUST refuse an assertion whose identifier it has already seen."
     rationale: "A replayed assertion must never sign a person in."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -668,7 +668,7 @@ requirements:
     statement: "The hub MUST accept no assurance level that the factors of an assertion do not prove."
     rationale: "The hub, not the accounts module, decides the level."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -682,7 +682,7 @@ requirements:
     statement: "A ceremony handle MUST be single use and valid for at most 600 seconds."
     rationale: "A bounded handle limits abandoned ceremonies."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -696,7 +696,7 @@ requirements:
     statement: "A callback code MUST be single use and valid for at most 60 seconds."
     rationale: "A short single-use code limits interception."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -710,7 +710,7 @@ requirements:
     statement: "The hub MUST check the callback state against the authorization-request cookie."
     rationale: "The state check ties the callback to the browser that started it."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -724,7 +724,7 @@ requirements:
     statement: "The hub MUST redeem a callback code with a PKCE verifier."
     rationale: "The verifier plays the role of PKCE between the hub and the accounts module."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -738,7 +738,7 @@ requirements:
     statement: "A ceremony that ends with the outcome cancelled MUST be answered with an error redirect of access_denied."
     rationale: "The relying party needs the standard error."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -752,7 +752,7 @@ requirements:
     statement: "A ceremony that ends with the outcome unmet MUST be answered with an error redirect of unmet_authentication_requirements."
     rationale: "The relying party can then start a step-up."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -766,7 +766,7 @@ requirements:
     statement: "A ceremony that ends with the outcome refused MUST be answered with the uniform refusal page and no redirect."
     rationale: "A refusal must not reveal its reason to the relying party."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -780,7 +780,7 @@ requirements:
     statement: "An expired ceremony MUST be answered with an error redirect of access_denied and the description ceremony_expired."
     rationale: "An abandoned ceremony must end cleanly."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -794,7 +794,7 @@ requirements:
     statement: "A callback code that was already redeemed, or a state that does not match, MUST be answered with the uniform error page and status 400 without a redirect."
     rationale: "A replay must not reach the relying party."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -808,7 +808,7 @@ requirements:
     statement: "When the accounts module is unavailable at ceremony start, the hub MUST answer with an error redirect of temporarily_unavailable."
     rationale: "The relying party can retry later."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -822,7 +822,7 @@ requirements:
     statement: "Profile claims MUST be released only to clients whose release list names them."
     rationale: "Names are personal data."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -836,7 +836,7 @@ requirements:
     statement: "A context client whose release list names a profile claim MUST be refused at load."
     rationale: "A context installation never releases profile claims."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:

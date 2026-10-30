@@ -7,7 +7,7 @@ requirements:
     statement: "sluis MUST pass the OpenID conformance plans for configuration, basic, RP-initiated logout and back-channel logout before an endpoint is enabled in the production profile."
     rationale: "Official suites define correct behaviour."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -24,7 +24,7 @@ requirements:
     statement: "sluis SHOULD pass the OpenID conformance plans for the relying-party role for every upstream connector kind."
     rationale: "Upstream login is relying-party code."
     level: SHOULD
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -39,7 +39,7 @@ requirements:
     statement: "sluis MAY pass the FAPI 2.0 security profile and message signing plans for profiles that claim them."
     rationale: "Certification of the high-assurance profile."
     level: MAY
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -55,7 +55,7 @@ requirements:
     statement: "Every driver of a port MUST pass the same behavioural suite of that port."
     rationale: "Drivers must be interchangeable."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -68,7 +68,7 @@ requirements:
     statement: "A release gate MUST run an automated negative test for every refused input."
     rationale: "Refusals are requirements."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -82,7 +82,7 @@ requirements:
     statement: "A negative test MUST NOT be relaxed to pass."
     rationale: "Refusals are requirements."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -96,7 +96,7 @@ requirements:
     statement: "Shared test vectors MUST be used by all language kits, including Wycheproof-style edge cases for signatures."
     rationale: "One source of truth across languages."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -111,7 +111,7 @@ requirements:
     statement: "Inspection reads, seeding, a software authenticator and a test clock MUST be compiled only into test builds."
     rationale: "End-to-end tests need controllable fixtures."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:

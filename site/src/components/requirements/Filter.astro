@@ -1,5 +1,5 @@
 ---
-// The filter above the overview table: area, level, status, origin, runtime, a text search and
+// The filter above the overview table: area, level, status, source, runtime, a text search and
 // the switch that hides the account-hosting areas whose scope is open. It filters the rows of
 // the table marked data-rq-table and the area rows marked data-rq-area; the choices are also
 // read from the query string (?level=MUST&status=planned&hide-open=1) so a view can be shared.
@@ -11,7 +11,7 @@ const fields = [
   ['area', 'Area', c.areas.map((a) => a.code)],
   ['level', 'Level', v.level],
   ['status', 'Status', v.status],
-  ['origin', 'Origin', v.origin],
+  ['source', 'Source', v.source],
   ['runtimes', 'Runtime', ['all', ...v.runtimes]],
 ] as const;
 ---
@@ -45,7 +45,7 @@ const fields = [
     const areaRows = [...document.querySelectorAll<HTMLElement>('[data-rq-area]')];
     const counter = form.querySelector<HTMLElement>('[data-rq-count]')!;
     const text = new Map(rows.map((r) => [r, (r.cells[0].textContent + ' ' + r.cells[1].textContent).toLowerCase()]));
-    const keys = ['area', 'level', 'status', 'origin', 'runtimes'] as const;
+    const keys = ['area', 'level', 'status', 'source', 'runtimes'] as const;
     const field = (n: string) => form.elements.namedItem(n) as HTMLInputElement | HTMLSelectElement;
 
     const apply = () => {

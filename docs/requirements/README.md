@@ -14,7 +14,7 @@ generates its pages from them and test tools read the same data.
 ## What the build makes from it
 
 - [sluis.id/requirements/](https://sluis.id/requirements/): counts, the areas, and one table of all records with a filter by area,
-  level, status, origin and runtime. The account-hosting areas (CIAM, ACCT, SUBJ, VAULT, REG) carry a "scope open" badge and can be hidden.
+  level, status, source and runtime. The account-hosting areas (CIAM, ACCT, SUBJ, VAULT, REG) carry a "scope open" badge and can be hidden.
 - `/requirements/<area>/`: one page per area, with standards, features, decisions and verification for each record.
 - `/requirements/matrix/`: requirement to standard, feature and verification, and back.
 - `/requirements/coverage/`: statistics, MUST records without a conformance suite or test vectors, open records by decision,
@@ -41,7 +41,7 @@ An id is `REQ-<AREA>-<nnn>`, for example `REQ-AUTHN-002`.
 | `statement` | One sentence ending in a period with exactly one of MUST, MUST NOT, SHOULD, SHOULD NOT, MAY. Names a role (sluis, an operator, a relying party), never a person or a company. |
 | `rationale` | One sentence ending in a period. |
 | `level` | MUST, SHOULD or MAY; equals the class of the keyword (MUST NOT counts as MUST). |
-| `origin` | A category: `v1-parity`, `stakeholder-ciam`, `stakeholder-integrator`, `security-review`, `design-decision`, `standard`. |
+| `source` | Where the requirement comes from (not the data origin of ADR 0016), a category: `v1-parity`, `stakeholder-ciam`, `stakeholder-integrator`, `security-review`, `design-decision`, `standard`. |
 | `status` | `planned` (an agreed feature or design covers it), `partial` (the plan is weaker), `open` (needs a decision or has no plan), `out-of-scope` (a boundary kept as a refusal), `withdrawn`. |
 | `runtimes` | `all`, or a list of `bare-metal`, `serverless`, `kubernetes`. |
 | `standards` | `{id, section, depth}`: an id from `standards.yaml`, the section, and `Full` or `Partial`. |

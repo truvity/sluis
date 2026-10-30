@@ -27,7 +27,7 @@ An on-call tool pages people. To do that it needs to know who they are, which ro
 - **GoAlert:** an **administrator API key**, bound to one stored GraphQL document, with a mandatory expiry. The document holds a small fixed list of operations (read users and rotations, create a user, link the sign-in subject, set a role, set a rotation, manage a contact method, delete a user), each run with variables only. The key is minted once by a GoAlert administrator and registered with sluis, which warns before it expires. A narrower key, which can only verify a contact method, belongs to the Telegram relay.
 - **Telegram:** a **bot token**. The Bot API cannot create a bot, so an administrator creates each bot with the platform's own bot-management bot and registers its token with sluis. sluis then sets up commands, description and webhook through the Bot API. One bot per purpose.
 
-Both are operator secrets, referenced and never inlined.
+Both are secrets an operator supplies: referenced from declared configuration, or put at run time with `sluis secrets put` as an operator-set secret, and never inlined.
 
 ## What policy controls
 

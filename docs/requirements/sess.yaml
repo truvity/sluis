@@ -7,7 +7,7 @@ requirements:
     statement: "A refresh token MUST be single use."
     rationale: "Reuse indicates theft."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -22,7 +22,7 @@ requirements:
     statement: "Two concurrent presentations of a refresh token within a short grace window MUST both succeed with the same successor."
     rationale: "Retried requests must not lock a client out."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -38,7 +38,7 @@ requirements:
     statement: "A presentation of a refresh token after the grace window MUST end the whole token chain."
     rationale: "Reuse indicates theft."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -52,7 +52,7 @@ requirements:
     statement: "A refresh token MUST be bound to the client session."
     rationale: "A session limit that tokens can outlive is no limit."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -67,7 +67,7 @@ requirements:
     statement: "A refresh token MUST end at sign-out, at the idle limit and at the absolute limit."
     rationale: "A session limit that tokens can outlive is no limit."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -81,7 +81,7 @@ requirements:
     statement: "A refresh MUST re-check that the grant, the client and the account are still allowed."
     rationale: "Refresh must not upgrade or hide a state change."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -95,7 +95,7 @@ requirements:
     statement: "A refresh MUST keep acr, amr, auth_time and sid from the original authentication."
     rationale: "Refresh must not upgrade or hide a state change."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -108,7 +108,7 @@ requirements:
     statement: "Each client session MUST have a sid that is unique per installation, client and single sign-on session."
     rationale: "The sid links tokens to a session for revocation."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -125,7 +125,7 @@ requirements:
     statement: "The sid MUST appear in ID tokens, access tokens and logout tokens."
     rationale: "The sid links tokens to a session for revocation."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -139,7 +139,7 @@ requirements:
     statement: "Session records MUST NOT contain e-mail addresses or names."
     rationale: "Durable, minimal records keep privacy and availability."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -153,7 +153,7 @@ requirements:
     statement: "Session records MUST survive process restarts and upgrades."
     rationale: "Durable, minimal records keep privacy and availability."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -166,7 +166,7 @@ requirements:
     statement: "sluis MUST allow an operator and a user to list and revoke sessions."
     rationale: "Session visibility is a basic control."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -179,7 +179,7 @@ requirements:
     statement: "Session cookies MUST be Secure, HttpOnly, host-prefixed and without a Domain attribute."
     rationale: "Host-prefixed cookies cannot be set by a sibling origin."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -193,7 +193,7 @@ requirements:
     statement: "Session cookies MUST be named with an installation prefix."
     rationale: "Two installations on one parent domain must not read each other's cookies."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -206,7 +206,7 @@ requirements:
     statement: "The end-session endpoint MUST accept an ID token hint that this installation signed for the named client even after expiry."
     rationale: "An expired hint is still proof of the session."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -222,7 +222,7 @@ requirements:
     statement: "The end-session endpoint MUST validate the post-logout redirect URI against the registered list."
     rationale: "An expired hint is still proof of the session."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -237,7 +237,7 @@ requirements:
     statement: "A client that registers a back-channel logout URI MUST receive a logout token with typ logout+jwt, iss, aud, iat, exp of at most two minutes, jti, sid or sub, the backchannel-logout event, and no nonce."
     rationale: "The logout token profile is what receivers verify."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -252,7 +252,7 @@ requirements:
     statement: "Delivery of logout tokens MUST retry with exponential backoff."
     rationale: "A missed logout leaves a session alive."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -266,7 +266,7 @@ requirements:
     statement: "A dead-lettered logout delivery MUST raise an alarm."
     rationale: "A missed logout leaves a session alive."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -279,7 +279,7 @@ requirements:
     statement: "A global sign-out MUST end every session of the account at every client."
     rationale: "Broadcast keeps the hub from building a person-to-service graph."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -295,7 +295,7 @@ requirements:
     statement: "A global sign-out MUST notify every registered receiver without sluis learning which receivers know the person."
     rationale: "Broadcast keeps the hub from building a person-to-service graph."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -310,7 +310,7 @@ requirements:
     statement: "An agent-class session MUST require explicit consent."
     rationale: "Consent for an agent is the user's only control."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -325,7 +325,7 @@ requirements:
     statement: "An agent-class session MUST be bound to that consent for its entire lifetime."
     rationale: "Consent for an agent is the user's only control."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:

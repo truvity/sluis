@@ -7,7 +7,7 @@ requirements:
     statement: "When sluis consumes an upstream ID token it MUST verify the signature against the connection key set."
     rationale: "An RP that skips a check is a login bypass."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -25,7 +25,7 @@ requirements:
     statement: "When sluis consumes an upstream ID token it MUST restrict the algorithms to an allow-list that excludes none and HMAC."
     rationale: "An RP that skips a check is a login bypass."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -41,7 +41,7 @@ requirements:
     statement: "When sluis consumes an upstream ID token it MUST verify iss, aud, azp, nonce and the time claims."
     rationale: "An RP that skips a check is a login bypass."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -57,7 +57,7 @@ requirements:
     statement: "sluis MUST NOT read identity claims from an unsigned upstream token."
     rationale: "An RP that skips a check is a login bypass."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -72,7 +72,7 @@ requirements:
     statement: "A federated identity MUST be linked by the tuple of connection, issuer and subject."
     rationale: "E-mail is not a stable or verified key."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: planned
     runtimes: all
     standards:
@@ -86,7 +86,7 @@ requirements:
     statement: "A federated identity MUST NOT be linked by e-mail address."
     rationale: "E-mail is not a stable or verified key."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: planned
     runtimes: all
     standards:
@@ -99,7 +99,7 @@ requirements:
     statement: "A client of an upstream connection MUST check iss in the authorization response."
     rationale: "This stops mix-up attacks across upstreams."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: planned
     runtimes: all
     standards:
@@ -113,7 +113,7 @@ requirements:
     statement: "A client of an upstream connection MUST refuse a missing iss when the upstream advertises support."
     rationale: "This stops mix-up attacks across upstreams."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: planned
     runtimes: all
     standards:
@@ -126,7 +126,7 @@ requirements:
     statement: "Each upstream connection MUST carry a trust policy that sets an assurance ceiling, optional required authentication methods and a maximum authentication age."
     rationale: "The relying decision is per connection."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: planned
     runtimes: all
     standards:
@@ -140,7 +140,7 @@ requirements:
     statement: "sluis MUST read only a configured allow-list of claims from an upstream."
     rationale: "Only declared claims enter the model."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: planned
     runtimes: all
     standards:
@@ -154,7 +154,7 @@ requirements:
     statement: "sluis MUST NOT read upstream roles or groups."
     rationale: "Upstream roles are not evidence that sluis has verified."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: planned
     runtimes: all
     standards:
@@ -168,7 +168,7 @@ requirements:
     statement: "sluis MUST refuse identity-provider-initiated sign-in."
     rationale: "An unsolicited response is a login CSRF vector."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: planned
     runtimes: all
     standards:
@@ -181,7 +181,7 @@ requirements:
     statement: "A domain MUST become routable to a connection only after a DNS TXT record proves control of the domain."
     rationale: "Home-realm routing for the wrong domain is an account-takeover path."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -195,7 +195,7 @@ requirements:
     statement: "sluis SHOULD be usable as an upstream by another sluis installation through the same connector, with peer trust declared by key set."
     rationale: "Peer trust composes installations."
     level: SHOULD
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -210,7 +210,7 @@ requirements:
     statement: "All outbound discovery, key-set and token fetches MUST pass an egress policy that checks addresses after name resolution and refuses loopback, link-local and private addresses outside the local profile."
     rationale: "SSRF through an attacker-chosen discovery URL reaches internal services."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: planned
     runtimes: all
     standards:
@@ -223,7 +223,7 @@ requirements:
     statement: "sluis MAY provide a SAML service-provider connector."
     rationale: "SAML is outside the current register."
     level: MAY
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: out-of-scope
     runtimes: all
     standards:
@@ -237,7 +237,7 @@ requirements:
     statement: "A SAML service-provider connector, where provided, MUST NOT accept an unsigned assertion."
     rationale: "SAML is outside the current register."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: out-of-scope
     runtimes: all
     standards:
@@ -251,7 +251,7 @@ requirements:
     statement: "A SAML service-provider connector, where provided, MUST NOT accept an unsolicited response."
     rationale: "SAML is outside the current register."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: out-of-scope
     runtimes: all
     standards:
@@ -264,7 +264,7 @@ requirements:
     statement: "A social-identity sign-in MUST count as a first factor only."
     rationale: "Social sign-in carries no assurance sluis has verified."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -279,7 +279,7 @@ requirements:
     statement: "A further own factor MUST be required before any assurance level is granted to a social-identity sign-in."
     rationale: "Social sign-in carries no assurance sluis has verified."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:

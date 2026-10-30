@@ -7,7 +7,7 @@ requirements:
     statement: "Every private-key operation MUST go through the signing port."
     rationale: "One port makes drivers swappable and auditable."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -23,7 +23,7 @@ requirements:
     statement: "Business code MUST NOT import a key-management SDK."
     rationale: "One port makes drivers swappable and auditable."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -38,7 +38,7 @@ requirements:
     statement: "A private signing key held by a hardware or managed key driver MUST be non-extractable."
     rationale: "A key that cannot leave the device cannot be stolen from disk."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -54,7 +54,7 @@ requirements:
     statement: "sluis MUST support signing with PS256, ES256 and EdDSA for profiles that require the FAPI 2.0 algorithm set."
     rationale: "FAPI 2.0 forbids ES384; the default keeps one curve everywhere else."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -72,7 +72,7 @@ requirements:
     statement: "sluis MUST NOT select PS256, ES256 or EdDSA unless a profile or an audience requires it."
     rationale: "ES384 stays the default everywhere else, so one curve serves the rest."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -85,7 +85,7 @@ requirements:
     statement: "Each key driver MUST declare which signature algorithms it supports."
     rationale: "PS256 on a hardware token is slow and EdDSA needs recent firmware."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: partial
     runtimes: ["bare-metal", "serverless", "kubernetes"]
     standards:
@@ -101,7 +101,7 @@ requirements:
     statement: "`sluis config check` MUST refuse a policy that pins an algorithm the configured driver cannot sign."
     rationale: "PS256 on a hardware token is slow and EdDSA needs recent firmware."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: partial
     runtimes: ["bare-metal", "serverless", "kubernetes"]
     standards:
@@ -116,7 +116,7 @@ requirements:
     statement: "RSA keys MUST be used only for a named audience or algorithm that requires them, and with a key separate from the default."
     rationale: "Interoperating clouds and libraries require RS256 and PS256."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -130,7 +130,7 @@ requirements:
     statement: "sluis MUST publish its public keys as a key set whose entries each carry kid, kty, alg and use."
     rationale: "Key rotation depends on timely discovery."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -145,7 +145,7 @@ requirements:
     statement: "A published key set MUST be cacheable for no longer than a documented bound."
     rationale: "Rotation depends on timely discovery."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -159,7 +159,7 @@ requirements:
     statement: "Key rotation MUST overlap for at least the token lifetime plus allowed clock skew."
     rationale: "A new key must be verifiable before it signs."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -172,7 +172,7 @@ requirements:
     statement: "A software key driver MUST be refused in a production installation."
     rationale: "Software keys are for development only."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -185,7 +185,7 @@ requirements:
     statement: "Keys with different purposes MUST be separate keys."
     rationale: "Cross-protocol key reuse is avoidable."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -201,7 +201,7 @@ requirements:
     statement: "A key MUST NOT be shared between protocols, in particular between certificate signing and SSH certificate signing."
     rationale: "Cross-protocol key reuse is avoidable."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -216,7 +216,7 @@ requirements:
     statement: "sluis MUST provide a build that uses a FIPS 140-3 validated cryptographic module."
     rationale: "Regulated users need a validated module."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -231,7 +231,7 @@ requirements:
     statement: "sluis MUST state that sluis itself is not the validated module."
     rationale: "A false claim of validation would mislead regulated users."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -245,7 +245,7 @@ requirements:
     statement: "An alarm MUST be raised on key-ring decryption outside planned rotation."
     rationale: "Key misuse is silent without alarms."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -259,7 +259,7 @@ requirements:
     statement: "An alarm MUST be raised on use of a signing key by an unexpected actor."
     rationale: "Key misuse is silent without alarms."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -273,7 +273,7 @@ requirements:
     statement: "An alarm MUST be raised on a new key identifier in a pinned upstream key set."
     rationale: "Key misuse is silent without alarms."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -286,7 +286,7 @@ requirements:
     statement: "sluis SHOULD be able to sign with post-quantum algorithms (ML-DSA) once the key drivers support them, selected by policy."
     rationale: "NIST plans deprecation of classical signatures after 2030."
     level: SHOULD
-    origin: design-decision
+    source: design-decision
     status: open
     runtimes: all
     standards:
@@ -302,7 +302,7 @@ requirements:
     statement: "The keys port MUST provide wrap and unwrap operations for data keys."
     rationale: "Backup data keys are wrapped through the port so that no driver-specific code touches them."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -317,7 +317,7 @@ requirements:
     statement: "The hardware-token PIV driver MUST refuse EdDSA signing on a device whose firmware does not support it."
     rationale: "PIV EdDSA needs a recent device firmware."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -331,7 +331,7 @@ requirements:
     statement: "`sluis config check` SHOULD warn when a pinned algorithm is slow on the configured hardware driver."
     rationale: "PS256 on a hardware token takes about two seconds per signature."
     level: SHOULD
-    origin: design-decision
+    source: design-decision
     status: open
     runtimes: all
     standards:

@@ -101,7 +101,9 @@ Both are `POST /token` with `grant_type=urn:ietf:params:oauth:grant-type:token-e
 
 ### Console API
 
-Connect services (JSON or protobuf over HTTP) under the console mount, package `sluis.v1`. Console calls use the same-origin session cookie; a workload may call them with its own platform token; some services also accept a CLI bearer. Roles are viewer and operator, optionally scoped to one directory.
+Connect services (JSON or protobuf over HTTP) under the console mount, package `sluis.v1`. The console API lives in `entry`, which is the browser's backend: console calls use the same-origin session cookie, an HttpOnly cookie, and the browser holds no token. A workload may call them with its own platform token; some services also accept a CLI bearer. Roles are viewer and operator, optionally scoped to one directory.
+
+The console's single-page application is a separate artifact, served on the same origin as the API by each runtime's static host: a directory that `entry` serves on bare-metal, the bucket behind the API gateway on serverless, a static container behind the ingress on Kubernetes. An operator-set write that arrives on the console API is carried out by the actor that owns the record kind, which validates it, and it is audited under the signed-in person's name ([ADR 0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
 
 | Service | What it manages |
 | ------- | --------------- |
@@ -122,7 +124,7 @@ Browser redirect routes under `/connect/<integration>/` complete the provider fl
 | Surface | Crosses the boundary as |
 | ------- | ----------------------- |
 | `sluis` CLI, login, token, exchange, credential helpers for kubeconfig and cloud SDKs | The endpoints above, with results cached under the user's config directory |
-| `sluis config check`, `sluis config explain` | Offline. No call to sluis |
+| `sluis config check`, `sluis config explain` | Offline by default, with no call to sluis. With `--live` they read the operator-set records through the console API, with an operator's credentials |
 | `sluis backup`, `restore`, `migrate`, `doctor` | On the host, against state and secrets directly |
 | Scheduled work (directory refresh, reconcile ticks, rotation, backup) | Events from a timer, a queue, or a platform scheduler, not user API |
 
@@ -149,7 +151,7 @@ The operations below are new in v2. Their paths and RPC names are proposed and m
 
 ## Resources each use case touches
 
-A use case touches resources of eight classes: a **signing key**, **state** (records), a **blob**, a **transport**, the **audit sink**, **secrets**, **config** (policy and clients), and **external** systems. The matrix lists the operations. `r` marks an operation on the request path (the caller waits); `b` marks one in the background.
+A use case touches resources of eight classes: a **signing key**, **state** (records), a **blob**, a **transport**, the **audit sink**, **secrets**, **config** (declared configuration: policy and clients), and **external** systems. Operator-set configuration is stored through the state port in namespaces of its own, so it appears in the State column; it is still configuration, and it is written only by the actor that owns its kind. The matrix lists the operations. `r` marks an operation on the request path (the caller waits); `b` marks one in the background.
 
 Operations: `sign` and `verify` (public key only), `wrap` and `unwrap`, `read`, `list`, `create` (if absent), `cas` (compare and swap on a revision), `put`, `append`, `delete`, `put` on the transport and `receive`, `fetch` (external read), `call` (external write).
 

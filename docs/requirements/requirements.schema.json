@@ -11,7 +11,7 @@
     "areaCode": { "type": "string", "pattern": "^[A-Z][A-Z0-9]{1,11}$" },
     "reqId": { "type": "string", "pattern": "^REQ-[A-Z][A-Z0-9]{1,11}-[0-9]{3}$" },
     "level": { "enum": ["MUST", "SHOULD", "MAY"] },
-    "origin": { "enum": ["v1-parity", "stakeholder-ciam", "stakeholder-integrator", "security-review", "design-decision", "standard"] },
+    "source": { "enum": ["v1-parity", "stakeholder-ciam", "stakeholder-integrator", "security-review", "design-decision", "standard"] },
     "status": { "enum": ["planned", "partial", "open", "out-of-scope", "withdrawn"] },
     "runtime": { "enum": ["bare-metal", "serverless", "kubernetes"] },
     "depth": { "enum": ["Full", "Partial"] },
@@ -40,7 +40,7 @@
     "requirement": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "area", "statement", "rationale", "level", "origin", "status", "runtimes", "standards", "features", "verification"],
+      "required": ["id", "area", "statement", "rationale", "level", "source", "status", "runtimes", "standards", "features", "verification"],
       "properties": {
         "id": { "$ref": "#/$defs/reqId" },
         "area": { "$ref": "#/$defs/areaCode" },
@@ -48,7 +48,7 @@
         "statement": { "$ref": "#/$defs/sentence" },
         "rationale": { "$ref": "#/$defs/sentence" },
         "level": { "$ref": "#/$defs/level" },
-        "origin": { "$ref": "#/$defs/origin" },
+        "source": { "$ref": "#/$defs/source" },
         "status": { "$ref": "#/$defs/status" },
         "runtimes": {
           "oneOf": [
@@ -95,10 +95,10 @@
             "vocabulary": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["level", "origin", "status", "runtimes", "verification", "depth"],
+              "required": ["level", "source", "status", "runtimes", "verification", "depth"],
               "properties": {
                 "level": { "type": "array", "items": { "$ref": "#/$defs/level" } },
-                "origin": { "type": "array", "items": { "$ref": "#/$defs/origin" } },
+                "source": { "type": "array", "items": { "$ref": "#/$defs/source" } },
                 "status": { "type": "array", "items": { "$ref": "#/$defs/status" } },
                 "runtimes": { "type": "array", "items": { "$ref": "#/$defs/runtime" } },
                 "verification": { "type": "array", "items": { "$ref": "#/$defs/verificationKind" } },
