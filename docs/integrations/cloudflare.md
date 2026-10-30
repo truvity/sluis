@@ -22,7 +22,9 @@ Cloudflare is a credential minter. sluis holds one account-level token that can 
 |---|---|
 | `CredentialMinter` | Receives a mint grant signed by the `policy` actor, checks the prototype, creates a token by cloning the prototype with an expiry, and sweeps expired tokens it created. |
 
-That is the only integration actor. Cloudflare supplies no facts and takes no desired state.
+That is the only integration actor, named `cloudflare@<company>`. Cloudflare supplies no facts and takes no desired state.
+
+It is separate from the **`cloudflare` cloud driver** (`cloud-cloudflare@<boundary>`), which mints R2 temporary credentials for sluis's own buckets with a parent token of the boundary; the two share a library but not a credential ([Ports and drivers](/concepts/drivers/#one-s3-compatible-blob-driver)).
 
 ## What sluis asks the vendor for
 

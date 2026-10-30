@@ -16,7 +16,7 @@ sidebar:
 
 All of them are supported on **amd64 and arm64**. The packages come from the apt repository (Ubuntu) and the dnf repository (Rocky Linux and Amazon Linux); see [Packages](/distribution/packages/).
 
-The [serverless](/runtimes/serverless/) and [kubernetes](/runtimes/kubernetes/) runtimes do not depend on a host distribution: Lambda runs zip packages on the managed runtime, and Kubernetes runs OCI images.
+The [serverless](/runtimes/serverless/) and [kubernetes](/runtimes/kubernetes/) runtimes do not depend on a host distribution: Lambda runs zip packages on the managed runtime, and Kubernetes runs OCI images on distroless bases. An executable that needs cgo is built against the oldest supported glibc (Amazon Linux 2023's), so the same binary runs in a package and in an image.
 
 ## The systemd floor
 
@@ -38,6 +38,7 @@ On Ubuntu 22.04:
 - **Default build.** FIPS mode is on by default. It runs Go's FIPS 140-3 module in `fips140=on` mode, using the latest module. In this mode TLS refuses X25519 and ChaCha20, and key generation runs pairwise consistency tests. Both behaviours are acceptable for sluis.
 - **Certified build.** A separately pinned build uses the CMVP-certified module, certificate #5247, module v1.0.0, for installs that need the certificate.
 - **BoringCrypto is not used.**
+- **Rust components** follow the same rule with `aws-lc-rs` in FIPS mode, and the certified build pins a certified module for them too ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)). The exact certified pin is settled by a spike before the first code.
 
 :::note[Proposed]
 How the certified build is named and delivered (its own repository path, tarballs or both) is not yet decided.

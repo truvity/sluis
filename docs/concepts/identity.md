@@ -6,13 +6,17 @@ sidebar:
   order: 5
 ---
 
-A sluis actor that talks to a cloud, for example to write an audit archive to a bucket, needs that cloud's credentials. On a cloud-native platform the platform hands the actor its identity: the Lambda function's role. On Kubernetes the identity is proposed to come from a projected ServiceAccount token (see below). On a node that the platform does not manage, nothing does. sluis fills that gap with workload identity.
+A sluis actor that talks to a cloud, for example to write an audit archive to a bucket, needs that cloud's credentials. On a cloud-native platform the platform hands the actor its identity: the Lambda function's role. On Kubernetes the identity comes from a projected ServiceAccount token (see below). On a node that the platform does not manage, nothing does. sluis fills that gap with workload identity.
+
+This page is about how an actor of sluis reaches a cloud. How a host, a pod or a CI job gets a machine identity from sluis (SPIFFE IDs, SVIDs, enrolment and trust bundles) is on [Machine identity](/concepts/machine-identity/).
 
 ## Workload identity
 
 The **node agent** (`sluis-node`) runs on each self-hosted node. It issues a short-lived **workload JWT** per actor. It knows which actor is asking without trusting what the caller says: the actor's identity comes from its **uid**, read from the connection's peer credentials on its Unix socket.
 
 The node agent signs each token with the **node's non-extractable key**, so a token cannot be made without the node. Tokens are valid for an hour and refreshed hourly per actor. At about 120 ms per signature on a YubiKey, the cost is negligible.
+
+The token's `sub` is the actor instance's name, **`<actor>@<boundary>`** ([Actors](/concepts/actors/#naming)), and the cloud role's trust policy pins it. This is credential brokering, not mediation: the node agent hands each actor a token of its own, and the cloud enforces what that token may do ([Ports and drivers](/concepts/drivers/#per-actor-and-shared-instances)).
 
 ## Per-node OIDC issuers
 
@@ -34,17 +38,17 @@ Each cloud driver (`aws`, `gcp`, `azure`) exchanges the workload JWT for that cl
 | GCP | Workload Identity Federation | ES256 |
 | Azure | A federated credential on an Entra application | RS256 |
 
+Cloudflare has no federation for R2. Its cloud driver, `cloud-cloudflare@<boundary>`, holds a parent token of the boundary, stored sealed, and mints R2 temporary credentials scoped to a bucket and a prefix ([Ports and drivers](/concepts/drivers/#one-s3-compatible-blob-driver)).
+
 GCP and Azure each need an algorithm other than P-384. The exception is made for the key that signs workload tokens for that cloud, in its own slot or key, and is described in [Keys](/concepts/keys/), together with the per-audience RS256 exception for verifiers that cannot take EC.
 
 ## Platform-native identity
 
 Where the platform supplies an identity, sluis uses it and does not add a layer: the function's role on serverless (AWS Lambda). The node agent exists for the nodes where none does.
 
-:::note[Proposed]
 **Kubernetes.** The identity of an actor is a projected ServiceAccount token, with one audience per sluis actor, mounted only into that actor's container and its driver. The actor's cloud driver exchanges the token with the cloud in the same way as in step 2 below (`AssumeRoleWithWebIdentity` on AWS, Workload Identity Federation on Google Cloud, a federated credential on Azure). Only the source of the token differs: the kubelet and the API server issue it, and the node agent `sluis-node` is not used on Kubernetes. The cloud role of each sluis actor trusts the cluster's issuer, that actor's audience, and the namespace and ServiceAccount of the install. The workload tokens are the cluster's, not sluis keys; see [Keys](/concepts/keys/).
 
-EKS Pod Identity is used only for a pod that holds a single actor, because its credentials belong to the pod and not to a container. This is [OD-19](/open-decisions/#od-19); options and limits are on [Kubernetes](/runtimes/kubernetes/#identity).
-:::
+EKS Pod Identity is used only for a pod that holds a single actor, because its credentials belong to the pod and not to a container ([OD-19](/open-decisions/#od-19), decided). Options and limits are on [Kubernetes](/runtimes/kubernetes/#identity).
 
 ## An actor getting AWS credentials
 
@@ -64,7 +68,7 @@ sequenceDiagram
   N-->>D: workload JWT
 ```
 
-The driver asks for a workload token for the audience `sts.amazonaws.com` over the node agent's Unix socket. The node agent reads the caller's uid from the peer credentials and maps the uid to an actor. It signs a JWT with ES384 using the node key, which is non-extractable, with the claims `iss=https://issuer.example.org/nodes/node-1/`, `sub=<actor>`, `iat` and `exp`. The JWT is valid for about 1 hour.
+The driver asks for a workload token for the audience `sts.amazonaws.com` over the node agent's Unix socket. The node agent reads the caller's uid from the peer credentials and maps the uid to an actor. It signs a JWT with ES384 using the node key, which is non-extractable, with the claims `iss=https://issuer.example.org/nodes/node-1/`, `sub=writer@prod` (the actor instance), `iat` and `exp`. The JWT is valid for about 1 hour.
 
 ### Step 2: the cloud exchanges the token for credentials
 

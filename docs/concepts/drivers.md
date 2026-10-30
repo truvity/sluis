@@ -18,8 +18,8 @@ An actor sees one contract per port, whatever sits behind it. `signer` calls "si
 |---|---|---|
 | `keys` | `sign`, `public-key`, `wrap`, `unwrap` | `wrap` and `unwrap` (or an `ecdh` operation) let a data key be protected without the key ever leaving the device or the service. A driver also declares which signing algorithms it supports: see [Keys](/concepts/keys/#algorithms) |
 | `state` | `get`, `put`, `cas` | `cas`: compare-and-set, needed wherever a record may be changed by more than one caller |
-| `lease` | `acquire`, `renew` | |
-| `blob` | `put-once`, `get`, `list`, plus a lock mode | lock mode: `none`, `removable` or `compliance` |
+| `lease` | `acquire`, `renew` | Built on the state store's compare-and-set; every acquire returns a fencing token |
+| `blob` | `put-once`, `get`, `list`, plus a lock mode | lock mode: `none`, `removable` or `compliance`. `put-once` is create-if-absent (`If-None-Match: *`) |
 | `transport` | `put` / `receive` / `ack`, or `stream` | |
 | `index` | `write`, `query` | |
 | `witness` | `cosign` | |
@@ -57,32 +57,101 @@ Whether the backend can tell callers apart decides how a driver runs. Each drive
 
 | Instance | Use it when | How access is enforced |
 |---|---|---|
-| `per-actor` | The backend can tell callers apart: AWS IAM, an HSM with a user per actor, a database with a role per sluis actor | Each instance carries that one actor's own credential, and the backend enforces access |
-| `shared` | The backend has one credential or one device: a YubiKey and its PIN, a TPM, software keys, the state store | One process holds the credential. It authenticates every caller by peer credentials (`SO_PEERCRED`) and checks an access list generated from the manifest |
+| `per-actor` | The backend can tell callers apart: AWS IAM, an HSM with a user per actor, a database with a role per sluis actor, an rqlite cluster with a user per actor | Each instance carries that one actor's own credential, and the backend enforces access |
+| `shared` | The backend has one credential or one device: a YubiKey and its PIN on a node | One process holds the credential. It authenticates every caller and checks an access list generated from the manifest |
+
+**A backend that can authorise each caller is used with per-actor credentials and no mediator** (agreed, MD-1). A mediator exists only for a backend that cannot tell its callers apart, and the one left is `key-holder` for a node's card. sluis brokers **credentials** instead of mediating the data path:
+
+- `sluis-node` issues a token per uid on a node;
+- the cloud drivers exchange that token for the actor's own cloud credentials;
+- `ca` issues database client certificates ([PostgreSQL](/integrations/postgresql/));
+- sluis issues NATS credentials (see [Audit](/concepts/audit/#the-transport)).
 
 ### The uid rule
 
-A **per-actor driver runs as the actor's own uid.** Its socket is owned by that uid and no other uid can connect to it. A **shared driver runs under its own uid**, and its socket accepts any caller that the access list then checks.
+A **per-actor driver runs as the actor's own uid.** Its socket is owned by that uid and no other uid can connect to it. A **shared driver runs under its own uid**, and gives each caller a socket of its own (see below).
 
-For example, the AWS driver for `signer` is a unit that runs as the `signer` user (the paths are illustrative):
+For example, the AWS driver for `signer@prod` is a unit that runs as the `sluis-signer-prod` user (the paths are illustrative):
 
 ```text
-/run/sluis/signer/api.sock     actor's own API, group-readable by its clients
-/run/sluis/signer/aws.sock     the signer's AWS driver, mode 0600, owned by the signer uid
+/run/sluis/signer/prod.sock        actor's own API, reachable by its callers
+/run/sluis/signer/prod/aws.sock    the signer's AWS driver, mode 0600, owned by the signer's uid
 ```
 
 Another actor cannot open `aws.sock`, and AWS does the rest: the KMS key policy names the signer's role and no other.
 
-## The two mediating drivers
+## The mediating driver
 
-Some resources cannot refuse a caller by themselves. A YubiKey has one PIN; a state store has one login. For these, a **shared driver** owns the resource and every other process goes through it. There are two, and both audit every use.
+A YubiKey or another card on a node has one PIN and cannot refuse a caller by itself. **`key-holder`** owns it, and every other process goes through it (agreed, YK-1):
 
-| Mediating driver | Port | Fronts | What it enforces |
+- **One `key-holder` process, one Unix socket per caller.** Each socket sits in a directory that only that caller can open: systemd `.socket` units with `SocketUser=` and `FileDescriptorName=` on a host, and only that one socket mounted into a container.
+- **A peer-uid check as a second factor.** `key-holder` reads the caller's uid from the connection and checks it against the socket it arrived on and an access list of caller actor × key purpose × operation, generated from the manifests.
+- **Content-aware signing per purpose.** The `ca` purpose signs only a parseable TBSCertificate within its constraints; the `ssh-ca` purposes sign only an OpenSSH certificate body; the token purposes sign only a JWS signing input. A caller that has a socket still cannot get arbitrary bytes signed.
+- **Hardened.** `key-holder` is written in Rust, has no network, runs under seccomp, keeps the PIN in mlocked memory (unlocked by a peer or by `sluis node unlock`), rate-limits signatures and audits each one. The access list lets only the audit `writer` use the log key, which is what replaces a separate notary.
+
+More cards per node are an option for later. The OpenPGP cards of the roots are used directly by the ceremony tool, with no mediator ([Keys](/concepts/keys/#openpgp-release-signing)).
+
+**There is no `state-owner`.** rqlite is light enough to run **one cluster per (boundary, owning actor)** (measured at about 7 to 9 MB idle and 16 to 26 MB loaded per node, plus about 30 MB shared per host). The owning actor gets an rqlite user with `execute`, and each declared reader a user with `query` only. Each cluster runs as a systemd template instance, `sluis-rqlite@<boundary>-<actor>`, with its own port from a port scheme and its own certificate, mutual TLS between nodes and to clients, and a sandbox that lets it write its data directory only (which also contains SQLite's `ATTACH`-creates-files hole). The footprint is measured again on the boards.
+
+## Defence in depth
+
+Every port is protected in **three layers**, and all three are generated from one manifest (agreed, DD-1). The record is [ADR 0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/).
+
+| Layer | Where | What it does |
+|---|---|---|
+| **1. The port library in the actor** | Linked into every actor | Scopes every call to `<boundary>/<kind>/…`, taken from the actor's own identity and never from the request. Encrypts every state value. Names keys by purpose. Writes blobs create-if-absent |
+| **2. The driver's or backend's own check** | The backend | Checks the caller's platform identity: the peer uid, the IAM role, the ServiceAccount token or the client certificate |
+| **3. Physical separation** | The installation | At [L3 and L4](/runtimes/boundaries/#the-isolation-ladder): a store, a bucket, a queue, an account or hosts of the boundary's own |
+
+- **Every state value is encrypted in the port library** (EC-1), with AES-256-GCM, under a data key per (boundary, record kind); see [Data](/concepts/data/#every-value-is-encrypted).
+- **One generator** writes the library scopes, the access lists, the IAM and KMS policy documents (as output for the infrastructure code), the units, the sockets and the ServiceAccounts, and a **drift test** compares them. `sluis config check` refuses an installation whose parts disagree.
+- **Isolation is tested per layer, with the other layers switched off**, so that no layer passes only because another one caught the case.
+- **A driver whose backend cannot check each caller** is allowed at L3 and above only together with its layer-3 separation, and `sluis config check` enforces it.
+
+| Port | Driver | Layer 2 | Layer 3 and notes |
 |---|---|---|---|
-| `key-holder` | keys | The keys driver for HSMs, YubiKeys and software keys | An access list of caller actor × key purpose × operation, generated from the manifests. The device node is closed to everyone else, and keys are created non-extractable and sign-only. The access list lets only the audit `writer` use the log key, which is what replaces a separate notary. |
-| `state-owner` | state | The replicated state store (rqlite on Raft) | An access list of caller actor × record kind × operation, with exactly one actor allowed to write each record kind. The store's own listener is closed to everyone else. See [Data](/concepts/data/). |
+| keys | software | `key-holder` | Refused in production |
+| keys | yubikey-piv | `key-holder` (one socket per caller) | |
+| keys | aws-kms | Key policy plus an encryption-context condition | |
+| keys | pkcs11, YubiHSM (planned) | `key-holder` plus the HSM's authentication keys and domains | |
+| keys | pkcs11, Nitrokey (planned) | `key-holder` plus the PIN | |
+| state | embedded | A file per uid, per actor | |
+| state | rqlite | A cluster per owning actor, plus rqlite users | |
+| state | dynamodb | IAM `dynamodb:LeadingKeys` per actor role | A table per boundary; at L4 in the boundary's account |
+| state | postgres | Roles, grants and row-level security (below) | |
+| lease | all | On the state store, independent of the Raft leader | |
+| blob | fs | A directory per uid, mode 0700 | |
+| blob | s3-compatible | IAM prefix conditions on AWS; R2 temporary credentials scoped to a prefix, from `cloud-cloudflare` | A bucket per boundary; Object Lock on S3 |
+| transport | direct-unix | The peer uid at the receiver | |
+| transport | direct-mtls | The SPIFFE ID in the client certificate | |
+| transport | spool | A directory per producer uid | |
+| transport | sqs | A queue policy per sender role | A queue per boundary |
+| transport | nats-jetstream | NATS accounts plus permission templates | See [Audit](/concepts/audit/#the-transport) |
+| index | sqlite | A file per indexer uid; the reader opens it read-only | |
+| index | rqlite | As for state | |
+| index | postgres | As for state | |
+| witness | peer | The node identity, over mutual TLS | |
+| witness | external | The witness's own key | |
+| secrets | sealed-state | On the state and keys ports | |
+| export | age | Encrypted to the recipient's key | |
+| cloud | web identity | `sluis-node` tokens per uid; the trust policy pins `sub` to `<actor>@<boundary>` | |
+| cloud | platform role | The platform's identity | |
+| cloud | gcp / azure | The cloud's federation | |
+| cloud | cloudflare | R2 temporary credentials, scoped to a bucket and a prefix | |
 
-Both have no internet egress, load no plugins, and are started before their callers.
+### Postgres drivers
+
+The `postgres` state and index drivers follow one model (agreed, PG-1):
+
+- a fixed schema per **actor kind**, with grants between kinds;
+- **row-level security between instances of the same kind** (boundaries and tenants), by group-role membership, `pg_has_role(current_user, 'boundary_' || boundary, 'member')`, with `FORCE ROW LEVEL SECURITY`;
+- actors never own tables: a migration role owns them;
+- policies never trust session variables; views are `security_invoker`, and nothing is `SECURITY DEFINER`;
+- the tenant column is part of every unique key;
+- a connection pool per role;
+- **PostgreSQL 15 or newer**;
+- at L3 and above, a database per boundary, with row-level security still on;
+- client certificates from `ca` (the common name is the role), or IAM authentication on RDS and Aurora.
 
 ## What each driver requires
 
@@ -94,13 +163,11 @@ Every driver declares what it needs from the installation. The columns are: whet
 | yubikey-piv | keys | ✓ | – | any | a YubiKey on each node |
 | aws-kms | keys | – | – | any | AWS |
 | embedded | state | ✓ | ✓ | exactly 1 | – |
-| rqlite | state, lease, index (index proposed) | ✓ | ✓ | 1, 3 or 5 (3+ to survive a failure) | – |
+| rqlite | state, lease, index (index proposed) | ✓ | ✓ | 1, 3 or 5 (3+ to survive a failure) | – (one cluster per boundary and owning actor) |
 | dynamodb | state, lease | – | – | any | AWS |
 | local lock | lease | ✓ | – | exactly 1 | – |
-| Kubernetes Lease | lease | ✓ | – | any | the Kubernetes API |
 | fs | blob | – | ✓ | exactly 1 | – (no lock: tamper evidence only with witnesses) |
-| r2 | blob | – | – | any | Cloudflare (lock removable by an account admin) |
-| s3 | blob | – | – | any | AWS (Object Lock, compliance mode) |
+| s3-compatible | blob | – | – | any | An S3 API: AWS S3 (Object Lock, compliance mode) or Cloudflare R2 (lock removable by an account admin). Credentials come from the `cloud` port |
 | direct-unix | transport | ✓ receiver | – | same host | – |
 | direct-mtls | transport | ✓ receiver | – | any | – |
 | spool | transport | ✓ | ✓ | any | – |
@@ -117,11 +184,12 @@ Every driver declares what it needs from the installation. The columns are: whet
 | web identity | cloud | – | – | any | the node agent and a public issuer URL |
 | platform role | cloud | – | – | any | a cloud VM, function or pod identity |
 | gcp / azure federation | cloud | – | – | any | GCP or Azure |
+| cloudflare | cloud | – | – | any | A Cloudflare account, and a parent token per boundary, stored sealed |
 
 Neither the nodes nor the dependencies belong to a [runtime](/runtimes/). The number of nodes is an attribute of an installation, and a provider is a dependency that a driver declares, such as an AWS account, a Cloudflare account, a YubiKey or a NATS service. The one exception is serverless: it always comes with a provider (AWS Lambda today), so there the provider is part of the runtime.
 
 :::note[Proposed]
-The `rqlite` index driver is proposed: rqlite is a replicated SQLite, so with it the reader can run on any node of a cluster. Whether it supports the full-text search (FTS5) that the indexer needs has to be verified before it is relied on. The `secrets` and `export` drivers are proposed too. The witness and transport drivers follow the decisions in [Audit](/concepts/audit/): the installation defaults are the spool on bare-metal and SQS on serverless and Kubernetes ([OD-34](/open-decisions/#od-34)), and a witness is optional ([OD-36](/open-decisions/#od-36)).
+The `rqlite` index driver is proposed: rqlite is a replicated SQLite, so with it the reader can run on any node of a cluster. Its full-text search (FTS5) was tested on 2026-10-30 and works on a three-node cluster. The `secrets` and `export` drivers are proposed too. The witness and transport drivers follow the decisions in [Audit](/concepts/audit/): the installation defaults are the spool on bare-metal and SQS on serverless and Kubernetes ([OD-34](/open-decisions/#od-34)), and a witness is optional ([OD-36](/open-decisions/#od-36)).
 :::
 
 ## Which drivers fit which runtime
@@ -141,10 +209,8 @@ Legend: ✓ possible, ~ possible with the condition in the footnote, ✗ impossi
 | lease | local lock | ✓ | ✗ | ✗ | ✗ |
 | | rqlite | ✓ | ✓ | ✗ | ✓ |
 | | dynamodb | ✓ | ✓ | ✓ | ✓ |
-| | Kubernetes Lease | ✗ | ✗ | ✗ | ✓ |
 | blob | fs | ~³ | ~³ | ✗ | ~² ³ |
-| | r2 | ✓ | ✓ | ✓ | ✓ |
-| | s3 | ✓ | ✓ | ✓ | ✓ |
+| | s3-compatible | ✓ | ✓ | ✓ | ✓ |
 | transport | direct-unix | ✓ | ✓ | ✗ | ~⁴ |
 | | direct-mtls | ✓ | ✓ | ✗⁵ | ✓ |
 | | spool | ✓ | ✓ | ✗ | ~² |
@@ -163,6 +229,7 @@ Legend: ✓ possible, ~ possible with the condition in the footnote, ✗ impossi
 | cloud | web identity | ✓ | ✓ | ~⁹ | ✓ |
 | | platform role | ~¹⁰ | ~¹⁰ | ✓ | ✓ |
 | | gcp / azure | ✓ | ✓ | ~⁹ | ✓ |
+| | cloudflare | ✓ | ✓ | ✓ | ✓ |
 
 1. USB passthrough, with the pod pinned to its node.
 2. Needs a persistent volume (a StatefulSet).
@@ -174,6 +241,8 @@ Legend: ✓ possible, ~ possible with the condition in the footnote, ✗ impossi
 8. Not independent within the same cluster.
 9. There is no node agent, so the JWT has to come from the signer.
 10. Only on a cloud VM.
+
+The lease rows are the state stores: a lease lives on the state store, with compare-and-set and a fencing token ([Data](/concepts/data/#leases-and-fencing-tokens)). A Kubernetes Lease driver is in the backlog, so the kubernetes runtime takes its lease from DynamoDB like its state.
 
 ## The postgres index driver
 
@@ -194,8 +263,17 @@ Serverless may run the indexer and the reader with a `postgres` index ([OD-12](/
 :::note[Proposed]
 The `index` port gains a second replicated driver, `rqlite`. rqlite is a replicated SQLite, and an installation that already runs it for `state` has the index on the same cluster with nothing more to run. Because every node holds a replica, the reader can run on **any node**, which a `sqlite` file on one node cannot offer. It is the proposed index of the [boards](/runtimes/installations/#boards) installation.
 
-It is not yet known whether rqlite supports the full-text search (FTS5) that the indexer needs; that has to be verified before the driver is relied on. If it does not, boards fall back to `sqlite` on the indexer's node, with the reader beside it.
+Its full-text search works: FTS5 was tested on 2026-10-30 with rqlite 10.6 on a three-node cluster, built with cgo and FTS5 and JSON1 compiled in (the arm64 build uses the same flags). The findings for the driver: followers serve reads only at the `none` level, so a reader uses a small freshness bound, and `weak` to read its own write; writes are batched; the search table is an external-content FTS table. Native arm64 hardware and the cost of fsync on eMMC are not yet tested. If either fails on the boards, they fall back to `sqlite` on the indexer's node, with the reader beside it.
 :::
+
+## One S3-compatible blob driver
+
+There is **one blob driver for object stores, `s3-compatible`**, and the separate `r2` driver is removed (agreed, CF-1). The driver speaks the S3 API, and takes its credentials from the **`cloud` port**:
+
+- on AWS, from STS through web identity or the platform role, scoped by IAM prefix conditions;
+- on Cloudflare R2, from the **`cloudflare` cloud driver**, which runs as `cloud-cloudflare@<boundary>` and mints R2 **temporary credentials** scoped to the bucket and the prefix. They are minted locally, as an HS256 token signed with the parent token's secret. The parent token is per boundary and is stored sealed.
+
+Long-lived R2 tokens can be scoped to a bucket only; a prefix scope exists only on temporary credentials, and R2 has no OIDC federation (checked 2026-09-26). The `cloudflare` cloud driver is separate from the company integration `cloudflare@<company>`, which mints Cloudflare tokens for people and jobs ([Cloudflare](/integrations/cloudflare/)); the two share a library.
 
 ## Capability flags
 
@@ -206,8 +284,8 @@ Two ports carry flags that an actor can require, so that "any driver for this po
 | Driver | Lock mode | What it means |
 |---|---|---|
 | `fs` | `none` | Nothing stops a local administrator from changing a file. The audit trail is tamper-evident only if witnesses co-sign its heads. |
-| `r2` | `removable` | An object lock exists, but an account administrator can remove it. |
-| `s3` | `compliance` | Object Lock in compliance mode: not even the account's root can shorten the retention. |
+| `s3-compatible` on Cloudflare R2 | `removable` | An object lock exists, but an account administrator can remove it. |
+| `s3-compatible` on AWS S3 | `compliance` | Object Lock in compliance mode: not even the account's root can shorten the retention. |
 
 An actor that stores a record which must not be changed, such as the audit log store, requires a lock mode. The installation's driver must meet it, or the installation states that it accepts the weaker mode and relies on witnesses. The audit log store is a `blob` with a lock mode; see [Audit](/concepts/audit/).
 
@@ -227,6 +305,8 @@ An **installation** is one concrete deployment: a [runtime](/runtimes/), a numbe
 - **An actor with instances: exactly 1 and no way to keep it so.** When nodes are more than one or elastic, the installation needs the lease port.
 - **The code floor.** A software key in a production installation.
 - **A direct transport with no disk.** `direct-unix` and `direct-mtls` fall back to a local spool when the writer is down, so they are refused on serverless.
+- **Generated parts that disagree.** The units, sockets, access lists and policy documents are generated from one manifest, and a drift test compares them with what is installed ([Defence in depth](#defence-in-depth)).
+- **A driver with no per-caller check, without its separation.** At L3 and above such a driver needs its layer-3 separation, a store or bucket of the boundary's own.
 - **A warning, not an error: no witness.** A witness is optional, so an installation without one passes the check with a warning that names the risk (see [Audit](/concepts/audit/#the-witness-is-optional)).
 
 Each refusal names the actor, the port, the driver and the thing that is missing, so that an operator can fix the file. For example (illustrative):
@@ -257,14 +337,14 @@ The same actors run on every runtime. The drivers behind their ports are what ch
 
 | Port | [local](/runtimes/installations/#local) | [boards](/runtimes/installations/#boards) | [lambda](/runtimes/installations/#lambda) | [kubernetes](/runtimes/installations/#kubernetes) |
 |---|---|---|---|---|
-| keys | software, or the host's YubiKey | yubikey-piv per node, shared | aws-kms, per-actor | aws-kms ([OD-20](/open-decisions/#od-20)) |
-| state | embedded | rqlite on Raft, behind `state-owner` | dynamodb | dynamodb |
-| lease | local lock | rqlite (Raft leader lease) | dynamodb conditional write, or the platform's concurrency limit of 1 | Kubernetes Lease |
-| blob | fs | r2 | s3 | s3 |
+| keys | software, or the host's YubiKey | yubikey-piv per node, through `key-holder` | aws-kms, per-actor | aws-kms ([OD-20](/open-decisions/#od-20)) |
+| state | embedded | rqlite, one cluster per owning actor | dynamodb | dynamodb |
+| lease | local lock | rqlite, on the state store | dynamodb, on the state store | dynamodb, on the state store |
+| blob | fs | s3-compatible on R2, with credentials from the `cloudflare` cloud driver | s3-compatible on S3 | s3-compatible on S3 |
 | transport | spool | spool | sqs | sqs ([OD-22](/open-decisions/#od-22)) |
 | index | sqlite | rqlite (proposed) | none (proposed default); postgres through RDS Proxy is allowed ([OD-12](/open-decisions/#od-12)) | postgres on cnpg (proposed) |
 | witness | none | peer, each node witnessing the others | none | none |
-| cloud | web identity (node agent), as configured | web identity, as configured | platform role | web identity or pod identity ([OD-19](/open-decisions/#od-19)) |
+| cloud | web identity (node agent), as configured | web identity; `cloudflare` for the bucket | platform role | web identity or pod identity ([OD-19](/open-decisions/#od-19)) |
 | secrets (proposed) | a mounted file, or sealed-state | sealed-state | a parameter store | a parameter store, or a mounted file |
 
 The keys, state and index choices follow the agreed installations. The **local** installation may use the host's YubiKey: the `key-holder` container uses the host's `pcscd` socket, which is mounted into it, and the pcsc-lite protocol versions of the image and the host must match. The fallback is to run the `key-holder` natively on the host, so that the containers mount only its Unix socket and the host keeps using the key.
@@ -277,7 +357,7 @@ Each driver choice is the reading of an older decision. [OD-5](/open-decisions/#
 The index defaults of lambda (`none`) and kubernetes (`postgres` on `cnpg`) are proposals, and so is the `rqlite` index of boards. The secrets row is a proposal.
 :::
 
-The only inter-node traffic is the state driver's own Raft port, over mutual TLS. It is the only TCP port between nodes.
+The only inter-node traffic is the Raft traffic of the rqlite clusters, one port per cluster from the port scheme, over mutual TLS with a certificate per cluster. These are the only TCP ports between nodes.
 
 ## On-disk layout
 
@@ -301,6 +381,6 @@ The directory is named `actors/`, to match the vocabulary (agreed; it amends the
 
 Compiling every driver into every actor would make fat binaries, noisy scanner results for code an actor never uses, and a rebuild to add a backend. An actor that spawned its own driver would need exec rights and would put supervision in our code. A single AWS driver shared by all actors would hold every actor's credentials and lose IAM's per-actor enforcement. Separate services cost a socket to protect, contract versioning across images and some memory, and one Unix-socket hop is a fraction of a millisecond against the several milliseconds a KMS or DynamoDB call takes.
 
-The aws, gcp and azure drivers are written in Rust.
+The AWS, GCP, Azure and Cloudflare drivers are written in Rust ([Source layout](/architecture/source-layout/#languages)). On serverless one Rust `aws` executable implements every AWS port for its function, as one extension.
 
 Where the sockets live and which of them ever listen on TCP is on [Listeners](/architecture/listeners/).

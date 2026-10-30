@@ -6,7 +6,7 @@ sidebar:
   order: 4
 ---
 
-sluis holds four authority keys (token signing, the certificate authorities, the audit log key and the mint grant), plus the keys that seal secrets at rest. This page says what backs each one in each installation, how it signs, and which algorithms it uses. The access rules, which actor may use which key, are enforced by the driver or the cloud, not by this page: see [Drivers](/concepts/drivers/).
+sluis holds five kinds of authority key (token signing, the X.509 CA, the SSH CA, the audit log key and the mint grant), plus the keys that seal data at rest. Each [environment](/runtimes/boundaries/) has its own set: no key is shared between development, staging and production. This page says what backs each key in each installation, how it signs, and which algorithms it uses. The access rules, which actor may use which key, are enforced by `key-holder` or by the cloud's key policy, not by this page: see [Ports and drivers](/concepts/drivers/#defence-in-depth).
 
 ## Key modes
 
@@ -34,11 +34,13 @@ Two topologies are the main patterns. The local installation is a third case: it
 
 YubiKey roots with KMS intermediates are allowed, but they are not a main pattern.
 
+**An existing KMS root comes first.** An estate that already runs a KMS root keeps it, and its intermediates, keys and issuers are per environment. YubiKey roots join it later by **dual trust**: both roots are anchors in the trust bundles while the YubiKey roots take over, so no relying party has to switch on one day. Production's keys may start in the management account and move into the production account as a follow-up.
+
 ## The key rule
 
 Which keys are certified, and which are only published, depends on how a verifier learns to trust them:
 
-- **A key whose public half is trusted through the PKI chain is a hardware-held child key**, attested where possible, and certified by the roots. These are the CA intermediates, the SSH CA keys (`ssh-user` and `ssh-host`) and the OpenPGP release subkeys. Each is certified in its own format: an X.509 intermediate by a certificate from each root, an OpenPGP subkey by a binding under each primary (see [OpenPGP release signing](#openpgp-release-signing)). For each SSH CA public key the roots issue an X.509 certificate with a dedicated "SSH CA" usage, as provenance evidence; `sshd` never checks it.
+- **A key whose public half is trusted through the PKI chain is a hardware-held child key**, attested where possible, and certified by the roots. These are the CA intermediates, the SSH CA keys (`ssh-user` and `ssh-host`, held for the `ssh-ca` actor) and the OpenPGP release subkeys. Each is certified in its own format: an X.509 intermediate by a certificate from each root, an OpenPGP subkey by a binding under each primary (see [OpenPGP release signing](#openpgp-release-signing)). For each SSH CA public key the roots issue an X.509 certificate with a dedicated "SSH CA" usage, as provenance evidence; `sshd` never checks it.
 - **Token-signing and workload-identity issuer keys are hardware-held and published through JWKS.** They are not certified, and a token carries **no `x5c`** header. A verifier gets the public key from the JWKS and from nothing else.
 - **Ephemeral keys are outside the rule.** Session keys, ECDH keys, wrapped data keys and derived keys are made for one use and are not certified or published as authority keys.
 
@@ -98,17 +100,20 @@ The `keys` port has two more operations beside `sign` and `public-key`: **`wrap`
 
 ## AWS KMS layout
 
-On the AWS installations there are five key purposes:
+On the AWS installations there are six key purposes, in each environment. Aliases follow the naming of the actor that uses the key, `alias/sluis/<boundary>/<actor>/<purpose>` ([Actors](/concepts/actors/#naming)):
 
 | Key | Spec | Purpose |
 |---|---|---|
 | Sealing and wrapping | One symmetric key, `ENCRYPT_DECRYPT` | Every sealing and wrapping need, separated by **encryption context** |
 | Token signing | `ECC_NIST_P384`, `SIGN_VERIFY` | The signing ring |
-| CA | `ECC_NIST_P384`, `SIGN_VERIFY` | The certificate authorities: the X.509 CA keys, `ssh-user` and `ssh-host` |
+| X.509 CA | `ECC_NIST_P384`, `SIGN_VERIFY` | The X.509 CA key of each trust domain, used by `ca` |
+| SSH CA | `ECC_NIST_P384`, `SIGN_VERIFY` | `ssh-user` and `ssh-host`, one key each, used by `ssh-ca` |
 | Audit log | `ECC_NIST_P384`, `SIGN_VERIFY` | Audit batch heads, one key per log, used only by that log's writer |
 | Grant | `ECC_NIST_P384`, `SIGN_VERIFY` | Mint grants, held by `policy` |
 
-In the KMS topology, the CA row is a root and one intermediate for each environment. The CA purpose covers the X.509 CA key for each trust domain and the separate `ssh-user` and `ssh-host` CA keys, so one key never serves two purposes.
+In the KMS topology, the X.509 CA row is a root and one intermediate for each environment. The SSH CA keys are separate keys of the `ssh-ca` actor, so one key never serves two purposes.
+
+The symmetric key wraps the data key of each (boundary, record kind) for the state encryption ([Data](/concepts/data/#every-value-is-encrypted)), the cookie-sealing key of `session` and the sealed secrets, each with its own encryption context; the key policy lets each actor decrypt only under the contexts its manifest names. The enrolment key, which opens the HPKE-sealed enrolment requests of [machine identity](/concepts/machine-identity/#enrolment-is-encrypted-end-to-end), is held by KMS or `key-holder`, and only `exchange` may use it.
 
 The reason for one key per authority purpose is how KMS works. A KMS key has one usage, and `Sign` takes no encryption context, so the only way to say "only this actor may sign with this key" is a key policy on a key that exists for that one purpose. With a key per purpose, each key policy names exactly one actor. Sealing is the exception, because `Encrypt` and `Decrypt` do take an encryption context, so one key serves every sealing need with a context per use.
 
@@ -120,8 +125,8 @@ A YubiKey in PIV mode has 24 slots and **no symmetric keys**. The slot plan for 
 |---|---|
 | `9c` | Node intermediate and signing |
 | `9d` | ECDH sealing and ring wrap |
-| `82` | `ssh-user` CA |
-| `83` | `ssh-host` CA |
+| `82` | `ssh-user` CA, for `ssh-ca` |
+| `83` | `ssh-host` CA, for `ssh-ca` |
 | `84` | Release-signing subkey S<sub>i</sub>, through `key-holder` (see [OpenPGP release signing](#openpgp-release-signing)) |
 | `85` to `95` | Retired sealing keys |
 | `9e` | Avoided |
@@ -133,6 +138,8 @@ The slots are a map with one reservation per purpose, and ranges kept for rotati
 :::
 
 There is one YubiKey per node. EUCLEAK, a side-channel flaw in the older firmware, is fixed from firmware 5.7. The cards of the root pair (below) are separate from the node cards, and never sit in a node.
+
+Every actor reaches a node card only through **`key-holder`**: one socket per caller, a peer-uid check on each call, and signing that understands the content of each purpose, so the `ca` purpose signs only a certificate within its constraints and the `ssh-ca` purposes only an OpenSSH certificate body. See [The mediating driver](/concepts/drivers/#the-mediating-driver).
 
 ### Touch and PIN policy
 
@@ -238,6 +245,8 @@ The vendor kernel 5.10 that the boards run for now makes `sluis doctor` warn on 
 The **default build** runs Go's FIPS 140-3 module in `fips140=on` mode, using the latest module. That refuses X25519 and ChaCha20 in TLS and runs pairwise consistency tests when keys are generated, and both are acceptable for sluis.
 
 A **separate build** pins the CMVP-certified module (certificate #5247, module v1.0.0) for installs that need the certificate itself.
+
+The Rust components follow the same rule with `aws-lc-rs` in FIPS mode, and the certified build pins a certified module for them too ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)).
 
 BoringCrypto is not used.
 

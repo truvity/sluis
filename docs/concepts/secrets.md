@@ -3,7 +3,7 @@ title: Secrets and export
 description: "What secrets sluis keeps (its own and its integrations'), the secrets and export ports, sealed state on any runtime, and age-encrypted drops."
 status: target
 sidebar:
-  order: 9
+  order: 10
 ---
 
 sluis holds secrets, because it has to: a GitHub App key that the vendor issued through a manifest flow, a chat token, a credential it minted, a generated client secret. This page says which secrets sluis keeps, which it publishes, and which it refuses to keep.

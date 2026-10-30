@@ -211,20 +211,20 @@ drivers:
   embedded:
     port: state
     title: embedded
-    instance: shared
-    shared_name: state-owner
+    instance: per-actor
+    shared_name: null
     binary: drivers/embedded
-    does: Serves the state port from a single-node embedded store, with no Raft. It enforces one writer per record kind with the same access list as the cluster driver.
+    does: Serves the state port from a single-node embedded store, with no Raft, a file per actor and uid. One writer per record kind follows from the scope the port library takes from the actor's own identity.
     holds: The store file
     backing: embedded single-node store
     status: agreed
   rqlite:
     port: state
     title: rqlite
-    instance: shared
-    shared_name: state-owner
+    instance: per-actor
+    shared_name: null
     binary: drivers/rqlite
-    does: Serves the state port on rqlite. rqlite has one credential, so this shared instance checks every caller against a per-actor prefix access list and allows one writer per record kind. Raft peer traffic is this driver's own TCP port, over mTLS.
+    does: Serves the state port on rqlite, with one cluster per boundary and owning actor (sluis-rqlite@<boundary>-<actor>) and no state-owner. The owner has an rqlite user with execute, and each declared reader a query-only user. Raft peer traffic is each cluster's own TCP port, over mTLS with a certificate per cluster.
     holds: The Raft peer TLS credential
     backing: rqlited (Raft, three nodes)
     status: agreed
@@ -262,21 +262,21 @@ drivers:
     status: agreed
   s3:
     port: blob
-    title: aws (S3 API)
+    title: s3-compatible (S3)
     instance: per-actor
     shared_name: null
     binary: drivers/aws
-    does: The blob port, served by the aws driver over the S3 API (S3 itself, or an S3-compatible store). Only the writer, the witness, the indexer and the reader use it.
+    does: The blob port on AWS S3, served by the one s3-compatible driver, with credentials from the cloud port and IAM prefix conditions. Only the writer, the witness, the indexer and the reader use it.
     holds: Nothing
     backing: object store
     status: agreed
   r2:
     port: blob
-    title: r2 (S3 API)
+    title: s3-compatible (R2)
     instance: per-actor
     shared_name: null
     binary: drivers/aws
-    does: The blob port on a Cloudflare R2 bucket, over the S3 API. An object lock exists, but an account administrator can remove it (lock mode removable), so tamper evidence leans on the witnesses. Only the writer, the witness, the indexer and the reader use it.
+    does: The blob port on a Cloudflare R2 bucket, served by the one s3-compatible driver with R2 temporary credentials scoped to the bucket and a prefix, minted by the cloudflare cloud driver. An object lock exists, but an account administrator can remove it (lock mode removable), so tamper evidence leans on the witnesses. Only the writer, the witness, the indexer and the reader use it.
     holds: Nothing
     backing: R2 bucket (S3 API)
     status: agreed
