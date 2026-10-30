@@ -69,7 +69,7 @@ sequenceDiagram
   N-->>D: workload JWT
 ```
 
-The driver asks for a workload token for the audience `sts.amazonaws.com` over the node agent's Unix socket. The node agent reads the caller's uid from the peer credentials and maps the uid to an actor. It signs a JWT with ES384 using the node key, which is non-extractable, with the claims `iss=https://issuer.example.org/nodes/node-1/`, `sub=writer@prod` (the actor instance), `iat` and `exp`. The JWT is valid for about 1 hour.
+The driver asks for a workload token for the audience of the target account, its registered client ID such as `aws-<account-alias>` and not the shared `sts.amazonaws.com` ([ADR 0059](/decisions/0059-each-boundary-has-its-own-issuer-and-tokens-carry-one-audience/)), over the node agent's Unix socket. The node agent reads the caller's uid from the peer credentials and maps the uid to an actor. It signs a JWT with ES384 using the node key, which is non-extractable, with the claims `iss=https://sluis.prod.example.com` (the boundary's issuer; a fleet with per-node issuers uses the node's issuer URL instead), `sub=writer@prod` (the actor instance), `iat` and `exp`. The JWT is valid for about 1 hour.
 
 ### Step 2: the cloud exchanges the token for credentials
 

@@ -92,4 +92,4 @@ A restore that has never been tried is a guess. A scheduled **rehearsal** restor
 | [serverless](/runtimes/serverless/) | A scheduled function. It spools to `/tmp`, so one invocation bounds the archive size | A separate function, invokable only by an administrator or a break-glass role |
 | [kubernetes](/runtimes/kubernetes/) | A CronJob | A Job started by the operator, never a CronJob |
 
-The archive's blob driver declares its own dependencies and lock mode. On Cloudflare R2 the `s3-compatible` driver's lock can be removed by an account administrator, so an installation on boards pairs it with a second, offline copy.
+The archive's blob driver declares its own dependencies and lock mode. On the boards the archive is on Garage, which has no object lock, and the audit log has an off-site copy on Cloudflare R2, where the `s3-compatible` driver's lock can be removed by an account administrator; an installation on boards therefore also keeps a second, offline copy.

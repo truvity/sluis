@@ -77,7 +77,7 @@ Served on the origin root of the public host (for example `https://sluis.example
 | -------- | --------------- | ------ |
 | Discovery | `GET /.well-known/openid-configuration`, `GET /.well-known/oauth-authorization-server` | Anyone. Public, CORS-open, no credentials |
 | Key set | `GET /keys` | Anyone. Public |
-| Authorization | `GET /authorize` (PKCE `S256` only, `response_mode=query`, `resource`, `prompt`) | A browser |
+| Authorization | `GET /authorize` (PKCE `S256` only, `response_mode=query` or `form_post` ([ADR 0061](/decisions/0061-optional-openid-plans-form-post-is-supported-ciba-comes-later/)), `resource`, `prompt`) | A browser |
 | Sign-in | `GET /login`, `GET /login/<provider>/start`, `GET /authorize/callback` | A browser, bound to the request by a `__Host-` cookie |
 | Token | `POST /token` with `authorization_code` or `refresh_token` | A client, public with PKCE or confidential with a secret. Refresh tokens are single use |
 | UserInfo | `GET\|POST /userinfo` | A bearer of a live sign-in |
@@ -158,7 +158,7 @@ Operations: `sign` and `verify` (public key only), `wrap` and `unwrap`, `read`, 
 | Use case | Key | State | Blob | Transport | Audit | Secret | Config | External |
 | -------- | --- | ----- | ---- | ----- | ----- | ------ | ------ | -------- |
 | Sign in through an upstream | sign r | cas, create, read r | | | put b | read r | read r | fetch r |
-| Device login | sign r | cas, create, read r and b | | | put b | | read r | call b, fetch r |
+| Device login (postponed) | sign r | cas, create, read r and b | | | put b | | read r | call b, fetch r |
 | Refresh, UserInfo, revoke, sign out, sessions | sign, verify r | cas, create, delete, list, read r | | | put b | | read r | call b |
 | Agent sessions and resources | sign r | create r | | | put b | | read r | fetch r |
 | Recovery sign-in | sign r | cas, create, read r | | | put r, spooled locally | read r | read r | call r |
