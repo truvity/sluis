@@ -144,12 +144,11 @@ Type the PIN and finish with Ctrl-D. The unit passes it to the `key-holder` with
 
 ## 6. Write a minimal config
 
-Configuration has five layers: defaults, the runtime, the installation's defaults, your install, and overrides per environment (development, staging, production). The bare-metal runtime and the boards defaults already set the key mode and the local audit spool, so the install layer holds only what is yours, plus the two drivers that differ with one node.
+Configuration has four layers: defaults, the runtime, your install file, and overrides per environment (development, staging, production). The bare-metal runtime already sets the key mode and the local audit spool. Start from the boards example file and change only what is yours, plus the two drivers that differ with one node.
 
 ```yaml
 # Example: /etc/sluis/install.yaml
 runtime: bare-metal
-installation: boards
 nodes: 1
 state:
   driver: embedded     # one node: no Raft
