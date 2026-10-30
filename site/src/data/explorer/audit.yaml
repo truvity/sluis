@@ -108,16 +108,16 @@ shapes:
   boards:
     log_key: "each node signs its own log with its own YubiKey, through the shared key-holder, which lets only that node's writer use the key. One log per node"
     witness: "peer: the other two nodes cosign each node's log (2-of-3). Optional, and sluis config check warns when there is none"
-    blob: "an R2 bucket (S3 API)"
+    blob: "an R2 bucket, through the s3-compatible driver with R2 temporary credentials"
     lock: "lock mode removable (an account admin can lift it)"
     cluster: "three nodes; each node has its own writer, spool and log; the audit pieces run on the same nodes and share driver instances"
-    index_placement: "rqlite, a replicated SQLite (a proposed driver), so the reader can run on any node; its full-text support must be verified. Where Search runs is derived from the port and driver rules"
+    index_placement: "rqlite, a replicated SQLite (a proposed driver), so the reader can run on any node; its full-text search was tested on a three-node cluster, and native arm64 and eMMC are still to be measured. Where Search runs is derived from the port and driver rules"
   lambda:
     log_key: "one KMS key, used only by the writer function's IAM role through its key policy. One log; the function's role is the isolation"
     witness: "none by default (optional); an external witness is possible. There is no peer"
     blob: "an S3 bucket"
     lock: "lock mode compliance (Object Lock), per install"
-    cluster: "managed by the platform; the writer has a reserved concurrency of 1"
+    cluster: "managed by the platform; the writer is fenced by create-if-absent on the bucket, and whether a reserved concurrency of 1 can stand in for its lease with an SQS trigger is to be verified (a FIFO queue with one message group, or a lease on DynamoDB, is the safe form)"
     index_placement: "None by default (proposed); a postgres index through RDS Proxy is allowed, and otherwise a separate Search installation holds the search index"
     note: "The default index here is none (proposed). Serverless may run the indexer and the reader with a postgres index, through RDS Proxy (proposed). With no index, the indexer and the reader of a separate Search installation read the same blob: on Kubernetes with Postgres (cnpg, or external with a connection string), or on a server with sqlite. Where Search runs is derived from the port and driver rules. A small install can run sluis audit search from the CLI, which builds a local sqlite index from the chain. The search index is a rebuildable cache; the chain in the blob is the record."
 

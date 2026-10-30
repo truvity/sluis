@@ -40,7 +40,23 @@ The maintainer agreed this order for the tested [installations](/runtimes/instal
 
 EC2 is no longer a delivery target. A virtual machine is still bare-metal, so an EC2 installation stays possible, under the same rules, but it is not tested. Installations other than these four are possible and untested.
 
-Packaging follows the runtime, not a build profile: `.deb`, `.rpm` and a tarball for bare-metal, a zip per actor for serverless, and an OCI image with a Helm chart for kubernetes. `dev` is not a build.
+Packaging follows the runtime, not a build profile: `.deb` and `.rpm` packages split by function and a tarball for bare-metal, a function per actor and a zip per executable for serverless, and one OCI image per process with one Helm chart for kubernetes. `dev` is not a build.
+
+## Spikes before code
+
+The language of each executable is fixed from a set of **spikes**, run before the first code of step 1 (agreed 2026-10-30, [ADR 0060](/decisions/0060-the-language-follows-the-executable/)). Every Rust choice on [Source layout](/architecture/source-layout/#languages) is gated by its spike, and falls back to Go if the spike fails.
+
+| Spike | What it settles |
+|---|---|
+| S1 | Connect for Rust over Unix sockets: interoperation with connect-go in both directions, peer credentials, the default-deny interceptor, streaming |
+| S2 | FIPS with `aws-lc-rs`: builds for amd64 and arm64, a certified module pin, the AWS SDK for Rust in FIPS mode |
+| S3 | A slim `entry` prototype in both languages: latency, memory, Lambda cold start and size, and a day of fuzzing |
+| S4 | `key-holder` through PKCS#11 (`cryptoki` with `ykcs11`): every algorithm and slot on [Keys](/concepts/keys/), concurrent callers, PIN handling |
+| S5 | The memory budget on the boards: each actor and driver under load, in each language, against the 2 GB budget |
+| S6 | OpenTelemetry from Rust: one trace across a Go and Rust hop |
+| S7 | Configuration in Rust: the same conformance vectors as the Go structs |
+| S8 | The ceremony with OpenPGP cards: two primaries and a shared subkey, verified with the tools tested on 2026-10-29 |
+| S10 | One release train: GoReleaser with a Cargo workspace, for two architectures, with SBOM, signing and provenance, and Lambda zips within their limits |
 
 ## Architecture decision records
 
@@ -84,7 +100,7 @@ Key custody, platform checks, workload identity, and the measurements that settl
 | [#870](https://github.com/truvity/sluis/issues/870) | Workload identity with a per-node issuer and AWS exchange |
 | [#878](https://github.com/truvity/sluis/issues/878) | Benchmark: AWS KMS Sign latency for ECC P-384 |
 | [#879](https://github.com/truvity/sluis/issues/879) | Benchmark: YubiKey firmware 5.8 P-384 sign and ECDH on an arm64 board |
-| [#880](https://github.com/truvity/sluis/issues/880) | Spike: memory footprint of Go and Rust cloud drivers on t4g.nano |
+| [#880](https://github.com/truvity/sluis/issues/880) | Spike: memory footprint of Go and Rust cloud drivers on t4g.nano (closed: Rust for the cloud drivers is decided; the board budget is spike S5) |
 
 ### Phase 1b: features beyond parity
 

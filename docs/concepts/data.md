@@ -1,9 +1,9 @@
 ---
 title: Data
-description: "How sluis keeps records safe: origins and sensitivity, one writer per record kind, trust classes, the data ports, fencing tokens and backups."
+description: "How sluis keeps records safe: origins and sensitivity, one writer per record kind, encryption of every value, the data ports, fencing tokens and backups."
 status: target
 sidebar:
-  order: 7
+  order: 8
 ---
 
 sluis keeps records: sessions, directory facts, operator-set configuration, quota balances and meters, the signing ring's metadata, audit batches. Most of the security of the design rests on who is allowed to change which of them. Three rules carry it: every record kind has an origin and a sensitivity, every record kind has one writer, and trust classes are kept apart.
@@ -37,7 +37,7 @@ A field may also carry a **free-text** flag, for text a person typed: it never e
 
 ## One writer per record kind
 
-Every **record kind** has exactly one **record writer**: one actor that is allowed to create and change it. Other actors may read it, if their manifest says so, and may not write it. The writer of a kind is written down in the manifests and enforced by the `state-owner` shared driver, which checks every call against `(caller actor, record kind, operation)` and lets exactly one actor write each kind. See [Drivers](/concepts/drivers/).
+Every **record kind** has exactly one **record writer**: one actor that is allowed to create and change it. Other actors may read it, if their manifest says so, and may not write it. The writer of a kind is written down in the manifests and enforced in two layers ([Defence in depth](/concepts/drivers/#defence-in-depth)): the port library scopes every call to `<boundary>/<kind>/…` from the actor's own identity, and the store checks the actor's own credentials. The owner of an rqlite cluster has the only user that may `execute`, and its readers have `query`-only users; on DynamoDB, an IAM `dynamodb:LeadingKeys` condition per actor role; on Postgres, grants and row-level security. There is no shared state driver in between.
 
 Examples (illustrative; the full list is generated from the manifests):
 
@@ -46,9 +46,9 @@ Examples (illustrative; the full list is generated from the manifests):
 | Audit batch sequence | The audit `writer` of that log | The sequence must have no gaps or forks, so there is exactly one writer per log. Purge and erasure requests go to the writer through a call and are appended by it. |
 | Quota balances | `quota` | Balances are issued records that change only through `quota`; the meters are derived from the log |
 | Signing ring | `signer` | The ring is the authority for token keys |
-| Sessions | `entry` | The protocol owner |
+| Sessions | `session` | The owner of sessions and the session cookie |
 | Directory snapshots | The facts integration that produced them | Another process holds only a cached copy with an expiry |
-| Operator-set records of a kind | The actor that owns the kind, on a request through the console API in `entry` | The owner validates the write with its own logic; the manifest says which kinds accept operator-set writes |
+| Operator-set records of a kind | The actor that owns the kind, on a request routed by `console` | The owner validates the write with its own logic; the manifest says which kinds accept operator-set writes |
 
 When two processes seem to need to write one record, the record is split instead: the learned fields become a kind the integration writes, and the operator-set fields a kind its owning actor writes, each with its own writer. The word **writer** by itself means this on this page, and not the audit `writer` actor.
 
@@ -61,6 +61,15 @@ v2 keeps records of different **trust classes** and origins apart, in separate n
 1. the ring and its wrapping, used by the issuer only;
 2. vendor-issued secrets held for integrations (a GitHub App key, a chat token), behind the `secrets` port;
 3. authority keys (the audit log key, the CA keys), which have their own holder and are never read by the issuer.
+
+## Every value is encrypted
+
+**Every state value is encrypted in the port library**, before it reaches any driver (agreed, EC-1). A store, its replicas and its backups hold ciphertext.
+
+- **AES-256-GCM**, which is FIPS-compatible.
+- **A data key per (boundary, record kind).** It is wrapped by the boundary's key-encryption key through the `keys` port. Unwrapping is allowed for the kind's writer and its declared readers only: by the `key-holder` access list, or by the KMS key policy with an encryption-context condition.
+- **The additional authenticated data is (boundary, kind, key, version)**, so a value moved to another record, kind, boundary or version fails to decrypt.
+- **Record keys never contain personal data.** Only the values are encrypted, so the keys must not carry an email address or a name.
 
 ## Ports
 
@@ -92,13 +101,19 @@ A **conditional adjust** changes a number by a delta, and refuses if the result 
 
 A lease is **named**: there is one lease for each thing that needs a single owner, and many can be held at once by different holders. Acquiring a lease returns a **fencing token**, a number that grows each time the lease changes hands. A holder passes its token with every write it makes under the lease, and the store refuses a token that is lower than one it has seen. A holder that was paused, lost its lease, and woke up believing it still held it, cannot write over the new holder.
 
-On a Raft cluster, leadership is just one named lease called `leader`. Every other lease is built on compare-and-swap in the state store.
+The final form is agreed:
+
+- **Leases live on the state store**, built on compare-and-set with a fencing token, and independent of the Raft leader. A named lease `leader` stays available.
+- **Where the target store can fence, the fence is in that store.** A Postgres write checks the token in the same transaction. Blob batches are created with `If-None-Match: *` (create-if-absent), so an audit log cannot fork; with one log per node, the writers on boards need no lease at all.
+- **External side effects** (the GitHub, chat and directory reconcilers) rely on the lease plus reconcilers that are idempotent.
+- **A session advisory lock is never used alone**, because it gives no fencing token.
+- A Kubernetes Lease driver is in the backlog. Whether a Postgres (CNPG) state driver is added is a question for the Kubernetes records.
 
 ## Where the data lives
 
 The drivers behind the ports differ by installation (see [Ports and drivers by installation](/concepts/drivers/#ports-and-drivers-by-installation)). Two choices matter for data:
 
-- **State** is the embedded single-node store on one node, **rqlite on Raft** across the three boards, and **DynamoDB** on serverless and on Kubernetes. The Raft peer traffic is the state driver's own port over mutual TLS.
+- **State** is the embedded single-node store on one node, **rqlite on Raft** across the three boards, with **one cluster per (boundary, owning actor)**, and **DynamoDB** on serverless and on Kubernetes, with a table per boundary. The Raft peer traffic is each cluster's own port over mutual TLS.
 - **Index** is `sqlite` on a single server, and `rqlite` on a cluster of boards (proposed, so the reader can run on any node). It is `postgres` on Kubernetes (the `cnpg` mode, or `external` with any connection string). Serverless may run the indexer and the reader with a `postgres` index through RDS Proxy (proposed); the default of the lambda installation is no index (proposed), and the reader and its index then run in a separate Search installation that reads the same bucket. The search index is derived from the audit batches and can always be rebuilt from them.
 
 ## Secrets

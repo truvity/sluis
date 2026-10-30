@@ -6,7 +6,7 @@ sidebar:
   order: 3
 ---
 
-At the third zoom level the [components](/architecture/components/) are placed into **actors**. An actor is a process with one responsibility and one credential set; it declares the [ports](/concepts/drivers/) it requires. Each actor is its own OS user and systemd unit on bare-metal, its own Lambda function on serverless, or (on Kubernetes, as proposed) its own container, so a compromise of one actor gives the attacker that actor's credentials and nothing else.
+At the third zoom level the [components](/architecture/components/) are placed into **actors**. An actor is a process with one responsibility and one credential set; it declares the [ports](/concepts/drivers/) it requires. Each actor instance, named `<actor>@<boundary>` ([Naming](/concepts/actors/#naming)), is its own OS user and systemd template instance on bare-metal, its own Lambda function on serverless, or (on Kubernetes) its own container, so a compromise of one actor gives the attacker that actor's credentials and nothing else.
 
 Where the actors run is described per [runtime](/runtimes/): the kind that decides how processes are started and what they can rely on. The number of nodes and the outside services an installation uses belong to the installation, not to the runtime. The four tested installations ([local, boards, lambda and kubernetes](/runtimes/installations/)) are used below as examples.
 
@@ -24,21 +24,25 @@ The rules the split follows:
 
 The concept is explained on [Actors](/concepts/actors/); the ports and the shared drivers on [Ports and drivers](/concepts/drivers/); the six integration actors on [Integrations](/concepts/integrations/); the key custody behind `signer` and `ca` on [Keys](/concepts/keys/); and the audit actors on [Audit](/concepts/audit/).
 
-There are four core actors (`entry`, `signer`, `policy`, `ca`), the `quota` actor beside them as the engine of the Quota piece, and four audit actors, plus integrations. `signer` and `policy` are split out from the first slice rather than later: splitting later is what v1 deferred and never did.
+The core actors are `entry`, `session`, `console`, `exchange`, `signer`, `policy`, `ca` and `ssh-ca` ([ADR 0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/), rewritten on 2026-10-30). The `quota` actor sits beside them as the engine of the Quota piece, and there are four audit actors, plus integrations. `signer` and `policy` are split out from the first slice rather than later: splitting later is what v1 deferred and never did.
 
 | Actor | Responsibility | Holds | Cannot |
 | ----- | -------------- | ----- | ------ |
-| `entry` | The OIDC protocol: sign-in, sessions, token exchange, the console API as the browser's backend. Sits behind the edge connector | Sessions, refresh tokens, client secret verifiers. **No key** | Read the signing keys, or reach an integration's vendor credential |
+| `entry` | Parses each request, validates it against closed parameter lists generated from the contracts, and routes it. Sits behind the edge connector | **Nothing**: no key, no secret, no state, no outbound network | Reach anything but the sockets of the actors it routes to |
+| `session` | Sessions, the session cookie, per-boundary freshness (step-up), the sign-in flows | Sessions and refresh tokens; the cookie-sealing key, behind the keys port | Sign a token, or reach an integration's vendor credential |
+| `console` | The operator API, as the browser's backend. Routes each write to the actor that owns the record kind | Delegation checks. No key | Write a record kind it does not own |
+| `exchange` | Token exchange (RFC 8693), enrolment and the proof verifiers | Client secret verifiers, enrolments, token hashes. Verifier drivers with public material only; the enrolment key stays in `key-holder` or KMS | Sign a token itself |
 | `signer` | Holds the signing ring and signs tokens under a signing policy; it is not a pure oracle. It checks the issuer URL, the audience set, the lifetime and the algorithm | The token-signing key use (KMS `Sign`, or the hardware key through `key-holder`) | Accept a request from anyone but `entry`, or parse internet input |
 | `policy` | The decision point. Declared Cedar policy, plus template-linked policies within a declared delegation policy, maps facts to grants. Signs mint grants with its own key | The grant key. No state, no network, no secrets | Reach any resource: a bad process can decide wrongly, but exfiltrates nothing |
-| `ca` | X.509 and the SSH CA | The CA keys | Sign anything outside its policy |
+| `ca` | The X.509 CA | The X.509 CA keys | Sign anything outside its policy |
+| `ssh-ca` | The SSH CA, for user and host certificates | The `ssh-user` and `ssh-host` keys | Sign anything but an OpenSSH certificate within its policy |
 | `quota` | Not a core actor: the engine of the Quota piece. Rate limits, caps and metering, with compare-and-set on the state port (a conditional adjust is proposed, ADR 0057) | Its own balances (issued) and meters (derived). No key | Touch identity records |
-| `writer` | Receives audit records, seals them in batches and writes them to the blob. Exactly one per log | The log-store credential. It asks `key-holder` to sign each batch head, and never holds the log key | Delete or overwrite an object, or use any key but the log key |
+| `writer` | Receives audit records, seals them in batches and writes them to the blob, create-if-absent. Exactly one per log | The log-store credential. It asks `key-holder` (on AWS, KMS under a key policy that names it) to sign each batch head, and never holds the log key | Delete or overwrite an object, or use any key but the log key |
 | `witness` | Co-signs the batch heads it has seen. Optional | Its own key | Write a batch object |
 | `indexer` | Builds the search index from the blob. Exactly one | Read on the blob, write on the index | Write to the evidence |
 | `reader` | Serves audit queries from the search index. It audits every read | Read access only | Write to the evidence |
 
-The blast radius of each is small by construction. A compromised `entry` can ask `signer` for tokens while it runs (a signing oracle), but cannot read the key and cannot reach an integration. A compromised `signer` holds the ability to sign, not the ability to parse a request. A compromised integration reaches its own provider account and its own state.
+The blast radius of each is small by construction. A compromised `entry` holds nothing and reaches only the sockets it routes to; it cannot read a key, a session or a secret, and every request it forwards is checked again by the actor that receives it. A compromised `signer` holds the ability to sign, not the ability to parse a request. A compromised integration reaches its own provider account and its own state.
 
 The audit actors are the **writer**, the **witness**, the **indexer** and the **reader**. There is no notary actor (agreed, [OD-39](/open-decisions/#od-39)): the writer asks `key-holder` to sign, and `key-holder`'s access list lets only the writer use the log key.
 
@@ -48,22 +52,23 @@ The audit actors are the **writer**, the **witness**, the **indexer** and the **
 
 Each integration runs as its own process and holds its own vendor credential: the GitHub App keys, a chat token, the minter credential for a cloud API, a directory service account. Integrations that hold no external secret (a verifier of workload tokens, for example) are still separate actors, because they separate code and policy and are good candidates for fusion when memory is tight.
 
-All integrations share one pattern: ingress only from `entry` and from the decision point by the call graph; state and secrets only in their own namespace (`<integration>/<connection>/*`); an audit emit; and egress to an allow-list of the provider's hosts, nothing else. They return facts or carry out authorized effects, and they call no other integration.
+Each integration is one process per vendor tenant and credential, named `<vendor>[-<capability>]@<tenant>`, such as `google-signin@<company>` and `google-directory@<company>`. All integrations share one pattern: ingress only from the core actors by the call graph; state and secrets only in their own namespace (`<integration>/<connection>/*`); an audit emit; and egress through the proxy to an allow-list of the provider's hosts, nothing else. They return facts or carry out authorized effects, and they call no other integration.
 
 Integrations with no standing work are not resident. A directory refresh or a reconcile tick runs from a systemd timer and exits. A request-driven one starts on its socket and exits when idle.
 
-## Shared drivers and the node agent
+## The mediating driver and the node agent
 
-Two platform processes exist because some backends cannot tell their callers apart. Each is a **shared driver**: one process serves every actor, authenticates the caller by peer credentials (`SO_PEERCRED`), checks an ACL generated from the manifests, performs the operation, and audits every use before acting.
+A backend that can authorise each caller is used with **per-actor credentials and no mediator**: IAM and KMS key policies on AWS, an rqlite cluster per owning actor with an rqlite user per actor, a Postgres role per actor. One backend cannot: a card on a node, with one PIN. For it there is one **mediating driver**, `key-holder`.
 
 | Process | Owns | Enforces |
 | ------- | ---- | -------- |
-| `key-holder` | The keys driver for an HSM, a YubiKey, or a software key | `(caller actor, key purpose, operation)`. Callers never see a PIN, an authentication key or key material. The device node is mode 0600 for its uid only |
-| `state-owner` | rqlite or the Raft store, as the state driver | `(caller actor, record kind, operation)`, and **one writer actor per record kind**. rqlite binds to loopback with one credential only it can read |
+| `key-holder` | The keys driver for a YubiKey, an HSM through PKCS#11, or a software key | One Unix socket per caller, in a directory only that caller can open; a peer-uid check on each call; an access list of `(caller actor, key purpose, operation)` generated from the manifests; and signing that understands each purpose's content. Callers never see a PIN, an authentication key or key material. The device node is mode 0600 for its uid only |
 
-Neither has internet egress, loads plugins, or has reconcile logic. One code path per operation, fuzz-tested decoding. Their blast radius is the whole resource class, and that price is paid once, in a small audited process, rather than in every owner. With AWS KMS or DynamoDB the platform does this job (a key policy and a per-actor identity; IAM leading-key conditions), so the shared driver is not used there.
+It has no internet egress, loads no plugins and has no reconcile logic: one code path per operation, fuzz-tested decoding, a rate limit and an audit record per signature. Its blast radius is every key on the card, and that price is paid once, in a small audited process. See [The mediating driver](/concepts/drivers/#the-mediating-driver).
 
-The **node agent** (`sluis-node`, bare-metal only) is the root-owned process that is the node's trusted base. It issues a short-lived workload JWT per actor, brokers cloud credentials, pulls and verifies signed configuration and binaries, and starts units. Everything in [Deployment](/architecture/deployment/) depends on it staying small. It does not run on serverless or on Kubernetes.
+There is **no `state-owner`**. State on a cluster of boards is **one rqlite cluster per (boundary, owning actor)**, `sluis-rqlite@<boundary>-<actor>`: the owner has the only user with `execute`, declared readers have `query`-only users, and each cluster has its own port, certificate and systemd sandbox.
+
+The **node agent** (`sluis-node`, bare-metal only) is the root-owned process that is the node's trusted base. It issues a short-lived workload JWT per uid, brokers cloud credentials, pulls and verifies signed configuration and binaries, and starts units. Everything in [Deployment](/architecture/deployment/) depends on it staying small. It does not run on serverless or on Kubernetes.
 
 ## The fusion rule
 
@@ -74,28 +79,28 @@ Actors are not the same as units. An installation may run several actors in one 
 
 Both are tested for every installation. For example, `signer` cannot be fused into `entry`: the fusion would put the signing key beside the internet-facing listener. On serverless the same reasoning keeps `signer` a separate function, because the key grant must stay out of the role of the function that faces the internet. Small, listener-free actors that hold no key (`quota` and an integration with no external secret, for instance) can share a unit on a 2 GB board.
 
-:::note[Proposed]
-On Kubernetes a pod holds several actors, so the word "unit" in rule 2 needs a definition. The unit is the **credential scope** (decided, [OD-18](/open-decisions/#od-18)): the systemd unit on a node, the function on serverless, and the container on Kubernetes, where each container has its own token audience. A generated check then fails the build if any container that can use a key also has a listener. A pod that holds `entry` and `signer` as two containers passes in substance, because `entry`'s container cannot reach the credentials of `signer`'s. This is [OD-18](/open-decisions/#od-18).
-:::
+On Kubernetes a pod holds several actors, so the word "unit" in rule 2 needs a definition. The unit is the **credential scope** (decided, [OD-18](/open-decisions/#od-18)): the systemd unit on a node, the function on serverless, and the container on Kubernetes, where each container has its own token audience. A generated check then fails the build if any container that can use a key also has a listener. A pod that holds `entry` and `signer` as two containers passes in substance, because `entry`'s container cannot reach the credentials of `signer`'s.
 
 ## Packaging
 
-:::note[Proposed]
-Every component ships as its own binary. On a host that uses packages, the binaries live under `/usr/libexec/sluis/`, grouped by kind:
+Every component ships as its own executable, in one language ([Source layout](/architecture/source-layout/#languages)). On a host that uses packages, the executables live under `/usr/libexec/sluis/`, grouped by kind:
 
 ```text
 /usr/libexec/sluis/
-  actors/         entry  signer  policy  ca  quota  writer  witness  indexer  reader
-  drivers/        state-owner  key-holder  <port drivers>
-  integrations/   <one binary per integration>
+  actors/         entry  session  console  exchange  signer  policy  ca  ssh-ca  quota  writer  witness  indexer  reader
+  drivers/        key-holder  <port drivers>
+  integrations/   <one executable per integration>
   node/           sluis-node
   vendor/         third-party binaries that sluis starts, such as rqlite
 ```
 
-The directory names and the layout are agreed (PK-1), and the directory is called `actors/` (agreed; it amends the layout, which first called it `roles/`). The binary names above are illustrative. Each actor has one systemd unit, one uid, and one socket directory `/run/sluis/<actor>/`. Actors are pinned by the unit: the binary a unit starts is the only code in that process, so an actor cannot contain another actor's code. Packaging follows the runtime. Bare-metal ships a deb, an rpm and a tarball. Serverless ships one zip per actor, and the Lambda Web Adapter is vendored into our own layer. Kubernetes runs one container per actor, from a multi-arch OCI image pinned by digest, installed with a Helm chart. There is no separate development build: local is an installation, not a build.
-:::
+The directory names and the layout are agreed (PK-1), and the directory is called `actors/` (agreed; it amends the layout, which first called it `roles/`). The executable names above are illustrative. Actors are pinned by the unit: the executable a unit starts is the only code in that process, so an actor cannot contain another actor's code. Packaging follows the runtime, and is agreed ([ADR 0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/), [ADR 0038](/decisions/0038-the-local-installation-is-docker-compose-with-one-container-per-actor/)):
 
-One version covers the whole repository. See [Packages](/distribution/packages/) for the artifacts, the apt and dnf repositories, and signing.
+- **Bare-metal** ships `.deb` and `.rpm` packages **split by function** (`sluis`, `sluis-node`, `sluis-server`, `sluis-drivers`, `sluis-driver-yubikey`, `sluis-audit-writer`, `sluis-audit-search`, `sluis-quota`, `sluis-host`, `sluis-console`), and a tarball. The packages ship **systemd template units** only, `sluis-<actor>@.service` and `.socket`; a **systemd generator** in the package reads `/etc/sluis/install.yaml` and creates the instances and their `sysusers.d` entries.
+- **Serverless** ships **one function per actor and one zip per executable**; drivers reach a function as one Rust `aws` extension, and sluis uses at most three layers of its own.
+- **Kubernetes** runs **one OCI image per process**, carrying the packages' binaries byte for byte, pinned by digest, and installed with **one Helm chart with presets**.
+
+There is no separate development build: local is an installation, not a build. The artifacts and their names are on [Packages](/distribution/packages/).
 
 Why not Go plugins: a Go `.so` shares the host's address space and so has no isolation at all; it needs the same toolchain and dependency versions as the host, so it can never be released independently; and it cannot be unloaded. Why not WebAssembly: dropped. Plugins always run out of process: a Unix socket with peer credentials locally, a Lambda invoke on AWS, HTTPS with mTLS remotely.
 
@@ -106,23 +111,25 @@ The same actors run on every runtime. What changes is who starts them, what they
 | | bare-metal, 1 node | bare-metal, N nodes | serverless | kubernetes (proposed) |
 | --- | --- | --- | --- | --- |
 | **Unit of an actor** | A systemd unit and an OS user | The same, on every node | A Lambda function | A container |
-| **Calls between actors** | Unix sockets | Unix sockets on the node; the Raft port is the only TCP port between nodes | Lambda invoke, authorized by a resource policy on an alias | Unix sockets within a pod, on a socket volume mounted into the permitted callers; a Service between pods |
+| **Calls between actors** | Unix sockets | Unix sockets on the node; the Raft ports of the rqlite clusters are the only TCP ports between nodes | Lambda invoke, authorized by a resource policy on an alias | Unix sockets within a pod, on a socket volume mounted into the permitted callers. No call crosses a pod boundary; the audit transport is the only link between pods |
 | **Node agent** | `sluis-node` | `sluis-node` on every node | None: the platform attests the function | None: the platform's token is used |
-| **Shared drivers** | `key-holder`, `state-owner` where the backend cannot tell callers apart | The same, with `state-owner` talking Raft to its peers | None: IAM does the job | None where the cloud does it |
-| **Actors that declare instances: exactly 1** | Run once | Need the lease port | Reserved concurrency of 1 may stand in for the lease | Need the lease port (the Kubernetes Lease driver) |
+| **Mediating driver** | `key-holder`, for a card on the node | The same, on every node | None: KMS key policies do the job | None: KMS key policies do the job |
+| **Actors that declare instances: exactly 1** | Run once | Need the lease port, on the state store | A lease on DynamoDB, or a FIFO queue with one message group (to verify) | Need the lease port, on the state store (DynamoDB) |
 | **Tested installation** | local | boards | lambda | kubernetes |
 
 ### Bare-metal, one node
 
-A bare-metal node (a single-board computer, a virtual machine such as EC2, or a container on a workstation) runs every actor as its own user, in its own systemd unit. The node is drawn in three steps: the request path, the keys and the state, and the audit emits. Arrows are Unix-socket calls allowed by the call graph. The only thing that reaches `entry` from outside is the edge connector, and it connects to `entry`'s loopback TCP port; every other call is a Unix-socket call. See [Listeners](/architecture/listeners/).
+A bare-metal node (a single-board computer, a virtual machine such as EC2, or a container on a workstation) runs every actor as its own user, in its own instance of a systemd template unit, `sluis-<actor>@<boundary>`. The node is drawn in three steps: the request path, the keys and the state, and the audit emits. Arrows are Unix-socket calls allowed by the call graph. The only thing that reaches `entry` from outside is the edge connector, and it forwards to `entry`'s Unix socket; `entry` runs with no network at all. Every call is a Unix-socket call. See [Listeners](/architecture/listeners/).
 
 | Group | Actors | What the group is |
 | ----- | ------ | ----------------- |
-| Front | `entry` | Parses requests and holds no key |
-| Authority | `signer`, `policy`, `ca` | Use authority keys, with no listener on the network. `policy` holds no state and has no network |
+| Front | `entry` | Parses and routes requests, and holds nothing |
+| Protocol | `session`, `exchange`, `console` | Sessions, token exchange and enrolment, and the operator API |
+| Authority | `signer`, `policy`, `ca`, `ssh-ca` | Use authority keys, with no listener on the network. `policy` holds no state and has no network |
 | Integrations | one actor per integration | Each holds its own vendor credential (credential A, credential B) |
 | Audit | `writer`, `witness`, `indexer`, `reader` | Write, witness, index and read the audit chain. The writer signs only through `key-holder` |
-| Shared drivers | `key-holder`, `state-owner` | One key driver and one state driver for the node |
+| Mediating driver | `key-holder` | The one keys driver for the node's card |
+| State | one rqlite cluster per owning actor | Each actor's own store, with an rqlite user per actor |
 | Node agent | `sluis-node` | Runs as root and is small |
 
 #### Step 1: the request path
@@ -130,12 +137,15 @@ A bare-metal node (a single-board computer, a virtual machine such as EC2, or a 
 ```mermaid
 flowchart LR
   net(["Internet"]) --> cf["cloudflared<br/>outbound only"]
-  cf -->|"http://127.0.0.1:8080"| entry["entry"]
-  entry --> signer["signer"]
-  entry --> policy["policy"]
-  entry --> quota["quota"]
-  entry --> gh["integration A"]
-  entry --> cl["integration B"]
+  cf -->|"Unix socket"| entry["entry"]
+  entry --> sess["session"]
+  entry --> xchg["exchange"]
+  entry --> con["console"]
+  xchg --> policy["policy"]
+  xchg --> signer["signer"]
+  xchg --> quota["quota"]
+  sess --> gh["integration A"]
+  xchg --> cl["integration B"]
   gh --> policy
 ```
 
@@ -145,18 +155,17 @@ The solid line from integration A to `policy` is a decision request; the integra
 
 ```mermaid
 flowchart LR
-  entry["entry"] --> so["state-owner"]
-  quota["quota"] --> so
-  aw["writer"] --> so
-  ar["reader"] --> so
-  so --> db[("rqlite or Raft")]
-  signer["signer"] --> kh["key-holder"]
+  sess["session"] --> db1[("rqlite<br/>session@prod")]
+  xchg["exchange"] --> db2[("rqlite<br/>exchange@prod")]
+  quota["quota"] --> db3[("rqlite<br/>quota@prod")]
+  signer["signer"] --> kh["key-holder<br/>one socket per caller"]
   ca["ca"] --> kh
-  aw --> kh
+  sshca["ssh-ca"] --> kh
+  aw["writer"] --> kh
   kh --> dev[("YubiKey")]
 ```
 
-The actors that use a key (`signer`, `ca`, and the audit `writer` for its log key) reach it only through `key-holder`, and every actor that reads or writes state goes through `state-owner`. `policy` also uses its grant key; it is left out of the picture.
+The actors that use a key (`signer`, `ca`, `ssh-ca`, and the audit `writer` for its log key) reach it only through `key-holder`, each through a socket of its own. Every actor that keeps state has its own rqlite cluster, and a declared reader of another actor's records has a `query`-only user on that cluster. `policy` also uses its grant key; it is left out of the picture.
 
 #### Step 3: audit emits and the node agent
 
@@ -173,11 +182,11 @@ Dashed lines to `writer` are asynchronous emits through the transport port. The 
 
 ### Bare-metal, N nodes
 
-On a three-node installation (the boards installation is the tested one) every node runs this set, and the `state-owner` processes talk to each other over the Raft driver's mTLS port. The audit actors are the exception worth reading carefully. A cluster keeps **one log per node**: each node's `writer` drains its own spool and signs with its own log key, and the other two nodes are its peer witnesses, which is the 2-of-3 co-signing. The rule is **exactly one writer per log**, not one per installation, so no lease is needed to elect a writer between nodes. Readers merge the logs by time. See [the audit installation](#the-audit-installation).
+On a three-node installation (the boards installation is the tested one) every node runs this set, and each rqlite cluster talks to its peers on the other nodes over its own mTLS port. The audit actors are the exception worth reading carefully. A cluster keeps **one log per node**: each node's `writer` drains its own spool and signs with its own log key, and the other two nodes are its peer witnesses, which is the 2-of-3 co-signing. The rule is **exactly one writer per log**, not one per installation, so no lease is needed to elect a writer between nodes. Readers merge the logs by time. See [the audit installation](#the-audit-installation).
 
 ### Serverless
 
-On serverless the same actors are separate Lambda functions with no `sluis-node`. The platform gives each function an execution role, which is its identity. The audit writer has a reserved concurrency of 1, which stands in for the lease. The transport is an SQS queue. Search may run inside the functions with a `postgres` index, through RDS Proxy (proposed) ([OD-12](/open-decisions/#od-12), revised). The default index of the lambda installation is none (proposed), and then Search is a separate installation that reads the same blob, or a small installation uses the scan from the CLI. See [Serverless](/runtimes/serverless/).
+On serverless the same actors are separate Lambda functions with no `sluis-node` and no `key-holder`: the KMS key policy is the access list. The platform gives each function an execution role, which is its identity. The audit writer is fenced by create-if-absent on the blob; whether a reserved concurrency of 1 can stand in for its lease with an SQS trigger is to be verified, and the safe forms are a FIFO queue with one message group or a lease on DynamoDB. The transport is an SQS queue. Search may run inside the functions with a `postgres` index, through RDS Proxy (proposed) ([OD-12](/open-decisions/#od-12), revised). The default index of the lambda installation is none (proposed), and then Search is a separate installation that reads the same blob, or a small installation uses the scan from the CLI. See [Serverless](/runtimes/serverless/).
 
 ### Kubernetes
 

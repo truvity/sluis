@@ -22,6 +22,8 @@ Google Workspace is the corporate directory in the common case. It plays two int
 | `Upstream` | Runs the sign-in: sends the person to Google, checks the returned ID token (issuer, audience, `nonce`, verified email), and returns a verified identity. |
 | `FactsSource` | Reads users, groups and domains, keeps a snapshot per tenant refreshed on an interval, and answers "what groups is this person in" with a freshness: `as_of`, `max_age` and whether the answer is authoritative. |
 
+The two use different credentials, so they are **two processes per tenant**: `google-signin@<company>` holds the OAuth client secret, and `google-directory@<company>` holds the directory credential ([Naming](/concepts/actors/#naming)). A compromise of one does not reach the other's credential, and each tenant has its own pair.
+
 ## What sluis asks the vendor for
 
 For sign-in, an OAuth client of type *Web application* with the scopes `openid`, `email` and `profile`. Nothing else.

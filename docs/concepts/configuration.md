@@ -3,7 +3,7 @@ title: Configuration
 description: "How sluis is configured: an installation, a Pkl-defined schema, JSON Schema validation, layers, operator-set records, live reload and explain."
 status: target
 sidebar:
-  order: 6
+  order: 7
 ---
 
 sluis is configured by files that an operator reads and edits, and by the records an operator sets on the console. The design makes four promises about them: a file that is wrong is refused before anything takes effect; a field that does not exist is an error, not silently ignored; any value can be traced to the origin and the layer that set it; and an operational switch can never change who may do what. The rules are [ADR 0015](/decisions/0015-configuration-is-defined-once-in-pkl-and-shipped-as-json-schema/) and [ADR 0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/).
@@ -66,6 +66,8 @@ The thing an operator configures is an **installation**: one concrete deployment
 An example is "bare-metal, 3 nodes, an AWS account". Four installations are tested and named: [local, boards, lambda and kubernetes](/runtimes/installations/). They ship as **example configuration files** used by the documentation, the tutorials and the test matrix; an operator copies one as a starting point. "Installation" is not a configuration key: the install file *is* the installation. Any other combination that the rules allow is a possible installation, and it is not tested. Nodes and dependencies are properties of the installation, not of the runtime.
 
 The word **environment** is kept for what differs between development, staging and production.
+
+**One install file per installation, also in a federation.** A sluis that spans several [boundaries](/runtimes/boundaries/) is a front installation plus one boundary installation for each L4 boundary, each with its own install file, joined by declared trust. A boundary below L4 (a company, or an environment at L2 or L3) is declared in the install file of the installation that holds it, and every actor instance it gets is named `<actor>@<boundary>` ([Naming](/concepts/actors/#naming)). On bare-metal a systemd generator reads `/etc/sluis/install.yaml` and creates those instances from the template units; on Kubernetes the chart's presets do the same. Nothing generates packages per installation.
 
 ## Layers
 

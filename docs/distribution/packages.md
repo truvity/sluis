@@ -14,11 +14,30 @@ What you download depends on the [runtime](/runtimes/) you install on. There are
 
 | Runtime | Packaging |
 |---|---|
-| [bare-metal](/runtimes/bare-metal/) | `.deb` and `.rpm` packages, and a tarball |
-| [serverless](/runtimes/serverless/) | A zip per actor, with layers and extensions |
-| [kubernetes](/runtimes/kubernetes/) | An OCI image and a Helm chart |
+| [bare-metal](/runtimes/bare-metal/) | `.deb` and `.rpm` packages split by function, and a tarball |
+| [serverless](/runtimes/serverless/) | One function per actor and one zip per executable, with at most three layers of sluis's own |
+| [kubernetes](/runtimes/kubernetes/) | One OCI image per process and one Helm chart with presets |
 
-The local installation runs the bare-metal packaging in Docker.
+The local installation runs the same OCI images as Kubernetes, under Docker Compose. The images carry the packages' binaries, byte for byte, and a hash test checks it ([ADR 0038](/decisions/0038-the-local-installation-is-docker-compose-with-one-container-per-actor/)). The packaging is agreed ([ADR 0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)).
+
+## Packages by function
+
+The `.deb` and `.rpm` packages are split by function, so that a host installs only what it runs:
+
+| Package | Holds |
+|---|---|
+| `sluis` | The CLI, `sluis agent`, and `sluis trust sync` with its timer ([Machine identity](/concepts/machine-identity/#trust-sync)) |
+| `sluis-node` | The node agent |
+| `sluis-server` | The core actors and the first-party integrations |
+| `sluis-drivers` | The drivers with no system dependencies, and the vendored binaries such as rqlite. `sluis-server`, the audit packages and `sluis-quota` depend on it |
+| `sluis-driver-yubikey` | The YubiKey driver (later also the PKCS#11 drivers) |
+| `sluis-audit-writer` | The audit writer and the witness |
+| `sluis-audit-search` | The indexer and the reader |
+| `sluis-quota` | The quota engine |
+| `sluis-host` | The SSH host service ([SSH](/integrations/ssh/)) |
+| `sluis-console` | The console's single-page application, as a static bundle |
+
+The packages ship systemd **template units** only, `sluis-<actor>@.service` and `sluis-<actor>@.socket`, and a systemd generator that reads `/etc/sluis/install.yaml` and creates the instances ([Bare-metal](/runtimes/bare-metal/#what-runs-where)). sluis does not generate packages per installation.
 
 The **console's single-page application** is a separate artifact: a bundle of static files with the release's version, deployable on its own. Each runtime's static host serves it on the same origin as `entry`'s API: a directory that `entry` serves on bare-metal, the bucket behind the API gateway on serverless, a static container behind the ingress on Kubernetes ([ADR 0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)).
 
@@ -31,7 +50,7 @@ apt/       dists/stable/{InRelease,Release,Release.gpg}
 dnf/       {x86_64,aarch64}/{repodata/, packages}
            sluis.repo
 bin/       <version>/<component>_linux_{amd64,arm64}.tar.gz
-lambda/    <version>/{functions,layers,extensions}/<name>-{x86_64,arm64}.zip
+lambda/    <version>/{functions,layers,extensions}/sluis-<kind>-<name>_<version>_{arm64,x86_64}.zip
 checksums/ <version>/SHA256SUMS, .sig (cosign), .asc (OpenPGP)
 keys/      the release OpenPGP public key, the cosign public key
 oidc/      nodes/<node>/.well-known/openid-configuration, jwks.json
@@ -92,30 +111,37 @@ Each component is a tarball for each architecture at `bin/<version>/<component>_
 
 ## Lambda zips
 
-Lambda is zip only, so layers and extensions combine. The zips are published under `lambda/<version>/` for `x86_64` and `arm64`:
+Lambda is zip only, so layers and extensions combine. The zips are published under `lambda/<version>/` for `arm64`, the default, and `x86_64`. Each file is named `sluis-<kind>-<name>_<version>_<arch>.zip`, the same on R2 and in the GitHub release, so no two files collide:
 
-- `functions/`: one zip per actor;
-- `layers/`: shared layers, including the vendored Lambda Web Adapter (pinned v1.1.0), which is built into sluis's own layer and not referenced from the public AWS layer;
-- `extensions/`: the drivers that run as Lambda extensions.
+- `functions/`: **one zip per executable**, and one function per actor. The function's handler is the `.deb`'s binary, renamed `bootstrap`;
+- `layers/`: at most three layers of sluis's own: the edge layer, with the vendored Lambda Web Adapter (pinned v1.1.0) that only `entry` uses; the drivers layer; and the configuration layer. There is no OpenTelemetry layer, and AppConfig is read through its API;
+- `extensions/`: the drivers, as **one Rust `aws` executable** that implements every AWS port for its function.
 
-A function has at most five layers and 250 MB unzipped, including layers and extensions. See [Serverless](/runtimes/serverless/).
+A function has at most five layers and 250 MB unzipped, including layers and extensions, so two layers are left to the operator. The zips are verified and published into the installation's own account by its infrastructure code; sluis publishes no public layer ARNs. See [Serverless](/runtimes/serverless/).
 
 ## OCI images
 
-Multi-arch images (amd64 and arm64) are published to GHCR. Pull by digest.
+There is **one image per process**: each actor, driver and integration, and the edge relay and the console, is an image of its own, so a container can run its one executable only. Multi-arch images (amd64 and arm64) are published to GHCR as `ghcr.io/truvity/sluis/<kind>/<name>`. Pull by digest.
+
+- The base is distroless `static`, or distroless with glibc and a pinned `pcsc-lite` for an executable that needs cgo, built against the oldest supported glibc.
+- The executable sits at the same path as in the `.deb` (for example `/usr/libexec/sluis/actors/entry`), byte for byte, and an OCI label names the package it comes from.
+- The same images run the local installation and Kubernetes.
 
 ```sh
 # Example
-docker pull ghcr.io/truvity/sluis-entry@sha256:<digest>
+docker pull ghcr.io/truvity/sluis/actors/entry@sha256:<digest>
 ```
 
 ## Helm charts
 
-Charts are OCI artifacts. A chart pins every image it deploys by digest, and the digests come from the GoReleaser output through `ocictl helmctl`, so a chart installs exactly the images that were released with it.
+Charts are OCI artifacts. A chart pins every image it deploys by digest, and the digests come from the GoReleaser output through `ocictl helmctl`, so a chart installs exactly the images that were released with it. A chart's version is the release version.
+
+- **One `sluis` chart** with a piece selector and presets, `install`, `audit-install`, `quota-install` and `kubernetes-dev`, and no subcharts ([OD-30](/open-decisions/#od-30), decided). The console runs as its own Deployment.
+- **The cert-manager issuer** has a chart of its own, with its CRDs and RBAC. The certificate sidecar is an image plus a snippet.
 
 ```sh
 # Example
-helm pull oci://ghcr.io/truvity/charts/sluis --version <version>
+helm pull oci://ghcr.io/truvity/sluis/charts/sluis --version <version>
 ```
 
 ## GitHub Releases
