@@ -27,9 +27,9 @@ Seven named installations were also too many to build and test. The maintainer c
 - **An installation is one concrete deployment:** runtime, nodes, available dependencies and one driver per port. For example: "bare-metal, 3 nodes, AWS account".
 - **Four installations are tested.** They are the ones we build, document and keep in the test matrix:
   - **local**: bare-metal, 1 node. Docker on a workstation, using the host's hardware key through the host's smart-card service. Not a software key.
-  - **boards**: bare-metal, 3 nodes. Three single-board computers (arm64, 2 GB RAM, eMMC), a hardware key in each node and a tunnel to the public hostname (`sluis.example.com` in docs). State and lease on rqlite. The index driver is decided in ADR 0022. Blob on Garage through the S3-compatible driver, with an off-site R2 copy of the audit log (after a spike), and spool transport. The audit pieces run on the same nodes and share driver instances. Each node keeps its own log with the other nodes as peer witnesses ([0004](/decisions/0004-audit-is-four-pieces-joined-by-a-transport-port/)).
-  - **lambda**: serverless on AWS. KMS for keys, DynamoDB for state and lease, SQS for transport, S3 for blob. The index driver is decided in ADR 0022. The writer runs with a reserved concurrency of 1 on a standard SQS queue; correctness comes from the blob fence (create-if-absent).
-  - **kubernetes**: KMS, DynamoDB, SQS, S3 and the Kubernetes Lease. The index driver is decided in ADR 0022; the pod layout and chart in ADRs 0046 and 0047.
+  - **boards**: bare-metal, 3 nodes. Three single-board computers (arm64, 2 GB RAM, eMMC), a hardware key in each node and a tunnel to the public hostname (`sluis.example.com` in docs). State and lease on rqlite. The index driver is decided in [0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/). Blob on Garage through the S3-compatible driver, with an off-site R2 copy of the audit log (after a spike), and spool transport. The audit pieces run on the same nodes and share driver instances. Each node keeps its own log with the other nodes as peer witnesses ([0004](/decisions/0004-audit-is-four-pieces-joined-by-a-transport-port/)).
+  - **lambda**: serverless on AWS. KMS for keys, DynamoDB for state and lease, SQS for transport, S3 for blob. The index driver is decided in [0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/). The writer runs with a reserved concurrency of 1 on a standard SQS queue; correctness comes from the blob fence (create-if-absent).
+  - **kubernetes**: KMS, DynamoDB, SQS, S3 and the Kubernetes Lease. The index driver is decided in [0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/); the pod layout and chart in ADRs 0046 and 0047.
 
   Any other combination is a possible installation: the rules allow it and `sluis config check` accepts it, but we do not test it.
 - **There are no presets.** The earlier ids T0 to T6 are retired. Visible text uses the four names above.
@@ -48,7 +48,7 @@ Seven named installations were also too many to build and test. The maintainer c
 - Local development uses a real hardware key, so contributors need one for the full local installation.
 - Older driver choices read as "this installation's default": spool on boards, SQS on lambda and kubernetes, a cloud key service on AWS, a hardware key on boards. Their reasoning is unchanged.
 - Local Docker and virtual machines share a runtime with physical nodes. Where they differ, the difference is a driver requirement, not a new runtime.
-- The index driver of each tested installation is decided in ADR 0022.
+- The index driver of each tested installation is decided in [0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/).
 
 
 ## Roads not taken
