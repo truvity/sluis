@@ -2,7 +2,10 @@
 # ST-nn are the rows of the standards register (docs/standards/index.md) plus the rows the
 # research proposed for it (register: false); NC-nn are candidate rows that the register lacks.
 # `register: true` means the row is on the /standards/ page. A row dropped from the page
-# (JWE, HPKE, OCSP; agreed 2026-10-30) keeps its id with `register: false`, so records that cite it stay valid.
+# (JWE, OCSP; agreed 2026-10-30) keeps its id with `register: false`, so records that cite it stay valid.
+# HPKE was dropped the same morning and is back on the page since the afternoon: enrolment is encrypted
+# end to end with it (agreed 2026-10-30). The SPIFFE rows ST-107 to ST-113 replace ST-48 (agreed 2026-10-30);
+# ST-48 keeps its id for SPIRE as prior art, which sluis does not deploy.
 schema: 1
 standards:
   - {id: ST-01, name: "RFC 6749 OAuth 2.0", group: "OAuth", register: true, url: "https://www.rfc-editor.org/rfc/rfc6749"}
@@ -52,7 +55,7 @@ standards:
   - {id: ST-45, name: "K8s SA token / TokenReview", group: "Workload", register: false, url: "https://kubernetes.io/docs/reference/access-authn-authz/service-accounts-admin/"}
   - {id: ST-46, name: "AWS web identity", group: "Workload", register: false, url: "https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRoleWithWebIdentity.html"}
   - {id: ST-47, name: "GCP WIF / Entra", group: "Workload", register: false}
-  - {id: ST-48, name: "SPIFFE / SPIRE", group: "Workload", register: false, url: "https://spiffe.io/docs/latest/spiffe-about/spiffe-concepts/"}
+  - {id: ST-48, name: "SPIRE (prior art, not deployed)", group: "Workload", register: false, url: "https://spiffe.io/docs/latest/spiffe-about/spiffe-concepts/"}
   - {id: ST-49, name: "RFC 7515 JWS", group: "JOSE", register: true, url: "https://www.rfc-editor.org/rfc/rfc7515"}
   - {id: ST-50, name: "RFC 7517 JWKS", group: "JOSE", register: true, url: "https://www.rfc-editor.org/rfc/rfc7517"}
   - {id: ST-51, name: "RFC 7518 JWA", group: "JOSE", register: true, url: "https://www.rfc-editor.org/rfc/rfc7518"}
@@ -65,7 +68,7 @@ standards:
   - {id: ST-58, name: "RFC 7800 `cnf`", group: "JOSE", register: false, url: "https://www.rfc-editor.org/rfc/rfc7800"}
   - {id: ST-59, name: "WebAuthn L2/L3", group: "Authn", register: true, url: "https://www.w3.org/TR/webauthn-3/"}
   - {id: ST-60, name: "SRP-6a", group: "Authn", register: true, url: "https://www.rfc-editor.org/rfc/rfc5054"}
-  - {id: ST-61, name: "RFC 9180 HPKE", group: "Authn", register: false, url: "https://www.rfc-editor.org/rfc/rfc9180"}
+  - {id: ST-61, name: "RFC 9180 HPKE", group: "Authn", register: true, url: "https://www.rfc-editor.org/rfc/rfc9180"}
   - {id: ST-62, name: "RFC 5280 X.509/CRL", group: "PKI", register: true, url: "https://www.rfc-editor.org/rfc/rfc5280"}
   - {id: ST-63, name: "RFC 6960 OCSP", group: "PKI", register: false, url: "https://www.rfc-editor.org/rfc/rfc6960"}
   - {id: ST-64, name: "RFC 8555 ACME", group: "PKI", register: true, url: "https://www.rfc-editor.org/rfc/rfc8555"}
@@ -111,6 +114,13 @@ standards:
   - {id: ST-104, name: "OpenID conformance suite", group: "Conformance", register: true, url: "https://openid.net/certification/"}
   - {id: ST-105, name: "FIDO conformance tools", group: "Conformance", register: false, url: "https://fidoalliance.org/certification/"}
   - {id: ST-106, name: "Wycheproof, CCTV, x509-limbo", group: "Conformance", register: true, url: "https://github.com/C2SP/wycheproof"}
+  - {id: ST-107, name: "SPIFFE ID", group: "Workload", register: true, url: "https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE-ID.md"}
+  - {id: ST-108, name: "SPIFFE Trust Domain and Bundle", group: "Workload", register: true, url: "https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Trust_Domain_and_Bundle.md"}
+  - {id: ST-109, name: "X.509-SVID", group: "Workload", register: true, url: "https://github.com/spiffe/spiffe/blob/main/standards/X509-SVID.md"}
+  - {id: ST-110, name: "JWT-SVID", group: "Workload", register: true, url: "https://github.com/spiffe/spiffe/blob/main/standards/JWT-SVID.md"}
+  - {id: ST-111, name: "SPIFFE Federation (later)", group: "Workload", register: true, url: "https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Federation.md"}
+  - {id: ST-112, name: "SPIFFE Workload Endpoint (later)", group: "Workload", register: true, url: "https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Workload_Endpoint.md"}
+  - {id: ST-113, name: "SPIFFE Workload API (later)", group: "Workload", register: true, url: "https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Workload_API.md"}
   - {id: NC-01, name: "RFC 8176 Authentication Method Reference Values", group: "Candidate", register: true}
   - {id: NC-02, name: "RFC 9562 UUIDv4", group: "Candidate", register: true}
   - {id: NC-03, name: "Security Event Tokens: RFC 8417, 8935 push, 8936 poll", group: "Candidate", register: false}
@@ -127,3 +137,4 @@ standards:
   - {id: NC-14, name: "Mail authentication (SPF, DKIM, DMARC)", group: "Candidate", register: false}
   - {id: NC-15, name: "Idempotency: IETF Idempotency-Key draft (`X-Request-ID` is not an RFC)", group: "Candidate", register: true}
   - {id: NC-16, name: "Assurance framework (NIST SP 800-63B, eIDAS levels)", group: "Candidate", register: false}
+  - {id: NC-17, name: "NATS decentralized JWT authentication and auth callout", group: "Candidate", register: false}
