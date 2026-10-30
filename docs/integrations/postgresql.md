@@ -6,7 +6,9 @@ sidebar:
   order: 8
 ---
 
-PostgreSQL is a **client profile**, not an integration: sluis calls nothing outside for it. The `ca` actor signs a short-lived X.509 client certificate, and the database trusts the CA. This page is here because "connect a database" is a use case every operator asks about.
+PostgreSQL is a **client profile**, not an integration: sluis calls nothing outside for it. The `ca` actor signs a short-lived X.509 client certificate from a **database-client intermediate**, and the database trusts only that intermediate. This page is here because "connect a database" is a use case every operator asks about. The record is [ADR 0033](/decisions/0033-database-access-uses-short-lived-credentials/).
+
+It covers PostgreSQL that you run yourself, including CloudNativePG (CNPG). **IAM authentication on Amazon RDS and Aurora is outside sluis** (below).
 
 ## What it's for
 
@@ -19,6 +21,16 @@ PostgreSQL is a **client profile**, not an integration: sluis calls nothing outs
 
 None. A client profile has no process and no credential of its own. The certificate is signed by the [`ca`](/concepts/actors/) actor, whose key sits in a hardware key or a KMS key. The client generates its own ECDSA P-384 key, so the private key never leaves the machine, and sends only a certificate signing request.
 
+## The certificate's name
+
+| Field | Holds |
+|---|---|
+| Issuer | The database-client intermediate of the [trust domain](/concepts/machine-identity/#spiffe-ids), one per boundary |
+| Common name (CN) | The database **role** |
+| Organizational unit (OU) | The **person** (their person key) or the **workload** |
+
+The server maps the certificate with `clientname=DN` and a fixed regular-expression map, so PostgreSQL 14 and newer log the full identity, not only the role. Some names are **reserved** in each trust domain and are never issued, such as `streaming_replica` and the owner role. The person and machine flows are the same apart from the proof: a person's sign-in, or a [machine identity](/concepts/machine-identity/).
+
 ## What sluis asks the vendor for
 
 Nothing. The operator configures the database to trust the CA and to map a certificate's common name to a database role. PostgreSQL does not check revocation unless a revocation list is configured, so a certificate works until it expires: keep the maximum lifetime short.
@@ -29,13 +41,26 @@ On the server, in the configuration (example):
 # postgresql.conf
 ssl = on
 ssl_ca_file = '/etc/postgresql/sluis-client-ca.pem'
-# pg_hba.conf
-hostssl orders all 0.0.0.0/0 cert map=sluis
-# pg_ident.conf: certificate common name to database role
-sluis   /^(.*)@example\.org$   \1
+# pg_hba.conf: map on the full subject, so the log shows who it was
+hostssl orders all 0.0.0.0/0 cert clientname=DN map=sluis
+# pg_ident.conf: subject (CN = role, OU = person or workload) to database role
+sluis   "/^CN=([a-z_]+),OU=.+$"   \1
 ```
 
 The CA's public certificate is published by sluis (static publication of CA certificates and revocation lists), so a server can fetch it rather than copy it by hand. The server's own certificate may come from a different CA; name its root in `sslrootcert`.
+
+**CNPG.** The CNPG-specific wiring (the `pg_hba` rules, the maps and the roles) lives with the CNPG deployment, outside sluis. sluis supplies the certificates and the intermediate.
+
+## Certificates in pods
+
+A workload in Kubernetes gets its certificate in two steps:
+
+1. **A cert-manager issuer backed by sluis**, first. It gives an identity per namespace, and the key is in a Secret. The issuer has a Helm chart of its own ([Packages](/distribution/packages/#helm-charts)).
+2. **The `sluis agent` sidecar**, next, for an identity per pod, with the key kept in the pod.
+
+## RDS and Aurora
+
+IAM database authentication on Amazon RDS and Aurora is **entirely outside sluis**. A small helper, separate from sluis, opens a `psql` session with ordinary AWS credentials, and sluis plugs in only as the source of those credentials, through `credential_process` in the AWS configuration. sluis mints no database credential for RDS or Aurora itself.
 
 ## What policy controls
 
@@ -75,7 +100,7 @@ The command signs in with the cached sign-in, requests a certificate, writes the
 ## v1 → v2 notes
 
 - v1 does not sign the certificate itself. OpenBao trusts the issuer on a JWT auth mount and signs the database client certificate; `sluisctl psql` and `sluisctl pg` authenticate to OpenBao and run the tool. See [Connect PostgreSQL with short-lived client certificates](/v1/guides/sluis/connect/postgresql/) and [Connect OpenBao](/v1/guides/sluis/connect/openbao/).
-- In v2 the `ca` actor signs the certificate. No secrets manager is needed for this use case, and sluis stays out of secrets storage.
+- In v2 the `ca` actor signs the certificate, from the database-client intermediate. No secrets manager is needed for this use case, and sluis stays out of secrets storage.
 - **PostgreSQL 18's native OAuth does not apply today:** v1 serves no device authorization grant for it, and v2 plans one for the command line ([#855](https://github.com/truvity/sluis/issues/855)).
 - Parity issues: [#824](https://github.com/truvity/sluis/issues/824) certificates, [#829](https://github.com/truvity/sluis/issues/829) the `psql` and `pg` wrappers.
 

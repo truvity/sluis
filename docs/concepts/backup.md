@@ -3,7 +3,7 @@ title: Backup and restore
 description: "What sluis backs up (authoritative state only), what it does not, how archives are encrypted, and how a restore proves and rebuilds the rest."
 status: target
 sidebar:
-  order: 10
+  order: 11
 ---
 
 A backup exists for the day the installation is lost or hostile. It is deliberately small. sluis backs up the **authoritative state that nothing else can recreate**, and rebuilds everything else after a restore.
@@ -92,4 +92,4 @@ A restore that has never been tried is a guess. A scheduled **rehearsal** restor
 | [serverless](/runtimes/serverless/) | A scheduled function. It spools to `/tmp`, so one invocation bounds the archive size | A separate function, invokable only by an administrator or a break-glass role |
 | [kubernetes](/runtimes/kubernetes/) | A CronJob | A Job started by the operator, never a CronJob |
 
-The archive's blob driver declares its own dependencies and lock mode. `r2` can be unlocked by an account administrator, so an installation on boards pairs it with a second, offline copy.
+The archive's blob driver declares its own dependencies and lock mode. On Cloudflare R2 the `s3-compatible` driver's lock can be removed by an account administrator, so an installation on boards pairs it with a second, offline copy.

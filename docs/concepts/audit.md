@@ -3,7 +3,7 @@ title: Audit
 description: "The sluis audit trail: producers put records through a transport to one writer per log, signed through key-holder, with optional witnesses."
 status: target
 sidebar:
-  order: 8
+  order: 9
 ---
 
 sluis writes a tamper-evident audit trail. This page explains the ideas. The actors, sockets and failure cases, installation by installation, are in the [audit explorer](/architecture/audit-explorer/).
@@ -57,15 +57,21 @@ flowchart LR
 1. **Transport.** An actor hands the record to the **transport** and carries on. In **queue** mode it returns to its caller once the record is durable in the queue, and never waits for the writer, the log store or the index. If the writer is down for an hour, requests still succeed and records queue. In **direct** mode the emitter streams the record to the writer; when the writer is down, the emitter falls back to a local spool (see [The transport](#the-transport)).
 2. **Sealed batches.** The writer takes records from the transport, validates and de-duplicates them, and groups them into an ordered **batch**. It closes the batch with a seal over its contents and the head of the previous batch.
 3. **The signed head and the hash chain.** The writer asks `key-holder` to sign the batch head with the log key. It never holds the key itself, and `key-holder`'s access list lets only the writer use the log key. The signature on a head that includes the previous signed head forms a **hash chain**: removing, reordering or altering a batch breaks every head after it. On AWS the same job is done by the key policy: it names the writer's role and no other.
-4. **Log store.** The batch is written to the blob store, with the lock mode that its blob driver gives. The log store is a `blob` whose lock mode matters: `s3` locks in compliance mode, `r2` locks in a mode that an account administrator can remove, and `fs` has no lock at all, so tamper evidence there depends on witnesses. See [capability flags](/concepts/drivers/#capability-flags).
+4. **Log store.** The batch is written to the blob store, with the lock mode that its blob driver gives. The log store is a `blob` whose lock mode matters: the `s3-compatible` driver locks in compliance mode on AWS S3 and in a mode that an account administrator can remove on Cloudflare R2, and `fs` has no lock at all, so tamper evidence there depends on witnesses. Every batch object is created with `If-None-Match: *`, so an object that exists is never written again. See [capability flags](/concepts/drivers/#capability-flags).
 
 The **witness** co-signs batch heads it has seen, so that the writer alone cannot choose which history an auditor sees. It is optional (see [The witness is optional](#the-witness-is-optional)).
 
 ## Exactly one writer per log
 
-The rule is **exactly one writer per log**, not one per installation. A log is the ordered sequence of batches with one log key. The writer declares **instances: exactly 1**, so when an installation has more than one node, or elastic nodes, it needs the lease port (on serverless the platform's concurrency limit of 1 may stand in for it).
+The rule is **exactly one writer per log**, not one per installation. A log is the ordered sequence of batches with one log key. The writer declares **instances: exactly 1**, so when an installation has more than one node, or elastic nodes, it needs the lease port.
 
-**A cluster keeps one log per node.** Each node has its own writer, its own spool and its own log key. The other nodes are that log's **peer witnesses**, which is the 2-of-3 co-signing on a three-node cluster. Readers merge the logs by time. No writer reads another node's spool, so there is nothing to elect, and when one node is down the other nodes keep writing their own logs.
+**The writer is fenced by the blob store itself.** A batch object is created only if it does not exist yet (`If-None-Match: *`), so a second writer that believes it holds the log cannot overwrite a batch or fork the log: its create fails. The lease, where one is needed, lives on the state store with a fencing token ([Data](/concepts/data/#leases-and-fencing-tokens)).
+
+:::note[Proposed]
+On serverless the writer was planned with a reserved concurrency of 1 in place of the lease. With an SQS trigger that is still to be verified: an event source mapping starts at a concurrency of 2, and a reserved concurrency of 1 throttles it. The safe forms are a FIFO queue with one message group, or a lease on DynamoDB, with the create-if-absent fence in either case.
+:::
+
+**A cluster keeps one log per node.** Each node has its own writer, its own spool and its own log key. The other nodes are that log's **peer witnesses**, which is the 2-of-3 co-signing on a three-node cluster. Readers merge the logs by time. No writer reads another node's spool, so there is nothing to elect and **no writer lease is needed**, and when one node is down the other nodes keep writing their own logs.
 
 | Installation | Log key | Witness |
 |---|---|---|
@@ -87,10 +93,22 @@ The transport has two modes and several drivers:
 
 The installation defaults stay as they are ([OD-34](/open-decisions/#od-34)): the spool on bare-metal installations such as boards, and SQS on serverless and on Kubernetes ([OD-22](/open-decisions/#od-22)). `direct` and `nats-jetstream` are supported drivers with no installation default; where NATS JetStream fits is a choice of the installation. Cloudflare Queues was considered and is not a transport driver.
 
+**The emitter is authenticated by the transport's own layer.** Each transport driver checks the producer with the platform's means, which is the second layer of [defence in depth](/concepts/drivers/#defence-in-depth):
+
+| Driver | How the producer is authenticated |
+|---|---|
+| `direct-unix` | The peer uid, read by the writer |
+| `direct-mtls` | The SPIFFE ID in the client certificate |
+| `spool` | A spool directory per producer uid |
+| `sqs` | A queue policy per sender role, and a queue per boundary |
+| `nats-jetstream` | NATS accounts and permission templates: an operator per environment, an account per tenant namespace, the company as an account tag, the user `<actor>@<boundary>`, and the subjects `sluis.audit.{{tag(boundary)}}.{{tag(actor)}}.>` |
+
+**sluis's own audit does not go through NATS by default.** NATS JetStream is a supported transport, and sluis can issue the NATS credentials that put it to use (as the NATS auth callout, or as user JWTs issued through `sluis agent`, both later and on Kubernetes), but the default transports stay the spool and SQS.
+
 **Direct mode falls back to a local spool when the writer is down** ([OD-35](/open-decisions/#od-35)). The emitter keeps the record on its own disk and replays it when the writer returns. The consequence is that direct mode needs a disk, so it is not available on serverless, which fits the [compatibility table](/concepts/drivers/#which-drivers-fit-which-runtime). An in-memory buffer is not offered, because it would lose records.
 
 :::caution[Open decision OD-31: Audit as a separate installation]
-The audit side is being redesigned as its own installation, connected to sluis over the network. Open: the actors of the audit installation, how an emitter authenticates, and a co-located placement for a small install. The design is not settled. The lean is that audit is its own installation, and sluis emits over a direct stream or a queue through the transport port.
+The audit side is being redesigned as its own installation, connected to sluis over the network. The actors are decided (no notary), and an emitter is authenticated by the transport driver's own layer (above). Open: the co-located profile for a small install. The lean is that audit is its own installation, and sluis emits over a direct stream or a queue through the transport port.
 
 OD-31 is the existing audit split. The points that refine it are decided: [OD-32](/open-decisions/#od-32) (placement is derived), [OD-33](/open-decisions/#od-33) (quota metering and enforcement), [OD-34](/open-decisions/#od-34) to [OD-36](/open-decisions/#od-36) (the transport defaults, direct mode, and the optional witness), [OD-37](/open-decisions/#od-37) and [OD-38](/open-decisions/#od-38) (the four pieces) and [OD-39](/open-decisions/#od-39) (the audit actors).
 :::
@@ -114,7 +132,7 @@ The witness port is where an independent party co-signs a head. `peer` lets the 
 A witness is **optional everywhere** ([OD-36](/open-decisions/#od-36)). `sluis config check` warns when an installation has none.
 
 :::caution[The risk of no witness]
-With no witness and no notary, a compromised writer can get a rewritten checkpoint signed: it asks `key-holder` for a signature over a history it changed, and nobody else has seen the old one. A compliance lock on `s3` still prevents overwriting objects that were already written, but it does not prevent a **split view**, in which the writer shows one history to one reader and another history to the next. Only a witness that has co-signed the original head can expose a split view. On `r2` the lock can be removed by an account administrator, and on `fs` there is no lock, so there the witness is the only protection. An installation that runs without a witness accepts this risk.
+With no witness and no notary, a compromised writer can get a rewritten checkpoint signed: it asks `key-holder` for a signature over a history it changed, and nobody else has seen the old one. A compliance lock on `s3` still prevents overwriting objects that were already written, but it does not prevent a **split view**, in which the writer shows one history to one reader and another history to the next. Only a witness that has co-signed the original head can expose a split view. On R2 the lock can be removed by an account administrator, and on `fs` there is no lock, so there the witness is the only protection. An installation that runs without a witness accepts this risk.
 :::
 
 There is no separate notary to take this role (agreed, [OD-39](/open-decisions/#od-39)). The notary was a second actor that signed what the writer wrote. It is replaced by the access list of `key-holder` (or by the key policy on AWS), which lets only the writer use the log key, and by the witness for what the writer alone cannot prove.

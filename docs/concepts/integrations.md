@@ -6,7 +6,7 @@ sidebar:
   order: 3
 ---
 
-An **integration** connects sluis to something outside it: a sign-in provider, a directory, a cloud, a chat workspace. Each integration is its own process and holds only its own vendor credential. It is an **integration actor** of one of six kinds, each a ConnectRPC contract over one shared base contract. The [actors](/concepts/actors/) page lists the ports each kind needs.
+An **integration** connects sluis to something outside it: a sign-in provider, a directory, a cloud, a chat workspace. Each integration is its own process and holds only its own vendor credential. There is one process per vendor tenant and per credential, named `<vendor>[-<capability>]@<tenant>`: sign-in and the directory of one workspace tenant are `google-signin@<company>` and `google-directory@<company>` ([Naming](/concepts/actors/#naming)). It is an **integration actor** of one of six kinds, each a ConnectRPC contract over one shared base contract. The [actors](/concepts/actors/) page lists the ports each kind needs.
 
 This page is the model. For what each integration is *for*, what sluis asks its vendor for and how to connect it, see [Integrations](/integrations/) and the [setup patterns](/integrations/connecting/). For the standards the integrations and the protocol follow, see the [standards register](/standards/).
 

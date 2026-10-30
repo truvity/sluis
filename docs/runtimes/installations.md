@@ -15,6 +15,8 @@ An **installation** is one concrete deployment: a [runtime](/runtimes/), a node 
 | [lambda](#lambda) | [serverless](/runtimes/serverless/) | AWS Lambda |
 | [kubernetes](#kubernetes) | [kubernetes](/runtimes/kubernetes/) | The one tested Kubernetes installation |
 
+An installation serves one [boundary](/runtimes/boundaries/) at L4, or the front of a federation with the boundaries below L4 inside it; several installations joined by declared trust form one federation, with one sign-in address and one console. A **test installation** is always separate: it serves no real user, trusts nothing, and lives outside the sluis host names.
+
 **Any other combination is a possible installation, allowed by the rules but not tested.** A single board, a single EC2 instance or a cluster of EC2 instances is such an installation: the rules of [Ports and drivers](/concepts/drivers/) allow it, and `sluis config check` (in the design) validates it against the requirements its drivers declare, but nobody runs it in CI. Nothing on this page forbids it. It only says what is tested.
 
 ## Delivery order
@@ -33,9 +35,9 @@ A driver choice that used to be a per-shape decision now reads as "this installa
 | Installation | keys | state, lease | transport | blob | index | witness |
 |---|---|---|---|---|---|---|
 | local | yubikey-piv through the host's `pcscd` | embedded, local lock | spool | fs | sqlite | none |
-| boards | yubikey-piv, one per node | rqlite | spool | r2 | rqlite (proposed driver) | peer |
-| lambda | aws-kms | dynamodb | sqs | s3 | none (proposed) | none |
-| kubernetes | aws-kms | dynamodb, Kubernetes Lease | sqs | s3 | postgres on cnpg (proposed) | none |
+| boards | yubikey-piv, one per node | rqlite, one cluster per owning actor | spool | s3-compatible on R2 | rqlite (proposed driver) | peer |
+| lambda | aws-kms | dynamodb | sqs | s3-compatible on S3 | none (proposed) | none |
+| kubernetes | aws-kms | dynamodb | sqs | s3-compatible on S3 | postgres on cnpg (proposed) | none |
 
 The key mode follows from the installation, not from a switch: a YubiKey on local and boards, KMS on lambda and kubernetes. A software key is allowed on local for development, and the code refuses it in production. The [transport](/concepts/audit/) defaults are the ones above. The `direct` and `nats-jetstream` transport drivers are supported and are the default of no installation ([OD-34](/open-decisions/#od-34)).
 
@@ -146,10 +148,10 @@ flowchart TB
   w3 -.-> r2
 ```
 
-- **Drivers:** yubikey-piv with one YubiKey per node and the slot plan on [bare-metal](/runtimes/bare-metal/#keys); rqlite for state and lease; the spool for transport on each node; Cloudflare R2 for the blob; and the index on rqlite. The rqlite index is a **proposed new driver**: a replicated SQLite, so the reader can run on any node. Whether rqlite supports the full-text search (FTS5) the index needs must be verified first.
+- **Drivers:** yubikey-piv with one YubiKey per node, through `key-holder`, and the slot plan on [bare-metal](/runtimes/bare-metal/#keys); rqlite for state and lease, one cluster per (boundary, owning actor); the spool for transport on each node; the `s3-compatible` blob driver on Cloudflare R2, with temporary credentials from the `cloudflare` cloud driver; and the index on rqlite. The rqlite index is a **proposed new driver**: a replicated SQLite, so the reader can run on any node. Its full-text search (FTS5) was tested on a three-node cluster on 2026-10-30; native arm64 hardware and the fsync cost on eMMC are still to be measured.
 - **Keys:** a node's key is its own. No key is shared between nodes, so losing a board loses one key, not the install's. Sealing uses ECDH plus HKDF with the node's `9d` key.
-- **Audit:** the pieces run on the same nodes and share driver instances. **There is one log per node** ([the agreed rule](/concepts/audit/): exactly one writer per log, not one per installation). Each node has its own writer, spool and log key, and the other two nodes are its peer witnesses, the agreed 2-of-3 co-signing. Readers merge the logs by time. A writer asks its node's `key-holder` to sign checkpoints, and there is no notary.
-- **Identity and edge:** each node runs its own `cloudflared`, and each is its own issuer, `https://<issuer>/nodes/<node>/`. The public hostname is `sluis.example.com`.
+- **Audit:** the pieces run on the same nodes and share driver instances. **There is one log per node** ([the agreed rule](/concepts/audit/): exactly one writer per log, not one per installation). Each node has its own writer, spool and log key, and the other two nodes are its peer witnesses, the agreed 2-of-3 co-signing. Readers merge the logs by time. A writer asks its node's `key-holder` to sign checkpoints, and there is no notary. Batches are created with `If-None-Match: *`, so with one log per node no writer lease is needed.
+- **Identity and edge:** each node runs its own `cloudflared`, which forwards to `entry`'s Unix socket, and each node is its own issuer for workload tokens, `https://<issuer>/nodes/<node>/`. The public hostname is `sluis.example.com`.
 - **Limits and residual risk:** Raft tolerates the loss of one node of three. A node's YubiKey and PIN guard its key; physical access to a board with its key and PIN allows signing as that node, which peer witnessing limits for the audit logs but not for tokens. R2's lock can be removed by a Cloudflare account administrator, so the logs get their tamper evidence from the witnesses, not from the bucket. Mixed distributions widen what has to be tested.
 
 ## lambda
@@ -167,8 +169,8 @@ flowchart LR
   writer --> s3["S3 blob<br/>(compliance lock)"]
 ```
 
-- **Drivers:** aws-kms for keys, DynamoDB for state and lease, an SQS queue for transport (a function's disk does not outlive its sandbox), S3 for the blob. The default index is `none` (proposed): a separate installation holds the index, or the scan from the CLI is used. A `postgres` index (`rds` or `aurora` through RDS Proxy, proposed) is allowed ([OD-12](/open-decisions/#od-12), revised).
-- **Writer:** the audit writer runs with reserved concurrency 1. It asks the `key-holder` to sign checkpoints with the log key, and there is no notary.
+- **Drivers:** aws-kms for keys, DynamoDB for state and lease, an SQS queue for transport (a function's disk does not outlive its sandbox), the `s3-compatible` blob driver on S3. The default index is `none` (proposed): a separate installation holds the index, or the scan from the CLI is used. A `postgres` index (`rds` or `aurora` through RDS Proxy, proposed) is allowed ([OD-12](/open-decisions/#od-12), revised).
+- **Writer:** the audit writer is fenced by create-if-absent on the bucket. Whether a reserved concurrency of 1 can stand in for its lease with an SQS trigger is to be verified; the safe forms are a FIFO queue with one message group or a lease on DynamoDB. It signs checkpoints with the log key in KMS, under a key policy that names only its role; there is no `key-holder` and no notary.
 - **Witness:** none by default. `sluis config check` warns about it ([OD-36](/open-decisions/#od-36)); an `external` witness is the way to add one.
 - **Transport:** the direct mode needs a disk for its fallback spool ([OD-35](/open-decisions/#od-35)), so it is not available on serverless.
 - **Identity and edge:** the function's IAM role is its identity. API Gateway sits in front of `entry`, through the Lambda Web Adapter to `entry`'s loopback port.
@@ -178,7 +180,7 @@ flowchart LR
 
 A node pod and an audit pod, a container per actor, on Amazon EKS with AWS KMS. It is built in parallel with boards and lambda, after local. It is in design and test scope now ([OD-7](/open-decisions/#od-7)), and its design is proposed. The details and the open points are on [Kubernetes](/runtimes/kubernetes/). Runtime: [kubernetes](/runtimes/kubernetes/), N nodes.
 
-- **Drivers:** aws-kms for keys ([OD-20](/open-decisions/#od-20)), DynamoDB for state ([OD-21](/open-decisions/#od-21)), Kubernetes Lease for the lease, SQS for transport for now ([OD-22](/open-decisions/#od-22)), S3 for the blob, and `postgres` on `cnpg` for the index (proposed; the `external` mode takes a connection string only).
+- **Drivers:** aws-kms for keys ([OD-20](/open-decisions/#od-20)), DynamoDB for state ([OD-21](/open-decisions/#od-21)) and for the lease (a Kubernetes Lease driver is in the backlog), SQS for transport for now ([OD-22](/open-decisions/#od-22)), the `s3-compatible` blob driver on S3, and `postgres` on `cnpg` for the index (proposed; the `external` mode takes a connection string only).
 - **Witness:** none by default. A peer witness in the same cluster is not independent, so an `external` witness is the useful one.
 - **Identity:** projected ServiceAccount tokens, one audience per actor ([OD-19](/open-decisions/#od-19)).
 - **Edge:** an edge relay or `cloudflared` ([OD-24](/open-decisions/#od-24)).

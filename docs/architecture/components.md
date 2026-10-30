@@ -16,15 +16,15 @@ Every major component is a ConnectRPC contract, even when caller and callee shar
 | ----- | ---------- | -------------- |
 | **Front** | web surface, OIDC endpoints, CLI and CI API, webhook ingress, PKI endpoint, exports API, console HTTP, audit query HTTP | Parse the wire protocol, apply uniform hardening (headers, cookies, throttling, uniform refusals), and delegate every decision to an owner. A front component decides nothing |
 | **Identity path** | authn, authorization flows, sessions, token exchange, token issuer, client registry, key ring, proof verifier, facts broker, policy, mint broker, tick scheduler, grants export, console | Own sessions, codes, refresh tokens and clients; verify proofs; turn facts into grants; ask for credentials to be minted |
-| **Certificates and quota** | PKI, SSH CA, quota, backup, restore | Issue X.509 and SSH certificates, admit metered operations, and protect and recover the install (see [Backup and restore](/concepts/backup/)). Quota (the quota engine and its quota state) is a separate piece, combinable with sluis, and its placement is derived from the port and driver rules, see [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived) ([OD-38](/open-decisions/#od-38), [OD-33](/open-decisions/#od-33)) |
+| **Certificates and quota** | PKI, SSH CA, host enrolment, quota, backup, restore | Issue X.509 and SSH certificates, admit metered operations, and protect and recover the install (see [Backup and restore](/concepts/backup/)). Quota (the quota engine and its quota state) is a separate piece, combinable with sluis, and its placement is derived from the port and driver rules, see [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived) ([OD-38](/open-decisions/#od-38), [OD-33](/open-decisions/#od-33)) |
 | **Audit and trust** | audit writer, witness coordinator, audit indexer, audit query, trust log, static publisher | Take records from every other component, seal them in batches, sign the batch heads through the keys port, and serve them back ([Audit](/concepts/audit/)). The indexer, the search index and the reader are the separate Search piece; its placement is derived from the port and driver rules, see [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived) ([OD-32](/open-decisions/#od-32)) |
 | **Integrations** | upstream, workload verifier, facts source, credential minter, provisioner, notifier | Talk to one external system each ([Integrations](/concepts/integrations/)). Return facts, or carry out effects core has authorized |
 | **Ports** | keys, state, lease, blob, transport, index, cloud, secrets and export, and for audit also witness | Libraries linked into the component that needs them. Never a hop |
 | **Drivers** | the technology behind one port | See [Drivers](/concepts/drivers/) and the table below |
 
-The groups map onto [actors](/architecture/processes/) (see also [Actors](/concepts/actors/)): `entry` hosts the front, authn, sessions, exchange, client registry and console; `signer` hosts the key ring; `policy` hosts the decision point; `ca` hosts PKI and SSH; the audit components split across the `writer`, the `witness`, the `indexer` and the `reader`; `quota` is its own actor; and each integration runs as its own process. There is no notary actor (agreed, [OD-39](/open-decisions/#od-39)): the writer asks `key-holder` to sign, and its access list lets only the writer use the log key.
+The groups map onto [actors](/architecture/processes/) (see also [Actors](/concepts/actors/)): `entry` hosts the front only, parsing, validating against closed parameter lists and routing; `session` hosts authn, the authorization flows and sessions; `exchange` hosts token exchange, the proof verifier, the client registry and host enrolment; `console` hosts the console; `signer` hosts the key ring; `policy` hosts the decision point; `ca` hosts PKI; `ssh-ca` hosts the SSH CA; the audit components split across the `writer`, the `witness`, the `indexer` and the `reader`; `quota` is its own actor; and each integration runs as its own process, one per vendor tenant and credential. There is no notary actor (agreed, [OD-39](/open-decisions/#od-39)): the writer asks `key-holder` to sign, and its access list lets only the writer use the log key.
 
-The console component in `entry` is the console API and the browser's backend: the session is an HttpOnly cookie, and the browser holds no token. It reads through the components it calls and routes each operator-set write to the component that owns the record kind, which validates it ([ADR 0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/)). The single-page application is a separate artifact, served on the same origin by each runtime's static host.
+The console component, in the `console` actor, is the operator API and the browser's backend, reached through `entry`: the session is an HttpOnly cookie that `session` checks, and the browser holds no token. It reads through the components it calls and routes each operator-set write to the component that owns the record kind, which validates it ([ADR 0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/)). The single-page application is a separate artifact, served on the same origin by each runtime's static host.
 
 ## Integration contracts
 
@@ -33,9 +33,9 @@ All integrations share one base contract, `Integration`, and implement one or mo
 | Contract | What it does | Facts only? | Implementations |
 | -------- | ------------ | ----------- | --------------- |
 | `Integration` (base) | Describe itself, probe health, connect and disconnect, link a person's account, handle a webhook | n/a | Every integration |
-| `Upstream` | Authenticate a person elsewhere: begin and complete a sign-in, verify an upstream access token | Yes | Workspace directory sign-in, generic OIDC, peer sluis |
+| `Upstream` | Authenticate a person elsewhere: begin and complete a sign-in, verify an upstream access token | Yes | Workspace directory sign-in (one per tenant, such as `google-signin@<company>`), generic OIDC (`oidc@<name>`), peer sluis |
 | `WorkloadVerifier` | Verify a machine proof. Needs no secret | Yes | GitHub Actions, Kubernetes, AWS web identity, peer sluis |
-| `FactsSource` | Answer what an external system knows about a subject or group, with freshness; refresh a snapshot | Yes | Workspace directory, GitHub teams, chat workspace users, generic OIDC claims |
+| `FactsSource` | Answer what an external system knows about a subject or group, with freshness; refresh a snapshot | Yes | Workspace directory (`google-directory@<company>`, a credential of its own), GitHub teams, chat workspace users, generic OIDC claims |
 | `CredentialMinter` | Produce a short-lived downstream credential for a scope core has authorized | Effector | Cloud API tokens, GitHub installation tokens, peer sluis |
 | `Provisioner` | Make an external system equal to a desired state core supplies | Effector | GitHub team membership, chat channels, wiki users and groups, on-call rotations |
 | `Notifier` | Deliver a message to a person or place; receive interactions through the webhook | Yes | Chat workspace, Telegram |
@@ -47,6 +47,7 @@ Rules shared by the contracts:
 - **A closed error model.** `UNAVAILABLE`, `UPSTREAM_REJECTED`, `INVALID`, `NOT_FOUND`, `RATE_LIMITED`, `UNSUPPORTED`, `STALE`. No vendor error text crosses the boundary.
 - **Freshness is part of every fact.** A fact carries `as_of`, `max_age` and whether it is authoritative. "I could not ask" is not "gone".
 - **The same protobuf on every transport.** A Unix socket with peer credentials locally, a Lambda invoke on AWS, HTTPS with mTLS remotely.
+- **One process per credential.** An integration is named `<vendor>[-<capability>]@<tenant>`, and a vendor whose capabilities use different credentials is split ([Naming](/concepts/actors/#naming)).
 
 Six of the sixteen integrations that v1 lists call no external system: databases, hosts, cert-manager, the GitOps controllers, MCP, and SSH certificate login. They become **client profiles** (an OIDC client entry plus a resource profile), not integrations, which leaves eleven real ones.
 
@@ -103,18 +104,18 @@ A port is the narrowest interface that every driver can honour and every user ne
 
 | Port | Operations | Notes |
 | ---- | ---------- | ----- |
-| **state** | `Get`, `Create`, `CompareAndSwap`, `DeleteIf`, `List`, `WriteBatch`, `Adjust` (proposed) | Two consistency levels, strong and local. An atomic write batch keeps the audit batch row, its dedupe record and the index cursor together. Quota state is the state port with compare-and-set; a conditional adjust (`Adjust`), like `DeleteIf` and `List`, is a proposed further operation (ADR 0057; the decided operations are in [ADR 0017](/decisions/0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite/)). A scope object `{owner, connection}` isolates callers; no one builds key strings |
+| **state** | `Get`, `Create`, `CompareAndSwap`, `DeleteIf`, `List`, `WriteBatch`, `Adjust` (proposed) | Two consistency levels, strong and local. An atomic write batch keeps the audit batch row, its dedupe record and the index cursor together. Quota state is the state port with compare-and-set; a conditional adjust (`Adjust`), like `DeleteIf` and `List`, is a proposed further operation (ADR 0057; the decided operations are in [ADR 0017](/decisions/0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite/)). The port library scopes every call to `<boundary>/<kind>/…` from the actor's own identity, so no one builds key strings, and it encrypts every value ([Data](/concepts/data/#every-value-is-encrypted)) |
 | **index** | `Apply`, `Cursor`, `Query`, `Rebuild` | The search index of the audit trail. Query syntax never leaks past the driver. Drivers: sqlite, rqlite (proposed), postgres, or none (a scan) |
 | **keys** | `Describe`, `Sign`, `Wrap`, `Unwrap`, `Derive`, `Agree`, `PublicKey` | See below. Callers name a key purpose, never an ARN or a slot |
-| **blob** | `PutIfAbsent`, `Put`, `Get`, `List`, `Delete`, `Capabilities` | Immutability is the common case. `Capabilities` reports the lock mode (none, removable or compliance), versioning and maximum object size. The audit log is a blob with a lock mode |
+| **blob** | `PutIfAbsent`, `Put`, `Get`, `List`, `Delete`, `Capabilities` | Immutability is the common case. `PutIfAbsent` is create-if-absent (`If-None-Match: *`), which is what fences the audit writer. `Capabilities` reports the lock mode (none, removable or compliance), versioning and maximum object size. The audit log is a blob with a lock mode. One `s3-compatible` driver serves S3 and R2, with credentials from the cloud port |
 | **transport** | `put`, `receive`, `ack`, or `stream` | How a record gets from an emitter (a library in every actor) to the writer: **direct** (a stream to the writer) or **queue** (spool, SQS, NATS JetStream). Carries a durability level on put. Visibility timeouts and dead-letter queues stay in the driver. It replaces the older queue port and "outbox" |
-| **lease** | `Acquire(name, ttl)`, `Renew`, `Release` | Named leases with fencing tokens, one per target, not "one leader". Needed by an actor that declares instances: exactly 1 when there is more than one node |
-| **cloud** | `Invoke`, `InvokeAsync`, `CallerIdentity` | How a process calls another and learns who called it. `CallerIdentity` returns a normalized `{class, id}` whatever proves it: a peer credential, a platform token, a certificate |
+| **lease** | `Acquire(name, ttl)`, `Renew`, `Release` | Named leases with fencing tokens, one per target, not "one leader", built on the state store and independent of the Raft leader. Needed by an actor that declares instances: exactly 1 when there is more than one node. Where the target store can fence, the fence is in that store ([Data](/concepts/data/#leases-and-fencing-tokens)) |
+| **cloud** | `Invoke`, `InvokeAsync`, `CallerIdentity` | How a process calls another and learns who called it. `CallerIdentity` returns a normalized `{class, id}` whatever proves it: a peer credential, a platform token, a certificate. Its drivers also hand out cloud credentials: AWS STS, GCP, Azure and Cloudflare R2 temporary credentials |
 | **secrets** (proposed) | `Get`, `Put` against a revision, `Delete`, `List` | Whole values under addresses: sluis's own secrets and its integrations'. A listing returns names, never values. Not a general secrets engine: see [Secrets and export](/concepts/secrets/) |
 | **export** (proposed) | `Put`, `Delete`, `Status` | A small, typed set of documents that something outside sluis may read. File and bucket drops are age-encrypted to the consumer's own recipient |
 | **witness** | `cosign` | The one port audit adds to the shared ones. Drivers: none, peer (two or more nodes) or external. A witness is optional everywhere, and `sluis config check` warns when there is none ([OD-36](/open-decisions/#od-36)) |
 
-Each driver is a service started by the platform that speaks ConnectRPC over a Unix socket; nobody execs a driver. A driver declares `instance: per-actor | shared`. See [Processes](/architecture/processes/). The drivers behind each port, what each requires, and which fit which runtime are on [Ports and drivers](/concepts/drivers/).
+Each driver is a service started by the platform that speaks ConnectRPC over a Unix socket; nobody execs a driver. A driver declares `instance: per-actor | shared`, and every port is protected in three layers: the port library, the backend's own check of the caller, and physical separation at L3 and above ([Defence in depth](/concepts/drivers/#defence-in-depth)). See [Processes](/architecture/processes/). The drivers behind each port, what each requires, and which fit which runtime are on [Ports and drivers](/concepts/drivers/).
 
 ### Actors and the ports they require
 
@@ -122,10 +123,14 @@ Every actor declares which ports it requires (R), may use (O), or does not use (
 
 | Actor | keys | state | lease | blob | transport | index | witness | cloud |
 | ----- | ---- | ----- | ----- | ---- | --------- | ----- | ------- | ----- |
-| `entry` | – | R | – | – | R | – | – | – |
+| `entry` | – | – | – | – | R | – | – | – |
+| `session` | R | R | – | – | R | – | – | – |
+| `console` | – | – | – | – | R | – | – | – |
+| `exchange` | R | R | – | – | R | – | – | – |
 | `signer` | R | R | O | O | R | – | – | – |
 | `policy` | R | – | – | – | R | – | – | – |
 | `ca` | R | R | – | O | R | – | – | – |
+| `ssh-ca` | R | R | – | O | R | – | – | – |
 | `quota` | – | R | – | – | R | – | – | – |
 | Upstream | O | O | – | – | R | – | – | – |
 | WorkloadVerifier | – | O | – | – | R | – | – | – |
@@ -134,7 +139,7 @@ Every actor declares which ports it requires (R), may use (O), or does not use (
 | Provisioner | – | O | O | R | R | – | – | O |
 | Notifier | – | O | – | – | R | – | – | – |
 | `sluis-node` | R | – | – | R | R | – | – | – |
-| `key-holder`, `state-owner` | – | – | – | – | R | – | – | O |
+| `key-holder` | – | – | – | – | R | – | – | – |
 | third-party app | O | – | – | – | R | – | – | – |
 
 The audit actors, with the same legend (agreed, [OD-39](/open-decisions/#od-39)). The cell marked * is the one place an actor receives from the transport instead of putting into it.
@@ -150,15 +155,17 @@ Three actors declare **instances: exactly 1**: the audit writer (one per log), t
 
 ### The keys port
 
-The keys port binds a **key purpose** to a backend and refuses a backend that is too weak for the purpose when the configuration loads. The code refuses a software key in production; configuration picks among the modes the installation's runtime allows. The key purposes are the unit callers name: `token-signing`, `ca`, `audit-log`, `grant`, `sealing`, and one per cloud federation. Callers never see an ARN, a slot or a path.
+The keys port binds a **key purpose** to a backend and refuses a backend that is too weak for the purpose when the configuration loads. The code refuses a software key in production; configuration picks among the modes the installation's runtime allows. The key purposes are the unit callers name: `token-signing`, `ca`, `ssh-user`, `ssh-host`, `audit-log`, `grant`, `sealing`, `enrolment`, and one per cloud federation. Callers never see an ARN, a slot or a path. Each boundary has its own keys.
 
 | Key purpose | Requires | On AWS KMS | On a YubiKey (PIV) |
 | -------- | -------- | ---------- | ------------------ |
 | `token-signing` | Never exportable; used by the `signer` actor only | One `ECC_NIST_P384` key; tokens are signed directly | Slot 9c; about 8 signatures per second |
-| `ca` (X.509 and SSH) | Never exportable; used by the `ca` actor only; one key per purpose (X.509 per trust domain, `ssh-user`, `ssh-host`) | One `ECC_NIST_P384` key per purpose | Slots 9c, 82 and 83 (proposed) |
+| `ca` (X.509) | Never exportable; used by the `ca` actor only; one key per trust domain | One `ECC_NIST_P384` key per trust domain | Slot 9c |
+| `ssh-user`, `ssh-host` | Never exportable; used by the `ssh-ca` actor only | One `ECC_NIST_P384` key each | Slots 82 and 83 (proposed) |
 | `audit-log` | Never exportable; used by the audit `writer` only, through `key-holder` or a key policy | One `ECC_NIST_P384` key per log | The node's own key; a cluster keeps one log per node and peers witness it |
 | `grant` | Never exportable; used by the `policy` actor only | One `ECC_NIST_P384` key | A node key |
-| `sealing` | Wraps and unwraps; takes an encryption context | One symmetric key with encryption contexts | ECDH plus HKDF (HPKE-style) with a P-384 key in slot 9d |
+| `sealing` | Wraps and unwraps; takes an encryption context. Wraps the data key of each (boundary, record kind) and the cookie-sealing key of `session` | One symmetric key with encryption contexts | ECDH plus HKDF (HPKE-style) with a P-384 key in slot 9d |
+| `enrolment` | Opens HPKE-sealed enrolment requests; used by `exchange` only | Held by KMS | Held by `key-holder` |
 
 Each backend describes itself with traits: exportability, attestation, whether a human must touch it, latency class, throughput, and who enforces which caller may use it (platform IAM, a shared driver, or nothing). The port signs bytes or digests; JWT shaping (`exp`, `iat`, lifetime limits) lives in a `jose` library in the token issuer, not in the port. `Derive` (a keyed, deterministic function) and `Agree` (ECDH) are separate operations because a PIV token has no HMAC. ES384 (P-384) is the default; the cloud-federation keys and the FAPI 2.0 algorithms (PS256, ES256, EdDSA) are the exceptions, each in its own slot or key. See [Keys](/concepts/keys/#algorithms).
 
@@ -179,7 +186,7 @@ flowchart LR
     cli["CLI and CI API"]
   end
 
-  subgraph CORE["Identity path"]
+  subgraph CORE["Identity path: session, exchange, signer, policy"]
     sess["sessions and codes"]
     xchg["token exchange"]
     issuer["token issuer"]
@@ -323,14 +330,15 @@ Rules the graph encodes:
 
 ## One writer per record kind
 
-Every record kind has exactly one component that writes it. Others read through the owner's contract, or read a prefix the owner publishes. The manifest generator refuses two actors that both declare `writer: true` for one kind, and on bare-metal the `state-owner` shared driver enforces the same rule at run time.
+Every record kind has exactly one component that writes it. Others read through the owner's contract, or read a prefix the owner publishes. The manifest generator refuses two actors that both declare `writer: true` for one kind, and the store enforces the same rule at run time with the owner's own credentials: the only rqlite user with `execute` on the owner's cluster, an IAM leading-key condition on DynamoDB, grants and row-level security on Postgres.
 
 | Record kind | Writer |
 | ----------- | ------ |
-| Sessions (single sign-on, per client, agent class), refresh tokens, the revocation list | sessions |
-| Authorization codes, consent, device authorization records | authorization flows |
-| Pending sign-in state, the recovery verifier and switch (passkeys: a generic WebAuthn relying party, planned) | authn |
-| Client secret versions and the client metadata cache | client registry |
+| Sessions (single sign-on, per client, agent class), refresh tokens, the revocation list | sessions, in `session` |
+| Authorization codes, consent, device authorization records | authorization flows, in `session` |
+| Pending sign-in state, the recovery verifier and switch (passkeys: a generic WebAuthn relying party, planned) | authn, in `session` |
+| Client secret versions and the client metadata cache | client registry, in `exchange` |
+| Enrolments, enrolment-token hashes and the host registry with attribute provenance | host enrolment, in `exchange` ([Machine identity](/concepts/machine-identity/)) |
 | The signing ring (published keys, key references) and its rotation schedule | key ring |
 | Last-known (held) fact sets per subject | facts broker |
 | Directory snapshots and tenant records | the directory integration |
@@ -340,7 +348,7 @@ Every record kind has exactly one component that writes it. Others read through 
 | Leases per target; the desired-state projections per connection | tick scheduler; grants export |
 | Per-target tick reports | the ticked integration |
 | Operator-set records of a kind (console channels, runtime switches, console-connected tenants) | the one component that owns the kind, on a request routed by the console. An integration may own an operator-set kind of its own (the chat integration's console channels) and is then its only writer; it never writes learned and operator-set data of the same object |
-| Issued-certificate and SSH-certificate ledgers, CRL and KRL state | PKI; SSH CA. The ledger exists for revocation and roll-forward, not for serial uniqueness: serials are random 128-bit values |
+| Issued-certificate and SSH-certificate ledgers, CRL and KRL state | PKI, in `ca`; SSH CA, in `ssh-ca`. The ledger exists for revocation and roll-forward, not for serial uniqueness: serials are random 128-bit values |
 | Trust log tiles | trust log, the only appender; ceremony tools submit through it |
 | Audit batch objects, the `audit_batches` sequence, dedupe records | audit writer. Erasure and purge commands are appended by the writer on request, never by their requesters |
 | The last signed head | audit writer, through `key-holder`; the witness stores its co-signatures in the blob |
@@ -367,6 +375,8 @@ The structure above is kept by tests that run in CI. They are cheap to write bec
 | No unit holds a key beside an unauthenticated listener | A fusion that breaks [the fusion rule](/architecture/processes/#the-fusion-rule) |
 | Each driver passes the port's conformance suite | A driver that diverges from the port contract |
 | The deny matrix: for every pair of actors, X is denied Y's records, secrets, keys and sockets | A generated policy that is too wide |
+| Isolation per layer, with the other layers switched off | A layer that passes only because another layer caught the case ([Defence in depth](/concepts/drivers/#defence-in-depth)) |
+| The drift test: generated scopes, access lists, policy documents, units, sockets and ServiceAccounts agree | A hand edit, or a generator change that missed one output |
 
 :::note[Proposed]
 Two further start-up checks are proposed but not yet agreed. First, every process that links the policy engine (entry, mint, PKI, exports, quota) reports its policy digest, and the install refuses to serve if they disagree for more than a few seconds. Second, the trust graph between installs, where one sluis trusts another as an upstream or a verifier, must be a directed acyclic graph, checked when the configuration loads.

@@ -6,27 +6,44 @@ sidebar:
   order: 6
 ---
 
-:::note[Proposed]
-The languages and the layout below are the design as proposed, awaiting the maintainer's review. All language choices below are proposed except the cloud drivers and the `policy` actor, which are decided.
-:::
-
 ## Languages
 
-| Component | Language | Status |
-| --------- | -------- | ------ |
-| Actors other than `policy` (`entry`, `signer`, `ca`, `quota`, `writer`, `witness`, `indexer`, `reader`) | Go | Proposed |
-| Most drivers (state, index, blob, transport, lease, keys for KMS and YubiKey) | Go. The YubiKey driver needs cgo against pcsc-lite, so it builds in a native per-architecture CI job | Proposed |
-| Integrations | Go | Proposed |
-| Cloud drivers (AWS, GCP, Azure) | Rust | Decided |
-| `policy` actor and its Cedar engine | Rust, with the `cedar-policy` crate | Decided |
-| Console | TypeScript | Proposed |
-| `sluis` CLI (one `sluis` binary, with subcommands for operators and users) | Go | Proposed |
+**One executable, one language.** The language of each executable follows a set of rules, agreed on 2026-10-30 ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)):
 
-Rust is used for the aws, gcp and azure cloud drivers. There is no Rust JOSE driver; tokens are standard JWS/JWT, so any language verifies them against the published key set.
+| Rule | Reading |
+|---|---|
+| R1 | One executable is written in one language |
+| R2 | Rust at the unauthenticated edge, when no Go-only protocol library is needed |
+| R3 | Rust for the trusted base |
+| R4 | Go where the deciding library is Go-only, or best in Go |
+| R5 | A driver follows its backend's best SDK: AWS, GCP and Azure are Rust |
+| R6 | Go by default |
+| R7 | No Rust where the only library for a security function is experimental or unaudited |
+| R8 | FIPS parity in Rust through `aws-lc-rs` in FIPS mode, mirroring [ADR 0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/) |
+| R9 | The kits of both languages pass one conformance suite |
+| R10 | Contracts are on the wire, so a choice can be reversed |
 
-The `policy` actor is written in Rust with the `cedar-policy` crate, and Cedar is the policy language.
+| Executable | Language |
+|---|---|
+| `entry` (slim) | Rust |
+| `sluis-node` | Rust |
+| `key-holder` (through PKCS#11: `cryptoki` with Yubico's `ykcs11`) | Rust |
+| `sluis-host` | Rust |
+| The AWS driver and the other cloud drivers | Rust |
+| `policy` and its Cedar engine (the `cedar-policy` crate) | Rust |
+| `sluis-ceremony`, the ceremony tool (`openpgp-card` and rPGP) | Rust, as an executable of its own |
+| `session`, `exchange`, `console`, `quota`, `signer`, `ca`, `ssh-ca` | Go |
+| The audit actors (`writer`, `witness`, `indexer`, `reader`) | Go |
+| Integrations | Go |
+| The `sluis` CLI and `sluis agent` | Go |
+| The cert-manager issuer | Go |
+| Console | TypeScript |
 
-The command-line tool is one `sluis` binary with subcommands for operators and for users. An actor can be written in any language, because every contract is ConnectRPC and every integration is out of process. The language choice is per component; the contracts do not change.
+Every Rust choice is **gated by its spike**, and the languages are fixed from the spikes before the first code of step 1 ([Roadmap](/roadmap/#spikes-before-code)): Connect for Rust over Unix sockets and a slim `entry` built in both languages decide `entry`; PKCS#11 through `cryptoki` decides `key-holder`; the OpenPGP-card ceremony decides `sluis-ceremony`; FIPS with `aws-lc-rs` decides the AWS drivers. A Rust choice that fails its spike falls back to Go.
+
+There is no Rust JOSE driver; tokens are standard JWS/JWT, so any language verifies them against the published key set.
+
+The command-line tool is one `sluis` binary with subcommands for operators and for users; the ceremony tool is the one separate executable. An actor can be written in either language, because every contract is ConnectRPC and every integration is out of process. The language choice is per executable; the contracts do not change.
 
 ## Shared kits
 
@@ -52,7 +69,8 @@ actors/<actor>/
 drivers/<driver>/
 integrations/<integration>/
 node/agent/
-cli/sluis/
+cli/sluis/  cli/sluis-ceremony/
+host/sluis-host/
 console/
 manifest/       permission manifests, one per actor
 deploy/
@@ -69,7 +87,8 @@ docs/  site/
 | `kits/` | The shared kits above, one directory per language, plus the conformance suite |
 | `actors/`, `drivers/`, `integrations/` | One directory per component, matching the layout under `/usr/libexec/sluis/` that the [packages](/architecture/processes/#packaging) install. The directory is called `actors` (agreed; it amends the layout, which first called it `roles`) |
 | `node/agent/` | The node agent (`sluis-node`) |
-| `cli/sluis/` | The one `sluis` binary, with subcommands for operators and users |
+| `cli/sluis/`, `cli/sluis-ceremony/` | The one `sluis` binary, with subcommands for operators and users, and the separate ceremony tool |
+| `host/sluis-host/` | The SSH host service ([SSH](/integrations/ssh/)) |
 | `console/` | The TypeScript console |
 | `manifest/` | The permission manifests, one per actor. They generate the IAM policies, key policies, shared-driver ACLs, systemd units, network rules and the deny-matrix tests |
 | `deploy/` | Packaging for each artifact: `.deb` and `.rpm` packages, Helm charts, Lambda archives, infrastructure as code |

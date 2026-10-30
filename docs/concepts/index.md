@@ -1,6 +1,6 @@
 ---
 title: Concepts
-description: "The ideas behind sluis v2 with a map: actors, ports and drivers, integrations, keys, identity, configuration, data, secrets, backup and audit."
+description: "The ideas behind sluis v2 with a map: actors, ports and drivers, integrations, keys, identity, machine identity, configuration, data and audit."
 status: target
 sidebar:
   order: 0
@@ -13,11 +13,11 @@ flowchart TB
   env["Runtime<br/>bare-metal, serverless, kubernetes"]
   inst["Installation<br/>runtime + nodes +<br/>dependencies + drivers"]
   manifest["Permission manifest<br/>one per actor"]
-  actors["Actors<br/>entry, signer, policy, ca,<br/>quota, audit actors"]
+  actors["Actors<br/>entry, session, exchange, signer,<br/>policy, ca, ssh-ca, audit actors"]
   drivers["Ports and drivers<br/>technology behind a port"]
   integ["Integration actors<br/>six kinds, called by core"]
   keys["Keys<br/>mode by installation"]
-  ident["Identity<br/>workload tokens, cloud exchange"]
+  ident["Identity<br/>workload tokens, cloud exchange,<br/>machine identity"]
   config["Configuration<br/>Pkl at build, JSON Schema at runtime"]
   data["Data<br/>one writer per record kind"]
   backup["Backup<br/>authoritative state only"]
@@ -49,13 +49,15 @@ flowchart TB
 |---|---|---|
 | **Actor** | A process with one responsibility. It declares the ports it requires. | `signer` requires keys, state, transport |
 | **Port** | An abstract interface, with capability flags | `blob` (lock mode: none, removable, compliance), `state` (cas) |
-| **Driver** | An implementation of a port. It declares its requirements. | `s3`, `rqlite`, `sqs` |
+| **Driver** | An implementation of a port. It declares its requirements. | `s3-compatible`, `rqlite`, `sqs` |
 | **Runtime** | Only the runtime kind: how processes are started and what they can rely on | bare-metal, serverless, kubernetes |
 | **Nodes** | How many nodes an installation has: 1, N, or elastic (serverless) | |
 | **Dependency** | Something outside sluis that a driver needs | an AWS account, a Cloudflare account, a YubiKey, a NATS service |
 | **Installation** | One concrete deployment: runtime + nodes + available dependencies + one driver per port | "bare-metal, 3 nodes, AWS account" |
 | **Tested installation** | One of four installations that the docs, the tutorials and the test matrix use: local, boards, lambda and kubernetes. Any other combination the rules allow is possible but untested. | [boards](/runtimes/installations/#boards) |
-| **Environment** | An install boundary such as development, staging or production. A boundary is an environment or a regulated entity. | production |
+| **Environment** | Development, staging or production (and the management environment). An environment is one kind of boundary. | production |
+| **Boundary** | The unit of isolation: an environment, a company or a product, placed on an isolation ladder from L0 (tenant) to L4 (its own runtime). | [prod](/runtimes/boundaries/) |
+| **Actor instance** | An actor in one boundary, named `<actor>@<boundary>` in every layer | `ca@prod` |
 
 ## The pages
 
@@ -66,6 +68,7 @@ flowchart TB
 | [Integrations](/concepts/integrations/) | How do vendors plug in, and why can they never decide? |
 | [Keys](/concepts/keys/) | Which key backs which purpose in each installation, which algorithms are supported, and how are the roots kept? |
 | [Identity](/concepts/identity/) | How does a process on a node prove who it is to a cloud? |
+| [Machine identity](/concepts/machine-identity/) | How do hosts, pods and CI jobs get a SPIFFE identity from sluis, and how does a host join? |
 | [Configuration](/concepts/configuration/) | How is an installation configured, validated and explained? |
 | [Data](/concepts/data/) | Who may write which record, and how are writes made safe? |
 | [Secrets](/concepts/secrets/) | Which secrets does sluis keep, which does it publish, and which does it refuse to keep? |

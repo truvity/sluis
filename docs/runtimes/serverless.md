@@ -23,16 +23,17 @@ flowchart LR
     lwa["Web Adapter"] --> app["entry process<br/>127.0.0.1:8080"]
   end
   ep --> lwa
-  app --> signer["signer"]
-  app --> policy["policy"]
-  app --> others["other actors"]
+  app --> proto["session, exchange,<br/>console"]
+  proto --> signer["signer"]
+  proto --> policy["policy"]
+  proto --> others["other actors"]
   signer --> kms["AWS KMS"]
   others --> kms
-  app --> ddb["DynamoDB"]
+  proto --> ddb["DynamoDB"]
   others --> ddb
 ```
 
-The callers are browsers, CLIs and relying parties. The web adapter is the Lambda Web Adapter; it connects to the `entry` process on `127.0.0.1:8080` inside the sandbox. Each arrow from `entry` to an actor is a Lambda invoke. The other actors are `ca`, `quota` and the audit writer.
+The callers are browsers, CLIs and relying parties. The web adapter is the Lambda Web Adapter; it connects to the `entry` process on `127.0.0.1:8080` inside the sandbox. Each arrow from `entry` to an actor is a Lambda invoke. In the picture, `entry` routes to `session`, `exchange` and `console`, which call `signer`, `policy`, `ca`, `ssh-ca` and `quota` in turn. The audit writer is not invoked: records reach it through the queue (step 2).
 
 ### Step 2: the audit path
 
@@ -47,24 +48,28 @@ The other actors put their audit records into the queue, the SQS transport drive
 
 ## What runs where
 
-- Each actor is its own Lambda function. Only `entry` takes requests from outside; every other function is invoke-only, and its resource policy names the caller's alias.
-- **Zip only.** The packaging for serverless is a zip per actor. A function is a zip archive, so layers and extensions combine. A container image is not used on Lambda. Functions, layers and extensions are published as zips for `x86_64` and `arm64`; see [Packages](/distribution/packages/). There are no build profiles, and `dev` is not a build.
-- **Drivers are Lambda extensions.** A driver is a platform-started service that speaks ConnectRPC over a Unix socket. On Lambda the platform that starts it is the extension mechanism, and the actor calls it over the socket inside the sandbox.
+- **One function per actor, one zip per executable** (agreed, PKG-1). Each actor instance, `<actor>@<boundary>`, is its own Lambda function and IAM role, `sluis-<actor>-<boundary>`. Only `entry` takes requests from outside; every other function is invoke-only, and its resource policy names the caller's alias.
+- **Zip only.** The packaging for serverless is a zip per executable. A function is a zip archive, so layers and extensions combine. A container image is not used on Lambda. The handler is the same binary as in the `.deb`, renamed `bootstrap`; only `entry` uses the Lambda Web Adapter. Zips are built for `arm64`, the default, and `x86_64`, and are named `sluis-<kind>-<name>_<version>_<arch>.zip`; they are published into the installation's own account, and there are no public layer ARNs. See [Packages](/distribution/packages/#lambda-zips). There are no build profiles, and `dev` is not a build.
+- **Drivers are one Lambda extension.** A driver is a platform-started service that speaks ConnectRPC over a Unix socket. On Lambda the platform that starts it is the extension mechanism, and the actor calls it over the socket inside the sandbox. **One Rust `aws` executable** implements every AWS port for the function, as one extension (PKG-2).
 - **Lambda Web Adapter.** `entry` speaks HTTP, so the Lambda Web Adapter, pinned at v1.1.0, translates Lambda events into HTTP requests. The adapter is vendored into sluis's own layer, so the function does not reference the public AWS layer.
-- **Limits.** A function has at most five layers and 250 MB unzipped, counting the function code, layers and extensions together. The zips are built to fit that.
-- **Configuration.** Declared configuration arrives in a Lambda layer or through AWS AppConfig, as whole versioned snapshots. A function may live-reload a new snapshot: it is validated, swapped atomically and audited, and a snapshot that fails validation leaves the version in force ([ADR 0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
-- **Single instance.** An actor that declares exactly one instance (the audit writer) runs with a reserved concurrency of 1 on Lambda. The platform's concurrency limit of 1 may stand in for the lease port.
+- **Limits.** A function has at most five layers and 250 MB unzipped, counting the function code, layers and extensions together. sluis uses **at most three layers of its own** (edge, drivers, configuration), so two are left to the operator; there is no OpenTelemetry layer.
+- **Configuration.** Declared configuration arrives in a Lambda layer or through the AWS AppConfig API (not the AppConfig agent layer), as whole versioned snapshots. A function may live-reload a new snapshot: it is validated, swapped atomically and audited, and a snapshot that fails validation leaves the version in force ([ADR 0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
+- **Single instance.** An actor that declares exactly one instance (the audit writer) is fenced by create-if-absent on the blob, so a second instance cannot fork the log.
+
+:::note[Proposed]
+A reserved concurrency of 1 was planned to stand in for the writer's lease. With an SQS trigger that is still to be verified: an event source mapping starts at a concurrency of 2, and a reserved concurrency of 1 throttles it. The safe forms are a FIFO queue with one message group, or a lease on DynamoDB.
+:::
 
 ## Keys
 
 - **KMS:** one symmetric key with encryption contexts for sealing, and one `ECC_NIST_P384` signing key per authority purpose. Each key policy names the one function role allowed to use it.
-- A function's execution role is its identity to KMS. Only the `signer` function can use the token-signing key, only `ca` the CA key, and only the writer the log key.
+- A function's execution role is its identity to KMS. Only the `signer` function can use the token-signing key, only `ca` the X.509 CA key, only `ssh-ca` the SSH CA keys, and only the writer the log key. There is **no `key-holder` on serverless**: the key policy is the access list.
 - Tokens are signed directly with the non-extractable key. There is no software key on Lambda.
 
 ## State and audit
 
-- **State:** DynamoDB, with conditional writes and one writer per record kind.
-- **Audit transport:** an SQS queue, because a function's local disk does not outlive its sandbox. The writer consumes the queue, seals batches and writes them to the blob store (S3), and asks the `key-holder` to sign checkpoints with the log key. The `key-holder`'s access list lets only the writer use that key; there is no notary actor ([OD-39](/open-decisions/#od-39)). SQS is the default on serverless, and the other transports are supported without being a default ([OD-34](/open-decisions/#od-34)). The `direct` mode falls back to a local spool when the writer is down ([OD-35](/open-decisions/#od-35)), so it needs a disk and is not available on serverless.
+- **State:** DynamoDB, with conditional writes and one writer per record kind, enforced by an IAM `dynamodb:LeadingKeys` condition per actor role. Each boundary has its own table; at L4 it is in the boundary's own account. Every value is encrypted in the port library before it reaches the table ([Data](/concepts/data/#every-value-is-encrypted)).
+- **Audit transport:** an SQS queue, because a function's local disk does not outlive its sandbox. The writer consumes the queue, seals batches and writes them to the blob store (S3, create-if-absent), and signs checkpoints with the log key in KMS. The key policy lets only the writer's role use that key; there is no notary actor ([OD-39](/open-decisions/#od-39)). The queue policy names each sender role, and each boundary has its own queue. SQS is the default on serverless, and the other transports are supported without being a default ([OD-34](/open-decisions/#od-34)). The `direct` mode falls back to a local spool when the writer is down ([OD-35](/open-decisions/#od-35)), so it needs a disk and is not available on serverless.
 - **Witness:** optional ([OD-36](/open-decisions/#od-36)), none by default on serverless. `sluis config check` warns when there is none. With no witness and no notary, a compromised writer can get a rewritten checkpoint signed. A compliance lock on the S3 bucket still prevents overwriting objects, but not a split view.
 - **Index:** serverless may run the indexer and the reader with a `postgres` index ([OD-12](/open-decisions/#od-12), revised). On AWS the provisioning mode is `rds` or `aurora`, and the functions reach the database through RDS Proxy (proposed), so that short-lived functions do not exhaust its connections. The `external` mode takes a connection string only. The lambda installation's default index stays `none` (proposed); with no index, the reader and its index run in a separate audit installation on another runtime that reads the same bucket: Kubernetes with Postgres (`cnpg`, or `external` with a connection string), or a server with `sqlite`. A small install can run `sluis audit search` from the CLI, which builds a local `sqlite` index from the chain. The index is a rebuildable cache; the chain in the bucket is the record. Where Search runs is derived from the port and driver rules ([OD-32](/open-decisions/#od-32)). See [The postgres index driver](/concepts/drivers/#the-postgres-index-driver).
 
@@ -75,6 +80,7 @@ The other actors put their audit records into the queue, the SQS transport drive
 - **Edge.** API Gateway sits in front of the `entry` function.
 - **The console.** The console's single-page application is served from the bucket behind the same API gateway, so the browser sees one origin for the page and the console API in `entry`.
 - There is no node agent: the JWT for a cloud federation has to come from the `signer`.
+- **Response streaming.** API Gateway REST APIs can stream Lambda responses since 2025-11-19, which changes the earlier premise that every call on Lambda is unary. It is to be tested again; the public API stays Connect only for now.
 
 ## Limits and residual risk
 
