@@ -128,7 +128,9 @@ Browser redirect routes under `/connect/<integration>/` complete the provider fl
 
 ### Second factor
 
-sluis relies on the upstream identity provider's multi-factor authentication for now. A person signs in at the upstream provider, and sluis takes the provider's result as a fact. Passkeys, including a step-up inside sluis for high-privilege roles, are a later roadmap feature.
+Agreed: sluis runs a **generic WebAuthn relying party**. Passkeys are the fast sign-in path, and a passkey counts as phishing-resistant multi-factor authentication. A full sign-in at the upstream identity provider, with its own multi-factor authentication, is still required every N days and for high-privilege grants (step-up). Policy sets the interval and the rules. The relying party is reusable for customers later. The upstream's `acr` and `amr` pass through, and a stronger sign-in is requested by RFC 9470 step-up; see [Generic OIDC and peer sluis](/integrations/oidc-upstream/).
+
+Until passkeys ship ([#885](https://github.com/truvity/sluis/issues/885)), sluis relies on the upstream provider's multi-factor authentication: a person signs in at the upstream provider, and sluis takes the provider's result as a fact.
 
 ### Added in v2
 

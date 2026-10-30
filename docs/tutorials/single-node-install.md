@@ -172,7 +172,7 @@ install -m 0600 /dev/stdin /etc/sluis/credentials/idp-client-secret
 ```
 
 :::note[Proposed]
-The location and the exact key names of the install file are not yet decided, and the rule that secrets are referenced is agreed. The five layers (defaults, runtime, installation, install, environment overrides) are proposed; an environment is development, staging or production.
+The location and the exact key names of the install file are not yet decided, and the rule that secrets are referenced is agreed. The four layers (defaults, runtime, install file, environment overrides) are proposed; an environment is development, staging or production.
 :::
 
 ## 7. Check and explain the config
@@ -287,7 +287,7 @@ On the other machine, sign in through the upstream provider.
 sluis login --issuer https://sluis.example.com
 ```
 
-A browser opens at the upstream provider. sluis relies on the provider's multi-factor authentication for now; passkeys are a later roadmap feature. After you sign in, sluis maps the provider's facts to grants through its policy and issues a token. The command prints where it stored the token.
+A browser opens at the upstream provider. sluis relies on the provider's multi-factor authentication for now. Passkeys are planned: they will be the fast path, with a full sign-in at the provider still required every N days and for high-privilege grants. After you sign in, sluis maps the provider's facts to grants through its policy and issues a token. The command prints where it stored the token.
 
 ```text
 # Example output

@@ -327,7 +327,7 @@ Every record kind has exactly one component that writes it. Others read through 
 | ----------- | ------ |
 | Sessions (single sign-on, per client, agent class), refresh tokens, the revocation list | sessions |
 | Authorization codes, consent, device authorization records | authorization flows |
-| Pending sign-in state, the recovery verifier and switch (passkeys are a later roadmap feature) | authn |
+| Pending sign-in state, the recovery verifier and switch (passkeys: a generic WebAuthn relying party, planned) | authn |
 | Client secret versions and the client metadata cache | client registry |
 | The signing ring (published keys, key references) and its rotation schedule | key ring |
 | Last-known (held) fact sets per subject | facts broker |

@@ -597,6 +597,9 @@ chain:
     - title: Three layers
       text: Hashes show each object is the one written. The lock (the blob's lock mode, compliance where the install has it, removable otherwise, or none) stops anyone overwriting or deleting before retention ends. Signed heads show nothing was removed or added, and a witness shows the operator did not show two different histories.
       status: agreed
+    - title: The formats are the C2SP ones
+      text: Heads are C2SP signed-note checkpoints (tlog-checkpoint), signed with the P-384 log key; the log is laid out as tlog-tiles; witnesses sign with tlog-cosignature (Ed25519 or ML-DSA-44 keys) and are asked through tlog-witness. The ca actor logs its X.509 certificates in a witnessed static-ct-api log. mtc-tlog follows when Merkle Tree Certificates arrive. sluis follows the specifications and invents no format.
+      status: agreed
     - title: Trust is the pin
       text: An auditor trusts a key because they pinned its thumbprint. Anything in the trust log is distribution; a verifier ignores an unpinned key.
       status: agreed
@@ -638,7 +641,7 @@ compare:
   - { topic: Seals, v1: "one per profile, tenant and hour, built by listing the bucket; empty hours sealed", v2: "one per run over new batches, chained by prev; cadence not yet decided" }
   - { topic: "Signing key", v1: "a notary with KMS, a transit key or a key file; a separate service account from the writer", v2: "no notary: the writer asks the keys driver to sign with the log key, and the driver's access list lets only the writer use it; a witness cosigns, and is optional" }
   - { topic: Recovery, v1: "not part of audit", v2: "a local spool in every installation; never blocks" }
-  - { topic: Blob, v1: "S3 with or without object lock, per install preset", v2: "kept; the blob port with a lock mode (none, removable, compliance)" }
+  - { topic: Blob, v1: "S3 with or without object lock, per install", v2: "kept; the blob port with a lock mode (none, removable, compliance)" }
 
 compare_note: "A mismatch worth naming. v1 makes the bucket the only contract between the parts, and the search index follows the bucket. The v2 design puts an ordered sequence in replicated state and feeds the search index from it. The blob stays the source of truth, since a node can still rebuild from it, but the state store is now on the write path of every batch."
 

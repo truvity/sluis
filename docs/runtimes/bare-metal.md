@@ -72,11 +72,11 @@ The node agent (`sluis-node`) holds the instance role, brokers per-actor AWS cre
 
 ## Local Docker
 
-Docker on a workstation is the development and CI form of bare-metal, one node: the [local](/runtimes/installations/#local) installation. It uses the host's YubiKey and not a software key, and it is the first installation to be delivered. It is not for production, and the code refuses a software key in production.
+Docker on a workstation is the development and CI form of bare-metal, one node: the [local](/runtimes/installations/#local) installation. It uses the host's YubiKey on a workstation and a software key in CI, and it is delivered first. It is not for production, and the code refuses a software key in production.
 
-- All actors run in one container on one node. Each is still its own OS user and its own process, started by a supervisor inside the image, so the call graph and the socket ACLs are the ones the other installations enforce.
-- Drivers speak ConnectRPC over Unix sockets under `/run/sluis/`.
-- The host's YubiKey is the default key. The `key-holder` runs natively on the host, talks to the host's `pcscd`, and the container mounts only the `key-holder`'s Unix socket (agreed, [OD-8](/open-decisions/#od-8)). The fallback is to mount the host's `pcscd` socket; then the ACL does not apply, and the pcsc-lite protocol versions of the image and the host must match.
+- It runs as **Docker Compose, one container per actor** (agreed), on one node. Each actor and each driver is its own container user and its own process, so the call graph and the socket ACLs are the ones the other installations enforce.
+- Actors and drivers speak ConnectRPC over Unix sockets on a shared volume under `/run/sluis/`.
+- The host's YubiKey is the default key on a workstation. The `key-holder` container uses the host's `pcscd` socket, mounted into it (agreed, [OD-8](/open-decisions/#od-8)); the pcsc-lite protocol versions of the image and the host must match. The fallback is to run the `key-holder` natively on the host, so that the containers mount only its Unix socket. CI uses a software key.
 
 ## Keys
 

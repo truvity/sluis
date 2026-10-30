@@ -267,7 +267,7 @@ The same actors run on every runtime. The drivers behind their ports are what ch
 | cloud | web identity (node agent), as configured | web identity, as configured | platform role | web identity or pod identity ([OD-19](/open-decisions/#od-19)) |
 | secrets (proposed) | a mounted file, or sealed-state | sealed-state | a parameter store | a parameter store, or a mounted file |
 
-The keys, state and index choices follow the agreed installations. The **local** installation may use the host's YubiKey: the `key-holder` runs natively on the host and talks to the host's `pcscd`, and the container mounts only the `key-holder`'s Unix socket, so the host keeps using the key. The fallback is to mount the host's `pcscd` socket into the container, with the risk that the pcsc-lite protocol versions must match.
+The keys, state and index choices follow the agreed installations. The **local** installation may use the host's YubiKey: the `key-holder` container uses the host's `pcscd` socket, which is mounted into it, and the pcsc-lite protocol versions of the image and the host must match. The fallback is to run the `key-holder` natively on the host, so that the containers mount only its Unix socket and the host keeps using the key.
 
 On **boards** the log is per node: each node's writer, spool and log key are its own, and the other two nodes are its peer witnesses. See [Audit](/concepts/audit/#exactly-one-writer-per-log).
 

@@ -18,7 +18,7 @@ The tutorials describe the target state. They show the experience sluis v2 is bu
 
 ## How the tutorials are kept true
 
-The tutorials are part of the test suite. Each one lives under `tests/tutorials` in the repository and runs on the tested [installations](/runtimes/installations/) it is written for, so a step that stops working fails CI. They follow the delivery order: local first, then boards, then lambda. Development uses the [local](/runtimes/installations/#local) installation.
+The tutorials are part of the test suite. Each one lives under `tests/tutorials` in the repository and runs on the tested [installations](/runtimes/installations/) it is written for, so a step that stops working fails CI. They follow the delivery order: local first, then boards, lambda and kubernetes in parallel. Development uses the [local](/runtimes/installations/#local) installation.
 
 ## Before you start
 

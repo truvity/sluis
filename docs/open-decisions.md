@@ -35,8 +35,8 @@ Each row says what was decided. The anchors stay, so links to a decided point st
 | <a id="od-4"></a>OD-4 | Which TCP ports exist between nodes | Raft driver port only |
 | <a id="od-5"></a>OD-5 | Audit transport per installation | Read as installation defaults: a local spool on the bare-metal installations (local and boards; co-signed by peer witnesses in cluster mode), SQS on serverless; SQS on Kubernetes for now, see [OD-22](#od-22). The remaining part was settled by [OD-34](#od-34) |
 | <a id="od-6"></a>OD-6 | Diagram tool | Mermaid now; LikeC4 generated from the model once the permission manifest exists |
-| <a id="od-7"></a>OD-7 | Whether the test matrix includes Kubernetes now | Kubernetes is in design and test scope now (the kubernetes installation); it is delivered after local, boards and lambda |
-| <a id="od-8"></a>OD-8 | Key for the local installation when a YubiKey runs in Docker | (c) `key-holder` runs natively on the host and talks to the host's `pcscd`; the container mounts only its Unix socket. Fallback: (a) mount the host `pcscd` socket |
+| <a id="od-7"></a>OD-7 | Whether the test matrix includes Kubernetes now | Kubernetes is in design and test scope now (the kubernetes installation); it is built after local, in parallel with boards and lambda |
+| <a id="od-8"></a>OD-8 | Key for the local installation when a YubiKey runs in Docker | (a) The container's `key-holder` uses the host's `pcscd` socket, mounted into it. Fallback: (c) `key-holder` runs natively on the host and talks to the host's `pcscd`; the containers mount only its Unix socket |
 | <a id="od-9"></a>OD-9 | How CI reaches the hardware boards | Design agreed, work in the CI backlog |
 | <a id="od-10"></a>OD-10 | Policy language | Cedar; the `policy` actor in Rust with `cedar-policy` |
 | <a id="od-11"></a>OD-11 | Role of TPM 2.0 | TPM is a backlog feature |

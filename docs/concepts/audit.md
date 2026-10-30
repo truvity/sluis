@@ -95,6 +95,18 @@ The audit side is being redesigned as its own installation, connected to sluis o
 OD-31 is the existing audit split. The points that refine it are decided: [OD-32](/open-decisions/#od-32) (placement is derived), [OD-33](/open-decisions/#od-33) (quota metering and enforcement), [OD-34](/open-decisions/#od-34) to [OD-36](/open-decisions/#od-36) (the transport defaults, direct mode, and the optional witness), [OD-37](/open-decisions/#od-37) and [OD-38](/open-decisions/#od-38) (the four pieces) and [OD-39](/open-decisions/#od-39) (the audit actors).
 :::
 
+## The formats are the C2SP ones
+
+sluis follows published specifications and invents no format for the log (agreed).
+
+- **Checkpoints** are C2SP `signed-note` documents in the `tlog-checkpoint` shape, signed with the P-384 log key (signature type `0x02`). A checkpoint names the size of the log and its root hash.
+- **The log** is laid out as `tlog-tiles`: static objects in the blob store that anyone can read without a server.
+- **A witness** signs with the `tlog-cosignature` format, using an Ed25519 or ML-DSA-44 key, and is asked to do so with the `tlog-witness` protocol. This is what the `peer` and `external` witness drivers speak.
+- **The `ca` actor** logs every X.509 certificate it issues in a C2SP `static-ct-api` log, which is witnessed in the same way.
+- **`mtc-tlog`** is adopted later, when Merkle Tree Certificates arrive, with the post-quantum track (parked).
+
+The rows are in the [standards register](/standards/#transparency-and-audit). Records themselves stay canonical JSON (RFC 8785).
+
 ## The witness is optional
 
 The witness port is where an independent party co-signs a head. `peer` lets the nodes of a cluster witness one another; `external` lets a party outside the installation do it; `none` is a single signer.

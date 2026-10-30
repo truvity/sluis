@@ -21,10 +21,8 @@ An **installation** is one concrete deployment: a [runtime](/runtimes/), a node 
 
 The installations are built in this order, which is agreed.
 
-1. **local.** Basic functionality and its tests, on a workstation, with the host's YubiKey and not a software key.
-2. **boards.** The three-board cluster.
-3. **lambda.** AWS Lambda.
-4. **kubernetes,** later.
+1. **local first.** The minimal drivers (embedded SQLite state, a SQLite index, a files blob, a local lock, and a spool or direct transport) and the basic functionality with its tests, until v2 can replace v1, together with the enablers of the target architecture. Keys are software keys in CI and the host's YubiKey on a workstation.
+2. **Then boards, lambda and kubernetes in parallel,** each built and tested in parallel with the others.
 
 EC2 is not a delivery target. A virtual machine is still bare-metal, so the [bare-metal](/runtimes/bare-metal/#virtual-machines-ec2) page keeps what applies to it, and an EC2 installation is a possible one.
 
@@ -63,26 +61,26 @@ flowchart TD
 ```
 
 - **Learning or developing:** [local](#local). It runs in Docker with the host's YubiKey.
-- **On-premises, with a spare:** [boards](#boards). Three boards run rqlite and a signing key lives on each node's YubiKey.
+- **On-premises, surviving a node failure:** [boards](#boards). Three boards run rqlite and a signing key lives on each node's YubiKey.
 - **AWS, no hosts to operate:** [lambda](#lambda). Each actor is a function.
 - **You already run a cluster:** [kubernetes](#kubernetes) (proposed). A node pod and an audit pod hold the actors, each in a container with its own token audience.
 - **Anything else** is a possible installation. Start from the nearest tested one and change drivers within the rules.
 
 ## local
 
-Docker on one workstation, one node, no cluster. It is the first installation to be delivered, and the one that CI uses, together with sluis v1 for GitHub OIDC to cloud permissions. It uses the **host's YubiKey** through the host's `pcscd` ([OD-8](/open-decisions/#od-8)), not a software key. It is not for production. Runtime: [bare-metal](/runtimes/bare-metal/#local-docker).
+Docker on one workstation, one node, no cluster. It is delivered first, and it is the one that CI uses, together with sluis v1 for GitHub OIDC to cloud permissions. It uses the **host's YubiKey** on a workstation, through the host's `pcscd` ([OD-8](/open-decisions/#od-8)), and a software key in CI. It is not for production. Runtime: [bare-metal](/runtimes/bare-metal/#local-docker).
 
 ```mermaid
 flowchart LR
-  dev["Developer<br/>or CI job"] --> container
-  subgraph container["Docker container (one node)"]
+  dev["Developer<br/>or CI job"] --> entry
+  subgraph compose["Docker Compose (one node, one container per actor)"]
     direction TB
     entry["entry"]
     signer["signer"]
     policy["policy"]
     others["other actors"]
     keyholder["key-holder<br/>(driver)"]
-    state["embedded store<br/>(driver)"]
+    state["state driver<br/>(embedded)"]
     entry --> signer
     entry --> policy
     signer --> keyholder
@@ -91,19 +89,17 @@ flowchart LR
   end
   subgraph host["Workstation host"]
     direction TB
-    hostkh["key-holder"]
     pcscd["pcscd"]
     yk["YubiKey"]
-    hostkh --> pcscd
     pcscd --> yk
   end
-  container -- "socket" --> host
+  keyholder -- "pcscd socket" --> pcscd
 ```
 
-The other actors are `ca`, `quota` and the audit actors. The `key-holder` in the container reaches the `key-holder` on the host through a mounted Unix socket; the host `key-holder` talks to the host's `pcscd`, which talks to the YubiKey.
+The other actors are `ca`, `quota` and the audit actors. Each actor and driver is its own container. They reach each other over Unix sockets on a shared volume. The `key-holder` container reaches the host's `pcscd` through a mounted socket, and `pcscd` talks to the YubiKey.
 
-- **Drivers:** yubikey-piv for keys, an embedded single-node store for state, a local lock for the lease, the spool for transport, a local files driver for the blob, and `sqlite` for the index. A software key (EC P-384, no production secret involved) is allowed for development and for CI jobs without hardware.
-- **Host YubiKey:** the `key-holder` runs natively on the host, talks to the host's `pcscd`, and the container mounts only the `key-holder`'s Unix socket. The host keeps using the YubiKey too, because `pcscd` lets several programs share the card. The fallback is to mount the host's `pcscd` socket into the container; then the `key-holder` ACL does not apply, and the pcsc-lite protocol versions of the image and the host must match.
+- **Drivers:** the minimal set. yubikey-piv for keys on a workstation, an embedded SQLite store for state, a local lock for the lease, the spool or direct mode for transport, a local files driver for the blob, and `sqlite` for the index. A software key (EC P-384, no production secret involved) is used in CI and anywhere without hardware.
+- **Host YubiKey:** the host's `pcscd` socket is mounted into the `key-holder` container. The host keeps using the YubiKey too, because `pcscd` lets several programs share the card. The pcsc-lite protocol versions of the image and the host must match. The fallback is to run the `key-holder` natively on the host, so that the containers mount only its Unix socket.
 - **Verification** never trusts the index or the state, so a test can rebuild the index and still verify the chain.
 - **Edge:** `entry`'s public API listens on TCP, bound to `127.0.0.1` inside the container, and a browser or a test harness reaches it through a published port. That published port is a development convenience; no other installation publishes it. See [Listeners](/architecture/listeners/).
 
@@ -111,11 +107,11 @@ The other actors are `ca`, `quota` and the audit actors. The `key-holder` in the
 How a developer reaches `entry` with the real edge in the loop is not yet decided. One candidate is an edge-connector container (`cloudflared` with an `http://127.0.0.1:<port>` service, as on boards) next to the sluis container.
 :::
 
-- **Limits:** a software key is extractable by anyone who can read the container's filesystem, so use it for development data only. With the host's YubiKey, any process in the container that can open the mounted `key-holder` socket can ask for a signature, subject to the `key-holder` ACL. One node has one failure domain: local proves behaviour, not availability. It does not exercise the platform controls of the other installations (IAM and KMS key policies, systemd sandboxing, Cilium policy).
+- **Limits:** a software key is extractable by anyone who can read the container's filesystem, so use it for development data only. With the host's YubiKey, any process that can open the `key-holder` socket can ask for a signature, subject to the `key-holder` ACL. One node has one failure domain: local proves behaviour, not availability. It does not exercise the platform controls of the other installations (IAM and KMS key policies, systemd sandboxing, Cilium policy).
 
 ## boards
 
-Three single-board computers (arm64, 2 GB RAM, eMMC), each with its own YubiKey, behind a Cloudflare tunnel to `sluis.example.com`. It is the second installation to be delivered. State is replicated by rqlite (Raft), and the audit pieces run on the same nodes, so they share driver instances ([OD-37](/open-decisions/#od-37)). The nodes may mix Ubuntu and Rocky Linux, because the package set is the same on both. Runtime: [bare-metal](/runtimes/bare-metal/#n-nodes), three nodes.
+Three single-board computers (arm64, 2 GB RAM, eMMC), each with its own YubiKey, behind a Cloudflare tunnel to `sluis.example.com`. It is built in parallel with lambda and kubernetes, after local. State is replicated by rqlite (Raft), and the audit pieces run on the same nodes, so they share driver instances ([OD-37](/open-decisions/#od-37)). The nodes may mix Ubuntu and Rocky Linux, because the package set is the same on both. Runtime: [bare-metal](/runtimes/bare-metal/#n-nodes), three nodes.
 
 ```mermaid
 flowchart TB
@@ -158,7 +154,7 @@ flowchart TB
 
 ## lambda
 
-One Lambda function per actor, with KMS keys and DynamoDB state. It is the third installation to be delivered. The details, the request path and the audit path are on [Serverless](/runtimes/serverless/). Runtime: [serverless](/runtimes/serverless/), elastic nodes.
+One Lambda function per actor, with KMS keys and DynamoDB state. It is built in parallel with boards and kubernetes, after local. The details, the request path and the audit path are on [Serverless](/runtimes/serverless/). Runtime: [serverless](/runtimes/serverless/), elastic nodes.
 
 ```mermaid
 flowchart LR
@@ -180,7 +176,7 @@ flowchart LR
 
 ## kubernetes
 
-A node pod and an audit pod, a container per actor, on Amazon EKS with AWS KMS. It is delivered after the other three. It is in design and test scope now ([OD-7](/open-decisions/#od-7)), and its design is proposed. The details and the open points are on [Kubernetes](/runtimes/kubernetes/). Runtime: [kubernetes](/runtimes/kubernetes/), N nodes.
+A node pod and an audit pod, a container per actor, on Amazon EKS with AWS KMS. It is built in parallel with boards and lambda, after local. It is in design and test scope now ([OD-7](/open-decisions/#od-7)), and its design is proposed. The details and the open points are on [Kubernetes](/runtimes/kubernetes/). Runtime: [kubernetes](/runtimes/kubernetes/), N nodes.
 
 - **Drivers:** aws-kms for keys ([OD-20](/open-decisions/#od-20)), DynamoDB for state ([OD-21](/open-decisions/#od-21)), Kubernetes Lease for the lease, SQS for transport for now ([OD-22](/open-decisions/#od-22)), S3 for the blob, and `postgres` on `cnpg` for the index (proposed; the `external` mode takes a connection string only).
 - **Witness:** none by default. A peer witness in the same cluster is not independent, so an `external` witness is the useful one.

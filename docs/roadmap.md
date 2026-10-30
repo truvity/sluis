@@ -30,18 +30,21 @@ Planned work is also tracked as [issues](https://github.com/truvity/sluis/issues
 
 ## Delivery order
 
-The maintainer agreed this order for the tested [installations](/runtimes/installations/) on 2026-10-29. It replaces the earlier plan that made an EC2 cluster the first build target.
+The maintainer agreed this order for the tested [installations](/runtimes/installations/) on 2026-10-29. It replaces the earlier plans that made an EC2 cluster, and then boards, the first build target.
 
-1. **local.** Docker on a workstation, using the host's YubiKey through the host's `pcscd` and not a software key. The basic functionality and its tests are covered here first.
-2. **boards.** Three single-board computers behind a Cloudflare tunnel, a YubiKey in each node, state and index on rqlite (the rqlite index is a proposed new driver), audit records in a Cloudflare R2 bucket, the audit pieces on the same nodes, and one log per node with the other nodes as peer witnesses.
-3. **lambda.** AWS Lambda.
-4. **kubernetes,** later.
+1. **local first.** Docker Compose on a workstation, one container per actor, with the minimal drivers: embedded SQLite state, a SQLite index, a files blob, a local lock, and a spool or direct transport. Keys are software keys in CI and the host's YubiKey on a workstation. This step runs until v2 can replace v1, and it includes the enablers of the target architecture.
+2. **Then boards, lambda and kubernetes in parallel,** built and tested in parallel.
+   - **boards.** Three single-board computers behind a Cloudflare tunnel, a YubiKey in each node, state and index on rqlite (the rqlite index is a proposed new driver), audit records in a Cloudflare R2 bucket, the audit pieces on the same nodes, and one log per node with the other nodes as peer witnesses.
+   - **lambda.** AWS Lambda.
+   - **kubernetes.** The one tested Kubernetes installation.
 
 EC2 is no longer a delivery target. A virtual machine is still bare-metal, so an EC2 installation stays possible, under the same rules, but it is not tested. Installations other than these four are possible and untested.
 
 Packaging follows the runtime, not a build profile: `.deb`, `.rpm` and a tarball for bare-metal, a zip per actor for serverless, and an OCI image with a Helm chart for kubernetes. `dev` is not a build.
 
-Also planned, with no issue yet: the YubiKey ceremony for the root and intermediate keys (`sluis pki` or `sluis ceremony`).
+## Architecture decision records
+
+The first batch of decision records is accepted: ADRs 0001 to 0011 are accepted. Batch 2 is in progress. Batches of more than five records are split into two pull requests. The list is on [Decisions](/decisions/).
 
 ## Technical backlog
 
@@ -63,6 +66,8 @@ The shape of the repository, the build, and the patterns every component follows
 | [#864](https://github.com/truvity/sluis/issues/864) | Configuration from Pkl to JSON Schema with strict validation |
 | [#866](https://github.com/truvity/sluis/issues/866) | systemd unit hardening baseline |
 | [#877](https://github.com/truvity/sluis/issues/877) | Installation test harness (local, boards, lambda, kubernetes) |
+| [#891](https://github.com/truvity/sluis/issues/891) | CI: integration tests on a private runner group (boards and AWS test installations) |
+| [#892](https://github.com/truvity/sluis/issues/892) | Policy actor in Rust with Cedar (cedar-policy crate) |
 
 ### Phase 1: keys, identity and configuration
 
@@ -73,11 +78,25 @@ Key custody, platform checks, workload identity, and the measurements that settl
 | [#865](https://github.com/truvity/sluis/issues/865) | Pkl to JSON Schema generator as a separate open-source tool |
 | [#867](https://github.com/truvity/sluis/issues/867) | `sluis doctor` platform checks |
 | [#868](https://github.com/truvity/sluis/issues/868) | FIPS builds with the Go FIPS 140-3 module |
+| [#913](https://github.com/truvity/sluis/issues/913) | The `ca` actor: X.509 and SSH certificate authorities |
+| [#914](https://github.com/truvity/sluis/issues/914) | `sluis ceremony`: semi-automatic key ceremonies, card slot map and node PIN unlock |
 | [#869](https://github.com/truvity/sluis/issues/869) | JOSE package and per-language verification demos |
 | [#870](https://github.com/truvity/sluis/issues/870) | Workload identity with a per-node issuer and AWS exchange |
 | [#878](https://github.com/truvity/sluis/issues/878) | Benchmark: AWS KMS Sign latency for ECC P-384 |
 | [#879](https://github.com/truvity/sluis/issues/879) | Benchmark: YubiKey firmware 5.8 P-384 sign and ECDH on an arm64 board |
 | [#880](https://github.com/truvity/sluis/issues/880) | Spike: memory footprint of Go and Rust cloud drivers on t4g.nano |
+
+### Phase 1b: features beyond parity
+
+New v2 features that sit on the foundation. They carry the label `type:feature` and sit on the [v2 board](https://github.com/orgs/truvity/projects/9).
+
+| Issue | Item |
+|---|---|
+| [#885](https://github.com/truvity/sluis/issues/885) | Passkeys: a generic WebAuthn relying party, and step-up for high-privilege grants |
+| [#912](https://github.com/truvity/sluis/issues/912) | FAPI 2.0 security profile: PAR, DPoP and `private_key_jwt` client authentication |
+| [#915](https://github.com/truvity/sluis/issues/915) | Quota: engine, quota state, metering and enforcement, Idempotency-Key |
+| [#916](https://github.com/truvity/sluis/issues/916) | Generic OIDC upstream integration with `acr`/`amr` passthrough and step-up (RFC 9470) |
+| [#917](https://github.com/truvity/sluis/issues/917) | Connect client library for TypeScript (connect-es) for the public API |
 
 ### Phase 2: release and distribution
 
@@ -90,6 +109,9 @@ How a release is built, signed, published and installed.
 | [#875](https://github.com/truvity/sluis/issues/875) | Serverless packaging: a zip per actor |
 | [#876](https://github.com/truvity/sluis/issues/876) | Kubernetes packaging: OCI images and Helm charts with digest-pinned images |
 | [#881](https://github.com/truvity/sluis/issues/881) | Board OS images for Ubuntu 26.04 and Rocky Linux 10.2 (boards installation) |
+| [#888](https://github.com/truvity/sluis/issues/888) | Release OpenPGP key ceremony on two YubiKeys (guide and tests) |
+| [#889](https://github.com/truvity/sluis/issues/889) | Research: publishing and verifying release keys (keyservers, WKD, DNS OPENPGPKEY, verifier tools) |
+| [#890](https://github.com/truvity/sluis/issues/890) | Artifact signing service: OpenPGP subkeys and short-lived X.509 signing certificates behind federated identity (needs a decision) |
 
 ### Later
 
@@ -98,3 +120,4 @@ How a release is built, signed, published and installed.
 | [#871](https://github.com/truvity/sluis/issues/871) | GCP Workload Identity Federation exchange |
 | [#872](https://github.com/truvity/sluis/issues/872) | Azure Entra federated credential exchange |
 | [#882](https://github.com/truvity/sluis/issues/882) | Site explorers read the permission manifest |
+| [#918](https://github.com/truvity/sluis/issues/918) | SAML 2.0 identity provider and SCIM provisioning for AWS IAM Identity Center |
