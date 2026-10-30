@@ -6,6 +6,8 @@
 # HPKE was dropped the same morning and is back on the page since the afternoon: enrolment is encrypted
 # end to end with it (agreed 2026-10-30). The SPIFFE rows ST-107 to ST-113 replace ST-48 (agreed 2026-10-30);
 # ST-48 keeps its id for SPIRE as prior art, which sluis does not deploy.
+# The optional OpenID plans (ADR 0061, decided 2026-10-30): Form Post (ST-34) is a v2 target; Front-Channel Logout (ST-32)
+# and 3rd Party-Initiated Login (ST-35) are not planned; CIBA (ST-36) is planned later, in poll mode, after v2 parity.
 schema: 1
 standards:
   - {id: ST-01, name: "RFC 6749 OAuth 2.0", group: "OAuth", register: true, url: "https://www.rfc-editor.org/rfc/rfc6749"}
@@ -43,7 +45,7 @@ standards:
   - {id: ST-33, name: "Session Management", group: "OIDC", register: true, url: "https://openid.net/specs/openid-connect-session-1_0.html"}
   - {id: ST-34, name: "Form Post response mode", group: "OIDC", register: true, url: "https://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html"}
   - {id: ST-35, name: "3rd Party-Initiated Login", group: "OIDC", register: true, url: "https://openid.net/specs/openid-connect-core-1_0.html#ThirdPartyInitiatedLogin"}
-  - {id: ST-36, name: "CIBA / FAPI-CIBA", group: "OIDC", register: true, url: "https://openid.net/specs/openid-client-initiated-backchannel-authentication-core-1_0.html"}
+  - {id: ST-36, name: "CIBA / FAPI-CIBA (later, poll mode)", group: "OIDC", register: true, url: "https://openid.net/specs/openid-client-initiated-backchannel-authentication-core-1_0.html"}
   - {id: ST-37, name: "FAPI 2.0 Security Profile", group: "OIDC", register: true, url: "https://openid.net/specs/fapi-security-profile-2_0-final.html"}
   - {id: ST-38, name: "FAPI 2.0 Message Signing", group: "OIDC", register: true, url: "https://openid.net/wg/fapi/specifications"}
   - {id: ST-39, name: "FAPI 2.0 Attacker Model", group: "OIDC", register: true, url: "https://openid.net/specs/fapi-attacker-model-2_0-final.html"}
