@@ -217,18 +217,19 @@ requirements:
     rationale: "Regulated users need a validated module."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-88, section: "1", depth: Full}
     features: ["#868"]
+    superseded_by: ["REQ-KEYS-024", "REQ-KEYS-025"]
     verification:
       - {kind: integration-test, ref: "FIPS build smoke test"}
       - {kind: manual, ref: "module-version check"}
   - id: REQ-KEYS-018
     area: KEYS
     split_from: REQ-KEYS-010
-    statement: "sluis MUST state that sluis itself is not the validated module."
+    statement: "sluis MUST NOT claim FIPS 140-3 validation for itself or for a build that does not use a validated module."
     rationale: "A false claim of validation would mislead regulated users."
     level: MUST
     source: design-decision
@@ -236,10 +237,38 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-88, section: "1", depth: Full}
-    features: ["#868"]
-    manual_reason: "A statement in the documentation is checked by reading it."
+    features: ["design"]
+    manual_reason: "A claim in the documentation and the release notes is checked by reading them."
     verification:
-      - {kind: manual, ref: "documentation review"}
+      - {kind: manual, ref: "documentation and release-note review"}
+  - id: REQ-KEYS-024
+    area: KEYS
+    statement: "Every algorithm that sluis uses to sign, seal, hash or derive keys MUST be a FIPS 140-3 approved algorithm, apart from the named exceptions and the formats that fix their own algorithm."
+    rationale: "Staying within the approved set lets a FIPS build variant be added later without changing a format or a stored value."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-88, section: "1", depth: Partial}
+      - {id: ST-89, section: "6", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "algorithm allow-list test over the signing, sealing and derivation code paths"}
+      - {kind: manual, ref: "algorithm inventory review per release"}
+  - id: REQ-KEYS-025
+    area: KEYS
+    statement: "sluis MAY offer a FIPS build variant that uses a FIPS 140-3 validated cryptographic module, added when a customer needs it."
+    rationale: "No installation that v2.0 targets needs a certificate, and the certified build would weigh on every build."
+    level: MAY
+    source: design-decision
+    status: out-of-scope
+    runtimes: all
+    standards:
+      - {id: ST-88, section: "1", depth: Partial}
+    features: ["#868"]
+    verification:
+      - {kind: manual, ref: "release matrix review"}
   - id: REQ-KEYS-011
     area: KEYS
     statement: "An alarm MUST be raised on key-ring decryption outside planned rotation."
