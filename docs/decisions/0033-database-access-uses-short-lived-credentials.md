@@ -19,7 +19,7 @@ Three facts about PostgreSQL shape the answer.
 
 Managed databases differ. RDS and Aurora offer IAM authentication: a client makes a token signed with its AWS credentials, valid for 15 minutes, and the database checks it with AWS.
 
-sluis also uses PostgreSQL itself, as a driver: the `postgres` index driver (ADR 0022), and possibly a state driver on Kubernetes, which is a question for the Kubernetes records (ADR 0047). Its own actors must be kept apart inside a shared database.
+sluis also uses PostgreSQL itself, as a driver: the `postgres` index driver ([0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)), and possibly a state driver on Kubernetes, which is a question for the Kubernetes records (ADR 0047). Its own actors must be kept apart inside a shared database.
 
 ## Decision
 

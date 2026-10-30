@@ -5,6 +5,7 @@
 
 Decided by the maintainer. Proposal: [issue #903](https://github.com/truvity/sluis/issues/903). Rewritten in place on 2026-10-29 during the v2 design phase (see "Design phase" in the decisions README).
 Rewritten in place on 2026-10-30 (realignment pass).
+Rewritten in place on 2026-10-31 (links to ADR 0022, which decided the index drivers, the default index of each tested installation and the path from serverless to Postgres).
 
 ## Context
 
@@ -46,10 +47,10 @@ A cluster has several nodes. If every node wrote to one shared log, that log wou
 - **Quota meters by default and enforces per policy rule.** A policy rule may enforce quota for chosen subjects or audiences. Enforcement needs state with compare-and-set on the mint path. Strict quota is switched on in production only after the load test.
 - **Serverless may run the indexer and reader with a postgres index.**
 - **The postgres index is one driver with a provisioning mode:**
-  - `rds` or `aurora` on AWS. How a serverless function reaches it is in ADR 0022.
+  - `rds` or `aurora` on AWS. How a serverless function reaches it is in [0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/).
   - `cnpg` on Kubernetes, in the same cluster.
   - `external`: a connection string only; sluis provisions nothing. Examples: a CloudNativePG cluster in another Kubernetes cluster behind a load balancer, or a Postgres that someone runs on bare metal. Exposing a database through a load balancer is not a driver; from sluis's side it is `external`.
-- **The other index drivers and the default index of each tested installation are in ADR 0022.** Among them is a replicated SQLite index (`rqlite`) for the boards, so that the reader can run on any node; it is proposed (ADR 0022).
+- **The other index drivers and the default index of each tested installation are in [0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/).** Among them is a replicated SQLite index (`rqlite`) for the boards, so that the reader can run on any node.
 - **The search index and the quota meters are derived data,** rebuilt from the log and never evidence. Quota limits are declared and quota balances are issued records ([0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
 
 ## Consequences
@@ -66,7 +67,7 @@ A cluster has several nodes. If every node wrote to one shared log, that log wou
 - Serverless installations gain search. They need a Postgres service, which is a dependency to provision and check with `sluis config check`.
 - Four transport modes and drivers (direct, spool, SQS, NATS JetStream) and three provisioning modes for postgres need tests and docs.
 - The `external` mode puts connection security and availability with the operator. sluis cannot check more than the connection string and a reachability probe.
-- The index drivers beyond postgres, the default index of each tested installation and the connection from serverless to Postgres are decided in ADR 0022. The docs mark them as proposed until then.
+- The index drivers beyond postgres, the default index of each tested installation and the connection from serverless to Postgres are decided in [0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/).
 
 ## Roads not taken
 

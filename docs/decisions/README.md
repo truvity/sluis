@@ -63,6 +63,9 @@ A rewritten record says so in one line under its proposal link, with the date. O
 | [0015](0015-configuration-is-defined-once-in-pkl-and-shipped-as-json-schema.md) | Configuration is defined once in Pkl and shipped as JSON Schema | Accepted |
 | [0016](0016-data-has-an-origin-and-a-sensitivity.md) | Data has an origin and a sensitivity | Accepted |
 | [0017](0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite.md) | State is one port with compare-and-set; one writer owns each record kind; clusters replicate with rqlite | Accepted |
+| [0021](0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode.md) | The audit log is a C2SP tiled log in a blob, sealed in batches by its one writer, with a lock-mode rule, a declared retention and company encryption; the record format is open | Proposed |
+| [0022](0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes.md) | Search is an index fed from the log, and the index is one driver with provisioning modes | Accepted |
+| [0023](0023-quotas-api-is-idempotent-and-its-data-follows-the-origin-model.md) | Quota's API is idempotent by a request id and `Idempotency-Key`, and its data follows the origin model | Accepted |
 | [0029](0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime.md) | One repository, one version, one release train, and packaging follows the runtime | Accepted |
 | [0033](0033-database-access-uses-short-lived-credentials.md) | Database access uses short-lived credentials | Accepted |
 | [0038](0038-the-local-installation-is-docker-compose-with-one-container-per-actor.md) | The local installation is Docker Compose with one container per actor, the published images and minimal drivers | Accepted |
@@ -72,3 +75,4 @@ A rewritten record says so in one line under its proposal link, with the date. O
 | [0059](0059-each-boundary-has-its-own-issuer-and-tokens-carry-one-audience.md) | Each boundary has its own issuer; tokens carry one audience that names a registered client | Accepted |
 | [0060](0060-the-language-follows-the-executable.md) | The language follows the executable: Go by default, Rust at the edge, in the trusted base and in cloud drivers | Accepted |
 | [0061](0061-optional-openid-plans-form-post-is-supported-ciba-comes-later.md) | Optional OpenID plans: form post is supported; front-channel logout and third-party-initiated login are not; CIBA comes later in poll mode | Accepted |
+| [0062](0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own.md) | An audit installation has its own front: a slim entry, the reader as its API, and a console of its own | Accepted |

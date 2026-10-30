@@ -86,7 +86,7 @@ Two other facts shape the answer. Drivers are services on Unix sockets, and the 
 - A Kubernetes Lease driver: in the backlog ([0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/)).
 - Further operations on the port beyond get, put with a precondition, cas and expiry (delete, listing by prefix, a conditional adjust of a counter, watch or a change feed), which v1's state port had or the design pages propose: ADR 0057.
 - The sealing format and the secrets port: ADR 0034.
-- The `rqlite` index driver, which uses rqlite for search and not for state: ADR 0022. Full-text search (FTS5) was checked on rqlite v10.6.6 on 2026-10-30 and is compiled in, on a single node and in a three-node cluster with replication, and in the arm64 image. The result belongs to that record, and nothing here depends on it.
+- The `rqlite` index driver, which uses rqlite for search and not for state: [0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/). Full-text search (FTS5) was checked on rqlite v10.6.6 on 2026-10-30 and is compiled in, on a single node and in a three-node cluster with replication, and in the arm64 image. The result belongs to that record, and nothing here depends on it.
 
 ## Consequences
 

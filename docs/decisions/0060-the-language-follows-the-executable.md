@@ -5,6 +5,7 @@
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 Rewritten in place on 2026-10-30 (the open points of [issue #910](https://github.com/truvity/sluis/issues/910) decided: fallbacks are candidates chosen when a spike fails, `cloud-cloudflare` is Go, `sluis-node` verifies OpenPGP signatures with Sigstore provenance as a second signal, and the ceremony is a `sluis` subcommand with a Rust helper inside the `sluis` package; OD-16 holds without exception).
+Rewritten in place on 2026-10-31 (`cloud-garage` is Rust, by rule R5).
 
 ## Context
 
@@ -52,6 +53,7 @@ FIPS mode and the certified build are ADR 0010. The release train and GoReleaser
 | `key-holder` | Rust, through PKCS#11 (`cryptoki` with Yubico's `ykcs11`) | R3, R7 | S4 |
 | `sluis-host` | Rust | R3 | S1 |
 | The ceremony's OpenPGP-card helper, run by `sluis ceremony` | Rust (`openpgp-card` with rPGP) | The deciding library is Rust-only, the converse of R4 | S8 |
+| `cloud-garage` | Rust; it shares no library with an integration, so R5 applies | R5 | None |
 | `cloud-cloudflare` | Go, sharing the library of the integration `cloudflare@<company>` | R4: an exception to R5 | None |
 | `session`, `exchange`, `console`, `quota`, `signer`, `ca`, `ssh-ca` | Go | R4, R6 | None |
 | Audit actors: `writer`, `witness`, `indexer`, `reader` | Go | R4 | None |
