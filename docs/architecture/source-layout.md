@@ -35,7 +35,7 @@ Parallel implementations of the same small kits, one per language, keep the lang
 | Kit | What it is |
 | --- | ---------- |
 | ConnectRPC over Unix sockets | A server and client that read peer credentials (`SO_PEERCRED`) on every call and expose them to the call-graph interceptor |
-| Config loader and validator | Loads the layered configuration (defaults, runtime, installation, install, environment overrides; the layering is proposed) and validates it against the generated JSON Schema, with strict unknown-field handling |
+| Config loader and validator | Loads the layered configuration (defaults, runtime, install file, environment overrides; the layering is proposed) and validates it against the generated JSON Schema, with strict unknown-field handling |
 | CLI conventions | One command-line convention: `config check`, `config explain`, `doctor`, and a uniform `--help` |
 | Conformance suite | Shared vectors and behavioural tests that every kit and driver must pass, whatever its language |
 

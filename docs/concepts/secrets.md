@@ -1,6 +1,6 @@
 ---
 title: Secrets and export
-description: "What secrets sluis keeps (its own and its integrations'), the secrets and export ports, sealed-state bootstrap, and age-encrypted drops."
+description: "What secrets sluis keeps (its own and its integrations'), the secrets and export ports, sealed state on any runtime, and age-encrypted drops."
 status: target
 sidebar:
   order: 9
@@ -47,12 +47,22 @@ The bootstrap rule is that **the credentials of the store come from a source, ne
 | `versioned` | Overlapping rotation needs at least the previous revision |
 | `consumer-readable` and `per-path-grants` | Needed if the store is also where an export is read from |
 
-### Sealed state, for installations with no other store
+### Sealed state
 
-On [boards](/runtimes/installations/#boards) there is no cloud store to hold learned secrets. The bootstrap there is a **sealed-state** driver: values are stored as records in `state`, encrypted under a key that the `keys` port holds. With a YubiKey the sealing is an ECDH and HKDF exchange against the public half of a key in the card's sealing slot (see [Keys](/concepts/keys/#yubikey-layout)). Sealing needs no hardware; only opening does.
+A **sealed-state** driver stores values as records in `state`, encrypted under a key that the `keys` port holds. On [boards](/runtimes/installations/#boards) it is the bootstrap, because there is no cloud store to hold learned secrets. With a YubiKey the sealing is an ECDH and HKDF exchange against the public half of a key in the card's sealing slot (see [Keys](/concepts/keys/#yubikey-layout)). Sealing needs no hardware; only opening does.
+
+Sealed state is **allowed on every runtime when it is done properly** (agreed). This replaces the stricter v1 rule on sealed state. A store the cloud provides is still the usual choice where there is one, but it is no longer the only permitted one.
 
 :::note[Proposed]
-`sealed-state` is for sluis's internal values. Nobody outside sluis can read it, so an exported value on such an installation goes out through a drop (below). The PIN of the card itself comes from a source, a systemd credential.
+A dedicated decision record is still to come. It has to fix:
+
+- the encryption context and the additional authenticated data (AAD);
+- a re-seal path, for when the sealing key rotates;
+- recovery when a sealing key is lost;
+- one immutable item per version, with compare-and-set on the record;
+- what a backup contains and how it behaves.
+
+Until it is written, the driver is a design, not a promise. `sealed-state` is for sluis's internal values. Nobody outside sluis can read it, so an exported value on such an installation goes out through a drop (below). The PIN of the card itself comes from a source, a systemd credential.
 :::
 
 ## The export port

@@ -45,7 +45,7 @@ Some actors declare **instances: exactly 1**: the audit writer (exactly one writ
 
 ## Choosing an installation
 
-The four tested installations name the default drivers for a runtime. They are delivered in this order: local, then boards, then lambda, and kubernetes later. Pick by the failure you have to survive and the key custody you accept.
+The four tested installations name the default drivers for a runtime. They are delivered in this order: local first, then boards, lambda and kubernetes in parallel. Pick by the failure you have to survive and the key custody you accept.
 
 - **[local](/runtimes/installations/#local):** Docker on a workstation, with the host's YubiKey. For learning and development.
 - **[boards](/runtimes/installations/#boards):** three single-board computers, a YubiKey in each, with rqlite state. On-premises, and it survives the loss of a node.

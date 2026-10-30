@@ -14,6 +14,7 @@ Google Workspace is one upstream sign-in provider. The **generic OpenID Connect 
 - **A person is routed by the domain of their email address.** `person@partner.example` goes to the partner's provider, `person@example.org` to the company directory. The routing is on the domain, and a domain claim is proven with a DNS TXT record rather than taken on trust.
 - **Several environments, one place to sign in.** An installation in one environment (development, staging or production, or in one regulated entity) accepts people vouched for by an installation in another, and the trust graph stays acyclic.
 - **A robot in one environment calls a service in another.** The peer's tokens are verified inbound; outbound, the peer's own policy decides what the caller gets.
+- **A customer-identity (CIAM) product plugs in as an upstream.** sluis stays a broker (agreed): it does not become the customer-identity product. A CIAM product that speaks OpenID Connect is one more upstream, reached through this generic connection, and its end users get sluis subjects like any other signed-in person.
 
 ## Integration actors
 
@@ -28,6 +29,19 @@ Google Workspace is one upstream sign-in provider. The **generic OpenID Connect 
 Nothing beyond being a registered client. sluis asks for the scopes `openid email profile`, and holds one client id and one client secret (or a signing key for `private_key_jwt`) per connection, as credentials. It reads the provider's discovery document and key set from public URLs.
 
 The checks sluis makes on every returned ID token are strict: issuer and audience match, `nonce` matches the one it sent, the signature verifies against the provider's keys, the email is verified, and the account's `sub` is the one first recorded for that address. A token with a wrong `aud` or `nonce` is refused.
+
+## What a connection can do
+
+Beyond sign-in, a connection supports the following, so that a CIAM product or any strict provider can be an upstream (agreed):
+
+- **Claim mapping per upstream.** Each connection maps the provider's claims to the facts sluis uses.
+- **`acr` and `amr` passthrough.** The authentication context class and the methods the provider reports are carried into the session, so that policy can see how strongly a person signed in.
+- **Step-up (RFC 9470).** When a grant needs a stronger sign-in than the session has, sluis sends the person back to the upstream with a challenge for a higher `acr`, or asks for a passkey ([Context](/architecture/context/#second-factor)).
+- **End-user subjects.** A person who signs in through a CIAM product gets a subject of their own.
+- **Back-channel logout.** The upstream can end the session at sluis with an OpenID Connect back-channel logout token.
+- **Rate limits** per connection.
+
+A SAML identity provider, and SCIM provisioning for AWS IAM Identity Center, are backlog ([#918](https://github.com/truvity/sluis/issues/918)). The work is tracked as [#916](https://github.com/truvity/sluis/issues/916).
 
 ## What policy controls
 
