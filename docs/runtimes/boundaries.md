@@ -59,7 +59,7 @@ flowchart LR
 For example, an operator with three companies (company A, B and C) and four environments runs the front and the management environment in one cloud account, and development, staging and production each at L4, with their own account or cluster, state and keys.
 
 - **What is shared:** the front's `entry`, the console, the roots and the operator.
-- **Accepted risks:** the roots, the operator who deploys, cluster administrators, a compromise of production's `ca` reaching every company in production, a bug in a shared policy definition, and data held outside sluis.
+- **Accepted risks:** the roots, the operator who deploys, cluster administrators, a compromise of production's `ca` reaching every company in production, a bug in a shared policy definition, and data held outside sluis. They are listed with the threats each boundary answers (T-1 to T-26) on the [threat model](/security/threat-model/#accepted-risks).
 - **A test installation is separate.** It serves no real user, trusts nothing, and lives outside the sluis host names.
 
 ### Across boundaries
@@ -134,3 +134,4 @@ The choices below are the reference for a federation of several companies and en
 - [Installations](/runtimes/installations/): the four tested installations. Each is one installation of a federation.
 - [Configuration](/concepts/configuration/#what-is-configured-an-installation): one install file per installation.
 - [Machine identity](/concepts/machine-identity/): SPIFFE IDs, trust domains and joining.
+- [Threat model](/security/threat-model/): the threats, attacker positions and controls per layer, and the [isolation requirements](/requirements/iso/) that test them.

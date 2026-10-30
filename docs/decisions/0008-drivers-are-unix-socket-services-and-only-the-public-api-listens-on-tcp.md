@@ -44,7 +44,12 @@ Kubernetes edge and pod layout: ADR 0046.
 
 ### Not decided here
 
-- **How a `per-actor` rqlite driver reaches its cluster's client port from an actor unit with `PrivateNetwork=yes`.** The rqlite client port is TCP, and a unit in a private network namespace cannot open the host's ports. Whether the driver then runs as a sidecar unit outside that namespace, or the actor's unit is given a narrower network rule, is open. It is tracked on [issue #910](https://github.com/truvity/sluis/issues/910). (inferred)
+- **How a `per-actor` rqlite driver reaches its cluster's client port from an actor unit with `PrivateNetwork=yes`.** The two rules above meet here. A `per-actor` driver runs as the actor's uid and holds the actor's rqlite user, and every actor that needs no network runs with `PrivateNetwork=yes` and `RestrictAddressFamilies=AF_UNIX`. But rqlite's client API (its HTTP port, beside the Raft port of each `sluis-rqlite@<boundary>-<actor>` cluster) is TCP. A unit in a private network namespace has only its own loopback device, so it cannot open the host's loopback port or a peer's address, and `AF_UNIX` alone forbids a TCP socket. The options, none chosen:
+  - **A narrow network rule instead of `PrivateNetwork=yes`.** The actor's unit, with its driver, stays in the host's network namespace, allows `AF_INET`/`AF_INET6` as well as `AF_UNIX`, and gets `IPAddressDeny=any` with `IPAddressAllow=` for loopback or the cluster's own address only. The actor keeps no other network, but it has a network stack, and the rule is per unit rather than structural.
+  - **rqlite listens on a Unix socket.** The client API would then be a socket file whose permissions admit only the owner and the declared readers, and the actor keeps `PrivateNetwork=yes`. rqlite does not support this today: as of v10.6.6 (2026-10-28) `rqlited` serves its HTTP API on TCP only (`net.Listen("tcp", …)`). An optional Unix-socket listener is proposed upstream in an unmerged pull request, rqlite/rqlite#2979. A patched build would be a fork to carry.
+  - **A per-actor sidecar unit holds the rqlite credential.** A small unit per actor, outside the private namespace and under its own uid or the actor's, holds the actor's rqlite user, connects to the cluster over TCP with mutual TLS, and serves the state port to its one actor over a Unix socket. The actor keeps `PrivateNetwork=yes`. The cost is one more unit per actor, and a process that is neither a mediator for several callers nor inside the actor's sandbox.
+
+  It is tracked on [issue #910](https://github.com/truvity/sluis/issues/910).
 
 ## Consequences
 

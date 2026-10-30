@@ -18,7 +18,7 @@ The number of nodes is an attribute of the installation, not of the runtime: bar
 - The node agent (`sluis-node`) runs on the node. It issues each actor a short-lived workload JWT and, on a cloud VM, is the only process that holds the instance role and brokers per-actor credentials.
 - The permission manifest generates the units: `User=`, a private state directory, `LoadCredential=` (or `LoadCredentialEncrypted=` where the systemd floor allows it) for the secrets an actor may read, and socket modes and groups for the callers the manifest allows.
 - **Hardening per unit:** `ProtectSystem=strict`, `NoNewPrivileges=`, an empty `CapabilityBoundingSet=` and `SystemCallFilter=@system-service`. Every actor that needs no network, `entry`, `policy` and `signer` among them, gets `PrivateNetwork=yes` and `RestrictAddressFamilies=AF_UNIX`. Integrations reach their providers through the egress proxy.
-- `key-holder` fronts the node's YubiKey with one socket per caller, a peer-uid check and content-aware signing ([The mediating driver](/concepts/drivers/#the-mediating-driver)). State has no mediator: each owning actor has its own rqlite cluster.
+- `key-holder` fronts the node's YubiKey with one socket per caller, a peer-uid check and content-aware signing ([The mediating driver](/concepts/drivers/#the-mediating-driver)). State has no mediator: each owning actor has its own rqlite cluster. How an actor in a private network namespace reaches its cluster's TCP client port is still open ([ADR 0008](/decisions/0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp/#not-decided-here)).
 - Integration actors run only when the installation uses them.
 
 ## Supported distributions and the systemd floor

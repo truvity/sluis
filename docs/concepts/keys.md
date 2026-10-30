@@ -6,7 +6,7 @@ sidebar:
   order: 4
 ---
 
-sluis holds five kinds of authority key (token signing, the X.509 CA, the SSH CA, the audit log key and the mint grant), plus the keys that seal data at rest. Each [environment](/runtimes/boundaries/) has its own set: no key is shared between development, staging and production. This page says what backs each key in each installation, how it signs, and which algorithms it uses. The access rules, which actor may use which key, are enforced by `key-holder` or by the cloud's key policy, not by this page: see [Ports and drivers](/concepts/drivers/#defence-in-depth).
+sluis holds five kinds of authority key (token signing, the X.509 CA, the SSH CA, the audit log key and the mint grant), plus the keys that seal data at rest. Each [environment](/runtimes/boundaries/) has its own set: no key is shared between development, staging and production. This page says what backs each key in each installation, how it signs, and which algorithms it uses. The access rules, which actor may use which key, are enforced by `key-holder` or by the cloud's key policy, not by this page: see [Ports and drivers](/concepts/drivers/#defence-in-depth). The threats to the keys (another boundary's or purpose's key, a key made to sign the wrong content, a compromised `key-holder`) are T-8 to T-10 on the [threat model](/security/threat-model/#keys-and-signing).
 
 ## Key modes
 

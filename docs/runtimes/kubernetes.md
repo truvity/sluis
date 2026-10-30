@@ -151,13 +151,13 @@ A console reaches the reader over a Unix socket in its own install. For an audit
 
 The console's single-page application runs as **its own Deployment and image**, behind the same gateway as `entry` by path, so the page and the console API share one origin. It is a key-less listener that serves static files only ([Listeners](/architecture/listeners/#the-consoles-static-host)).
 
-`entry` listens on `127.0.0.1` on every runtime. A gateway cannot route to a loopback address in another pod, and the kubelet's HTTP and TCP probes connect to the pod address, so they cannot reach it either.
+On bare-metal `entry` listens on a Unix socket, and on serverless on `127.0.0.1` inside the sandbox. The proposal for Kubernetes keeps it on `127.0.0.1` in its container. A gateway cannot route to a loopback address in another pod, and the kubelet's HTTP and TCP probes connect to the pod address, so they cannot reach it either.
 
 :::note[Proposed]
 `entry` keeps its loopback listener. A container in the same pod bridges it, in one of two modes:
 
 - **Edge relay (the default).** A small container that holds no key listens on the pod address and forwards to `entry` on `127.0.0.1`. A Service targets its port, so any Gateway API implementation or Ingress controller can route to it. The relay serves a health endpoint for the gateway, passes the client address in `X-Forwarded-For`, and removes that header from requests unless they come from a configured trusted proxy. A certificate can be configured when the hop from the gateway must be encrypted.
-- **`cloudflared`.** A sidecar that connects out to the edge and to `entry`'s loopback port, as on the boards installation. The pod accepts no inbound connection at all.
+- **`cloudflared`.** A sidecar that connects out to the edge and to `entry`'s loopback port, as `cloudflared` does on the boards installation, where it reaches a Unix socket instead. The pod accepts no inbound connection at all.
 
 The kubelet probes `entry` with an `exec` probe, which runs inside the container's network namespace and reaches the loopback port. `entry` is not bound to the pod address.
 :::

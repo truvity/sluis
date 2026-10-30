@@ -63,13 +63,13 @@ Three details keep this safe:
 - `entry` holds nothing: no key, no secret, no state. The actor behind the unauthenticated listener cannot sign a token or read a session; it can only route to `session`, `exchange` and `console`, whose sockets neither `cloudflared` nor any other process outside the call graph can open.
 - `entry` has no network, so even a compromised `entry` cannot reach out.
 
-## Where the TCP listener is, per runtime
+## Where `entry`'s listener is, per runtime
 
-The listener is the same on every runtime. What differs is who connects to it. The tested installations are the worked examples.
+The API is the same on every runtime; the listener follows the edge connector. It is a Unix socket on bare metal, and a loopback TCP port only where the connector needs one: inside the Lambda sandbox for the Web Adapter, and on Kubernetes as proposed in ADR 0046. The tested installations are the worked examples.
 
 | Runtime and installation | Listener | Who connects |
 | ------------------------ | -------- | ------------ |
-| bare-metal: local | `127.0.0.1:<port>` inside the container | The developer's browser or test harness, through a published port |
+| bare-metal: local | A Unix socket on a shared volume; `entry`'s container has no network | An edge-connector container, or a development proxy that publishes a port to the workstation; which one is ADR 0055, not yet decided |
 | bare-metal: boards | A Unix socket | `cloudflared` on the same board, a tunnel to the installation's public hostname |
 | bare-metal on a virtual machine (a possible installation, not a tested one) | A Unix socket | `cloudflared` on the same instance |
 | serverless: lambda | `127.0.0.1:<port>` inside the function's sandbox | The Lambda Web Adapter, pinned at v1.1.0 and vendored into sluis's own layer. The edge in front of the function is API Gateway |
@@ -91,7 +91,7 @@ On bare-metal installations with N nodes (boards is the tested one) each rqlite 
 
 ## Local development and tests
 
-In the local installation the same sockets live in a runtime directory inside the container and `entry`'s loopback port is the container's own. A test harness or a developer publishes that port to the workstation to reach it from a browser. The published port is a development convenience; production installations never publish it.
+In the local installation the same sockets live on shared volumes, `entry`'s public socket among them, and `entry`'s container has no network, as on any bare-metal installation. How a test harness or a developer's browser reaches that socket, through an edge-connector container or a development proxy that publishes a port to the workstation, is not decided yet (ADR 0055, see [ADR 0038](/decisions/0038-the-local-installation-is-docker-compose-with-one-container-per-actor/)). A published port is a development convenience; production installations never publish one.
 
 ## Related
 

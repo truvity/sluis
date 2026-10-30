@@ -142,6 +142,7 @@ These are tracked in [issue #910](https://github.com/truvity/sluis/issues/910) a
   - **client:** `sluis-host enroll` detects the platform; the key is held in a card if there is one, else a TPM, else a file; the matching code; status, renew, leave and re-enrol; `sluis host user-data --group <group>` prints a cloud-init snippet, as text and not as an artifact;
   - **console:** a list of hosts, a queue of pending requests, token management with each token shown once, an "Add host" page, and the rules shown read-only.
 - The standards register lists the SPIFFE ID, the trust domain and bundle, the X.509-SVID and the JWT-SVID as Full, and SPIFFE Federation, the Workload Endpoint and the Workload API as Planned. RFC 9180 is added for enrolment (inferred). A "Machine identity" page carries the mapping table above.
+- Threats addressed: T-20, T-21, T-22, T-23 and T-24, see the [threat model](/security/threat-model/).
 
 ## Roads not taken
 

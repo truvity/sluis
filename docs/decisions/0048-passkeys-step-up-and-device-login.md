@@ -58,6 +58,7 @@ The standards exist: WebAuthn for passkeys, RFC 9470 for a resource to ask for a
 - A boundary that verifies passkeys keeps its own challenges and the public keys it needs, so a passkey works there even when the front is compromised. (that the boundary keeps the public keys is inferred)
 - MFA rules live in each boundary's policy, so production can demand more than development without a change in code.
 - The conformance work includes the WebAuthn conformance tool and RFC 9470's challenge format. (inferred)
+- Threats addressed: T-5, T-6 and T-7, see the [threat model](/security/threat-model/).
 
 ## Roads not taken
 

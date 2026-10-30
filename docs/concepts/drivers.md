@@ -93,9 +93,11 @@ More cards per node are an option for later. The OpenPGP cards of the roots are 
 
 **There is no `state-owner`.** rqlite is light enough to run **one cluster per (boundary, owning actor)** (measured at about 7 to 9 MB idle and 16 to 26 MB loaded per node, plus about 30 MB shared per host). The owning actor gets an rqlite user with `execute`, and each declared reader a user with `query` only. Each cluster runs as a systemd template instance, `sluis-rqlite@<boundary>-<actor>`, with its own port from a port scheme and its own certificate, mutual TLS between nodes and to clients, and a sandbox that lets it write its data directory only (which also contains SQLite's `ATTACH`-creates-files hole). The footprint is measured again on the boards.
 
+**Not decided yet: how an actor reaches its own cluster.** An actor that needs no network runs with `PrivateNetwork=yes` and `RestrictAddressFamilies=AF_UNIX`, but rqlite's client API is a TCP port, so the actor's `per-actor` rqlite driver cannot reach its own cluster from inside that sandbox. A narrow `IPAddressAllow=` rule, a Unix-socket listener in rqlite (not supported today) and a per-actor sidecar unit are the options. It is an open point of [ADR 0008](/decisions/0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp/#not-decided-here), tracked on [issue #910](https://github.com/truvity/sluis/issues/910).
+
 ## Defence in depth
 
-Every port is protected in **three layers**, and all three are generated from one manifest (agreed, DD-1). The record is [ADR 0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/).
+Every port is protected in **three layers**, and all three are generated from one manifest (agreed, DD-1). The record is [ADR 0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/). The threats these layers answer (T-8 to T-14 and T-24 among them), the attacker positions and what is left after each control are on the [threat model](/security/threat-model/), and each control's test vectors are in the [isolation requirements](/requirements/iso/).
 
 | Layer | Where | What it does |
 |---|---|---|
@@ -366,7 +368,7 @@ Internal programs are not on `PATH`. The only command for humans is `/usr/bin/sl
 ```text
 /usr/bin/sluis                         the only command for humans
 /usr/libexec/sluis/
-  actors/                              entry, signer, policy, ca, quota, writer, witness, indexer, reader
+  actors/                              entry, session, console, exchange, signer, policy, ca, ssh-ca, quota, writer, witness, indexer, reader
   drivers/                             one directory entry per driver
   integrations/                        one per integration
   node/                                sluis-node, and other node services

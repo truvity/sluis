@@ -32,7 +32,7 @@ The core actors are `entry`, `session`, `console`, `exchange`, `signer`, `policy
 | `session` | Sessions, the session cookie, per-boundary freshness (step-up), the sign-in flows | Sessions and refresh tokens; the cookie-sealing key, behind the keys port | Sign a token, or reach an integration's vendor credential |
 | `console` | The operator API, as the browser's backend. Routes each write to the actor that owns the record kind | Delegation checks. No key | Write a record kind it does not own |
 | `exchange` | Token exchange (RFC 8693), enrolment and the proof verifiers | Client secret verifiers, enrolments, token hashes. Verifier drivers with public material only; the enrolment key stays in `key-holder` or KMS | Sign a token itself |
-| `signer` | Holds the signing ring and signs tokens under a signing policy; it is not a pure oracle. It checks the issuer URL, the audience set, the lifetime and the algorithm | The token-signing key use (KMS `Sign`, or the hardware key through `key-holder`) | Accept a request from anyone but `entry`, or parse internet input |
+| `signer` | Holds the signing ring and signs tokens under a signing policy; it is not a pure oracle. It checks the issuer URL, the audience set, the lifetime and the algorithm | The token-signing key use (KMS `Sign`, or the hardware key through `key-holder`) | Accept a request from an actor its call graph does not name (`session` and `exchange`), or parse internet input |
 | `policy` | The decision point. Declared Cedar policy, plus template-linked policies within a declared delegation policy, maps facts to grants. Signs mint grants with its own key | The grant key. No state, no network, no secrets | Reach any resource: a bad process can decide wrongly, but exfiltrates nothing |
 | `ca` | The X.509 CA | The X.509 CA keys | Sign anything outside its policy |
 | `ssh-ca` | The SSH CA, for user and host certificates | The `ssh-user` and `ssh-host` keys | Sign anything but an OpenSSH certificate within its policy |
@@ -66,7 +66,7 @@ A backend that can authorise each caller is used with **per-actor credentials an
 
 It has no internet egress, loads no plugins and has no reconcile logic: one code path per operation, fuzz-tested decoding, a rate limit and an audit record per signature. Its blast radius is every key on the card, and that price is paid once, in a small audited process. See [The mediating driver](/concepts/drivers/#the-mediating-driver).
 
-There is **no `state-owner`**. State on a cluster of boards is **one rqlite cluster per (boundary, owning actor)**, `sluis-rqlite@<boundary>-<actor>`: the owner has the only user with `execute`, declared readers have `query`-only users, and each cluster has its own port, certificate and systemd sandbox.
+There is **no `state-owner`**. State on a cluster of boards is **one rqlite cluster per (boundary, owning actor)**, `sluis-rqlite@<boundary>-<actor>`: the owner has the only user with `execute`, declared readers have `query`-only users, and each cluster has its own port, certificate and systemd sandbox. How an actor unit that runs with `PrivateNetwork=yes` reaches its cluster's TCP client port is still open ([ADR 0008](/decisions/0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp/#not-decided-here), [issue #910](https://github.com/truvity/sluis/issues/910)).
 
 The **node agent** (`sluis-node`, bare-metal only) is the root-owned process that is the node's trusted base. It issues a short-lived workload JWT per uid, brokers cloud credentials, pulls and verifies signed configuration and binaries, and starts units. Everything in [Deployment](/architecture/deployment/) depends on it staying small. It does not run on serverless or on Kubernetes.
 
@@ -174,11 +174,11 @@ flowchart LR
   entry["entry"] -.->|"transport"| aw["writer"]
   gh["integration A"] -.->|"transport"| aw
   aw -->|"sign head"| kh["key-holder"]
-  agent["sluis-node"] -.->|"workload JWT"| entry
+  agent["sluis-node"] -.->|"workload JWT"| sess["session"]
   agent -.->|"workload JWT"| signer["signer"]
 ```
 
-Dashed lines to `writer` are asynchronous emits through the transport port. The node agent dashes stand for the workload JWT it issues to every actor; the picture omits them for the other actors to stay readable.
+Dashed lines to `writer` are asynchronous emits through the transport port. The node agent dashes stand for the workload JWT it issues to the actors that need one; the picture omits the others to stay readable. `entry` needs none: it has no network and reaches only Unix sockets.
 
 ### Bare-metal, N nodes
 

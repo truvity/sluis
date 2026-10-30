@@ -96,6 +96,7 @@ Four things shape the answer.
 - Two CA actors mean two sets of keys, profiles and conformance tests, and two things to publish: X.509 anchors and CRLs, SSH CA keys and KRLs.
 - Every certificate is audited: the requester, the profile, the serial, the validity and the public key hash. Every X.509 certificate is also in the issuance log.
 - `sluis config check` refuses a policy that uses `reported` attributes in a permit, and refuses a `g:` grant outside the three allowed cases. (inferred)
+- Threats addressed: T-8, T-9, T-19, T-20 and T-26, see the [threat model](/security/threat-model/).
 
 ## Roads not taken
 

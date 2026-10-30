@@ -5,6 +5,7 @@
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909). Delivery order: [0039](/decisions/0039-delivery-goes-local-first-then-boards-lambda-and-kubernetes-in-parallel/). How a developer reaches `entry` from outside the Compose network is ADR 0055; see the last Consequences item.
 Rewritten in place on 2026-10-30 (one image set for local and Kubernetes; a `key-holder` socket per caller; state per actor).
+Rewritten in place on 2026-10-30 (alignment with 0007, 0058).
 
 ## Context
 
@@ -59,7 +60,7 @@ A YubiKey is a smart card, reached through the smart-card service (`pcscd`). Tha
 - Local does not exercise the platform controls of the other installations: IAM and key policies, systemd sandboxing, a replicated store, a compliance lock. Those need the boards, lambda and kubernetes installations.
 - The `fs` blob has no lock mode, so tamper evidence on local comes from verification and not from the store. A test can rebuild the `sqlite` index and still verify the chain.
 - A software key is extractable by anyone who can read the key's volume. Use it for development data only.
-- The listener rule of [0008](/decisions/0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp/) still holds: `entry`'s public API listens on a loopback address and only a connector reaches it. How a developer or a test harness reaches that listener from outside the Compose network, by a published port or by an edge-connector container, is not decided here. It is ADR 0055.
+- The listener rule of [0008](/decisions/0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp/) holds as on any bare-metal installation: `entry`'s public API is a Unix socket on a shared volume, `entry`'s container has no network, and only a connector reaches the socket. How a developer or a test harness reaches that socket from outside the Compose network, by an edge-connector container or by a development proxy that publishes a port, is not decided here. It is ADR 0055. (aligned with 0008)
 
 ## Roads not taken
 

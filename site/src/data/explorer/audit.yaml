@@ -154,10 +154,10 @@ nodes:
     role: entry
     title: entry
     l2: behind the edge
-    l3: tcp 127.0.0.1
+    l3: unix socket
     l3_lambda: tcp 127.0.0.1
-    does: Takes the public request, forwards search to the reader, and is also a producer.
-    holds: Its loopback TCP port, reached through the edge connector
+    does: Stands for the front on this map. entry takes the public request and routes it to session, exchange or console, which do the work drawn here; an audit search goes through console to the reader. Each of them is also a producer.
+    holds: Nothing. Its public socket (a loopback port inside the sandbox on serverless), reached through the edge connector
     never: Any key; a way to read the transport
   producers:
     lane: 0

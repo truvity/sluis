@@ -5,6 +5,7 @@
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 Rewritten in place on 2026-10-30 (realignment pass; then a named exception for NATS decentralized authentication, and FIPS parity for Rust components).
+Rewritten in place on 2026-10-30 (alignment with 0007, 0058).
 
 ## Context
 
@@ -38,7 +39,7 @@ Which key signs, and where that key lives, is a separate decision ([0011](/decis
 - **How a client or an audience selects a non-default algorithm is client-profile configuration.** It is not part of this record.
 - **Driver support is checked per algorithm, not assumed.** Two facts are known now. PS256 on a YubiKey takes about 2.3 seconds per signature, so it suits a low-volume audience only. Ed25519 in the PIV application needs YubiKey firmware 5.7 or newer. A driver that cannot offer an algorithm refuses it when the installation is checked, not at the first token.
 - **FIPS 140-3 mode is on by default.** The default build runs Go's FIPS 140-3 module with `fips140=on`, using the latest module. That refuses X25519 and ChaCha20 in TLS and runs a pairwise consistency test when a key is generated. Both are acceptable. A separately pinned build uses the CMVP-certified module (certificate #5247, module v1.0.0) for installations that need the certificate itself. BoringCrypto is not used.
-- **Rust components keep FIPS parity.** A Rust component that performs an approved operation (TLS, an AEAD, the hash under a signature) uses aws-lc-rs in FIPS mode in the default build, and a pinned, CMVP-certified AWS-LC module in the certified build. It never uses RustCrypto or ring for an approved operation. A component that performs no approved operation, such as a slim `entry` behind a loopback edge, is exempt, and its manifest says so.
+- **Rust components keep FIPS parity.** A Rust component that performs an approved operation (TLS, an AEAD, the hash under a signature) uses aws-lc-rs in FIPS mode in the default build, and a pinned, CMVP-certified AWS-LC module in the certified build. It never uses RustCrypto or ring for an approved operation. A component that performs no approved operation, such as a slim `entry` behind the edge connector (a Unix-socket origin on bare metal, a loopback port only inside the Lambda sandbox), is exempt, and its manifest says so.
 - **The certified Rust build is pinned on purpose.** The current aws-lc-rs binds a module version that is not yet certified, so the certified build pins an older binding that maps to a certified module. Which binding that is, for both architectures, is established by a build spike before the first code, tracked with ADR 0060.
 - **The only source of randomness is the operating system's CSPRNG**, through Go's `crypto/rand`. Since Go 1.26 the standard library's crypto ignores a reader passed in and always uses it. Tests replace it with `testing/cryptotest.SetGlobalRandom`. A Rust component uses the generator of its FIPS module, which is seeded by the operating system, and no second library (inferred). sluis does not mix in randomness from a key service or a hardware key, and NIST SP 800-90C does not require it.
 - **`sluis doctor` checks the platform's randomness**, because that is what can still go wrong:

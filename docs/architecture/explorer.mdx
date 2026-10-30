@@ -28,7 +28,7 @@ Select a box to see what it holds, its manifest summary and its listeners; the l
 
 ## Processes and listeners
 
-The same facts as tables, for the installation picked above. `entry`'s public API listens on TCP, bound to `127.0.0.1`, on every runtime: `cloudflared` connects to that loopback port on bare-metal, and the Lambda Web Adapter does on serverless. Every other actor and driver listens on Unix sockets under `/run/sluis/` only. How Kubernetes reaches the loopback port is on [Listeners](/architecture/listeners/).
+The same facts as tables, for the installation picked above. On bare-metal `entry`'s public API is a Unix socket and `entry` has no network: `cloudflared` forwards to the socket as a `unix:` origin. On serverless it is a TCP port bound to `127.0.0.1` inside the function's sandbox, and the Lambda Web Adapter connects to it. Every other actor and driver listens on Unix sockets under `/run/sluis/` only. Kubernetes, which is proposed in ADR 0046, is on [Listeners](/architecture/listeners/).
 
 Quota and Search are separate pieces whose placement is derived from the port and driver rules, not decided per installation: see [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived), [OD-38](/open-decisions/#od-38), [OD-33](/open-decisions/#od-33) and [OD-32](/open-decisions/#od-32).
 

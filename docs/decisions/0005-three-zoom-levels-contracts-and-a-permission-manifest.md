@@ -5,6 +5,7 @@
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 Rewritten in place on 2026-10-30 (realignment pass).
+Rewritten in place on 2026-10-30 (alignment with 0007, 0058).
 
 ## Context
 
@@ -28,7 +29,7 @@ v2 is a rewrite, and it is several processes. It needs one method that says how 
 - **Nothing that enforces least privilege is written by hand. The manifest generates it, for every runtime:**
   - IAM policies and trust policies;
   - key policies, with one actor per key;
-  - the access lists of the shared drivers `key-holder` and `state-owner`;
+  - the access lists and the per-caller sockets of the one mediating driver, `key-holder`, and the users of each per-actor rqlite cluster (there is no `state-owner`: [0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/));
   - systemd units and sandbox drop-ins;
   - network rules (nftables, Kubernetes network policies);
   - the call graph, which is default deny: one interceptor in every process refuses a call that is not an edge of the reviewed graph;
