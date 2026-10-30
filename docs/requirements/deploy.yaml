@@ -88,8 +88,8 @@ requirements:
   - id: REQ-DEPLOY-011
     area: DEPLOY
     split_from: REQ-DEPLOY-003
-    statement: "The public API MUST listen on loopback only."
-    rationale: "Only the edge is exposed."
+    statement: "On bare-metal the public API MUST listen on a Unix socket only, with no TCP address bound by entry."
+    rationale: "Only the edge connector reaches entry, and entry runs with no network (ADR 0008)."
     level: MUST
     source: design-decision
     status: planned

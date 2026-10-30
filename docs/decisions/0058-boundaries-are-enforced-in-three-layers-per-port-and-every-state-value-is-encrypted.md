@@ -4,6 +4,7 @@
 **Date:** 2026-10-30
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
+Rewritten in place on 2026-10-30 (threat IDs from the threat model added to the consequences).
 
 ## Context
 
@@ -174,6 +175,7 @@ A dash means that the decision names no layer-2 check for that driver yet.
 - **PostgreSQL needs more set-up:** a migration role, a group role per boundary, a pool per role and version 15 or newer. Self-run PostgreSQL clients get certificates from `ca`.
 - **This record changes three accepted records.** [0002](/decisions/0002-actors-declare-ports-placement-is-derived/) and [0008](/decisions/0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp/) name `state-owner` as a mediating driver, and [0017](/decisions/0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite/) has `state-owner` enforce one writer per record kind, runs one rqlite cluster per installation behind it, and lists a Kubernetes Lease driver. Where they disagree with this record, this record is the reasoning, and they are realigned in place during the design phase.
 - **The driver page and the requirements catalogue follow.** The per-driver table belongs on the drivers page, and the isolation test vectors are requirements with one clause each.
+- **Threats addressed:** T-8, T-9, T-10, T-11, T-12, T-13, T-14, T-24 and T-25, see the [threat model](/security/threat-model/).
 
 ## Roads not taken
 

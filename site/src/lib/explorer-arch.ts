@@ -26,9 +26,9 @@ export type ShapeModel = MapModel & {
 
 const LANES = ['Edge and node', 'Actors', 'Drivers', 'Backing stores', 'Integrations', 'Outside'];
 
-const ROLE_ORDER = ['policy', 'signer', 'ca', 'quota', 'writer', 'witness', 'indexer', 'reader'];
+const ROLE_ORDER = ['session', 'exchange', 'console', 'policy', 'signer', 'ca', 'ssh-ca', 'quota', 'writer', 'witness', 'indexer', 'reader'];
 const INT_ORDER = ['int-upstream', 'int-workload', 'int-facts', 'int-minter', 'int-provisioner', 'int-notifier'];
-const PORT_ROW: Record<string, number> = { keys: 1, state: 2.8, blob: 4.6, transport: 6.2 };
+const PORT_ROW: Record<string, number> = { keys: 1.4, state: 3.8, blob: 6.2, transport: 8.4 };
 
 
 export function shapes(): ShapeModel[] {
@@ -68,7 +68,7 @@ function build(shape: any): ShapeModel {
   const entryRole = data.roles.entry;
   add({
     id: 'entry', lane: 0, row: 2.4, cls: 'role', shared: false,
-    title: 'entry', l2: fill(rt.role.id_short, { id: 'entry' }), l3: 'tcp 127.0.0.1',
+    title: 'entry', l2: fill(rt.role.id_short, { id: 'entry' }), l3: entryRole.map_line_by_runtime?.[shape.runtime] ?? fill(rt.role.sock_short, { id: 'entry' }),
     detail: roleDetail('entry', entryRole),
   });
   if (shape.node_agent) {
@@ -96,7 +96,7 @@ function build(shape: any): ShapeModel {
   ROLE_ORDER.forEach((id, i) => {
     const r = data.roles[id];
     add({
-      id, lane: 1, row: i * 1.06, cls: 'role', shared: false,
+      id, lane: 1, row: i, cls: 'role', shared: false,
       title: r.name, l2: fill(rt.role.id_short, { id }), l3: fill(rt.role.sock_short, { id }),
       detail: roleDetail(id, r),
     });
@@ -163,7 +163,7 @@ function build(shape: any): ShapeModel {
     const d = data.drivers[idxId];
     const bl = data.backing_lines[`index.${idxId}`];
     add({
-      id: 'store-index', lane: 3, row: 7.5, cls: 'store', shared: false,
+      id: 'store-index', lane: 3, row: 10.2, cls: 'store', shared: false,
       title: bl[0], l2: bl[1], l3: 'index',
       detail: {
         title: `Index: ${d.title}`, kind: 'backing store', cls: 'store', status: d.status, od: d.od,
@@ -226,7 +226,7 @@ function build(shape: any): ShapeModel {
     if (outs.length) n.detail.lists.push({ title: 'Calls', items: outs.map((e) => `${nm(e.t)}: ${e.m}${e.d ? `. ${e.d}` : ''}`) });
     if (ins.length) n.detail.lists.push({ title: 'Called by', items: ins.map((e) => `${nm(e.f)}: ${e.m}`) });
     if (n.cls === 'role' || n.cls === 'integration') {
-      if (shape.node_agent) n.detail.lists.push({ title: 'Also', items: ['Asks sluis-node for its workload JWT at start and renewal (not drawn).'] });
+      if (shape.node_agent && data.roles[n.id]?.workload_jwt !== false) n.detail.lists.push({ title: 'Also', items: ['Asks sluis-node for its workload JWT at start and renewal (not drawn).'] });
     }
   }
 

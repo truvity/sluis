@@ -5,6 +5,7 @@
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 Rewritten in place on 2026-10-30 (the federation model: boundary kinds, the isolation ladder, a front installation with boundary installations, and the rules across boundaries). The slug is unchanged.
+Rewritten in place on 2026-10-30 (threat IDs from the threat model added to the consequences).
 
 ## Context
 
@@ -120,7 +121,8 @@ There is a runbook from day one. A company leaves, or moves to an installation o
 - A call between boundaries costs a mutual-TLS hop and a second decision. The front never holds a boundary's keys.
 - No code enforced company ceilings before. Now a ceiling guard is checked when the policy loads, and a cross-company grant has to be declared as one.
 - A company can leave by a tested runbook, not by an extraction project. The runbook needs a test, and so does each isolation layer with the others switched off.
-- The isolation requirements get test vectors per layer, for example: `ca` of one environment asks for another environment's key and is refused; an actor writes another prefix and is refused; a subject of one company asks for another company's scope without a declared grant and is refused. A threat-model page lists the threats this record answers. (Both are work that must follow.)
+- The isolation requirements get test vectors per layer, for example: `ca` of one environment asks for another environment's key and is refused; an actor writes another prefix and is refused; a subject of one company asks for another company's scope without a declared grant and is refused. A threat-model page lists the threats this record answers. (Both now exist: the [isolation requirements](/requirements/iso/) and the [threat model](/security/threat-model/).)
+- Threats addressed: T-3, T-5, T-8, T-11, T-16, T-17, T-18, T-19, T-21 and T-26, see the [threat model](/security/threat-model/).
 - The SPIFFE trust domain changes from the installation to the boundary. A workload's ID says which environment it belongs to, and SPIFFE federation is the path for a boundary that moves out.
 - The docs and the glossary use "installation" for the deployment, "boundary" for the unit of isolation, and the level names L0 to L4. v1's "installation" (one per application) is written "v1 installation" where it appears.
 

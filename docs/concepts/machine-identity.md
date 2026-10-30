@@ -12,7 +12,7 @@ A **machine identity** is the name a host, a pod, a CI job or a sluis actor carr
 2. The `exchange` actor verifies the proof and performs a **token exchange** ([RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693)). `policy` decides what the machine may become.
 3. sluis returns a **credential**: an X.509-SVID from `ca`, a JWT-SVID from the boundary's issuer, or an SSH host certificate from `ssh-ca`.
 
-This is agreed (2026-10-30). The record is [ADR 0012](/decisions/0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials/). How an actor on a node reaches a cloud with its identity is on [Identity](/concepts/identity/); this page is about the identity itself.
+This is agreed (2026-10-30). The record is [ADR 0012](/decisions/0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials/). How an actor on a node reaches a cloud with its identity is on [Identity](/concepts/identity/); this page is about the identity itself. The threats it answers are T-20 to T-24 on the [threat model](/security/threat-model/#machine-identity-enrolment-and-trust): a credential for another identity, a caller from another boundary, a stolen or replayed enrolment, wrong roots, and a neighbour using an actor's identity.
 
 ## SPIFFE, as far as sluis implements it
 
