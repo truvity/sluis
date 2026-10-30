@@ -61,7 +61,7 @@ function build(sh: any): AuditShape {
       rows = [
         { k: 'Unit', v: fill(rt.role.unit, { id: rid }), code: true },
         { k: 'Identity', v: fill(rt.role.identity, { id: rid }), code: true },
-        { k: 'Listens', v: rid === 'entry' ? (lambda ? 'TCP 127.0.0.1:8080 (an example port) inside the sandbox, through the Lambda Web Adapter' : 'TCP 127.0.0.1:8080 (an example port), loopback only') : fill(rt.role.listen, { id: rid }), code: true },
+        { k: 'Listens', v: arch.roles[rid]?.listen_by_runtime?.[sh.runtime] ?? fill(rt.role.listen, { id: rid }), code: true },
       ];
       if (rid === 'writer') rows.push({ k: 'Log key', v: au.log_key });
       if (rid === 'witness') rows.push({ k: 'Witness', v: au.witness });

@@ -103,10 +103,10 @@ The other actors are `ca`, `quota` and the audit actors. Each actor and driver i
 - **Drivers:** the minimal set. yubikey-piv for keys on a workstation, an embedded SQLite store for state, a local lock for the lease, the spool or direct mode for transport, a local files driver for the blob, and `sqlite` for the index. A software key (EC P-384, no production secret involved) is used in CI and anywhere without hardware.
 - **Host YubiKey:** the host's `pcscd` socket is mounted into the `key-holder` container. The host keeps using the YubiKey too, because `pcscd` lets several programs share the card. The pcsc-lite protocol versions of the image and the host must match. The fallback is to run the `key-holder` natively on the host, so that the containers mount only its Unix socket.
 - **Verification** never trusts the index or the state, so a test can rebuild the index and still verify the chain.
-- **Edge:** `entry`'s public API listens on TCP, bound to `127.0.0.1` inside the container, and a browser or a test harness reaches it through a published port. That published port is a development convenience; no other installation publishes it. See [Listeners](/architecture/listeners/).
+- **Edge:** `entry`'s public API is a Unix socket on a shared volume, and `entry`'s container has no network, as on every bare-metal installation. See [Listeners](/architecture/listeners/).
 
 :::note[Proposed]
-How a developer reaches `entry` with the real edge in the loop is not yet decided. One candidate is an edge-connector container (`cloudflared` with an `http://127.0.0.1:<port>` service, as on boards) next to the sluis container.
+How a developer or a test harness reaches `entry`'s socket is not yet decided (ADR 0055). One candidate is an edge-connector container (`cloudflared` with a `unix:` origin on the socket, as on boards). Another is a development proxy that publishes a port to the workstation; a published port is a development convenience that no other installation has.
 :::
 
 - **Limits:** a software key is extractable by anyone who can read the container's filesystem, so use it for development data only. With the host's YubiKey, any process that can open the `key-holder` socket can ask for a signature, subject to the `key-holder` ACL. One node has one failure domain: local proves behaviour, not availability. It does not exercise the platform controls of the other installations (IAM and KMS key policies, systemd sandboxing, Cilium policy).
@@ -120,19 +120,19 @@ flowchart TB
   edge["Cloudflare edge"]
   r2["Blob store<br/>(Cloudflare R2)"]
   subgraph n1["Node 1"]
-    cfd1["cloudflared"] -- "127.0.0.1" --> c1["entry + actors"]
+    cfd1["cloudflared"] -- "Unix socket" --> c1["entry + actors"]
     c1 --> kh1["key-holder"] --> yk1["YubiKey 1"]
     c1 --> r1["rqlite<br/>(state, index)"]
     c1 --> w1["writer + spool<br/>(log 1)"]
   end
   subgraph n2["Node 2"]
-    cfd2["cloudflared"] -- "127.0.0.1" --> c2["entry + actors"]
+    cfd2["cloudflared"] -- "Unix socket" --> c2["entry + actors"]
     c2 --> kh2["key-holder"] --> yk2["YubiKey 2"]
     c2 --> r2n["rqlite<br/>(state, index)"]
     c2 --> w2["writer + spool<br/>(log 2)"]
   end
   subgraph n3["Node 3"]
-    cfd3["cloudflared"] -- "127.0.0.1" --> c3["entry + actors"]
+    cfd3["cloudflared"] -- "Unix socket" --> c3["entry + actors"]
     c3 --> kh3["key-holder"] --> yk3["YubiKey 3"]
     c3 --> r3["rqlite<br/>(state, index)"]
     c3 --> w3["writer + spool<br/>(log 3)"]

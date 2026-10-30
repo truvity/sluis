@@ -4,6 +4,7 @@
 **Date:** 2026-10-30
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
+Rewritten in place on 2026-10-30 (threat IDs from the threat model added to the consequences).
 
 ## Context
 
@@ -97,6 +98,7 @@ Tokens are standard JWS and JWT, signed as ADR 0010 says, with keys that sign in
 - **A broad passkey relying party ID is a trade-off.** Every page under the parent domain can ask a browser for an assertion for it, so the origin allow-list in every verifier is what keeps a page outside sluis from using one. Moving sluis to another parent domain means new passkeys. (the second part is inferred)
 - **Workloads and people share an issuer per environment**, so a relying party such as a cluster's API server or a cloud's federation trusts one issuer per environment for both. Node-local tokens that `sluis-node` gives its actors for cloud credentials come from a per-node issuer instead ([0012](/decisions/0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials/)).
 - **The identity and federation pages and the standards register** (OpenID Connect discovery, RFC 8693, RFC 8707, RFC 9470, SPIFFE JWT-SVID) follow this record.
+- **Threats addressed:** T-2, T-3, T-5, T-6 and T-21, see the [threat model](/security/threat-model/).
 
 ## Roads not taken
 

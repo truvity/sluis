@@ -379,7 +379,7 @@ The structure above is kept by tests that run in CI. They are cheap to write bec
 | The drift test: generated scopes, access lists, policy documents, units, sockets and ServiceAccounts agree | A hand edit, or a generator change that missed one output |
 
 :::note[Proposed]
-Two further start-up checks are proposed but not yet agreed. First, every process that links the policy engine (entry, mint, PKI, exports, quota) reports its policy digest, and the install refuses to serve if they disagree for more than a few seconds. Second, the trust graph between installs, where one sluis trusts another as an upstream or a verifier, must be a directed acyclic graph, checked when the configuration loads.
+Two further start-up checks are proposed but not yet agreed. First, every `policy` instance of a boundary reports its policy digest, and the install refuses to serve if they disagree for more than a few seconds. Second, the trust graph between installs, where one sluis trusts another as an upstream or a verifier, must be a directed acyclic graph, checked when the configuration loads.
 :::
 
 Next: [Processes](/architecture/processes/) says which of these components run together, and with which credentials.

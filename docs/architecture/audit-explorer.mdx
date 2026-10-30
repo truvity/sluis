@@ -20,7 +20,7 @@ Audit shares the sluis port definitions: keys, state, lease, blob, transport, in
 
 ## Map and flows
 
-Select a box to see what it holds, what it never holds and who it calls. Choose a flow to step through it: each step lights the lines it uses, in order. Actors other than `entry` listen only on Unix sockets; the network listeners are `entry`'s loopback port, which the edge connector connects to, and, on a bare-metal cluster, the state driver's Raft port. The architecture explorer shows [the sockets and processes](/architecture/explorer/) of each installation.
+Select a box to see what it holds, what it never holds and who it calls. Choose a flow to step through it: each step lights the lines it uses, in order. Every actor listens on Unix sockets. `entry`'s public API is a Unix socket that the edge connector forwards to on bare-metal, and a loopback port inside the sandbox on serverless, where the Lambda Web Adapter connects to it. The only network listeners are that loopback port and, on a bare-metal cluster, the Raft ports of the rqlite clusters. The architecture explorer shows [the sockets and processes](/architecture/explorer/) of each installation.
 
 Search (the indexer, the search index and the reader) and Quota are separate pieces. Where each runs is derived from the port and driver rules, not decided per installation: see [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived) and [OD-32](/open-decisions/#od-32). Quota meters by default and enforces per policy rule ([OD-33](/open-decisions/#od-33), [OD-38](/open-decisions/#od-38)). The witness is optional everywhere ([OD-36](/open-decisions/#od-36)), and there is no notary ([OD-39](/open-decisions/#od-39)).
 

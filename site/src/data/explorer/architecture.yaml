@@ -167,10 +167,10 @@ edges_kinds:
     title: edge connector
     sub: cloudflared tunnel
     line2: "cloudflared"
-    line3: "http://127.0.0.1:8080"
-    does: The Cloudflare tunnel client. Its ingress service is entry's loopback port (http://127.0.0.1:8080 is an example), so it makes outbound connections only and no inbound port is opened on the node.
-    listen: Outbound tunnel only. It connects to 127.0.0.1:8080, entry's loopback port (an example port).
-    transport: Loopback TCP (127.0.0.1)
+    line3: "unix: origin"
+    does: "The Cloudflare tunnel client. Its ingress service is entry's public Unix socket, as a unix: origin (unix:/run/sluis/entry/<boundary>-public.sock), so it makes outbound connections only and no inbound port is opened on the node. It holds no key and can open no other actor's socket. In the local installation, how a developer reaches entry's socket (this connector in a container, or a development proxy) is ADR 0055, not yet decided."
+    listen: Outbound tunnel only. It forwards to entry's public Unix socket.
+    transport: Unix socket (a unix origin)
     status: proposed
   lwa:
     title: edge connector
@@ -203,10 +203,10 @@ drivers:
     instance: shared
     shared_name: key-holder
     binary: drivers/yubikey
-    does: Serves the keys port from the node's YubiKey (PIV). One device and one PIN, so one shared instance that checks every caller against an access list generated from the manifest. Built with cgo against pcsc-lite.
+    does: "Serves the keys port from the node's YubiKey (PIV), as key-holder, the one mediating driver. One device and one PIN, so one shared instance with three checks: one Unix socket per caller, in a directory only that caller can open; the caller's peer uid on every connection; and content-aware signing per purpose (a TBSCertificate for ca, an OpenSSH certificate body for ssh-ca, a JWS signing input for token purposes). An access list generated from the manifest names who may use which key. Built with cgo against pcsc-lite."
     holds: The PIN, as a systemd credential. No symmetric keys; sealing uses ECDH plus HKDF with the P-384 key in slot 9d.
     backing: YubiKey PIV
-    slots: "9c node intermediate and signing; 9d ECDH sealing and ring wrap; 82 SSH user CA; 83 SSH host CA; 84 release subkey; 85 to 95 retired sealing keys (proposed); 9e avoided"
+    slots: "9c node intermediate and signing; 9d ECDH sealing and ring wrap; 82 SSH user CA and 83 SSH host CA (both for ssh-ca); 84 release subkey; 85 to 95 retired sealing keys (proposed); 9e avoided"
     status: agreed
   embedded:
     port: state
@@ -224,7 +224,7 @@ drivers:
     instance: per-actor
     shared_name: null
     binary: drivers/rqlite
-    does: Serves the state port on rqlite, with one cluster per boundary and owning actor (sluis-rqlite@<boundary>-<actor>) and no state-owner. The owner has an rqlite user with execute, and each declared reader a query-only user. Raft peer traffic is each cluster's own TCP port, over mTLS with a certificate per cluster.
+    does: Serves the state port on rqlite, with one cluster per boundary and owning actor (sluis-rqlite@<boundary>-<actor>) and no state-owner. The owner has an rqlite user with execute, and each declared reader a query-only user. Raft peer traffic is each cluster's own TCP port, over mTLS with a certificate per cluster. How an actor unit that runs with PrivateNetwork=yes reaches its cluster's TCP client port is an open point of ADR 0008.
     holds: The Raft peer TLS credential
     backing: rqlited (Raft, three nodes)
     status: agreed
@@ -340,13 +340,13 @@ ports:
     title: keys
     store_node: store-keys
     store_title: key custody
-    users: [policy, signer, ca, writer, witness]
+    users: [session, exchange, policy, signer, ca, ssh-ca, writer, witness]
   state:
     node: drv-state
     title: state
     store_node: store-state
     store_title: state store
-    users: [entry, signer, quota, writer, witness, indexer, reader]
+    users: [session, exchange, signer, ca, ssh-ca, quota, writer, witness, indexer, reader]
   blob:
     node: drv-blob
     title: blob
@@ -358,7 +358,7 @@ ports:
     title: transport
     store_node: store-transport
     store_title: transport
-    users: [entry, policy, signer, ca, quota, writer, witness, indexer, reader]
+    users: [entry, session, exchange, console, policy, signer, ca, ssh-ca, quota, writer, witness, indexer, reader]
   index:
     node: null
     store_node: store-index
@@ -375,19 +375,65 @@ roles:
     name: entry
     kind: actor
     binary: actors/entry
-    does: "The OIDC protocol: sign-in, sessions, token exchange, and the console API as the browser's backend (an HttpOnly session cookie, no tokens in the browser). It routes each operator-set write to the actor that owns the record kind. It sits behind the edge connector and is the only actor whose API is public."
-    holds: No key
-    uses: [state, transport]
+    does: "Parses each request, validates it against closed parameter lists generated from the contracts, and routes it to the actor that owns it: session for sign-in and sessions, exchange for token exchange and enrolment, console for the operator API, ssh-ca for SSH certificates. It sits behind the edge connector and is the only actor whose API faces the edge. It is written in a memory-safe language, fuzzed, loads no plugin and runs on a read-only file system (ADR 0007)."
+    holds: "Nothing: no key, no secret, no state and no outbound network"
+    uses: [transport]
+    workload_jwt: false
     resources:
-      - "state: sessions/*, clients/*, grants/*, directory/*, cursors/* (its own record kinds)"
-      - "calls: policy, signer, quota, ca, reader and every integration"
+      - "calls: session, exchange, console, ssh-ca (on serverless it invokes them); integrations only to route a push notification"
+      - "state: none; keys: none; secrets: none"
+      - "network: none (PrivateNetwork=yes, AF_UNIX only, seccomp and Landlock on bare-metal)"
       - "transport: put"
-      - "keys: none"
     listen_by_runtime:
-      docker: "TCP 127.0.0.1:8080 (an example port), loopback only"
-      systemd: "TCP 127.0.0.1:8080 (an example port), loopback only"
+      docker: "/run/sluis/entry/<boundary>-public.sock on a shared volume; the container has no network"
+      systemd: "/run/sluis/entry/<boundary>-public.sock, a Unix socket; PrivateNetwork=yes, so no TCP listener"
       lambda: "TCP 127.0.0.1:8080 (an example port) inside the sandbox, through the Lambda Web Adapter"
-    listener_note: "entry's public API is the only TCP listener of an actor, bound to 127.0.0.1 on every runtime. The edge connector (cloudflared, or the Lambda Web Adapter) connects to that loopback port. Every other actor listens on Unix sockets only."
+    map_line_by_runtime:
+      docker: "unix socket"
+      systemd: "unix socket"
+      lambda: "tcp 127.0.0.1"
+    listener_note: "entry's public API is the only listener that faces the edge. On bare-metal it is a Unix socket that cloudflared forwards to as a unix: origin, and entry has no network at all. On serverless it is a loopback TCP port inside the function's sandbox, because the Lambda Web Adapter needs one. Kubernetes is proposed in ADR 0046. Every other actor listens on Unix sockets only."
+  session:
+    status: agreed
+    name: session
+    kind: actor
+    binary: actors/session
+    does: "Sign-in and sessions: the authorization flows with the upstream integrations, session records, the HttpOnly session cookie it seals, and freshness per boundary (RFC 9470 step-up). It owns the recovery verifier and switch. It asks policy before it issues anything and has no listener toward the edge."
+    holds: "The cookie-sealing key, behind the keys port; sessions and refresh tokens (state)"
+    uses: [keys, state, transport]
+    resources:
+      - "state: sessions/*, codes/*, recovery/* (its own record kinds, in its own rqlite cluster)"
+      - "keys: seal and open the session cookie"
+      - "calls: policy, signer, the Upstream integrations"
+      - "called by: entry (sign-in, cookie), console (session check)"
+      - "transport: put"
+  exchange:
+    status: agreed
+    name: exchange
+    kind: actor
+    binary: actors/exchange
+    does: "Token exchange (RFC 8693), enrolment of hosts and workloads, and the proof verifiers (aws-iid, k8s-sa-token, github-oidc, yubikey-attestation, enrol-token, manual approval). Verifier drivers hold public material only. An enrolment request is HPKE-encrypted end to end, and exchange opens it through the keys port; the enrolment key stays in key-holder or KMS. A downstream mint goes from here to the minter with a grant that policy signed."
+    holds: "No authority key. Enrolments, token hashes and the host registry (state)"
+    uses: [keys, state, transport]
+    resources:
+      - "state: enrolments/*, enrol-tokens/* (hashes only), hosts/*, clients/* (its own record kinds)"
+      - "keys: open an enrolment request sealed to the enrolment key"
+      - "calls: policy, quota, signer, ca, the WorkloadVerifier, CredentialMinter and Notifier integrations"
+      - "called by: entry, console (operator writes to its record kinds)"
+      - "transport: put"
+  console:
+    status: agreed
+    name: console
+    kind: actor
+    binary: actors/console
+    does: "The operator API, as the browser's backend. It has session check the cookie, checks the operator's delegation (per company, and per environment for machine-plane records), and routes each operator-set write to the actor that owns the record kind, which validates and writes it. It reads through the actors it calls. The browser holds no token; the single-page application is a separate static artifact."
+    holds: "No key and no write access to other actors' records; delegation checks only"
+    uses: [transport]
+    resources:
+      - "state: none of its own; writes go to the owning actor"
+      - "calls: session (session check), the owning actors of operator-set kinds (exchange for enrolments and hosts, an integration for its console-managed kinds), reader (the audit page)"
+      - "keys: none"
+      - "transport: put (every operator change, under the operator's name)"
   policy:
     status: agreed
     name: policy
@@ -405,7 +451,7 @@ roles:
     name: signer
     kind: actor
     binary: actors/signer
-    does: "Holds the signing ring and signs tokens under a signing policy. It is not a pure oracle."
+    does: "Holds the signing ring and signs tokens under a signing policy. It is not a pure oracle: it checks the issuer, the audience, the lifetime and the algorithm, and accepts a request only from session and exchange."
     holds: The token-signing keys
     uses: [keys, state, transport]
     resources:
@@ -417,11 +463,27 @@ roles:
     name: ca
     kind: actor
     binary: actors/ca
-    does: "X.509 and the SSH CA (one actor)."
-    holds: The CA keys (slot 9c for the node intermediate, 82 for the SSH user CA and 83 for the SSH host CA on a YubiKey, proposed)
-    uses: [keys, transport]
+    does: "The X.509 certificate authority: host and workload SVIDs at enrolment, and database client certificates. The subject comes from the requester's authenticated identity, never from the request. Every certificate is audited and goes in the issuance log. The SSH CA is a separate actor, ssh-ca (ADR 0013)."
+    holds: The X.509 CA keys (slot 9c for the node intermediate on a YubiKey, proposed)
+    uses: [keys, state, transport]
     resources:
-      - "keys: sign with the CA keys, one key per purpose"
+      - "keys: sign a TBSCertificate within its profile's constraints (key-holder parses it before signing)"
+      - "state: issued/* (its own record kinds)"
+      - "called by: exchange"
+      - "transport: put"
+  ssh-ca:
+    status: agreed
+    name: ssh-ca
+    kind: actor
+    binary: actors/ssh-ca
+    does: "The SSH certificate authority, for user and host certificates. A certificate carries identity only (u:<person-key> for people, w:<workload> for machines); what an identity may log in as comes from the signed bundle that sluis-host writes on each host. Policy decides each signature (ssh.certify). It is its own actor because it is a different authority from ca (ADR 0013)."
+    holds: The SSH user and host CA keys (slots 82 and 83 on a YubiKey, proposed)
+    uses: [keys, state, transport]
+    resources:
+      - "keys: sign an OpenSSH certificate body only (key-holder parses it before signing)"
+      - "state: ssh-issued/* (its own record kinds)"
+      - "calls: policy"
+      - "called by: entry (the SSH certificate endpoint)"
       - "transport: put"
   quota:
     status: agreed
@@ -505,7 +567,7 @@ integrations:
   int-facts:
     kind: FactsSource
     example: int-github
-    does: Returns directory facts (workspace directories, GitHub teams, chat workspaces). entry stores the cursor it returns.
+    does: Returns directory facts (workspace directories, GitHub teams, chat workspaces) and writes them as learned records of its own. A product's push notification reaches it through entry; it then pulls the full state. It also owns the operator-set kinds of its own objects (a chat integration's managed channels), written through console.
     holds: The source's credential
     egress: the source's API host only
   int-minter:
@@ -539,7 +601,7 @@ node_agent:
   resources:
     - "keys: sign workload JWTs with the node key"
     - "callers: every sluis uid listed in the uid-to-actor map generated from the manifest"
-  listener_note: "Every actor except entry, and every driver, listens on Unix sockets only. sluis-node publishes no network listener; the issuer's discovery document and JWKS (public keys only) are static files served from the distribution bucket, one issuer per node."
+  listener_note: "On bare-metal every actor, entry included, and every driver listens on Unix sockets only. sluis-node publishes no network listener; the issuer's discovery document and JWKS (public keys only) are static files served from the distribution bucket, one issuer per node."
 
 # ---------------------------------------------------------------------------
 # External and backing nodes (drawn, not run by sluis)
@@ -585,19 +647,32 @@ backing_lines:
 # ---------------------------------------------------------------------------
 calls:
   - { f: client, t: edge, m: HTTPS, d: "Sign-in, token exchange, mint and the console reach sluis through the edge connector." }
-  - { f: edge, t: entry, m: connect, d: "The edge connector reaches entry's API socket; this is the only public path in." }
-  - { f: entry, t: policy, m: Decide, d: Every decision. }
-  - { f: entry, t: signer, m: SignToken, d: Issue a token. }
-  - { f: entry, t: quota, m: Adjust, d: Rate and count limits. }
-  - { f: entry, t: ca, m: Issue, d: Certificates and SSH certificates. }
-  - { f: entry, t: reader, m: Search, d: The console audit page. }
-  - { f: entry, t: drv-state, m: "State: own records", d: "sessions/*, clients/*, grants/*, directory/*, cursors/*" }
-  - { f: entry, t: int-upstream, m: "Authorize / Callback", d: Human sign-in upstream. }
-  - { f: entry, t: int-workload, m: Verify, d: Check a workload subject token. }
-  - { f: entry, t: int-facts, m: Pull(cursor), d: Directory sync; entry stores the returned cursor. }
-  - { f: entry, t: int-minter, m: Mint(grant), d: "Downstream mint, with a grant signed by policy." }
-  - { f: entry, t: int-provisioner, m: Reconcile, d: Pull a digest-addressed desired state. }
-  - { f: entry, t: int-notifier, m: Notify, d: Notifications. }
+  - { f: edge, t: entry, m: connect, d: "The edge connector reaches entry's public socket; this is the only public path in." }
+  - { f: entry, t: session, m: "Route: sign-in", d: "Sign-in, the session cookie and step-up go to session." }
+  - { f: entry, t: exchange, m: "Route: exchange", d: "Token exchange, enrolment and downstream mint go to exchange." }
+  - { f: entry, t: console, m: "Route: console", d: "The operator API goes to console." }
+  - { f: entry, t: ssh-ca, m: "Route: SSH cert", d: "An SSH certificate request goes to ssh-ca." }
+  - { f: entry, t: int-facts, m: "Route: push", d: "A product's push notification goes to the integration that owns the object; the integration then pulls the full state." }
+  - { f: session, t: int-upstream, m: "Authorize / Callback", d: Human sign-in upstream. }
+  - { f: session, t: policy, m: Decide, d: "Maps the upstream facts to grants, and says whether fresh MFA is needed." }
+  - { f: session, t: signer, m: SignToken, d: "ID and access tokens for a signed-in session." }
+  - { f: session, t: drv-keys, m: "Seal(cookie)", d: "Seals and opens the session cookie with the cookie-sealing key." }
+  - { f: session, t: drv-state, m: "sessions/*", d: "Sessions, codes and the recovery switch, in its own cluster." }
+  - { f: console, t: session, m: "Check session", d: "session checks the HttpOnly cookie and its freshness for the boundary." }
+  - { f: console, t: exchange, m: "Operator write", d: "Approve a pending enrolment, create an enrolment token; exchange validates and writes its own records." }
+  - { f: console, t: int-facts, m: "Operator write", d: "An operator-set kind an integration owns, such as a chat integration's managed channels." }
+  - { f: console, t: reader, m: Search, d: The console audit page. }
+  - { f: exchange, t: int-workload, m: Verify, d: Check a workload subject token. }
+  - { f: exchange, t: policy, m: Decide, d: "host.enrol, token exchange and mint decisions." }
+  - { f: exchange, t: quota, m: Adjust, d: Rate and count limits. }
+  - { f: exchange, t: signer, m: SignToken, d: Issue a token. }
+  - { f: exchange, t: ca, m: Issue, d: "A host or workload SVID, bound to the requester's identity." }
+  - { f: exchange, t: drv-keys, m: "Open(enrolment)", d: "Opens an HPKE-sealed enrolment request; the enrolment key never leaves the keys port." }
+  - { f: exchange, t: drv-state, m: "enrolments/*", d: "Enrolments, enrolment-token hashes, hosts and clients, in its own cluster." }
+  - { f: exchange, t: int-minter, m: Mint(grant), d: "Downstream mint, with a grant signed by policy." }
+  - { f: exchange, t: int-notifier, m: Notify, d: "Notifications, such as an enrolment waiting for approval." }
+  - { f: console, t: int-provisioner, m: Reconcile, d: "Asks the provisioner to reconcile to a published, digest-addressed desired state (illustrative)." }
+  - { f: ssh-ca, t: policy, m: Decide, d: "ssh.certify: may this identity get this certificate now." }
   - { f: int-upstream, t: upstream, m: OIDC, d: The user authenticates at the upstream provider. }
   - { f: int-workload, t: upstream, m: JWKS, d: Fetches the issuer's published keys. }
   - { f: int-facts, t: vendor, m: Read, d: Reads directory facts. }
@@ -606,11 +681,14 @@ calls:
   - { f: int-notifier, t: vendor, m: Send, d: Sends the notification. }
   - { f: policy, t: drv-keys, m: "Sign(grant)", d: Signs mint grants with its own key. }
   - { f: signer, t: drv-keys, m: "Sign(token)", d: Token signatures. }
-  - { f: ca, t: drv-keys, m: "Sign(cert)", d: Certificates. }
+  - { f: ca, t: drv-keys, m: "Sign(cert)", d: "A TBSCertificate within its profile's constraints." }
+  - { f: ssh-ca, t: drv-keys, m: "Sign(ssh cert)", d: "An OpenSSH certificate body only." }
   - { f: writer, t: drv-keys, m: "Sign(head)", d: "Asks key-holder to sign the batch head with the log key; only the writer may use it." }
   - { f: witness, t: drv-keys, m: "Sign(cosign)", d: Cosigns a batch head with its own key. }
   - { f: signer, t: drv-state, m: "ring/*", d: The signing ring. }
   - { f: quota, t: drv-state, m: "quota/*", d: Compare-and-set on balances. }
+  - { f: ca, t: drv-state, m: "issued/*", d: Its issued certificates. }
+  - { f: ssh-ca, t: drv-state, m: "ssh-issued/*", d: Its issued SSH certificates. }
   - { f: witness, t: drv-state, m: "Read heads", d: Reads new batch heads from audit_batches. }
   - { f: writer, t: drv-state, m: "audit_batches", d: Registers each batch in order. }
   - { f: indexer, t: drv-state, m: "Follow batches", d: Reads audit_batches from its cursor. }
@@ -620,7 +698,11 @@ calls:
   - { f: reader, t: drv-blob, m: "Get batch", d: Fetches the batch object when one record is opened. }
   - { f: indexer, t: store-index, m: "Apply", d: Applies batches to the search index. }
   - { f: reader, t: store-index, m: "Query", d: Answers queries. }
-  - { f: entry, t: drv-transport, m: Put, d: Records the exchange. }
+  - { f: entry, t: drv-transport, m: Put, d: "Records each request it routes or refuses." }
+  - { f: session, t: drv-transport, m: Put, d: "Records each sign-in and step-up." }
+  - { f: exchange, t: drv-transport, m: Put, d: "Records each exchange, enrolment and mint." }
+  - { f: console, t: drv-transport, m: Put, d: "Records each operator change, under the operator's name." }
+  - { f: ssh-ca, t: drv-transport, m: Put, d: Records each SSH certificate. }
   - { f: policy, t: drv-transport, m: Put, d: Records each decision. }
   - { f: signer, t: drv-transport, m: Put, d: Records each signature. }
   - { f: ca, t: drv-transport, m: Put, d: Records each certificate. }
@@ -654,33 +736,35 @@ flows:
       - title: The browser reaches the edge
         nodes: [client, edge]
         edges: ["client>edge"]
-        text: The browser opens the console and HTTPS arrives at the edge connector. Nothing on the node listens on a public TCP port; entry listens on 127.0.0.1 only.
+        text: The browser opens the console and HTTPS arrives at the edge connector. Nothing on the node listens on a public TCP port, and entry listens on a Unix socket with no network of its own.
       - title: The edge connector forwards to entry
         nodes: [edge, entry]
         edges: ["edge>entry"]
-        text: The edge connector hands the request to entry's loopback port.
+        text: The edge connector forwards the request to entry's public Unix socket, a unix origin.
         variants:
-          - { shapes: [lambda], text: "API Gateway invokes the function, and the Lambda Web Adapter forwards the request to entry over loopback TCP inside the sandbox." }
-      - title: entry asks the upstream integration
-        nodes: [entry, int-upstream]
-        edges: ["entry>int-upstream"]
-        text: entry calls the upstream integration (Authorize) for the redirect, and later (Callback) with the code. The integration returns facts; it does not decide.
-      - title: The user authenticates upstream
-        nodes: [int-upstream, upstream]
-        edges: ["int-upstream>upstream"]
-        text: The user authenticates at the upstream provider. The integration verifies the code and returns subject, email and groups as facts.
+          - { shapes: [lambda], text: "API Gateway invokes the function, and the Lambda Web Adapter forwards the request to entry over loopback TCP inside the sandbox, the one place entry has a TCP port." }
+      - title: entry routes to session
+        nodes: [entry, session]
+        edges: ["entry>session"]
+        text: entry checks the request against the closed parameter list of the endpoint and routes it to session, which owns sign-in. entry holds nothing and decides nothing.
+      - title: session asks the upstream integration
+        nodes: [session, int-upstream, upstream]
+        edges: ["session>int-upstream", "int-upstream>upstream"]
+        text: session calls the upstream integration (Authorize) for the redirect, and later (Callback) with the code. The user authenticates at the upstream provider, and the integration returns subject, email and groups as facts. It does not decide.
       - title: policy decides
-        nodes: [entry, policy]
-        edges: ["entry>policy"]
-        text: entry asks policy to map the facts to grants. The policy is a reviewed file; policy keeps no state and opens no network connection.
-      - title: The session is stored
-        nodes: [entry, drv-state, store-state]
-        edges: ["entry>drv-state", "drv-state>store-state"]
-        text: entry writes the session through the state driver. It owns the sessions record kind; the state driver refuses any other actor writing it.
+        nodes: [session, policy]
+        edges: ["session>policy"]
+        text: session asks policy to map the facts to grants, and whether this boundary wants fresh MFA. The policy is a reviewed file; policy keeps no state and opens no network connection.
+      - title: The session is stored and sealed
+        nodes: [session, drv-state, store-state, drv-keys, store-keys]
+        edges: ["session>drv-state", "drv-state>store-state", "session>drv-keys", "drv-keys>store-keys"]
+        text: session writes the session record in its own state, which no other actor can write, and seals the HttpOnly cookie with its cookie-sealing key. The browser holds no token.
+        variants:
+          - { shapes: [boards], text: "The session record goes to session's own rqlite cluster, where only session has the execute user." }
       - title: The sign-in is audited
-        nodes: [entry, drv-transport, store-transport]
-        edges: ["entry>drv-transport", "drv-transport>store-transport"]
-        text: entry puts a record on the transport. The request returns once the record is durable there, never waiting for the audit writer.
+        nodes: [entry, session, drv-transport, store-transport]
+        edges: ["entry>drv-transport", "session>drv-transport", "drv-transport>store-transport"]
+        text: entry and session each put a record on the transport. The request returns once the records are durable there, never waiting for the audit writer.
   - id: exchange
     title: Token exchange
     why: A workload trades its CI or Kubernetes token for a sluis token (RFC 8693).
@@ -689,58 +773,132 @@ flows:
         nodes: [client, edge, entry]
         edges: ["client>edge", "edge>entry"]
         text: A CI job or workload posts its subject token to the token endpoint, through the edge connector. Whatever happens next, success or refusal, leaves a record.
+      - title: entry routes to exchange
+        nodes: [entry, exchange]
+        edges: ["entry>exchange"]
+        text: entry validates the parameters against the closed list for the token endpoint and routes the request to exchange.
       - title: The subject token is verified
-        nodes: [entry, int-workload, upstream]
-        edges: ["entry>int-workload", "int-workload>upstream"]
-        text: entry asks the workload verifier to check the token. The verifier fetches the issuer's published keys and returns facts.
+        nodes: [exchange, int-workload, upstream]
+        edges: ["exchange>int-workload", "int-workload>upstream"]
+        text: exchange asks the workload verifier to check the token. The verifier fetches the issuer's published keys and returns facts.
       - title: policy decides
-        nodes: [entry, policy]
-        edges: ["entry>policy"]
+        nodes: [exchange, policy]
+        edges: ["exchange>policy"]
         text: policy maps the facts to a grant, or refuses. A refusal stops here with a reason and is audited the same way.
       - title: The limit is adjusted
-        nodes: [entry, quota, drv-state]
-        edges: ["entry>quota", "quota>drv-state"]
+        nodes: [exchange, quota, drv-state]
+        edges: ["exchange>quota", "quota>drv-state"]
         text: quota updates the balance with compare-and-set. Caps and rate limits live in core.
       - title: signer signs the token
-        nodes: [entry, signer, drv-keys, store-keys]
-        edges: ["entry>signer", "signer>drv-keys", "drv-keys>store-keys"]
-        text: signer signs the token under its signing policy through the keys driver.
+        nodes: [exchange, signer, drv-keys, store-keys]
+        edges: ["exchange>signer", "signer>drv-keys", "drv-keys>store-keys"]
+        text: signer signs the token under its signing policy through the keys driver. The token is sender-constrained (DPoP or mutual TLS) and carries exactly one audience.
         variants:
           - { shapes: [lambda], text: "The token is signed directly with the non-extractable KMS key. A production install measured about 25,000 tokens in 7 days, a peak of 0.8 per second, so direct signing costs about $2.62 per month." }
-          - { shapes: [boards], text: "P-384 on the YubiKey signs at about 120 ms, 8 per second, far above the measured load. The YubiKey signs each token itself; there are no derived signing keys." }
+          - { shapes: [boards], text: "P-384 on the YubiKey signs at about 120 ms, 8 per second, far above the measured load. The YubiKey signs each token itself, through signer's own key-holder socket; there are no derived signing keys." }
           - { shapes: [local], text: "The host's YubiKey signs it through key-holder, or a software key in tests; the code refuses a software key in production." }
       - title: The exchange is audited
-        nodes: [entry, drv-transport, store-transport]
-        edges: ["entry>drv-transport", "policy>drv-transport", "signer>drv-transport", "drv-transport>store-transport"]
-        text: entry, policy and signer each put a record on the transport. The token goes back to the client once entry's record is durable.
+        nodes: [exchange, drv-transport, store-transport]
+        edges: ["exchange>drv-transport", "policy>drv-transport", "signer>drv-transport", "drv-transport>store-transport"]
+        text: exchange, policy and signer each put a record on the transport. The token goes back to the client once exchange's record is durable.
+  - id: enrol
+    title: Host enrolment
+    why: A host or workload proves what it is and gets a short-lived certificate (SVID) from ca.
+    steps:
+      - title: The host posts a sealed request
+        nodes: [client, edge, entry, exchange]
+        edges: ["client>edge", "edge>entry", "entry>exchange"]
+        text: The host sends its proof and a CSR, HPKE-encrypted to the enrolment key carried in the signed bundle. entry routes it to exchange and cannot read it.
+      - title: exchange opens and verifies it
+        nodes: [exchange, drv-keys, store-keys]
+        edges: ["exchange>drv-keys", "drv-keys>store-keys"]
+        text: "exchange opens the request through the keys port; the enrolment key stays in key-holder or KMS. A verifier driver checks the proof: an instance identity document (once per instance), a ServiceAccount token, a CI token, a YubiKey attestation, an enrolment token (its ID and an HMAC, never the token itself) or a manual approval."
+      - title: policy decides
+        nodes: [exchange, policy]
+        edges: ["exchange>policy"]
+        text: policy decides host.enrol from attested and declared attributes. Reported attributes never grant.
+      - title: ca issues the certificate
+        nodes: [exchange, ca, drv-keys, store-keys]
+        edges: ["exchange>ca", "ca>drv-keys", "drv-keys>store-keys"]
+        text: ca issues the host's X.509-SVID. Its subject comes from the authenticated requester, never from the request, and key-holder signs only a TBSCertificate within the profile's constraints.
+      - title: The enrolment is recorded and audited
+        nodes: [exchange, drv-state, store-state, drv-transport, store-transport]
+        edges: ["exchange>drv-state", "drv-state>store-state", "exchange>drv-transport", "ca>drv-transport", "drv-transport>store-transport"]
+        text: exchange writes the enrolment and the host record in its own state; exchange and ca each put a record on the transport.
+  - id: operator
+    title: Operator write
+    why: An operator changes a record on the console, and the owning actor writes it.
+    steps:
+      - title: The browser reaches console through entry
+        nodes: [client, edge, entry, console]
+        edges: ["client>edge", "edge>entry", "entry>console"]
+        text: The console's single-page application calls the operator API. entry routes it to console, the browser's backend.
+      - title: session checks the cookie
+        nodes: [console, session]
+        edges: ["console>session"]
+        text: console has session check the HttpOnly cookie and its freshness for this boundary. A stale session gets a step-up challenge.
+      - title: console checks the delegation and routes the write
+        nodes: [console, exchange]
+        edges: ["console>exchange"]
+        text: console checks that the operator is delegated for this company and environment, then routes the write, here the approval of a pending host, to exchange, the actor that owns the record kind. console itself has no write access to it.
+      - title: The owning actor validates and writes
+        nodes: [exchange, drv-state, store-state]
+        edges: ["exchange>drv-state", "drv-state>store-state"]
+        text: exchange validates the write with its own logic and writes its own record. The state backend refuses any other writer.
+      - title: The change is audited under the operator's name
+        nodes: [console, exchange, drv-transport, store-transport]
+        edges: ["console>drv-transport", "exchange>drv-transport", "drv-transport>store-transport"]
+        text: console and exchange each put a record on the transport, naming the operator.
+  - id: sshcert
+    title: SSH certificate
+    why: A person or a workload gets a short-lived SSH certificate that carries its identity only.
+    steps:
+      - title: The request reaches ssh-ca
+        nodes: [client, edge, entry, ssh-ca]
+        edges: ["client>edge", "edge>entry", "entry>ssh-ca"]
+        text: The CLI posts its public key with its sender-constrained token. entry routes the request to ssh-ca.
+      - title: policy decides
+        nodes: [ssh-ca, policy]
+        edges: ["ssh-ca>policy"]
+        text: ssh-ca asks policy for ssh.certify. Which accounts the identity may use on which hosts is not in the certificate; it comes from the signed bundle that sluis-host writes on each host (ssh.login).
+      - title: The certificate is signed
+        nodes: [ssh-ca, drv-keys, store-keys]
+        edges: ["ssh-ca>drv-keys", "drv-keys>store-keys"]
+        text: "The certificate carries u:<person-key> for a person or w:<workload> for a machine. key-holder signs only an OpenSSH certificate body with the SSH user CA key."
+        variants:
+          - { shapes: [lambda], text: "The SSH CA key is a KMS key whose key policy names only ssh-ca's role." }
+      - title: The certificate is recorded and audited
+        nodes: [ssh-ca, drv-state, drv-transport, store-transport]
+        edges: ["ssh-ca>drv-state", "ssh-ca>drv-transport", "drv-transport>store-transport"]
+        text: ssh-ca records the certificate (requester, profile, serial, validity, key hash) and puts a record on the transport.
   - id: mint
     title: Downstream mint
     why: A caller asks for a short-lived downstream credential, such as a cloud API token.
     steps:
       - title: The caller names the connection
-        nodes: [client, edge, entry]
-        edges: ["client>edge", "edge>entry"]
-        text: The caller posts to the mint endpoint, naming the connection and the preset.
+        nodes: [client, edge, entry, exchange]
+        edges: ["client>edge", "edge>entry", "entry>exchange"]
+        text: The caller posts to the mint endpoint, naming the connection and the preset. entry routes it to exchange.
       - title: policy decides
-        nodes: [entry, policy]
-        edges: ["entry>policy"]
+        nodes: [exchange, policy]
+        edges: ["exchange>policy"]
         text: policy decides whether this caller may mint this credential.
       - title: policy signs a mint grant
         nodes: [policy, drv-keys, store-keys]
         edges: ["policy>drv-keys", "drv-keys>store-keys"]
         text: policy signs the mint grant (connection, preset, ttl, nonce, expiry) with its own grant key. The grant key is not the token-signing key, and only policy may use it.
-      - title: entry calls the minter with the grant
-        nodes: [entry, int-minter]
-        edges: ["entry>int-minter"]
-        text: entry passes the grant to the minter. The minter verifies the grant against policy's public key and the nonce. It does not decide; caps and rate limits already live in core.
+      - title: exchange calls the minter with the grant
+        nodes: [exchange, int-minter]
+        edges: ["exchange>int-minter"]
+        text: exchange passes the grant to the minter. The minter verifies the grant against policy's public key and the nonce. It does not decide; caps and rate limits already live in core.
       - title: The minter mints at the vendor
         nodes: [int-minter, vendor]
         edges: ["int-minter>vendor"]
         text: The minter holds only the connection's parent credential. It mints the short-lived credential and returns it.
       - title: The mint is audited
-        nodes: [entry, drv-transport, store-transport]
-        edges: ["entry>drv-transport", "drv-transport>store-transport"]
-        text: entry appends the record and returns the credential to the caller.
+        nodes: [exchange, drv-transport, store-transport]
+        edges: ["exchange>drv-transport", "drv-transport>store-transport"]
+        text: exchange appends the record and returns the credential to the caller.
   - id: workload
     title: Workload credentials
     why: An actor's cloud driver gets the cloud credentials it needs, on a node that runs sluis-node.
@@ -771,8 +929,8 @@ flows:
     why: A request becomes evidence, and a record reaches the index.
     steps:
       - title: An actor appends a record
-        nodes: [entry, policy, signer, drv-transport, store-transport]
-        edges: ["entry>drv-transport", "policy>drv-transport", "signer>drv-transport", "drv-transport>store-transport"]
+        nodes: [entry, session, exchange, policy, signer, drv-transport, store-transport]
+        edges: ["entry>drv-transport", "session>drv-transport", "exchange>drv-transport", "policy>drv-transport", "signer>drv-transport", "drv-transport>store-transport"]
         text: Every actor that acted puts what it did on the transport. The request returns once the record is durable there. Every success is audited.
         variants:
           - { shapes: [local, boards], text: "Durable means an fsync to the node's local spool." }
@@ -824,11 +982,12 @@ cluster:
   - { process: edge connector, where: every node, status: proposed }
   - { process: quota, where: "derived from the port and driver rules: a separate piece, combinable with sluis and sharing its driver instances; metering by default, enforcement per policy rule", status: agreed }
   - { process: "Search (indexer, search index, reader)", where: "derived from the port and driver rules: with an rqlite index (proposed) the reader runs on any node; with a sqlite index it runs on the indexer's node", status: agreed }
-  - { process: entry, where: "every node, bound to 127.0.0.1 behind that node's edge connector", status: agreed }
-  - { process: "signer, policy, ca", where: "every node; an earlier draft made each single-active, with a named lease and a fencing token, and standbys on the other nodes", status: proposed }
+  - { process: entry, where: "every node, on a Unix socket behind that node's edge connector, with no network", status: agreed }
+  - { process: "session, console, exchange", where: "every node, beside entry. session and exchange each keep their state in their own rqlite cluster; console keeps none", status: agreed }
+  - { process: "signer, policy, ca, ssh-ca", where: "every node; an earlier draft made each single-active, with a named lease and a fencing token, and standbys on the other nodes", status: proposed }
   - { process: writer, where: "every node: one log per node, each writer draining its own spool and signing with its own log key. The rule is exactly one writer per log, not one per installation", status: agreed }
   - { process: witness, where: "every node, as a peer: each node's log is cosigned by the other two (2-of-3). A witness is optional, and sluis config check warns when there is none", status: agreed }
-  - { process: "state driver and its store", where: "every node; Raft quorum of three over the state driver's own TCP port with mTLS", status: agreed }
-  - { process: keys driver, where: "each node's own YubiKey, behind a shared key-holder", status: agreed }
+  - { process: "state driver and its store", where: "every node; one rqlite cluster per (boundary, owning actor), each a Raft quorum of three over its own TCP port with mTLS. How an actor unit with PrivateNetwork=yes reaches its cluster's client port is open (ADR 0008)", status: open }
+  - { process: keys driver, where: "each node's own YubiKey, behind key-holder, with one socket per caller", status: agreed }
   - { process: sluis-node, where: every node, status: agreed }
-  - { process: integrations, where: "next to entry on each node, over Unix sockets; no actor is called across nodes, and the Raft port is the only TCP port between nodes", status: agreed }
+  - { process: integrations, where: "next to the actors that call them on each node, over Unix sockets; no actor is called across nodes, and the Raft port is the only TCP port between nodes", status: agreed }

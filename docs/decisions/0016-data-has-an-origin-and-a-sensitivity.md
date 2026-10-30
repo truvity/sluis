@@ -4,6 +4,7 @@
 **Date:** 2026-10-30
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
+Rewritten in place on 2026-10-30 (alignment with 0007, 0058).
 
 **In short:**
 - Every record kind has one origin (declared, operator-set, learned, derived, issued) and every field one sensitivity (public, internal, personal, secret, plus free text), written in the schema.
@@ -31,7 +32,7 @@ The early v2 design had three "data origins" for configuration: declared, learne
 - It calls things "learned" that sluis cannot rebuild: a GitHub App's private key from the manifest flow, a chat bot token, the workspace pinned at the first install. A restore cannot learn them again, and some are security pins.
 - It covers configuration only. Backup, export, audit and telemetry kept their own lists of what is in and what is out, and the lists disagreed.
 
-The configuration schema is defined once in Pkl and shipped as JSON Schema ([0015](/decisions/0015-configuration-is-defined-once-in-pkl-and-shipped-as-json-schema/)). Every record kind has one writer, enforced by `state-owner` ([0017](/decisions/0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite/)). The permission manifest generates the access lists ([0005](/decisions/0005-three-zoom-levels-contracts-and-a-permission-manifest/)). This record gives all of them one classification to read.
+The configuration schema is defined once in Pkl and shipped as JSON Schema ([0015](/decisions/0015-configuration-is-defined-once-in-pkl-and-shipped-as-json-schema/)). Every record kind has one writer, enforced by the state backend's own check of each caller, with no mediator ([0017](/decisions/0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite/), [0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/)). The permission manifest generates the access lists ([0005](/decisions/0005-three-zoom-levels-contracts-and-a-permission-manifest/)). This record gives all of them one classification to read.
 
 ## Decision
 
@@ -79,12 +80,12 @@ A secret that an operator supplies is not an origin of its own. A secret **refer
 | learned | `state`, in the namespace of the integration that observed it, with the time it was observed and a maximum age; or memory | The integration actor that observed it |
 | derived | `index`; `state` for meters and projections; caches | The actor that derives it (the indexer; `quota` for meters) |
 | issued, durable | `state` records; `secrets` for values; the trust registry and trust log for ceremony outputs; `blob` for published revocation lists | The issuing actor, one per kind |
-| issued, ephemeral | `state` with a short lifetime; memory | The owner of the protocol (`entry` for sessions and codes, the lease holder) |
+| issued, ephemeral | `state` with a short lifetime; memory | The owner of the protocol (`session` for sessions and codes, `exchange` for enrolments, the lease holder) |
 
-- **Operator-set writes are done by the owning actor**, which validates them with its own logic. The console API lives in `entry` ([0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/)), and it routes each write to the actor that owns the kind. The permission manifest declares which kinds accept operator-set writes. `state-owner` refuses any other writer.
+- **Operator-set writes are done by the owning actor**, which validates them with its own logic. The console API is the `console` actor, behind `entry` ([0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/)). It checks the operator's delegation and routes each write to the actor that owns the kind. The permission manifest declares which kinds accept operator-set writes, and the state backend's own per-caller check refuses any other writer.
 - **Namespaces are per origin and trust class, with one writer per kind.** When pieces are combined in one installation they share driver instances ([0004](/decisions/0004-audit-is-four-pieces-joined-by-a-transport-port/)). Operator-set records, learned facts, issued records and sessions then sit in separate namespaces, and the deny matrix generated from the origin annotation keeps each writer to its own kind.
 - **Every operator change is authorised for a concrete person.** It is permission-checked and audited under that person's name. There is no extra signature on an operator write in 2.0.
-- **Every operator-set kind has one owning actor, and it is that kind's only writer.** The owner may be a core actor (`entry` for the recovery switch) or an integration actor that owns an operator-set kind of its own (the chat integration for its console-managed channels).
+- **Every operator-set kind has one owning actor, and it is that kind's only writer.** The owner may be a core actor (`session` for the recovery switch) or an integration actor that owns an operator-set kind of its own (the chat integration for its console-managed channels).
 - **No actor writes learned and operator-set data of the same object.** An integration writes the facts it observed as a learned kind, and an operator's choices about the same object form a separate operator-set kind with its own owner; when one object seems to need both, it is split into two kinds.
 
 ### Learned by pull or by push
@@ -245,11 +246,11 @@ Per record kind and per field, in the Pkl source and the generated JSON Schema. 
 - Cons: it needs passkeys at every operator write, and it adds friction to the pattern the maintainer wants.
 - Why not: an authenticated, permission-checked write audited under a concrete person is enough for 2.0. A two-person approval for chosen kinds was weighed for the same reason and set aside.
 
-### The console, a new console actor or `entry` writes every operator-set record
+### The console, the `console` actor or `entry` writes every operator-set record
 
-- Pros: one writer for all operator-set kinds. A `console` actor behind `entry` would keep `entry` to the protocol.
-- Cons: one actor would validate records whose rules belong to another, and it would hold write access to every console-configurable kind. A new actor adds a unit and a hop.
-- Why not: the owning actor writes its own operator-set records with its own validation, the console API in `entry` routes to it, and the manifest and `state-owner` enforce it.
+- Pros: one writer for all operator-set kinds.
+- Cons: one actor would validate records whose rules belong to another, and it would hold write access to every console-configurable kind.
+- Why not: the owning actor writes its own operator-set records with its own validation. The `console` actor checks the operator's delegation and routes the write to it, and the manifest and the state backend's per-caller check enforce it.
 
 ### A separate store for operator-set records
 

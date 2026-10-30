@@ -58,7 +58,7 @@ Three consequences follow from making the manifest the single source:
 | [Components](/architecture/components/) | L2 | Components, integration contracts, ports, the call graph, one writer per record kind |
 | [Processes](/architecture/processes/) | L3 | Actors and what each holds, the fusion rule, packaging, the actor processes on each runtime, and where the audit installation, Search and Quota run |
 | [Deployment](/architecture/deployment/) | L3 | Enforcement per runtime and mechanism, with the tested installations as examples, and the residual risk |
-| [Listeners](/architecture/listeners/) | L3 | The `entry` loopback port, Unix sockets everywhere else, and the Raft port |
+| [Listeners](/architecture/listeners/) | L3 | `entry`'s socket behind the edge connector (a loopback port only in the Lambda sandbox), Unix sockets everywhere else, and the Raft ports |
 | [Source layout](/architecture/source-layout/) | | Languages per component, shared kits, the repository tree |
 | [Architecture explorer](/architecture/explorer/) | L1 to L3 | An interactive view of the components and their calls |
 | [Audit explorer](/architecture/audit-explorer/) | L2 | An interactive view of the audit pipeline |

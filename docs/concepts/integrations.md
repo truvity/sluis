@@ -54,7 +54,7 @@ sequenceDiagram
 
 ## Core calls integrations, never the reverse
 
-Calls go one way. `entry`, `policy` and the other core actors call integrations; an integration never calls a core actor. Where an integration needs something from core, such as the desired state for a provisioner, core publishes it as data in a read-only prefix and the integration reads it.
+Calls go one way. The core actors call integrations (`session` its upstreams, `exchange` its verifiers, minters and notifiers, `console` the integrations that own operator-set kinds, and `entry` only to route a push notification); an integration never calls a core actor. Where an integration needs something from core, such as the desired state for a provisioner, core publishes it as data in a read-only prefix and the integration reads it.
 
 Three invariants are checked by tests, so the rule survives changes:
 

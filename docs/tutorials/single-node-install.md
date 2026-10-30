@@ -234,25 +234,26 @@ sluis-entry.service         loaded active running  sluis entry
 sluis-node.service          loaded active running  sluis node agent
 ```
 
-Each unit runs as its own user. One TCP listener exists: `entry`'s public API, bound to `127.0.0.1:8080` (the port is an example). Every other actor and driver listens on a Unix socket under `/run/sluis/<actor>/`.
+Each unit runs as its own user. sluis opens no TCP listener here: `entry`'s public API is a Unix socket, and `entry` runs with `PrivateNetwork=yes`, so it has no network at all. Every other actor and driver listens on a Unix socket under `/run/sluis/<actor>/` too.
 
 ```sh
 # Example
 ss -ltn
-ls -l /run/sluis/signer/
+ls -l /run/sluis/entry/
 ```
 
 ```text
 # Example output
 State   Recv-Q  Send-Q  Local Address:Port  Peer Address:Port
-LISTEN  0       4096    127.0.0.1:8080      0.0.0.0:*
+
+srw-rw---- 1 sluis-entry-prod sluis-edge 0 Oct 30 09:12 prod-public.sock
 ```
 
-On a single node that is the only TCP listener, and it is bound to the loopback address only.
+On a single node with the embedded state driver there is no Raft port either, so `ss` lists no sluis listener at all. The socket's group is the edge connector's, generated from the manifest.
 
 ## 9. Connect cloudflared to the entry listener
 
-`cloudflared` connects to `entry`'s loopback port and makes outbound connections only, so the board opens no inbound port. Install `cloudflared` from Cloudflare's own repository, create the tunnel, and point the ingress at the loopback port. The port, `8080` here, is an example.
+`cloudflared` forwards to `entry`'s Unix socket as a `unix:` origin and makes outbound connections only, so the board opens no inbound port. Install `cloudflared` from Cloudflare's own repository, create the tunnel, run it in the group of `entry`'s public socket, and point the ingress at the socket. The path follows the naming rule, `/run/sluis/entry/<boundary>-public.sock`; `prod` here is an example.
 
 ```yaml
 # Example: /etc/cloudflared/config.yaml
@@ -260,7 +261,7 @@ tunnel: <tunnel-id-from-cloudflare>
 credentials-file: /etc/cloudflared/credentials.json
 ingress:
   - hostname: sluis.example.com
-    service: http://127.0.0.1:8080
+    service: unix:/run/sluis/entry/prod-public.sock
   - service: http_status:404
 ```
 
