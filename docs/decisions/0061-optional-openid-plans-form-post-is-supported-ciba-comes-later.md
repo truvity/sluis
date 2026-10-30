@@ -126,7 +126,7 @@ Some facts bear on the answers.
 
 - Pros: customers that need it get it sooner.
 - Cons: a new flow competes with the parity work, and its banking profile depends on FAPI 2.0, which comes after parity.
-- Why not: parity comes first. FAPI 2.0 and device login are after it too.
+- Why not: parity comes first. FAPI 2.0 comes after it too, and device login is postponed.
 
 ### CIBA approval by a notification tap
 

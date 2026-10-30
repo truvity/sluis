@@ -53,14 +53,14 @@ shapes:
     nodes: 3
     node_agent: true
     edge: cloudflared
-    ports: { keys: yubikey, state: rqlite, blob: r2, transport: spool, index: rqlite_index }
+    ports: { keys: yubikey, state: rqlite, blob: garage, transport: spool, index: rqlite_index }
     keys: One YubiKey per node
     state: rqlite (Raft) across three nodes
     use: Integration tests and tutorials. Built in parallel with lambda and kubernetes after local; a Cloudflare tunnel serves sluis.example.com.
     notes:
       - text: "The audit pieces run on the same nodes as sluis, so they share driver instances. Each node has its own writer, spool and log key, and the other two nodes are its peer witnesses (the 2-of-3 co-signing). Readers merge the logs by time. The rule is exactly one writer per log."
         status: agreed
-      - text: "The blob is an R2 bucket. Its lock can be removed by an account administrator, so the peer witnesses are what protects against a rewritten history."
+      - text: "The blob is Garage, an S3-compatible store on the boards, through the one s3-compatible driver with keys from the cloud-garage credential driver (a bucket per actor). Garage has no object lock (lock mode none), so the peer witnesses are what protects against a rewritten history, and an off-site R2 copy keeps the audit log if the boards are lost. A spike comes first: conditional writes for the blob fence, memory on the boards and key expiry."
         status: agreed
       - text: "The index is rqlite, a replicated SQLite, so the reader can run on any node. This is a proposed index driver (ADR 0022). Its full-text support (FTS5) was verified on a three-node cluster on 2026-10-30; arm64 board hardware and the cost of writes on eMMC are not measured yet."
         status: proposed
@@ -224,7 +224,7 @@ drivers:
     instance: per-actor
     shared_name: null
     binary: drivers/rqlite
-    does: Serves the state port on rqlite, with one cluster per boundary and owning actor (sluis-rqlite@<boundary>-<actor>) and no state-owner. The owner has an rqlite user with execute, and each declared reader a query-only user. Raft peer traffic is each cluster's own TCP port, over mTLS with a certificate per cluster. How an actor unit that runs with PrivateNetwork=yes reaches its cluster's TCP client port is an open point of ADR 0008.
+    does: Serves the state port on rqlite, with one cluster per boundary and owning actor (sluis-rqlite@<boundary>-<actor>) and no state-owner. The owner has an rqlite user with execute, and each declared reader a query-only user. Raft peer traffic is each cluster's own TCP port, over mTLS with a certificate per cluster. rqlite has no Unix-socket listener, so the actor unit gets a narrow network rule for its own cluster's address and port only, instead of PrivateNetwork=yes, and a client certificate per cluster (ADR 0008).
     holds: The Raft peer TLS credential
     backing: rqlited (Raft, three nodes)
     status: agreed
@@ -269,6 +269,16 @@ drivers:
     does: The blob port on AWS S3, served by the one s3-compatible driver, with credentials from the cloud port and IAM prefix conditions. Only the writer, the witness, the indexer and the reader use it.
     holds: Nothing
     backing: object store
+    status: agreed
+  garage:
+    port: blob
+    title: s3-compatible (Garage)
+    instance: per-actor
+    shared_name: null
+    binary: drivers/aws
+    does: The blob port on Garage, run on the boards, served by the one s3-compatible driver with per-(boundary, actor) keys minted by the cloud-garage credential driver through a scoped admin token. Garage scopes keys per bucket, not per prefix, so each actor has its own bucket. It has no object lock (lock mode none), so tamper evidence leans on the witnesses, and the audit log is also copied off site to R2. Only the writer, the witness, the indexer and the reader use it.
+    holds: Nothing
+    backing: Garage (S3 API)
     status: agreed
   r2:
     port: blob
@@ -627,6 +637,7 @@ externals:
 # What a port's backing node says, per port and driver.
 backing_lines:
   blob.r2: ["R2 bucket", "S3 API, lock removable"]
+  blob.garage: ["Garage", "S3 API, no lock"]
   index.rqlite_index: ["rqlite index", "replicated SQLite"]
   keys.soft: ["software key file", "under driver-soft"]
   keys.yubikey: ["YubiKey PIV", "one per node, or the host's"]
@@ -987,7 +998,7 @@ cluster:
   - { process: "signer, policy, ca, ssh-ca", where: "every node; an earlier draft made each single-active, with a named lease and a fencing token, and standbys on the other nodes", status: proposed }
   - { process: writer, where: "every node: one log per node, each writer draining its own spool and signing with its own log key. The rule is exactly one writer per log, not one per installation", status: agreed }
   - { process: witness, where: "every node, as a peer: each node's log is cosigned by the other two (2-of-3). A witness is optional, and sluis config check warns when there is none", status: agreed }
-  - { process: "state driver and its store", where: "every node; one rqlite cluster per (boundary, owning actor), each a Raft quorum of three over its own TCP port with mTLS. How an actor unit with PrivateNetwork=yes reaches its cluster's client port is open (ADR 0008)", status: open }
+  - { process: "state driver and its store", where: "every node; one rqlite cluster per (boundary, owning actor), each a Raft quorum of three over its own TCP port with mTLS. The actor unit reaches its cluster's client port through a narrow per-actor network rule, with a client certificate per cluster (ADR 0008)", status: agreed }
   - { process: keys driver, where: "each node's own YubiKey, behind key-holder, with one socket per caller", status: agreed }
   - { process: sluis-node, where: every node, status: agreed }
   - { process: integrations, where: "next to the actors that call them on each node, over Unix sockets; no actor is called across nodes, and the Raft port is the only TCP port between nodes", status: agreed }

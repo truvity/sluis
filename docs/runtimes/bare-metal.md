@@ -63,7 +63,7 @@ An EC2 installation is bare-metal on virtual machines. The units are the same as
   - **Leave.** An ASG lifecycle hook makes an instance leave the cluster cleanly when the group scales it in.
   - **Enrolment.** A replacement instance enrols its identity through the node agent.
 - Spread the group over availability zones, so that one zone outage costs one instance.
-- Each instance publishes its workload-identity discovery document and JWKS, public keys only, to the distribution bucket under `nodes/<node>/`.
+- Each instance's card key is published in the boundary issuer's key set (public keys only). Only a fleet that uses per-node issuers publishes a discovery document and JWKS per node, under `nodes/<node>/`.
 - A `t4g.nano` has little memory. The actors, the drivers and rqlite have to fit in it. The memory measurement on this instance type also bounds the Rust cloud drivers.
 - Egress to AWS endpoints is by IP, not by name, in a plain VPC. A per-actor allow-list by host name needs a proxy.
 

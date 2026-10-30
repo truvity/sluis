@@ -133,7 +133,7 @@ Some actors declare **instances: exactly 1**. At any moment there must be one an
 - the `FactsSource` reconciler, because two reconcilers would fight over the same external state;
 - the indexer, because the search index has one writer.
 
-When an installation has more than one node, or its nodes are elastic, such an actor needs the **lease** port, so that exactly one holder runs at a time and a stale holder is refused by its fencing token (see [Data](/concepts/data/#leases-and-fencing-tokens)). On a single node a local lock is enough. On serverless, the platform's concurrency limit of 1 (reserved concurrency) may stand in for the lease.
+When an installation has more than one node, or its nodes are elastic, such an actor needs the **lease** port, so that exactly one holder runs at a time and a stale holder is refused by its fencing token (see [Data](/concepts/data/#leases-and-fencing-tokens)). On a single node a local lock is enough. On serverless the audit writer runs with a reserved concurrency of 1 on a standard SQS queue, and its single-writer guarantee comes from the blob fence (every batch created only if absent), not from the concurrency limit (decided 2026-10-30).
 
 ## Why the signer and the policy are separate
 

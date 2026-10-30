@@ -356,7 +356,7 @@ The same actors run on every runtime. The drivers behind their ports are what ch
 | keys | software, or the host's YubiKey | yubikey-piv per node, through `key-holder` | aws-kms, per-actor | aws-kms ([OD-20](/open-decisions/#od-20)) |
 | state | embedded | rqlite, one cluster per owning actor | dynamodb | dynamodb |
 | lease | local lock | rqlite, on the state store | dynamodb, on the state store | dynamodb, on the state store |
-| blob | fs | s3-compatible on R2, with credentials from the `cloudflare` cloud driver | s3-compatible on S3 | s3-compatible on S3 |
+| blob | fs | s3-compatible on Garage, with keys from the `garage` cloud driver; an off-site R2 copy of the audit log | s3-compatible on S3 | s3-compatible on S3 |
 | transport | spool | spool | sqs | sqs ([OD-22](/open-decisions/#od-22)) |
 | index | sqlite | rqlite (proposed) | none (proposed default); postgres through RDS Proxy is allowed ([OD-12](/open-decisions/#od-12)) | postgres on cnpg (proposed) |
 | witness | none | peer, each node witnessing the others | none | none |
