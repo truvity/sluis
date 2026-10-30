@@ -5,6 +5,7 @@
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909). This record continues the one-train rule of v1 ADR 0042 for v2, retires the build profiles of the early v2 design, and renames the package directory that earlier v2 notes called `roles`. Release signing and upload credentials: ADR 0030. Kubernetes pod layout and the Kubernetes baseline: ADRs 0046 and 0047.
 Rewritten in place on 2026-10-30 (realignment pass; then the package split by function, the Lambda, OCI and Helm packaging, one S3-compatible blob driver, and Rust executables on the same train).
+Rewritten in place on 2026-10-30 (two open points of [issue #910](https://github.com/truvity/sluis/issues/910) decided: a package per driver executable with installation meta-packages, the ceremony helper inside `sluis`, and the Lambda audit writer on reserved concurrency 1 with the blob fence; two points stay open).
 
 ## Context
 
@@ -33,8 +34,8 @@ This record does not set the compatibility rule between releases (what may break
 - **Every artifact of a release carries the same version.** Packages, tarballs, Lambda zips, images, charts and the console bundle all carry it, and a release publishes all of them together. A component with no change still ships in the release. This continues v1 ADR 0042 for v2.
 - **v2 versions are v2.x.y.** The module path of the main Go module ends in `/v2` (`github.com/truvity/sluis/v2`). Go requires the suffix from major version 2, and it also keeps v1 and v2 importable side by side while the two lines coexist. Any further Go module in the repository takes the same suffix, and all modules are tagged at one commit with one version, as v1 ADR 0042 did.
 - **One build tool: GoReleaser v2, open-source edition.** A release contains Rust executables as well as Go ones, and they are built through the same train, with the same SBOM, signing and provenance. There is one build definition for every artifact below. GoReleaser's Rust builder is documented for simple projects, so a multi-binary Cargo workspace for two architectures is proved by a spike (S10, tracked with ADR 0060) before the first Rust code ships.
-- **The YubiKey driver is built in a native per-architecture CI job,** inside the userland of the oldest supported distribution, so it runs on every supported glibc. It needs cgo against pcsc-lite, so the amd64 build runs on amd64 and the arm64 build on arm64. The job's outputs join the rest of the release.
-- **One command-line tool: `sluis`, with subcommands** for operators and users. Examples are `sluis config check`, `sluis doctor` and `sluis trust sync`. The actors, drivers, the node agent and the host service are separate executables, one per process, because each runs as its own user, unit, function or container ([0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/)). The ceremony tool is its own executable, `sluis-ceremony`, because it drives the root cards directly.
+- **The YubiKey driver is built in a native per-architecture CI job** while it needs cgo, inside the userland of the oldest supported distribution, so it runs on every supported glibc. It needs cgo against pcsc-lite, so the amd64 build runs on amd64 and the arm64 build on arm64. The job's outputs join the rest of the release.
+- **One command-line tool: `sluis`, with subcommands** for operators and users. Examples are `sluis config check`, `sluis doctor` and `sluis trust sync`. The actors, drivers, the node agent and the host service are separate executables, one per process, because each runs as its own user, unit, function or container ([0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/)). The ceremonies are `sluis ceremony …` subcommands. The part that drives the root cards is a Rust helper executable under `/usr/libexec/sluis/helpers/`, which ships inside the `sluis` package ([0060](/decisions/0060-the-language-follows-the-executable/)). (the directory name is inferred)
 
 ### Packaging follows the runtime
 
@@ -47,26 +48,34 @@ There are no build profiles. The runtime decides the packaging, and every artifa
 | kubernetes | One multi-arch OCI image per process, and one Helm chart, with the images pinned by digest |
 
 - **`dev` is not a build.** What the profile `dev` used to mean is the local installation ([0038](/decisions/0038-the-local-installation-is-docker-compose-with-one-container-per-actor/)), which runs the published images in Docker.
-- **The install directory is `/usr/libexec/sluis/{actors,drivers,integrations,node,vendor}/<short-name>`.** It is the same in a package, a tarball and an image. The directory that held the actors is called `actors`; earlier v2 notes called it `roles`, and this rename amends that package layout. File names inside it are unchanged.
+- **The install directory is `/usr/libexec/sluis/{actors,drivers,integrations,node,helpers,vendor}/<short-name>`.** It is the same in a package, a tarball and an image. The directory that held the actors is called `actors`; earlier v2 notes called it `roles`, and this rename amends that package layout. File names inside it are unchanged.
 
 ### Packages for hosts
 
-The deb and rpm packages are split by function. A package is a grouping for a host, not a unit of execution.
+The deb and rpm packages are split by function, and every driver executable is a package of its own. A package is a grouping for a host, not a unit of execution.
 
 | Package | Holds |
 |---|---|
-| `sluis` | The CLI, `sluis agent`, and the `sluis trust sync` timer |
+| `sluis` | The CLI, `sluis agent`, the `sluis trust sync` timer, and the `sluis ceremony` subcommands with their OpenPGP-card helper |
 | `sluis-node` | The node agent |
 | `sluis-server` | The core actors and the first-party integrations |
-| `sluis-drivers` | The drivers with no system dependency, `key-holder`, and the vendored binaries such as rqlite |
-| `sluis-driver-yubikey` | The drivers that need pcsc-lite; later a `-pkcs11` package for other hardware |
+| `sluis-driver-<name>` | One driver executable, with the system packages it needs |
 | `sluis-audit-writer` | The audit writer and witness |
 | `sluis-audit-search` | The indexer and reader |
 | `sluis-quota` | `quota` |
 | `sluis-host` | The SSH host service |
 | `sluis-console` | The console's static bundle |
+| `sluis-install-<installation>` | A meta-package per tested installation that installs from packages: the packages and drivers that installation runs |
 
-- **`sluis-server`, `sluis-audit-writer`, `sluis-audit-search` and `sluis-quota` depend on `sluis-drivers`,** so a host that runs only the audit log or only Quota does not install the core actors.
+- **One package per driver executable, with its system dependencies.** For example:
+  - `sluis-driver-yubikey-piv` depends on pcscd and pcsc-lite;
+  - `sluis-driver-pkcs11` depends on p11-kit;
+  - `sluis-driver-rqlite` ships `rqlited` under `vendor/` and the `sluis-rqlite@.service` template;
+  - `sluis-driver-aws` is the one Rust `aws` driver executable.
+
+  A host then installs only the drivers it runs, and a driver's system dependency is declared once, in its own package. The driver packages replace `sluis-drivers` and `sluis-driver-yubikey`.
+- **Meta-packages exist only for the bare-metal installations.** The lambda and kubernetes installations have no deb or rpm, so they have none. `sluis-install-boards` installs what the boards run. The local installation runs the published images under Docker ([0038](/decisions/0038-the-local-installation-is-docker-compose-with-one-container-per-actor/)), so a `sluis-install-local` exists only if a native local mode is added. (the local case is inferred)
+- **`sluis-server`, `sluis-audit-writer`, `sluis-audit-search` and `sluis-quota` depend on no driver package.** The drivers an installation chooses come from its meta-package or from the operator, so a host that runs only the audit log or only Quota does not install the core actors, and no host installs a driver it does not use.
 - **`sluis-host` is a separate root host service, mainly for SSH.** It never listens on the network. It fetches a signed bundle, verifies it, writes it atomically and keeps the last good one. It ships as signed deb and rpm packages. There is no NixOS module.
 - **The trust bundle reaches hosts through the generic `sluis` package.** It ships `sluis trust sync` as a oneshot service with a `sluis-trust-sync.timer`, which stays off until `sluis trust enroll --url … --fingerprint …` configures it. The sync fetches the bundle in SPIFFE format, checks its signature by a key that both roots certified, refuses a lower sequence number, writes the anchors and runs the distribution's trust update. Its unit may write only the anchors and the extracted store. **sluis generates no packages.** On Kubernetes the bundle reaches pods through a trust-manager source or a ClusterTrustBundle.
 
@@ -78,6 +87,7 @@ The deb and rpm packages are split by function. A package is a grouping for a ho
 - **The function's executable is the package's binary, renamed `bootstrap`.** An invoke adapter in the kit maps the invocation onto the in-process handler. Only `entry` uses the Lambda Web Adapter, which is pinned and vendored into the edge layer; a function never references the public AWS layer ([0008](/decisions/0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp/)). The other functions have no listener.
 - **arm64 is the default, and both architectures are published.** One installation uses one architecture for all its functions, because layers must match. sluis publishes no public layer ARNs: the installation's own infrastructure code verifies the signature and checksum and publishes the layers into its own account.
 - **Files are named `sluis-<kind>-<name>_<version>_<arch>.zip`,** for example `sluis-actor-entry_<version>_arm64.zip` and `sluis-driver-aws_<version>_arm64.zip`. The name is unique without a directory, because GitHub Releases is flat and some short names (`aws`) exist as a driver and as an integration.
+- **The audit writer runs with a reserved concurrency of 1 on a standard SQS queue.** An event source mapping starts at a concurrency of 2, so the limit throttles it and messages return to the queue. Correctness does not come from the limit: every batch is created only if absent (`If-None-Match: *`), so a second writer cannot fork the log. The cost of the throttling is measured at the Lambda step of the delivery order ([0039](/decisions/0039-delivery-goes-local-first-then-boards-lambda-and-kubernetes-in-parallel/)).
 - **Not published for Lambda:** the YubiKey driver, `key-holder`, `sluis-node`, rqlite and every driver that needs a disk or a long-running process. With the cloud key service and the cloud state store, the platform does their job.
 
 ### Images
@@ -134,10 +144,10 @@ The deb and rpm packages are split by function. A package is a grouping for a ho
 
 These are tracked in [issue #910](https://github.com/truvity/sluis/issues/910):
 
-- which package carries `sluis-ceremony`;
 - whether GHCR accepts three-segment names under the repository prefix (the fallback is `ghcr.io/truvity/sluis/<kind>-<name>`);
-- whether the Rust FIPS build can be static, or needs the glibc base;
-- whether the audit writer on Lambda can rely on a concurrency limit of 1 with a queue trigger, or needs a FIFO queue with one message group or a lease.
+- whether the Rust FIPS build can be static, or needs the glibc base.
+
+Decided on 2026-10-30: the ceremony helper ships inside the `sluis` package, and the Lambda audit writer uses a reserved concurrency of 1 on a standard queue with the blob fence (both above).
 
 ## Consequences
 
@@ -147,7 +157,8 @@ These are tracked in [issue #910](https://github.com/truvity/sluis/issues/910):
 - The build needs two native jobs per release, one per architecture, for the YubiKey driver. The jobs' outputs are joined before publishing, so a failure in one architecture blocks the whole release.
 - About thirty images per architecture are built, signed and attested. Each digest names one thing, and a scanner reports on the binary a container actually runs.
 - Lambda limits (five layers, 250 MB) are a build-time budget. The build fails when a function's declared drivers need more than three sluis layers. Per-actor functions chain cold starts on a first request, and provisioned concurrency on `entry` and `signer` is the lever if that is too slow.
-- The package split lets a host install only what it runs, and the `sluis-drivers` dependency keeps a stand-alone audit or Quota host free of the core actors.
+- The package split lets a host install only what it runs. A package per driver means more packages to build, sign and test, about one per driver executable, and the meta-packages are the short list an operator installs. A stand-alone audit or Quota host stays free of the core actors.
+- On Lambda a throttled writer delays records, it does not lose or fork them. If the measured delay is too long, a FIFO queue with one message group or a lease on DynamoDB is the alternative, still with the blob fence. (the alternative is inferred from the earlier options)
 - One blob driver means one driver to test for S3 and R2. Prefix scoping on R2 depends on temporary credentials, so the parent token is a secret per boundary that has to be sealed, rotated and backed up.
 - The trust bundle reaches any host through one generic package and a timer, and no release has to carry a per-installation package.
 - The package layout has one spelling of the directory. Everything generated from the permission manifest ([0005](/decisions/0005-three-zoom-levels-contracts-and-a-permission-manifest/)) uses `actors`, and docs and units that still say `roles` are fixed.
@@ -189,11 +200,23 @@ These are tracked in [issue #910](https://github.com/truvity/sluis/issues/910):
 - Cons: a second release definition, with its own signing, SBOM and provenance, and two trains to keep in step.
 - Why not: one train builds everything. The spike checks that GoReleaser can carry the Cargo workspace.
 
-### Drivers and integrations inside `sluis-server`, or a package per driver
+### Drivers and integrations inside `sluis-server`, or one `sluis-drivers` package
 
-- Pros: fewer packages; or, the other way, the smallest possible install.
-- Cons: with everything in `sluis-server`, a stand-alone audit or Quota host installs the core actors too. A package per driver and per integration means dozens of packages to sign and version.
-- Why not: `sluis-drivers` holds the drivers with no system dependency, and the packages that need them depend on it.
+- Pros: fewer packages to build, sign and version.
+- Cons: with everything in `sluis-server`, a stand-alone audit or Quota host installs the core actors too. A shared `sluis-drivers` package installs every driver on every host, and a driver's system dependency either lands on hosts that do not need it or needs a package of its own anyway. `sluis-drivers` was the first version of this record.
+- Why not: one package per driver executable declares its own dependencies, and meta-packages per installation keep the install short.
+
+### A package per integration
+
+- Pros: the smallest possible install.
+- Cons: dozens more packages to sign and version, for executables that need no system dependency. (inferred)
+- Why not: the integrations stay in `sluis-server`. Only drivers, which carry system dependencies, are split one per package. (inferred)
+
+### A FIFO queue or a lease for the Lambda audit writer
+
+- Pros: one writer at a time by construction, with no throttling.
+- Cons: a FIFO queue limits throughput per message group, and a lease adds a DynamoDB round trip to every batch. (inferred)
+- Why not: the blob fence already makes a second writer harmless, so a reserved concurrency of 1 on a standard queue is enough. The throttling is measured at the Lambda step.
 
 ### Cross-compile the YubiKey driver
 

@@ -1,10 +1,10 @@
 # 0012 — Machine identity follows SPIFFE: proofs are exchanged for short-lived credentials
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-10-30
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
-The open points at the end of the decision are tracked in [issue #910](https://github.com/truvity/sluis/issues/910).
+Rewritten in place on 2026-10-30 (the three open points of [issue #910](https://github.com/truvity/sluis/issues/910) decided: one boundary issuer for workload tokens, one actor ID form, and what the server keeps for a reusable token; the record is Accepted).
 
 ## Context
 
@@ -52,7 +52,8 @@ Other records constrain the answer:
 ### Actors on a node get a token each
 
 - **`sluis-node` issues a short-lived workload JWT to each actor on its node.** It reads the caller's uid from the peer credentials of its Unix socket and maps the uid to an actor. The caller cannot name another actor. The token is signed with the node's non-extractable key.
-- **Each node is its own issuer of these tokens.** A cloud role trusts only the issuers of the nodes that run its actor, so a compromised node can reach only the roles of its own actors.
+- **The boundary's issuer is the issuer of these tokens, by default.** There is one issuer for workload tokens per boundary. Its key set holds one public key per node card, three on the boards, plus the next keys while a key rotates. Each node signs with its own card's key, under the boundary's issuer.
+- **Per-node issuers are optional,** only for a fleet whose nodes run different sets of actors. There a cloud role can trust only the issuers of the nodes that run its actor, so a compromised node reaches only its own actors' roles. Where every node runs the same actors, as on the boards, per-node issuers would protect nothing more, so the default is one issuer. (the last reason is inferred)
 - **A cloud driver exchanges the token for that cloud's credentials**, for example with `AssumeRoleWithWebIdentity` on AWS. The role's trust policy pins `sub` to the actor and its boundary.
 - **Every actor uses its own credentials, and nothing mediates the data path.** Where a backend can tell callers apart, the actor reaches it with credentials of its own. sluis brokers credentials. It does not proxy data. The node's per-actor tokens, cloud token exchange, database client certificates from `ca` and NATS credentials from sluis are all forms of this.
 - **Where the platform gives an identity, sluis uses it.** On serverless it is the function's role. On Kubernetes it is a projected ServiceAccount token per container by default, EKS Pod Identity for a pod with one actor, and `sluis-node` only as a fallback. The Kubernetes detail is ADR 0046.
@@ -69,7 +70,7 @@ Other records constrain the answer:
   | A. Manual approval | The host shows a short code. The person approving sees the same code in the console. | The groups are assigned at approval. |
   | B. Automation through user data | On EC2 the instance identity document, with no secret. Elsewhere a single-use token put into the user data. | |
   | C. Network | Tailscale WhoIs. | A plain IP address only for a low-privilege identity, or with approval. |
-  | D. Reusable token | Like a Tailscale auth key: a number of uses, an expiry, bound groups, a name pattern and a pre-approved flag. | Stored as a hash and shown once. |
+  | D. Reusable token | Like a Tailscale auth key: a number of uses, an expiry, bound groups, a name pattern and a pre-approved flag. | Shown once. The server keeps a key derived from the secret, not the secret (below). |
   | E. Hardware attestation | A YubiKey now, a TPM later. | |
 
 - **Attributes keep their provenance.** What the verifier read from the proof is `attested`. What reviewed configuration says is `declared`. What an operator set in the console, audited, is `assigned`. What the host says about itself, and plain cloud tags, is `reported` and never grants anything. SSH uses these attributes ([0013](/decisions/0013-ca-and-ssh-ca-are-the-certificate-authorities-and-ssh-uses-only-sluis-own-ca/)).
@@ -77,6 +78,7 @@ Other records constrain the answer:
 ### The enrolment protocol
 
 - **The enrolment token never travels.** The client sends the token's ID and an HMAC over its CSR and a nonce from the server, keyed with the token's secret.
+- **The server keeps a key derived from the secret, sealed at rest.** For a token, single-use or reusable, the server stores the HMAC key that HKDF derives from the token's secret, not the secret. Like every state value it is encrypted in the port library (EC-1, [0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/)): under a data key that the boundary's key-encryption key wraps, in KMS or on the node cards. A copy of the store alone therefore cannot enrol a host. (that this applies to single-use tokens too is inferred)
 - **Enrolment is encrypted end to end through the edge.** The signed trust bundle carries an enrolment public key. The host encrypts its proof and its CSR to that key with HPKE (RFC 9180). The private key is held by `key-holder` or KMS, and `exchange` opens the request through the keys port. The edge sees only ciphertext. (inferred)
 - **The host pins the roots.** The fingerprints of both roots are mandatory at enrolment, except in manual approval, where the person compares the fingerprint the host shows. The pin updates itself through bundles signed by the current roots. Web PKI is kept so that the host can reach sluis, and as an extra layer. It is not the trust.
 - **The enrolment API** has start, poll, renew over mutual TLS, leave, and bundle. `entry` routes it and `exchange` carries it out.
@@ -95,10 +97,10 @@ Other records constrain the answer:
   |---|---|
   | A host | `spiffe://<trust-domain>/host/<name>` |
   | A Kubernetes ServiceAccount | `spiffe://<trust-domain>/k8s/<cluster>/ns/<namespace>/sa/<sa>` |
-  | An actor on a node | `spiffe://<trust-domain>/node/<node>/actor/<actor>` |
+  | A sluis actor | `spiffe://<trust-domain>/sluis/<actor>`, for example `spiffe://prod.example.com/sluis/ca` |
   | A CI job | `spiffe://<trust-domain>/ci/github/<org>/<repo>` |
 
-  The actor naming of the boundaries record names an actor `spiffe://<trust-domain>/sluis/<actor>`, for example `spiffe://prod.example.com/sluis/ca`.
+- **An actor has one ID form.** The ID names the actor in any of its instances. The instance, a node or a unit, is a separate attribute: a DNS name in the subject alternative names of an X.509-SVID, and a claim in a JWT-SVID. A policy that cares about the node reads the attribute, and one that does not sees one ID per actor.
 - **JWT-SVIDs come from the boundary's issuer.** `iss` is the boundary's issuer URL, such as `https://sluis.prod.example.com`, and `sub` is the SPIFFE ID.
 - **Across boundaries, actors use mutual TLS with SPIFFE IDs.** A token for an actor in another boundary has that actor's SPIFFE ID as `aud`. The target decides again with its own policy.
 - **How SPIRE's parts map to sluis** (prior art, not a dependency):
@@ -121,14 +123,6 @@ Other records constrain the answer:
 - **sluis generates no packages.** The same package serves every installation, and its configuration says what to pull.
 - **On Kubernetes** the bundle is a trust-manager Bundle source or a ClusterTrustBundle.
 
-### Open points
-
-These are tracked in [issue #910](https://github.com/truvity/sluis/issues/910) and keep this record Proposed:
-
-1. **The per-node issuer: its URL and how it is published.** Each node is its own issuer of per-actor tokens, so that a compromised node reaches only its own actors' roles. JWT-SVIDs come from the boundary's issuer. Whether the node's tokens are JWT-SVIDs, and under which URL and bucket layout the per-node discovery documents and key sets are published, is not decided.
-2. **The two forms of an actor's ID.** The naming gives `spiffe://<trust-domain>/sluis/<actor>` for an actor and the ID paths give `/node/<node>/actor/<actor>`. Reading the first as the actor in any instance and the second as one instance on one node is an inference to be confirmed.
-3. **How a reusable token is kept.** Case D stores the token as a hash. The HMAC check needs a key derived from the token's secret, and the record kind that holds it must say what the server keeps.
-
 ## Consequences
 
 - One flow covers sluis's own nodes, hosts, CI and pods. Each new kind of proof is a verifier driver with its own conformance tests, not a new flow.
@@ -137,8 +131,10 @@ These are tracked in [issue #910](https://github.com/truvity/sluis/issues/910) a
 - Moving the trust domain to the boundary means a host of one environment does not trust another environment's SVIDs by default. A connection between boundaries is declared.
 - The trust bundle is a signed static document. A host keeps working with its last good bundle when sluis is down, and an attacker who controls the network cannot roll it back.
 - The enrolment key sits in the bundle, so rotating it is a bundle change.
+- **One issuer per boundary keeps the cloud side small:** one OIDC provider per boundary and one key per node card, well inside AWS's limits of 100 providers per account and 100 keys per key set. The cost is that a compromised node can sign a token for any actor of its boundary, until its key is removed from the key set. Peer witnessing does not limit this for tokens. A fleet whose nodes run different actors chooses per-node issuers to get that limit back. (the cost is inferred)
+- **A node key that is rotated or revoked is a key-set change**: the next key is published before it signs, and a removed card's key leaves the set.
 - The work that follows:
-  - **server:** the enrolment API; the verifier drivers; state for enrolments, token hashes and the host registry with attribute provenance; the four policy actions; the host profile in `ca`; audit and notifications;
+  - **server:** the enrolment API; the verifier drivers; state for enrolments, the derived token keys and the host registry with attribute provenance; the four policy actions; the host profile in `ca`; audit and notifications;
   - **client:** `sluis-host enroll` detects the platform; the key is held in a card if there is one, else a TPM, else a file; the matching code; status, renew, leave and re-enrol; `sluis host user-data --group <group>` prints a cloud-init snippet, as text and not as an artifact;
   - **console:** a list of hosts, a queue of pending requests, token management with each token shown once, an "Add host" page, and the rules shown read-only.
 - The standards register lists the SPIFFE ID, the trust domain and bundle, the X.509-SVID and the JWT-SVID as Full, and SPIFFE Federation, the Workload Endpoint and the Workload API as Planned. RFC 9180 is added for enrolment (inferred). A "Machine identity" page carries the mapping table above.
@@ -169,6 +165,24 @@ These are tracked in [issue #910](https://github.com/truvity/sluis/issues/910) a
 - Pros: one trust domain, one bundle and one CA per installation.
 - Cons: one installation can hold several boundaries, and a boundary owns its keys, so environments would share a trust domain.
 - Why not: the boundary model replaced it. The trust domain follows the keys.
+
+### An issuer per node by default
+
+- Pros: a cloud role trusts only the nodes that run its actor, so a compromised node reaches only its own actors' roles.
+- Cons: one discovery document, key set and OIDC provider per node, and nothing gained where every node runs the same actors.
+- Why not: one boundary issuer with a key per node card is the default. Per-node issuers stay an option for a fleet whose nodes run different sets of actors.
+
+### Two ID forms for an actor
+
+- Pros: `/node/<node>/actor/<actor>` names one instance on one node directly in the ID.
+- Cons: every policy and trust rule has to say which form it means, and an actor would have as many IDs as nodes. (inferred)
+- Why not: one ID per actor, with the instance as a separate attribute.
+
+### The reusable token stored as a hash
+
+- Pros: a stolen store yields nothing that can be replayed. (inferred)
+- Cons: the HMAC check needs a key derived from the secret, which a hash cannot give.
+- Why not: the server keeps the HKDF-derived key, sealed at rest under the boundary's key-encryption key, so the store alone is still not enough.
 
 ### OAuth client credentials for machines
 

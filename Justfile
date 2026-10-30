@@ -28,6 +28,11 @@ site-lint: site-install
     site/scripts/check-status.mjs
     site/scripts/check-requirements.mjs
 
+# Rewrite the generated coverage block on docs/standards/conformance.md from the
+# requirements catalogue. `just site-lint` fails while the block is stale.
+site-coverage: site-install
+    site/scripts/check-requirements.mjs --write-coverage
+
 # Every link in the built site, internal and external (lychee.toml). Needs `just site-build`.
 site-links:
     lychee --config lychee.toml --root-dir "$PWD/site/dist" --no-progress 'site/dist/**/*.html'

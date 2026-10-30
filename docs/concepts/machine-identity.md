@@ -38,11 +38,14 @@ A trust domain is one boundary, such as `prod.example.com`. The ID paths are fix
 |---|---|
 | A host | `spiffe://<td>/host/<name>` |
 | A Kubernetes workload | `spiffe://<td>/k8s/<cluster>/ns/<ns>/sa/<sa>` |
-| A sluis actor on a node | `spiffe://<td>/node/<node>/actor/<actor>` |
-| A sluis actor of the boundary | `spiffe://<td>/sluis/<actor>`, for example `spiffe://prod.example.com/sluis/ca` |
+| A sluis actor | `spiffe://<td>/sluis/<actor>`, for example `spiffe://prod.example.com/sluis/ca` |
 | A CI job | `spiffe://<td>/ci/github/<org>/<repo>` |
 
-A JWT-SVID carries `iss` = the boundary's issuer URL (`https://sluis.<env>.example.com`) and `sub` = the SPIFFE ID. Between actors of two boundaries, the audience is the target's SPIFFE ID, over mutual TLS. See [Issuers and tokens](/runtimes/boundaries/#issuers-and-tokens).
+**An actor has one ID**, whichever node or unit runs it. The instance is a separate attribute: a DNS name among the subject alternative names of an X.509-SVID, and a claim in a JWT-SVID. A rule that cares about the node reads the attribute (decided 2026-10-30).
+
+A JWT-SVID carries `iss` = the boundary's issuer URL (`https://sluis.<env>.example.com`) and `sub` = the SPIFFE ID.
+
+**Workload tokens on a node come from the boundary's issuer too** (decided 2026-10-30). `sluis-node` signs each actor's token with its own card's key, and the boundary's key set holds one key per node card, three on the boards, plus the next keys during a rotation. Per-node issuers are optional, only for a fleet whose nodes run different sets of actors, so that a cloud role can trust only the nodes that run its actor. Where every node runs the same actors, one issuer loses nothing and needs one OIDC provider instead of one per node. Between actors of two boundaries, the audience is the target's SPIFFE ID, over mutual TLS. See [Issuers and tokens](/runtimes/boundaries/#issuers-and-tokens).
 
 ### SPIRE as prior art
 
@@ -82,7 +85,7 @@ Five cases cover how a host joins. Each ends in the same exchange.
 | **A. Manual approval** | A short code is shown on the host and on the console, and a person checks that they match | Groups are assigned at approval. The person also compares the root fingerprint |
 | **B. Automation through user data** | On EC2, the instance identity document, with no secret. Elsewhere, a single-use token put into the user data | `sluis host user-data --group <g>` prints a cloud-init snippet: text, not an artifact |
 | **C. Network** | Tailscale WhoIs | A plain IP address is accepted only for low-privilege identities, or with approval |
-| **D. Reusable token** | A token with a number of uses, an expiry, bound groups, a name pattern and a pre-approved flag, as Tailscale auth keys have | Stored as a hash and shown once |
+| **D. Reusable token** | A token with a number of uses, an expiry, bound groups, a name pattern and a pre-approved flag, as Tailscale auth keys have | Shown once. The server keeps a key derived from the secret, sealed at rest (below) |
 | **E. Hardware attestation** | A YubiKey attestation (later a TPM) | |
 
 Groups come from declared rules over the host's attributes. An attribute records where it came from: **attested**, **declared** and **assigned** (on the console, audited) attributes may grant; **reported** attributes and plain cloud tags may not.
@@ -108,6 +111,8 @@ sequenceDiagram
 
 A host that enrols with a token sends the **token's id** and an **HMAC over its certificate signing request and a server nonce**, keyed with the token's secret. The secret itself never crosses the network, so a recorded request cannot be replayed and a log line cannot leak it.
 
+**The server keeps a key derived from the secret, not the secret.** It stores the HMAC key that HKDF derives from the token's secret. Like every state value, the record is encrypted in the port library, under a data key that the boundary's key-encryption key wraps, in KMS or on the node cards ([Data](/concepts/data/#every-value-is-encrypted)). A copy of the store alone does not let anyone enrol a host.
+
 ### Enrolment is encrypted end to end
 
 The signed trust bundle carries an **enrolment public key**. The host encrypts its proof and its certificate signing request to that key with **HPKE** ([RFC 9180](https://datatracker.ietf.org/doc/html/rfc9180)). The private key is held by `key-holder` or KMS. The edge in front of `entry` (`cloudflared`, an API gateway) sees only ciphertext.
@@ -129,10 +134,8 @@ The trust bundle reaches a host through a **generic package**, not through a pac
 
 | Place | What it does |
 |---|---|
-| Server | The enrolment API (start, poll, renew over mutual TLS, leave, bundle), routed by `entry` to `exchange`; the verifier drivers; state for enrolments, token hashes and the host registry with attribute provenance; the Cedar actions `host.enrol`, `host.renew`, `enrol-token.create` and `enrolment.approve`; the host-SVID profile in `ca`; audit and notifications |
+| Server | The enrolment API (start, poll, renew over mutual TLS, leave, bundle), routed by `entry` to `exchange`; the verifier drivers; state for enrolments, the derived token keys and the host registry with attribute provenance; the Cedar actions `host.enrol`, `host.renew`, `enrol-token.create` and `enrolment.approve`; the host-SVID profile in `ca`; audit and notifications |
 | Client | `sluis-host enroll` detects the platform, keeps the key in a card, then a TPM, then a file, shows the matching code, and handles status, renew, leave and re-enrol |
 | Console | A hosts list, a queue of pending requests, enrolment tokens (shown once), an "Add host" page, and the rules, read-only |
 
-:::note[Proposed]
-Whether `ca` also speaks ACME is wanted and is decided in the `ca` record. If it does, `sluis-host` is only the SSH host service ([SSH](/integrations/ssh/)), and certificates for other host services come over ACME.
-:::
+**ACME comes after the first release** (decided 2026-10-30, [#978](https://github.com/truvity/sluis/issues/978)). `ca` will then serve ACME (RFC 8555), and `sluis-host` is only the SSH host service ([SSH](/integrations/ssh/)). Until then a host gets TLS certificates by sending a CSR to `ca`, through the enrolment API or the certificate module of `sluis-host` ([ADR 0013](/decisions/0013-ca-and-ssh-ca-are-the-certificate-authorities-and-ssh-uses-only-sluis-own-ca/)).

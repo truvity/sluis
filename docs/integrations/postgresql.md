@@ -101,7 +101,7 @@ The command signs in with the cached sign-in, requests a certificate, writes the
 
 - v1 does not sign the certificate itself. OpenBao trusts the issuer on a JWT auth mount and signs the database client certificate; `sluisctl psql` and `sluisctl pg` authenticate to OpenBao and run the tool. See [Connect PostgreSQL with short-lived client certificates](/v1/guides/sluis/connect/postgresql/) and [Connect OpenBao](/v1/guides/sluis/connect/openbao/).
 - In v2 the `ca` actor signs the certificate, from the database-client intermediate. No secrets manager is needed for this use case, and sluis stays out of secrets storage.
-- **PostgreSQL 18's native OAuth does not apply today:** v1 serves no device authorization grant for it, and v2 plans one for the command line ([#855](https://github.com/truvity/sluis/issues/855)).
+- **PostgreSQL 18's native OAuth does not apply today:** v1 serves no device authorization grant for it, and v2 plans one for the command line later; it is postponed ([#855](https://github.com/truvity/sluis/issues/855)).
 - Parity issues: [#824](https://github.com/truvity/sluis/issues/824) certificates, [#829](https://github.com/truvity/sluis/issues/829) the `psql` and `pg` wrappers.
 
 :::note[Proposed]

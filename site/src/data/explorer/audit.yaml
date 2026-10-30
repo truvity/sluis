@@ -117,7 +117,7 @@ shapes:
     witness: "none by default (optional); an external witness is possible. There is no peer"
     blob: "an S3 bucket"
     lock: "lock mode compliance (Object Lock), per install"
-    cluster: "managed by the platform; the writer is fenced by create-if-absent on the bucket, and whether a reserved concurrency of 1 can stand in for its lease with an SQS trigger is to be verified (a FIFO queue with one message group, or a lease on DynamoDB, is the safe form)"
+    cluster: "managed by the platform; the writer runs with a reserved concurrency of 1 on a standard SQS queue, and correctness comes from create-if-absent on the bucket; the throttling is measured at the Lambda step"
     index_placement: "None by default (proposed); a postgres index through RDS Proxy is allowed, and otherwise a separate Search installation holds the search index"
     note: "The default index here is none (proposed). Serverless may run the indexer and the reader with a postgres index, through RDS Proxy (proposed). With no index, the indexer and the reader of a separate Search installation read the same blob: on Kubernetes with Postgres (cnpg, or external with a connection string), or on a server with sqlite. Where Search runs is derived from the port and driver rules. A small install can run sluis audit search from the CLI, which builds a local sqlite index from the chain. The search index is a rebuildable cache; the chain in the blob is the record."
 

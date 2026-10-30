@@ -14,7 +14,7 @@ What you download depends on the [runtime](/runtimes/) you install on. There are
 
 | Runtime | Packaging |
 |---|---|
-| [bare-metal](/runtimes/bare-metal/) | `.deb` and `.rpm` packages split by function, and a tarball |
+| [bare-metal](/runtimes/bare-metal/) | `.deb` and `.rpm` packages split by function, a package per driver executable, meta-packages per installation, and a tarball |
 | [serverless](/runtimes/serverless/) | One function per actor and one zip per executable, with at most three layers of sluis's own |
 | [kubernetes](/runtimes/kubernetes/) | One OCI image per process and one Helm chart with presets |
 
@@ -22,20 +22,33 @@ The local installation runs the same OCI images as Kubernetes, under Docker Comp
 
 ## Packages by function
 
-The `.deb` and `.rpm` packages are split by function, so that a host installs only what it runs:
+The `.deb` and `.rpm` packages are split by function, and every driver executable is a package of its own, so that a host installs only what it runs (decided 2026-10-30):
 
 | Package | Holds |
 |---|---|
-| `sluis` | The CLI, `sluis agent`, and `sluis trust sync` with its timer ([Machine identity](/concepts/machine-identity/#trust-sync)) |
+| `sluis` | The CLI, `sluis agent`, `sluis trust sync` with its timer ([Machine identity](/concepts/machine-identity/#trust-sync)), and the `sluis ceremony` subcommands with their OpenPGP-card helper |
 | `sluis-node` | The node agent |
 | `sluis-server` | The core actors and the first-party integrations |
-| `sluis-drivers` | The drivers with no system dependencies, and the vendored binaries such as rqlite. `sluis-server`, the audit packages and `sluis-quota` depend on it |
-| `sluis-driver-yubikey` | The YubiKey driver (later also the PKCS#11 drivers) |
+| `sluis-driver-<name>` | One driver executable, with the system packages it needs |
 | `sluis-audit-writer` | The audit writer and the witness |
 | `sluis-audit-search` | The indexer and the reader |
 | `sluis-quota` | The quota engine |
 | `sluis-host` | The SSH host service ([SSH](/integrations/ssh/)) |
 | `sluis-console` | The console's single-page application, as a static bundle |
+| `sluis-install-<installation>` | A meta-package per bare-metal installation, such as `sluis-install-boards`, which pulls in what that installation runs |
+
+Examples of driver packages and what they bring:
+
+| Package | Dependencies and contents |
+|---|---|
+| `sluis-driver-yubikey-piv` | Depends on pcscd and pcsc-lite |
+| `sluis-driver-pkcs11` | Depends on p11-kit |
+| `sluis-driver-rqlite` | Ships `rqlited` under `vendor/` and the `sluis-rqlite@.service` template |
+| `sluis-driver-aws` | The one Rust `aws` driver executable |
+
+No package depends on a driver package except the meta-packages. The lambda and kubernetes installations have no `.deb` or `.rpm`, so they have no meta-package, and the local installation runs the images under Docker ([ADR 0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)).
+
+The ceremonies need no package of their own. `sluis ceremony …` runs a Rust helper that drives the OpenPGP cards, shipped in the `sluis` package under `/usr/libexec/sluis/helpers/`. On the offline live USB system the same `sluis` runs with the same configuration: a ceremony is prepared online, run offline, and completed and published online ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)).
 
 The packages ship systemd **template units** only, `sluis-<actor>@.service` and `sluis-<actor>@.socket`, and a systemd generator that reads `/etc/sluis/install.yaml` and creates the instances ([Bare-metal](/runtimes/bare-metal/#what-runs-where)). sluis does not generate packages per installation.
 
@@ -58,7 +71,7 @@ latest     pointer to the newest version
 ```
 
 - Everything is served directly from R2. There are no redirects.
-- `oidc/` is not a release artifact. It holds the workload-identity discovery documents and JWKS of the nodes, public keys only, at `https://distribution.sluis.id/oidc/nodes/<node>/`. See [Identity](/concepts/identity/).
+- `oidc/` is not a release artifact. It holds workload-identity discovery documents and JWKS, public keys only. By default an installation's workload tokens come from its boundary's issuer, so `oidc/nodes/<node>/` is used only by a fleet that chooses per-node issuers. See [Identity](/concepts/identity/).
 - `latest` is a pointer to the newest version. Pin a version in anything you automate.
 
 ## apt (Debian and Ubuntu)
@@ -106,7 +119,7 @@ gpgkey=https://distribution.sluis.id/keys/sluis-release.asc
 Each component is a tarball for each architecture at `bin/<version>/<component>_linux_{amd64,arm64}.tar.gz`, with its `.sha256` beside it. Use a tarball when you manage the units yourself. The layout inside a package or tarball is the same, and the directory that held the actors was renamed from `roles` to `actors`:
 
 ```text
-/usr/libexec/sluis/{actors,drivers,integrations,node,vendor}/<short-name>
+/usr/libexec/sluis/{actors,drivers,integrations,node,helpers,vendor}/<short-name>
 ```
 
 ## Lambda zips

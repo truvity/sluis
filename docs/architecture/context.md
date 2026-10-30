@@ -56,7 +56,7 @@ What each box stands for:
 
 | Party | What they do with sluis |
 | ----- | ----------------------- |
-| **Person** | Signs in through an upstream identity provider, from a browser or from a CLI on a machine with a browser; signs in on a headless machine with device login; refreshes, lists and revokes their sessions; signs out |
+| **Person** | Signs in through an upstream identity provider, from a browser or from a CLI on a machine with a browser; signs in on a headless machine with device login once it ships (postponed, [#855](https://github.com/truvity/sluis/issues/855)); refreshes, lists and revokes their sessions; signs out |
 | **Robot** | A CI job or a workload presents a platform token (a GitHub Actions token, a Kubernetes ServiceAccount token, an AWS web-identity token) and exchanges it for an access token, a downstream credential, or a certificate |
 | **Relying party** | Reads discovery and the key set, then verifies tokens offline with any standard JOSE library. sluis needs no client library |
 | **Operator** | Connects and reconnects integrations, manages clients and secrets, reads the console, runs backup, restore and migration, and holds the key ceremonies |
@@ -141,7 +141,7 @@ The operations below are new in v2. Their paths and RPC names are proposed and m
 
 | Operation | Shape |
 | --------- | ----- |
-| Device login (RFC 8628) | `POST /device_authorization`, `GET /device`, approve and deny calls, and `grant_type=urn:ietf:params:oauth:grant-type:device_code` on `/token`. The verification page requires a session that the upstream provider authenticated with MFA, and shows the client, host, IP address and location |
+| Device login (RFC 8628), postponed ([ADR 0048](/decisions/0048-passkeys-step-up-and-device-login/)) | `POST /device_authorization`, `GET /device`, approve and deny calls, and `grant_type=urn:ietf:params:oauth:grant-type:device_code` on `/token`. The verification page requires a session that the upstream provider authenticated with MFA, and shows the client, host, IP address and location |
 | Certificates for workloads, people and hosts | A Connect call for cert-manager's external-issuer library, and `sluis pki` and `sluis ssh` for people and robots |
 | Static publication | `GET` of CA certificates, CRLs, bundles, SSH CA keys and the key revocation list, public |
 | Audit receiver | `SinkService.Send` served by sluis, so other installs can send records |

@@ -5,6 +5,7 @@
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909). This record covers the bare-metal and serverless runtimes. Kubernetes edge and pod layout: ADR 0046.
 Rewritten in place on 2026-10-30 (alignment with 0007, 0058 and 0012).
+Rewritten in place on 2026-10-30 (the point that was not decided here, how a `per-actor` rqlite driver reaches its cluster, is decided: a narrow network rule per unit; tracked on [issue #910](https://github.com/truvity/sluis/issues/910)).
 
 ## Context
 
@@ -35,6 +36,7 @@ The public API is the exception. It has to be reachable from the internet, throu
   - **On Kubernetes, the edge and the pod port are ADR 0046**, which is not yet decided.
   - **The API authenticates every request itself**, on every runtime.
   - **Every other actor and every driver listens on Unix sockets only**, under `/run/sluis/<actor>/`, one socket per instance (`/run/sluis/<actor>/<boundary>.sock`). A key-holding actor and a driver never get a TCP listener. `signer` is reachable by Unix socket only.
+  - **A `per-actor` rqlite driver reaches its cluster through a narrow network rule, not a private network namespace.** rqlite's client API is TCP, so the unit that runs the driver cannot use `PrivateNetwork=yes`. It stays in the host's network namespace with `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`, `IPAddressDeny=any` and `IPAddressAllow=` for its own cluster's addresses only, and it holds a client certificate for that one cluster. Every other actor that needs no network keeps `PrivateNetwork=yes` and `AF_UNIX` only. If rqlite adds a Unix-socket listener, the driver moves to it and the unit goes back to `PrivateNetwork=yes`.
   - **The state store's cluster ports are the only other TCP ports.** On rqlite there is one cluster per boundary and owning actor, each run from the systemd template `sluis-rqlite@<boundary>-<actor>` with a port scheme for its Raft and HTTP ports. Node-to-node and client traffic use mutual TLS with a certificate per cluster, so a node of one cluster cannot join another ([0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/)). The Raft ports are the only TCP ports between nodes, and the firewall limits them to the other nodes' addresses. No actor is reachable from another node.
 - **A driver declares its requirements, and `sluis config check` enforces them.** The requirements are the ones in [0002](/decisions/0002-actors-declare-ports-placement-is-derived/): a long-running process, a local disk, a node count and a dependency. `sluis config check` validates an installation against them, and a driver that is attached in a way the runtime cannot provide (for example, a hardware-key driver on serverless) fails the check. The runtime kinds are in [0003](/decisions/0003-runtimes-are-runtime-kinds/).
 
@@ -42,14 +44,13 @@ The public API is the exception. It has to be reachable from the internet, throu
 
 Kubernetes edge and pod layout: ADR 0046.
 
-### Not decided here
+### How a `per-actor` rqlite driver reaches its cluster
 
-- **How a `per-actor` rqlite driver reaches its cluster's client port from an actor unit with `PrivateNetwork=yes`.** The two rules above meet here. A `per-actor` driver runs as the actor's uid and holds the actor's rqlite user, and every actor that needs no network runs with `PrivateNetwork=yes` and `RestrictAddressFamilies=AF_UNIX`. But rqlite's client API (its HTTP port, beside the Raft port of each `sluis-rqlite@<boundary>-<actor>` cluster) is TCP. A unit in a private network namespace has only its own loopback device, so it cannot open the host's loopback port or a peer's address, and `AF_UNIX` alone forbids a TCP socket. The options, none chosen:
-  - **A narrow network rule instead of `PrivateNetwork=yes`.** The actor's unit, with its driver, stays in the host's network namespace, allows `AF_INET`/`AF_INET6` as well as `AF_UNIX`, and gets `IPAddressDeny=any` with `IPAddressAllow=` for loopback or the cluster's own address only. The actor keeps no other network, but it has a network stack, and the rule is per unit rather than structural.
-  - **rqlite listens on a Unix socket.** The client API would then be a socket file whose permissions admit only the owner and the declared readers, and the actor keeps `PrivateNetwork=yes`. rqlite does not support this today: as of v10.6.6 (2026-10-28) `rqlited` serves its HTTP API on TCP only (`net.Listen("tcp", …)`). An optional Unix-socket listener is proposed upstream in an unmerged pull request, rqlite/rqlite#2979. A patched build would be a fork to carry.
-  - **A per-actor sidecar unit holds the rqlite credential.** A small unit per actor, outside the private namespace and under its own uid or the actor's, holds the actor's rqlite user, connects to the cluster over TCP with mutual TLS, and serves the state port to its one actor over a Unix socket. The actor keeps `PrivateNetwork=yes`. The cost is one more unit per actor, and a process that is neither a mediator for several callers nor inside the actor's sandbox.
+The two rules above met here, and the maintainer decided on 2026-10-30. A `per-actor` driver runs as the actor's uid and holds the actor's rqlite user, and an actor that needs no network runs with `PrivateNetwork=yes` and `AF_UNIX` only. rqlite's client API (its HTTP port, beside the Raft port of each `sluis-rqlite@<boundary>-<actor>` cluster) is TCP, and a unit in a private network namespace cannot reach the host's loopback port or a peer's address.
 
-  It is tracked on [issue #910](https://github.com/truvity/sluis/issues/910).
+- **The unit gets a narrow rule instead:** `IPAddressDeny=any`, `IPAddressAllow=` for its own cluster's addresses and nothing else, and `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`. The generator writes the addresses from the cluster's port scheme ([0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/)). (that the generator writes them is inferred)
+- **The driver holds a client certificate per cluster**, so it can reach only the cluster it is allowed, even if the address rule were wider.
+- **A Unix socket is the later form.** As of v10.6.6 (2026-10-28) `rqlited` serves its HTTP API on TCP only. An optional Unix-socket listener is proposed upstream in an unmerged pull request, rqlite/rqlite#2979. If rqlite adds one, the driver moves to it and its unit returns to `PrivateNetwork=yes`.
 
 ## Consequences
 
@@ -62,6 +63,7 @@ Kubernetes edge and pod layout: ADR 0046.
 - A serverless function that has a loopback listener and a gateway adapter needs the adapter pinned and vendored into sluis's own layer, so the listener's only client is a component sluis ships.
 - ConnectRPC over Unix sockets costs a hop and a serialisation where a library call would be free. That cost is accepted for the isolation. It also means every driver needs the Protobuf contract of its port.
 - A second implementation language is possible for a driver (for example Rust for `key-holder` and the cloud drivers), because the contract is on the wire and not in a Go interface.
+- A unit that runs a `per-actor` rqlite driver has a network stack, limited by a per-unit rule rather than by a namespace. A wrong address in the rule is caught by the per-cluster client certificate, and the deny tests check that the unit cannot reach any other address. (the deny test is inferred)
 - Testing a listener rule is mechanical: no actor or driver may bind a TCP address, except `entry` on serverless (on loopback) and the state clusters' ports. On bare metal `entry` binds none. The deny tests check it.
 - Kubernetes will be decided in ADR 0046. Docs for it stay marked proposed until that record is accepted.
 - The listener rule on the site ([Listeners](/architecture/listeners/)) and the driver page ([Ports and drivers](/concepts/drivers/)) describe this record. When they disagree, this record is the reasoning and the page is fixed.
@@ -109,6 +111,18 @@ Kubernetes edge and pod layout: ADR 0046.
 - Pros: a gateway or a load balancer can reach it directly. (inferred)
 - Cons: it puts an unauthenticated listener on the network. The firewall and the security group become part of the actor's protection. (inferred)
 - Why not: with a Unix-socket origin on bare metal, a loopback port in the sandbox on serverless and an outbound-only connector, the node opens no inbound port. (For the Kubernetes pod address, see ADR 0046.) (inferred)
+
+### `PrivateNetwork=yes` with rqlite on a Unix socket now
+
+- Pros: the actor keeps no network stack at all, and the socket's permissions admit only the owner and its readers.
+- Cons: rqlite does not support it today, so sluis would carry a patched build.
+- Why not: the narrow rule works with rqlite as it is. The driver moves to a Unix socket when rqlite has one.
+
+### A per-actor sidecar unit that holds the rqlite credential
+
+- Pros: the actor keeps `PrivateNetwork=yes`, and the sidecar alone talks TCP with mutual TLS.
+- Cons: one more unit per actor, and a process that is neither a mediator for several callers nor inside the actor's sandbox.
+- Why not: the narrow rule with a certificate per cluster gives the same reach with no extra unit.
 
 ### Peer traffic over TCP between actors on different nodes
 

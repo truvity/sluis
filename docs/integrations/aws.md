@@ -12,7 +12,7 @@ AWS appears in three directions, and it helps to keep them apart.
 |---|---|---|
 | **Accounts trust sluis** | A person or a CI job proves its identity to sluis, then to an AWS account. | An IAM OIDC provider for sluis's issuer; `AssumeRoleWithWebIdentity` at STS. |
 | **AWS roles prove themselves to sluis** | A Lambda function, container task or instance running as an IAM role calls a service that trusts sluis. | AWS outbound identity federation; sluis verifies the token (a `WorkloadVerifier`). |
-| **sluis's own actors reach AWS** | A sluis actor on a node writes to its bucket or uses its key. | The workload identity of [Identity](/concepts/identity/): a per-node issuer and `AssumeRoleWithWebIdentity`. |
+| **sluis's own actors reach AWS** | A sluis actor on a node writes to its bucket or uses its key. | The workload identity of [Identity](/concepts/identity/): the boundary's issuer, with a key per node card, and `AssumeRoleWithWebIdentity`. |
 
 ## What it's for
 
@@ -52,7 +52,7 @@ Signing: AWS accepts ES384, the algorithm sluis uses by default, so no RSA key i
 
 - Every exchange, with the proof (person, CI or workload), the audience, the outcome and the groups.
 - A refusal: a role in no group, an unknown audience, a token from an undeclared account (the caller sees one fixed answer for all of these).
-- For sluis's own actors, AWS's own CloudTrail records each `AssumeRoleWithWebIdentity`, and the trust policy names the node's issuer and the actor's subject.
+- For sluis's own actors, AWS's own CloudTrail records each `AssumeRoleWithWebIdentity`, and the trust policy names the boundary's issuer and the actor's subject.
 
 ## Setup
 
