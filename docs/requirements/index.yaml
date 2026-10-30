@@ -4,10 +4,10 @@
 schema: 1
 catalogue:
   title: "sluis requirements"
-  checked: "2026-10-29"
+  checked: "2026-10-30"
   vocabulary:
     level: [MUST, SHOULD, MAY]
-    origin: [v1-parity, stakeholder-ciam, stakeholder-integrator, security-review, design-decision, standard]
+    source: [v1-parity, stakeholder-ciam, stakeholder-integrator, security-review, design-decision, standard]
     status: [planned, partial, open, out-of-scope, withdrawn]
     runtimes: [bare-metal, serverless, kubernetes]
     verification: [conformance-suite, test-vectors, integration-test, manual]
@@ -55,6 +55,9 @@ catalogue:
     "driver": "An implementation of a port. A driver declares what it needs: a long-running process, a disk, a node count, a dependency."
     "runtime": "The kind of platform that starts the processes: bare-metal, serverless or kubernetes."
     "installation": "One concrete deployment: a runtime, a node count, available dependencies and one driver per port."
+    "origin": "Where a record kind comes from: declared, operator-set, learned, derived or issued. Not the same as a requirement's source."
+    "operator-set": "A lasting choice a person makes on the console, the CLI or the API, stored as a record and written by the actor that owns its kind."
+    "sensitivity": "How a field may be shown: public, internal, personal or secret, plus a free-text flag."
     "tested installation": "One of the four installations the project tests: local, boards, lambda, kubernetes. Any other combination is possible but untested."
     "hub installation": "In an account-hosting setup, the installation that holds customer accounts and issues pairwise subjects."
     "context installation": "In an account-hosting setup, an installation of one regulated entity. It has its own issuer, keys, subjects and sessions, and gets sign-in silently from the hub."

@@ -36,14 +36,14 @@ shapes:
     nodes: 1
     node_agent: false
     edge: cloudflared
-    ports: { keys: yubikey, state: embedded, blob: s3, transport: spool, index: sqlite }
-    keys: the host's YubiKey, through a key-holder on the host (a software key stays possible for tests)
+    ports: { keys: yubikey, state: embedded, blob: fs, transport: spool, index: sqlite }
+    keys: the host's YubiKey, through the host's pcscd socket mounted into the key-holder container (a software key in CI)
     state: embedded single-node store
     use: Development and CI. Delivered first, until v2 can replace v1.
     notes:
       - text: "The key-holder container uses the host's pcscd socket, mounted into it; the host keeps using the YubiKey, and the pcsc-lite protocol versions of the image and the host must match. The fallback is to run key-holder natively on the host, so that the containers mount only its Unix socket."
         status: agreed
-      - text: "The log store is a local S3-compatible store with no object lock, so tamper evidence depends on a witness. The witness is optional, and sluis config check warns when there is none."
+      - text: "The log store is the fs blob, a local directory with no lock mode, so tamper evidence comes from verification and, where there is one, a witness. The witness is optional, and sluis config check warns when there is none."
         status: agreed
   - id: boards
     name: Boards (three-board cluster)
@@ -62,7 +62,7 @@ shapes:
         status: agreed
       - text: "The blob is an R2 bucket. Its lock can be removed by an account administrator, so the peer witnesses are what protects against a rewritten history."
         status: agreed
-      - text: "The index is rqlite, a replicated SQLite, so the reader can run on any node. This is a proposed index driver, and its full-text support (FTS5) must be verified first."
+      - text: "The index is rqlite, a replicated SQLite, so the reader can run on any node. This is a proposed index driver (ADR 0022). Its full-text support (FTS5) was verified on a three-node cluster on 2026-10-30; arm64 board hardware and the cost of writes on eMMC are not measured yet."
         status: proposed
       - text: "The boards run the vendor's Ubuntu 22.04 for now, as a declared exception. systemd 249 has no LoadCredentialEncrypted=, so units use plain LoadCredential=, and sluis doctor warns about kernel 5.10. Building Ubuntu 26.04 and Rocky 10.2 images is a backlog task."
         status: agreed
@@ -250,6 +250,16 @@ drivers:
     holds: The spool segment files
     backing: local spool on disk
     status: proposed
+  fs:
+    port: blob
+    title: fs
+    instance: file
+    shared_name: null
+    binary: drivers/fs
+    does: The blob port on a local directory, for one node. It has no lock mode, so tamper evidence comes from verification and witnesses. The blob driver of the local installation.
+    holds: The blob directory
+    backing: local directory
+    status: agreed
   s3:
     port: blob
     title: aws (S3 API)
@@ -297,7 +307,7 @@ drivers:
     instance: shared
     shared_name: null
     binary: drivers/rqlite
-    does: "The index port on rqlite, a replicated SQLite, so the reader can run on any node. A projection of the batch stream, never the evidence. This is a proposed index driver; its full-text support (FTS5) must be verified before it is relied on."
+    does: "The index port on rqlite, a replicated SQLite, so the reader can run on any node. A projection of the batch stream, never the evidence. This is a proposed index driver (ADR 0022); its full-text support (FTS5) was verified on 2026-10-30."
     holds: The replicated index tables
     backing: rqlite (replicated SQLite)
     status: proposed
@@ -365,7 +375,7 @@ roles:
     name: entry
     kind: actor
     binary: actors/entry
-    does: "The OIDC protocol: sign-in, sessions, token exchange and the console API. It sits behind the edge connector and is the only actor whose API is public."
+    does: "The OIDC protocol: sign-in, sessions, token exchange, and the console API as the browser's backend (an HttpOnly session cookie, no tokens in the browser). It routes each operator-set write to the actor that owns the record kind. It sits behind the edge connector and is the only actor whose API is public."
     holds: No key
     uses: [state, transport]
     resources:
@@ -418,11 +428,11 @@ roles:
     name: quota
     kind: actor
     binary: actors/quota
-    does: "Rate limits and caps, with a conditional adjust. Caps and limits live in core. Quota (quota engine, quota state) is a separate piece, combinable with sluis, and it shares sluis's driver instances. It meters by default and enforces per policy rule."
-    holds: Counters (state), no key
+    does: "Rate limits and caps, with compare-and-set on the state port (a conditional adjust is a proposed further operation). Caps and limits live in core. Quota (quota engine, quota state) is a separate piece, combinable with sluis, and it shares sluis's driver instances. It meters by default and enforces per policy rule."
+    holds: Balances and meters (state), no key
     uses: [state, transport]
     resources:
-      - "state: quota/* conditional adjust (the state port with compare-and-set)"
+      - "state: quota/* compare-and-set (balances are issued records; meters are derived from the log)"
       - "transport: put"
   writer:
     status: agreed
@@ -600,7 +610,7 @@ calls:
   - { f: writer, t: drv-keys, m: "Sign(head)", d: "Asks key-holder to sign the batch head with the log key; only the writer may use it." }
   - { f: witness, t: drv-keys, m: "Sign(cosign)", d: Cosigns a batch head with its own key. }
   - { f: signer, t: drv-state, m: "ring/*", d: The signing ring. }
-  - { f: quota, t: drv-state, m: "quota/*", d: Conditional adjust of counters. }
+  - { f: quota, t: drv-state, m: "quota/*", d: Compare-and-set on balances. }
   - { f: witness, t: drv-state, m: "Read heads", d: Reads new batch heads from audit_batches. }
   - { f: writer, t: drv-state, m: "audit_batches", d: Registers each batch in order. }
   - { f: indexer, t: drv-state, m: "Follow batches", d: Reads audit_batches from its cursor. }
@@ -690,7 +700,7 @@ flows:
       - title: The limit is adjusted
         nodes: [entry, quota, drv-state]
         edges: ["entry>quota", "quota>drv-state"]
-        text: quota applies a conditional adjust to the counter. Caps and rate limits live in core.
+        text: quota updates the balance with compare-and-set. Caps and rate limits live in core.
       - title: signer signs the token
         nodes: [entry, signer, drv-keys, store-keys]
         edges: ["entry>signer", "signer>drv-keys", "drv-keys>store-keys"]

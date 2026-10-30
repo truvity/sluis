@@ -14,7 +14,7 @@ const c = catalogue();
   <table class="rq-table" data-rq-table={filterable ? '' : undefined}>
     <thead>
       <tr>
-        <th>Id</th><th>Requirement</th><th>Level</th><th>Status</th>{!detail && <th>Origin</th>}{!detail && <th>Runtimes</th>}
+        <th>Id</th><th>Requirement</th><th>Level</th><th>Status</th>{!detail && <th>Source</th>}{!detail && <th>Runtimes</th>}
         {detail && <th>Traceability</th>}{detail && <th>Verification</th>}
       </tr>
     </thead>
@@ -27,7 +27,7 @@ const c = catalogue();
             data-area={r.area}
             data-level={r.level}
             data-status={r.status}
-            data-origin={r.origin}
+            data-source={r.source}
             data-runtimes={runtimesOf(r)}
             data-scope-open={area.scopeOpen ? '' : undefined}
           >
@@ -35,14 +35,14 @@ const c = catalogue();
             <td data-label="Requirement" class="rq-statement">
               <p>{r.statement}</p>
               {detail && <p class="rq-why">{r.rationale}</p>}
-              {detail && <p class="rq-note rq-meta">{r.origin}; runtimes: {runtimesOf(r)}</p>}
+              {detail && <p class="rq-note rq-meta">{r.source}; runtimes: {runtimesOf(r)}</p>}
               {r.split_from && <p class="rq-note">Split from <a href={detail && r.split_from.split('-')[1] === r.area ? `#${r.split_from}` : reqPath(c.byId.get(r.split_from)!)}>{r.split_from}</a>.</p>}
               {r.superseded_by && <p class="rq-note">Superseded by {r.superseded_by.map((s, i) => <>{i > 0 && ', '}<a href={reqPath(c.byId.get(s)!)}>{s}</a></>)}.</p>}
               {r.manual_reason && detail && <p class="rq-note">Manual because: {r.manual_reason}</p>}
             </td>
             <td data-label="Level"><span class={`rq-badge rq-level-${r.level.toLowerCase()}`}>{r.level}</span></td>
             <td data-label="Status"><span class={`rq-badge rq-status-${r.status}`} title={STATUS_HINT[r.status]}>{r.status}</span></td>
-            {!detail && <td data-label="Origin">{r.origin}</td>}
+            {!detail && <td data-label="Source">{r.source}</td>}
             {!detail && <td data-label="Runtimes">{runtimesOf(r)}</td>}
             {detail && <td data-label="Traceability" class="rq-chips rq-trace"><Chips req={r} /></td>}
             {detail && (

@@ -7,7 +7,7 @@ requirements:
     statement: "sluis SHOULD issue short-lived client certificates for PostgreSQL authentication where the server accepts a configured client CA."
     rationale: "Short-lived certificates avoid database passwords."
     level: SHOULD
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -20,7 +20,7 @@ requirements:
     statement: "Where a database service does not accept a client CA, sluis MUST support the service's native IAM token as the credential."
     rationale: "Managed databases differ in supported auth."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -33,7 +33,7 @@ requirements:
     statement: "sluis MUST NOT store long-lived database passwords for operators or applications."
     rationale: "A stored password defeats short-lived credentials."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: open
     runtimes: all
     standards:

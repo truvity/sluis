@@ -7,7 +7,7 @@ requirements:
     statement: "Hosted pages MUST meet WCAG 2.1 level AA."
     rationale: "Accessibility is a legal and ethical baseline."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -22,7 +22,7 @@ requirements:
     statement: "A sign-in path that does not need a smartphone MUST exist, such as a roaming security key."
     rationale: "Not everyone has a phone."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:

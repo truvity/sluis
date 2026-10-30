@@ -20,6 +20,8 @@ What you download depends on the [runtime](/runtimes/) you install on. There are
 
 The local installation runs the bare-metal packaging in Docker.
 
+The **console's single-page application** is a separate artifact: a bundle of static files with the release's version, deployable on its own. Each runtime's static host serves it on the same origin as `entry`'s API: a directory that `entry` serves on bare-metal, the bucket behind the API gateway on serverless, a static container behind the ingress on Kubernetes ([ADR 0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)).
+
 ## The R2 layout
 
 ```text

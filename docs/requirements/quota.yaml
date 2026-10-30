@@ -7,7 +7,7 @@ requirements:
     statement: "Quota MUST be metering by default, with enforcement configurable per policy rule for chosen subjects or audiences."
     rationale: "Enforcement carries availability risk."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -21,7 +21,7 @@ requirements:
     statement: "Under strict enforcement the admitted total MUST never exceed the configured limit under concurrent requests."
     rationale: "These are the testable accuracy guarantees."
     level: MUST
-    origin: stakeholder-integrator
+    source: stakeholder-integrator
     status: planned
     runtimes: all
     standards:
@@ -36,7 +36,7 @@ requirements:
     statement: "Under soft enforcement the admitted total MUST exceed the limit by no more than one grant per instance."
     rationale: "These are the testable accuracy guarantees."
     level: MUST
-    origin: stakeholder-integrator
+    source: stakeholder-integrator
     status: planned
     runtimes: all
     standards:
@@ -50,7 +50,7 @@ requirements:
     statement: "A request to admit, to confirm usage or to cancel MUST be idempotent under a caller-supplied request identifier."
     rationale: "Retries must not double-count."
     level: MUST
-    origin: stakeholder-integrator
+    source: stakeholder-integrator
     status: planned
     runtimes: all
     standards:
@@ -63,7 +63,7 @@ requirements:
     statement: "The effect of an event on a balance MUST be separate from the meter it counts towards."
     rationale: "Top-ups and consumption are different facts."
     level: MUST
-    origin: stakeholder-integrator
+    source: stakeholder-integrator
     status: open
     runtimes: all
     standards:
@@ -78,7 +78,7 @@ requirements:
     statement: "The effect of an event on a balance MUST be able to be negative, zero or positive."
     rationale: "Top-ups and consumption are different facts."
     level: MUST
-    origin: stakeholder-integrator
+    source: stakeholder-integrator
     status: open
     runtimes: all
     standards:
@@ -92,7 +92,7 @@ requirements:
     statement: "A top-up pushed to the quota engine MUST be idempotent and audited."
     rationale: "Money-like operations need exactly-once effects."
     level: MUST
-    origin: stakeholder-integrator
+    source: stakeholder-integrator
     status: planned
     runtimes: all
     standards:
@@ -105,7 +105,7 @@ requirements:
     statement: "The quota policy MUST define whether an exhausted balance blocks or allows overage."
     rationale: "Operators choose the risk."
     level: MUST
-    origin: stakeholder-integrator
+    source: stakeholder-integrator
     status: planned
     runtimes: all
     standards:
@@ -120,7 +120,7 @@ requirements:
     statement: "The quota policy MUST define whether an unavailable quota engine fails open or fails closed."
     rationale: "Operators choose the risk."
     level: MUST
-    origin: stakeholder-integrator
+    source: stakeholder-integrator
     status: planned
     runtimes: all
     standards:
@@ -134,7 +134,7 @@ requirements:
     statement: "A client MUST be able to query current usage and remaining balance."
     rationale: "Aggregates must be verifiable."
     level: MUST
-    origin: stakeholder-integrator
+    source: stakeholder-integrator
     status: planned
     runtimes: all
     standards:
@@ -149,7 +149,7 @@ requirements:
     statement: "Hourly aggregates MUST list the identifiers of their events so that their sum equals the count of facts."
     rationale: "Aggregates must be verifiable."
     level: MUST
-    origin: stakeholder-integrator
+    source: stakeholder-integrator
     status: planned
     runtimes: all
     standards:
@@ -163,7 +163,7 @@ requirements:
     statement: "Turning enforcement on in production MUST be preceded by a load test of the mint path with enforcement enabled."
     rationale: "Enforcement adds state writes to the hot path."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -172,3 +172,16 @@ requirements:
     decisions: ["OD-33"]
     verification:
       - {kind: integration-test, ref: "load test"}
+  - id: REQ-QUOTA-013
+    area: QUOTA
+    statement: "An operator MAY lower a declared quota limit on the console as a tighten-only change."
+    rationale: "A fast brake on abuse must not wait for a deployment."
+    level: MAY
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "quota limit tighten test"}

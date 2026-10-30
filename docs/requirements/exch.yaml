@@ -7,7 +7,7 @@ requirements:
     statement: "Token exchange MUST be denied unless a configured exchange grant matches the requesting client, the subject token and the requested audience."
     rationale: "Deny by default prevents confused-deputy chains."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -22,7 +22,7 @@ requirements:
     statement: "The token exchange endpoint MUST refuse a request that carries an actor_token with invalid_request."
     rationale: "Ignoring a parameter implies delegation semantics that sluis does not provide."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -36,7 +36,7 @@ requirements:
     statement: "The token exchange endpoint MUST refuse a requested_token_type other than an access token with invalid_request."
     rationale: "Ignoring a parameter implies delegation semantics that sluis does not provide."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -49,7 +49,7 @@ requirements:
     statement: "A refusal by unknown audience, by limit or by missing grant MUST be answered identically with invalid_target."
     rationale: "A uniform answer hides which audiences exist."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -64,7 +64,7 @@ requirements:
     statement: "The reason for an exchange refusal MUST be recorded in the audit log."
     rationale: "The operator still needs the real reason."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -78,7 +78,7 @@ requirements:
     statement: "The output of an exchange MUST be narrower than or equal to the subject token in audience, scope and lifetime."
     rationale: "An exchange must never widen authority."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -92,7 +92,7 @@ requirements:
     statement: "The output of an exchange MUST NOT include a refresh token."
     rationale: "A refresh token would extend the lifetime beyond the subject token."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -105,7 +105,7 @@ requirements:
     statement: "An exchange MUST be refused when the session that produced the subject token has ended."
     rationale: "Logout must cut every derived token."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -119,7 +119,7 @@ requirements:
     statement: "An exchange MUST be refused when the subject token was issued by a different installation."
     rationale: "Cross-installation exchange breaks the trust boundary."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -132,7 +132,7 @@ requirements:
     statement: "A client that exchanges tokens MUST be confidential."
     rationale: "Public clients cannot hold an exchange authority."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -147,7 +147,7 @@ requirements:
     statement: "A client that exchanges tokens MUST authenticate."
     rationale: "Public clients cannot hold an exchange authority."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:

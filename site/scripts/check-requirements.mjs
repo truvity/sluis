@@ -127,7 +127,7 @@ if (register.size !== standardsDoc.standards.length) E('L1 standards.yaml: dupli
 
 // L3
 const enumOf = (def) => schema.$defs[def].enum;
-for (const [key, def] of [['level', 'level'], ['origin', 'origin'], ['status', 'status'], ['runtimes', 'runtime'], ['verification', 'verificationKind'], ['depth', 'depth']]) {
+for (const [key, def] of [['level', 'level'], ['source', 'source'], ['status', 'status'], ['runtimes', 'runtime'], ['verification', 'verificationKind'], ['depth', 'depth']]) {
   if (JSON.stringify(cat.vocabulary[key]) !== JSON.stringify(enumOf(def))) E(`L3 index.yaml: vocabulary ${key} differs from the schema`);
 }
 

@@ -24,15 +24,15 @@ The rules the split follows:
 
 The concept is explained on [Actors](/concepts/actors/); the ports and the shared drivers on [Ports and drivers](/concepts/drivers/); the six integration actors on [Integrations](/concepts/integrations/); the key custody behind `signer` and `ca` on [Keys](/concepts/keys/); and the audit actors on [Audit](/concepts/audit/).
 
-There are about nine core and audit actors, plus integrations. `signer` and `policy` are split out from the first slice rather than later: splitting later is what v1 deferred and never did.
+There are four core actors (`entry`, `signer`, `policy`, `ca`), the `quota` actor beside them as the engine of the Quota piece, and four audit actors, plus integrations. `signer` and `policy` are split out from the first slice rather than later: splitting later is what v1 deferred and never did.
 
 | Actor | Responsibility | Holds | Cannot |
 | ----- | -------------- | ----- | ------ |
-| `entry` | The OIDC protocol: sign-in, sessions, token exchange, the console API. Sits behind the edge connector | Sessions, refresh tokens, client secret verifiers. **No key** | Read the signing keys, or reach an integration's vendor credential |
+| `entry` | The OIDC protocol: sign-in, sessions, token exchange, the console API as the browser's backend. Sits behind the edge connector | Sessions, refresh tokens, client secret verifiers. **No key** | Read the signing keys, or reach an integration's vendor credential |
 | `signer` | Holds the signing ring and signs tokens under a signing policy; it is not a pure oracle. It checks the issuer URL, the audience set, the lifetime and the algorithm | The token-signing key use (KMS `Sign`, or the hardware key through `key-holder`) | Accept a request from anyone but `entry`, or parse internet input |
-| `policy` | The decision point. Reviewed, file-based policy maps facts to grants. Signs mint grants with its own key | The grant key. No state, no network, no secrets | Reach any resource: a bad process can decide wrongly, but exfiltrates nothing |
+| `policy` | The decision point. Declared Cedar policy, plus template-linked policies within a declared delegation policy, maps facts to grants. Signs mint grants with its own key | The grant key. No state, no network, no secrets | Reach any resource: a bad process can decide wrongly, but exfiltrates nothing |
 | `ca` | X.509 and the SSH CA | The CA keys | Sign anything outside its policy |
-| `quota` | Rate limits and caps, with conditional adjust | Its own balances and ledger | Touch identity records |
+| `quota` | Not a core actor: the engine of the Quota piece. Rate limits, caps and metering, with compare-and-set on the state port (a conditional adjust is proposed, ADR 0057) | Its own balances (issued) and meters (derived). No key | Touch identity records |
 | `writer` | Receives audit records, seals them in batches and writes them to the blob. Exactly one per log | The log-store credential. It asks `key-holder` to sign each batch head, and never holds the log key | Delete or overwrite an object, or use any key but the log key |
 | `witness` | Co-signs the batch heads it has seen. Optional | Its own key | Write a batch object |
 | `indexer` | Builds the search index from the blob. Exactly one | Read on the blob, write on the index | Write to the evidence |

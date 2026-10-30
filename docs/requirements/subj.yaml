@@ -7,7 +7,7 @@ requirements:
     statement: "The key that identifies a person in storage, sessions, exchange proofs, held records and audit actors MUST be the account identifier."
     rationale: "E-mail addresses change and are personal data."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -21,7 +21,7 @@ requirements:
     statement: "The account identifier MUST NOT appear in any token or response that a relying party receives."
     rationale: "A global identifier is a correlation key across controllers."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -35,7 +35,7 @@ requirements:
     statement: "Every person-profile client MUST name exactly one sector."
     rationale: "A forgotten sector must never fall back to a global identifier."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -49,7 +49,7 @@ requirements:
     statement: "The loader MUST refuse a person-profile client that names no sector."
     rationale: "A missing sector is a configuration error."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -63,7 +63,7 @@ requirements:
     statement: "The loader MUST refuse a machine client that names a sector."
     rationale: "Machine tokens carry the client identifier as subject."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -77,7 +77,7 @@ requirements:
     statement: "The subject of a machine token MUST be its client identifier."
     rationale: "A machine has no person to hide."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -91,7 +91,7 @@ requirements:
     statement: "In an account-hosting hub the subject for a client in a sector MUST be a keyed MAC of the account identifier with the sector as tenant."
     rationale: "Entities and products must not be able to join their customer lists."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -108,7 +108,7 @@ requirements:
     statement: "The subject MAC key MUST be non-extractable and used through the keys port."
     rationale: "A key that cannot be read cannot be brute-forced offline."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -123,7 +123,7 @@ requirements:
     statement: "A pairwise subject MUST be the unpadded base64url encoding of a 256-bit MAC."
     rationale: "A fixed encoding makes the value verifiable by vector."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -137,7 +137,7 @@ requirements:
     statement: "Two clients in one sector MUST receive the same pairwise subject for a person."
     rationale: "A sector is one audience."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -151,7 +151,7 @@ requirements:
     statement: "Clients in two different sectors MUST receive different pairwise subjects for a person."
     rationale: "Different sectors must not be able to correlate a person."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -165,7 +165,7 @@ requirements:
     statement: "A pairwise subject MUST stay the same across sign-in, refresh, exchange and logout tokens."
     rationale: "Relying parties key their records by subject."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -179,7 +179,7 @@ requirements:
     statement: "A pairwise subject MUST NOT equal the account identifier."
     rationale: "The subject must not expose the internal key."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -193,7 +193,7 @@ requirements:
     statement: "Discovery MUST announce pairwise as the only supported subject type."
     rationale: "Discovery must tell the truth about the subject type."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -209,7 +209,7 @@ requirements:
     statement: "The loader MUST refuse a change of a sector's key backend, key identifier or tenant while accounts exist."
     rationale: "Such a change would change every stored subject of the sector."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -223,7 +223,7 @@ requirements:
     statement: "A change of subject key MUST be made as a new sector or as a migration through the computed-subject export."
     rationale: "Subject stability is worth more than key hygiene here."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -237,7 +237,7 @@ requirements:
     statement: "No component except the administrative service MUST be able to map a sector subject back to an account identifier."
     rationale: "Reverse resolution is a privileged, audited capability."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -251,7 +251,7 @@ requirements:
     statement: "Reverse resolution of a sector subject MUST write a blocking audit record."
     rationale: "A resolution that cannot be audited must not happen."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -265,7 +265,7 @@ requirements:
     statement: "Reverse resolution in a production profile MUST require a dual-signed intent."
     rationale: "No single person may unmask a customer."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -279,7 +279,7 @@ requirements:
     statement: "Reverse resolution MUST return an opaque account reference and not the account identifier."
     rationale: "The only person handle outside the hub is the reference."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -293,7 +293,7 @@ requirements:
     statement: "An account reference MUST be deterministic, stable per installation and not reversible without the administrative service state."
     rationale: "Support and requests need a stable handle that reveals nothing."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -307,7 +307,7 @@ requirements:
     statement: "Reverse resolution of an unknown subject MUST be audited."
     rationale: "Failed lookups are part of the trail."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -321,7 +321,7 @@ requirements:
     statement: "The issuer and the accounts module MUST NOT have read access to the reverse pointers."
     rationale: "Only the administrative service may hold the mapping."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -335,7 +335,7 @@ requirements:
     statement: "In a context installation the subject MUST be a random version 4 UUID that is the same for every client of that installation."
     rationale: "A context needs a stable subject that reveals nothing about the hub."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -349,7 +349,7 @@ requirements:
     statement: "A context account MUST be linked to the hub by the hub sector identifier and the hub subject, rather than by the hub issuer."
     rationale: "The link then survives a change of the hub host."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -363,7 +363,7 @@ requirements:
     statement: "A context subject MUST differ from every hub subject of the same person."
     rationale: "A context must not be linkable to the hub by subject."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -377,7 +377,7 @@ requirements:
     statement: "Hub tokens issued to a client MUST carry the sector marker of the client's sector in the configured claim."
     rationale: "Resource servers can detect a token minted for the wrong sector."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -391,7 +391,7 @@ requirements:
     statement: "The sector marker claim MUST be omitted for a sector whose marker is null."
     rationale: "A sector may choose not to be marked."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -405,7 +405,7 @@ requirements:
     statement: "The WebAuthn user handle MUST be 32 random bytes stored on the account."
     rationale: "The handle lives on authenticators and leaves the device."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -419,7 +419,7 @@ requirements:
     statement: "The WebAuthn user handle MUST NOT be derived from the account identifier."
     rationale: "A derived handle would leak the internal identifier."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -433,7 +433,7 @@ requirements:
     statement: "In workforce mode the subject MUST be the staff account identifier, a random version 4 UUID."
     rationale: "Resource servers key their staff records by it."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -447,7 +447,7 @@ requirements:
     statement: "The staff creation operation MUST return the subject before the first sign-in."
     rationale: "Resource servers create their records before the person signs in."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -461,7 +461,7 @@ requirements:
     statement: "In partner mode the subject MUST be the client identifier."
     rationale: "A partner token represents the partner."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -475,7 +475,7 @@ requirements:
     statement: "An e-mail address MUST NOT be used as a subject in workforce, partner or context mode."
     rationale: "E-mail addresses change and are personal data."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -489,7 +489,7 @@ requirements:
     statement: "Exit, escrow and step-in packages MUST carry the computed subject per sector and per account."
     rationale: "A successor keeps every relying-party subject."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -503,7 +503,7 @@ requirements:
     statement: "Exit, escrow and step-in packages MUST NOT carry sector keys."
     rationale: "A successor must never hold a non-extractable key."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:

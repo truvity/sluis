@@ -7,7 +7,7 @@ requirements:
     statement: "sluis MUST export metrics, traces and logs over OTLP."
     rationale: "Telemetry loss must not stop service."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -21,7 +21,7 @@ requirements:
     statement: "sluis MUST treat telemetry as best effort, never as the durable audit channel."
     rationale: "Telemetry loss must not stop service."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -34,7 +34,7 @@ requirements:
     statement: "sluis MUST propagate trace context between processes."
     rationale: "Correlation across actors needs a standard header."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -48,7 +48,7 @@ requirements:
     statement: "sluis MUST include trace identifiers in log lines."
     rationale: "Correlation across actors needs a standard header."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -61,7 +61,7 @@ requirements:
     statement: "Telemetry attributes MUST pass an allow-list."
     rationale: "Telemetry leaves the trust boundary."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -75,7 +75,7 @@ requirements:
     statement: "Personal data MUST NOT enter telemetry."
     rationale: "Telemetry leaves the trust boundary."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -88,7 +88,7 @@ requirements:
     statement: "On serverless, telemetry MUST be flushed within a bounded deadline before the runtime freezes."
     rationale: "A frozen runtime drops buffered data."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["serverless"]
     standards:
@@ -101,7 +101,7 @@ requirements:
     statement: "sluis MUST serve liveness and readiness probes."
     rationale: "Orchestrators need truthful probes."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -115,7 +115,7 @@ requirements:
     statement: "Readiness MUST report ready only when policy, keys and state are usable."
     rationale: "Orchestrators need truthful probes."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -123,3 +123,29 @@ requirements:
     features: ["#836"]
     verification:
       - {kind: integration-test, ref: "readiness-gating test"}
+  - id: REQ-OBS-010
+    area: OBS
+    statement: "Fields flagged as free text MUST NOT enter telemetry."
+    rationale: "Typed text can hold anything, including personal data or a secret."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-98, section: "OTLP", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "free-text redaction test"}
+  - id: REQ-OBS-011
+    area: OBS
+    statement: "The telemetry allowlist MUST be generated from the sensitivity annotations of the configuration schema."
+    rationale: "A list kept by hand drifts from the fields."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-98, section: "OTLP", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "generated allowlist test"}

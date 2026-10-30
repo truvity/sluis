@@ -52,6 +52,7 @@ The other actors put their audit records into the queue, the SQS transport drive
 - **Drivers are Lambda extensions.** A driver is a platform-started service that speaks ConnectRPC over a Unix socket. On Lambda the platform that starts it is the extension mechanism, and the actor calls it over the socket inside the sandbox.
 - **Lambda Web Adapter.** `entry` speaks HTTP, so the Lambda Web Adapter, pinned at v1.1.0, translates Lambda events into HTTP requests. The adapter is vendored into sluis's own layer, so the function does not reference the public AWS layer.
 - **Limits.** A function has at most five layers and 250 MB unzipped, counting the function code, layers and extensions together. The zips are built to fit that.
+- **Configuration.** Declared configuration arrives in a Lambda layer or through AWS AppConfig, as whole versioned snapshots. A function may live-reload a new snapshot: it is validated, swapped atomically and audited, and a snapshot that fails validation leaves the version in force ([ADR 0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
 - **Single instance.** An actor that declares exactly one instance (the audit writer) runs with a reserved concurrency of 1 on Lambda. The platform's concurrency limit of 1 may stand in for the lease port.
 
 ## Keys
@@ -72,6 +73,7 @@ The other actors put their audit records into the queue, the SQS transport drive
 - The function's IAM role is its identity. The platform injects the credentials only into that function's sandbox. A function calls another by `lambda:Invoke`, and the callee reads the invoked alias, which tells it the caller class, and a verified token, which tells it the caller actor.
 - **Listener.** `entry`'s public API listens on TCP, bound to `127.0.0.1` inside the sandbox (`8080` in the example), and the Lambda Web Adapter connects to it. The sandbox holds only sluis's own processes, and the port is never reachable from outside it. The other functions have no TCP listener; their drivers use Unix sockets. See [Listeners](/architecture/listeners/).
 - **Edge.** API Gateway sits in front of the `entry` function.
+- **The console.** The console's single-page application is served from the bucket behind the same API gateway, so the browser sees one origin for the page and the console API in `entry`.
 - There is no node agent: the JWT for a cloud federation has to come from the `signer`.
 
 ## Limits and residual risk

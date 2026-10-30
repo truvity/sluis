@@ -7,7 +7,7 @@ requirements:
     statement: "The certificate authority actor MUST issue only short-lived certificates by default."
     rationale: "Short lifetimes make revocation a break-glass control rather than the main control."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "serverless", "kubernetes"]
     standards:
@@ -20,7 +20,7 @@ requirements:
     statement: "A certificate authority MUST give every certificate a random 128-bit serial number."
     rationale: "Random serials remove the need for a ledger and stop prediction."
     level: MUST
-    origin: standard
+    source: standard
     status: planned
     runtimes: all
     standards:
@@ -35,7 +35,7 @@ requirements:
     statement: "Issuance MUST be governed by a role policy that fixes subject constraints, extensions and maximum lifetime."
     rationale: "Requesters must not choose names or extensions."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -51,7 +51,7 @@ requirements:
     statement: "A certificate request without a common name MUST be accepted when the role policy supplies identity."
     rationale: "Requesters must not choose names or extensions."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -64,7 +64,7 @@ requirements:
     statement: "A root key MUST be generated on a hardware token with attestation."
     rationale: "Independent roots avoid copying keys and keep attestation."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -80,7 +80,7 @@ requirements:
     statement: "Each token of a pair MUST hold its own independent root."
     rationale: "Independent roots mean losing one card does not lose the other."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -96,7 +96,7 @@ requirements:
     statement: "A root key MUST NOT be copied to another token."
     rationale: "A copied key loses its attestation."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -111,7 +111,7 @@ requirements:
     statement: "Both roots of a pair MUST be authoritative."
     rationale: "A verifier must be able to trust either root."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -126,7 +126,7 @@ requirements:
     statement: "Both roots of a pair MUST be present in every trust bundle."
     rationale: "Independent roots avoid copying keys and keep attestation."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -140,7 +140,7 @@ requirements:
     statement: "Root key operations MUST run on a machine that is neither a server nor a CI runner."
     rationale: "Operator presence is the control."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal"]
     standards:
@@ -155,7 +155,7 @@ requirements:
     statement: "Every root key signature MUST require a PIN and a touch."
     rationale: "Operator presence is the control."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal"]
     standards:
@@ -169,7 +169,7 @@ requirements:
     statement: "A certificate signing ceremony MUST reserve its attempt before signing."
     rationale: "A burnt attempt must never be reusable."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -184,7 +184,7 @@ requirements:
     statement: "A certificate signing ceremony MUST refuse a wrong confirmation hash before reserving."
     rationale: "A mistyped confirmation must not burn an attempt."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -199,7 +199,7 @@ requirements:
     statement: "A certificate signing ceremony MUST write a hash-chained ceremony record that contains no secrets."
     rationale: "A burnt attempt must never be reusable."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -213,7 +213,7 @@ requirements:
     statement: "sluis MAY publish a static certificate revocation list."
     rationale: "Static revocation fits short-lived certificates."
     level: MAY
-    origin: design-decision
+    source: design-decision
     status: open
     runtimes: all
     standards:
@@ -229,7 +229,7 @@ requirements:
     statement: "sluis MAY support ACME for host certificates."
     rationale: "Static revocation fits short-lived certificates."
     level: MAY
-    origin: design-decision
+    source: design-decision
     status: open
     runtimes: all
     standards:
@@ -244,7 +244,7 @@ requirements:
     statement: "sluis MUST NOT run an online certificate status responder until a decision to do so is recorded."
     rationale: "A responder adds an always-on dependency to relying parties."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: open
     runtimes: all
     standards:
@@ -259,7 +259,7 @@ requirements:
     statement: "sluis MAY issue post-quantum or hybrid certificates once a certificate profile is standardised."
     rationale: "PQ transition planning."
     level: MAY
-    origin: standard
+    source: standard
     status: open
     runtimes: all
     standards:
@@ -273,7 +273,7 @@ requirements:
     statement: "Each intermediate key MUST be certified by both roots of a pair, with one certificate from each root."
     rationale: "Two certificates for one key let either root card be lost without breaking a chain."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -288,7 +288,7 @@ requirements:
     statement: "The loss of either root card MUST NOT break any certificate chain."
     rationale: "This is the property that dual certification buys."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -301,7 +301,7 @@ requirements:
     statement: "A root MUST be revoked by removing it from every trust bundle through the trust registry."
     rationale: "Removal from the bundles is the only way to revoke a root."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -315,7 +315,7 @@ requirements:
     statement: "The lost-card runbook MUST generate the replacement root on a fresh hardware token."
     rationale: "A replacement root must have its own attestation."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -329,7 +329,7 @@ requirements:
     statement: "The lost-card runbook MUST re-issue any intermediate that chained only to the lost root."
     rationale: "Dual certification should leave none, but the runbook must still check."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -343,7 +343,7 @@ requirements:
     statement: "Cross-signing between the two roots of a pair MAY be used."
     rationale: "Cross-signing is optional because both roots are already authoritative."
     level: MAY
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -356,7 +356,7 @@ requirements:
     statement: "The documentation MUST NOT describe the second token of a pair as a spare copy of the first."
     rationale: "The second token holds its own independent root, not a copy."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -370,7 +370,7 @@ requirements:
     statement: "sluis MUST provide a ceremony command for hardware-token root and intermediate operations."
     rationale: "The ceremony automates every step that is not a human act and leaves PIN, touch and custody manual."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: open
     runtimes: ["bare-metal", "kubernetes"]
     standards:
