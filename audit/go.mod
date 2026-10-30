@@ -24,10 +24,10 @@ require (
 	github.com/nats-io/nats-server/v2 v2.15.1
 	github.com/nats-io/nats.go v1.54.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
-	github.com/truvity/cnpg/v2 v2.35.0
+	github.com/truvity/cnpg/v2 v2.37.0
 	github.com/truvity/gateway-auth v0.7.1
-	github.com/truvity/gemaal v0.26.2
-	github.com/truvity/policy v1.54.1
+	github.com/truvity/gemaal v0.26.5
+	github.com/truvity/policy v1.54.5
 	github.com/truvity/sluis/audit/sdk v1.79.4
 	github.com/truvity/sluis/storage v1.79.4
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0
@@ -83,7 +83,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/truvity/ocictl v0.8.0 // indirect
-	github.com/urfave/cli/v3 v3.11.0 // indirect
+	github.com/urfave/cli/v3 v3.14.0 // indirect
 	github.com/valyala/fastjson v1.6.10 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.47.0 // indirect
