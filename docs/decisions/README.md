@@ -71,3 +71,4 @@ A rewritten record says so in one line under its proposal link, with the date. O
 | [0058](0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted.md) | Boundaries are enforced in three layers per port, by the driver, and every state value is encrypted | Accepted |
 | [0059](0059-each-boundary-has-its-own-issuer-and-tokens-carry-one-audience.md) | Each boundary has its own issuer; tokens carry one audience that names a registered client | Accepted |
 | [0060](0060-the-language-follows-the-executable.md) | The language follows the executable: Go by default, Rust at the edge, in the trusted base and in cloud drivers | Accepted |
+| [0061](0061-optional-openid-plans-form-post-is-supported-ciba-comes-later.md) | Optional OpenID plans: form post is supported; front-channel logout and third-party-initiated login are not; CIBA comes later in poll mode | Accepted |
