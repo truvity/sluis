@@ -38,7 +38,7 @@ These two are agreed non-goals. They keep the blast radius of a compromised slui
 v1 is the sluis that runs today. It is a set of many AWS Lambda functions. v2 is a from-scratch rewrite on the `main` branch that shares no history with v1.
 
 - v2 has to reach **parity with v1** as it is at cutover. The [features page](/features/) lists what that means feature by feature.
-- Once at parity, v2 adds features that v1 does not have, device login among them.
+- Once at parity, v2 adds features that v1 does not have, FAPI 2.0 and CIBA among them. Device login is postponed.
 - v2 is not tied to Lambda. The actors, drivers and configuration that run as Lambda functions also run as systemd units on a single board, and as pods on Kubernetes.
 - The two lines coexist. v1 keeps its agreed roadmap and fixes until the maintainer's own production deployments run v2. The reasoning is in [ADR 0001](/decisions/) and the plan on the [roadmap](/roadmap/). The documentation of v1 is at [/v1/](/v1/).
 

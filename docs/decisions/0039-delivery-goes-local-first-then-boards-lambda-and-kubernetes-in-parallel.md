@@ -30,12 +30,12 @@ Foundations come first in any order. The build, the process and driver patterns,
   | Installation | Runtime and nodes | Needs |
   |---|---|---|
   | **local** | bare-metal, 1 node | A workstation with Docker. A YubiKey and the host's smart-card service for the card path; none for continuous integration, which uses a software key |
-  | **boards** | bare-metal, 3 nodes | Three single-board computers (arm64, 2 GB RAM, eMMC), each with a YubiKey. A Cloudflare account for the tunnel to the public hostname (`sluis.example.com` in docs) and for the R2 bucket. The vendor's Ubuntu 22.04, a declared exception until newer images exist ([0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)) |
-  | **lambda** | serverless, elastic | An AWS account with Lambda, KMS, DynamoDB, SQS and S3. The writer runs with reserved concurrency of 1 |
+  | **boards** | bare-metal, 3 nodes | Three single-board computers (arm64, 2 GB RAM, eMMC), each with a YubiKey. A Cloudflare account for the tunnel to the public hostname (`sluis.example.com` in docs) and for the off-site R2 copy of the audit log; the boards' blob store is Garage. The vendor's Ubuntu 22.04, a declared exception until newer images exist ([0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)) |
+  | **lambda** | serverless, elastic | An AWS account with Lambda, KMS, DynamoDB, SQS and S3. The writer runs with reserved concurrency of 1 on a standard SQS queue, fenced by create-if-absent on the bucket |
   | **kubernetes** | kubernetes, N nodes | A Kubernetes cluster and an AWS account with KMS, DynamoDB, SQS and S3. The Kubernetes Lease for the lease port |
 
   - **local:** `yubikey-piv` or `software` keys, `embedded` state, local lock, `fs` blob, `spool` or `direct` transport, `sqlite` index.
-  - **boards:** `yubikey-piv` with one key per node, `rqlite` for state and lease, `r2` blob, `spool` transport. The audit pieces run on the same nodes and share driver instances. Each node keeps its own log with the other nodes as peer witnesses ([0004](/decisions/0004-audit-is-four-pieces-joined-by-a-transport-port/)).
+  - **boards:** `yubikey-piv` with one key per node, `rqlite` for state and lease, Garage as the blob store through the `s3-compatible` driver (with an off-site R2 copy of the audit log, after a spike), `spool` transport. The audit pieces run on the same nodes and share driver instances. Each node keeps its own log with the other nodes as peer witnesses ([0004](/decisions/0004-audit-is-four-pieces-joined-by-a-transport-port/)).
   - **lambda:** `aws-kms`, `dynamodb`, `sqs`, `s3`.
   - **kubernetes:** `aws-kms`, `dynamodb`, `sqs`, `s3` and the Kubernetes Lease.
 

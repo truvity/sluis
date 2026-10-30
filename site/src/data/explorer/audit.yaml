@@ -108,8 +108,8 @@ shapes:
   boards:
     log_key: "each node signs its own log with its own YubiKey, through the shared key-holder, which lets only that node's writer use the key. One log per node"
     witness: "peer: the other two nodes cosign each node's log (2-of-3). Optional, and sluis config check warns when there is none"
-    blob: "an R2 bucket, through the s3-compatible driver with R2 temporary credentials"
-    lock: "lock mode removable (an account admin can lift it)"
+    blob: "Garage on the boards, through the s3-compatible driver with keys from the cloud-garage credential driver, plus an off-site R2 copy of the audit log (after a spike)"
+    lock: "lock mode none (Garage has no object lock); the peer witnesses protect the history"
     cluster: "three nodes; each node has its own writer, spool and log; the audit pieces run on the same nodes and share driver instances"
     index_placement: "rqlite, a replicated SQLite (a proposed driver), so the reader can run on any node; its full-text search was tested on a three-node cluster, and native arm64 and eMMC are still to be measured. Where Search runs is derived from the port and driver rules"
   lambda:

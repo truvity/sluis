@@ -226,17 +226,16 @@ requirements:
   - id: REQ-PKI-018
     area: PKI
     split_from: REQ-PKI-007
-    statement: "sluis MAY support ACME for host certificates."
-    rationale: "Static revocation fits short-lived certificates."
+    statement: "sluis MAY support ACME for host certificates after the first release."
+    rationale: "Hosts can then use a stock ACME client, and ACME was placed after the first release (ADR 0013)."
     level: MAY
     source: design-decision
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-62, section: "5", depth: Full}
       - {id: ST-64, section: "1", depth: Full}
-    features: ["design"]
-    gap: proposed-design
+    features: ["#978"]
     verification:
       - {kind: integration-test, ref: "ACME issuance test"}
   - id: REQ-PKI-008

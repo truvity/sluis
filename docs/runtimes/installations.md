@@ -193,7 +193,7 @@ A node pod and an audit pod, a container per actor, on Amazon EKS with AWS KMS. 
 
 These are possible installations: allowed by the rules, not tested. They are listed because earlier versions of the design named them.
 
-- **One board.** The boards installation reduced to one node, with the embedded state, `sqlite` for the index and the blob on R2. The [single-board tutorial](/tutorials/single-node-install/) walks through it.
+- **One board.** The boards installation reduced to one node, with the embedded state, `sqlite` for the index and the blob on Garage, as on the boards. The [single-board tutorial](/tutorials/single-node-install/) walks through it.
 - **One EC2 instance** with KMS keys, DynamoDB state, the spool and S3.
 - **Three EC2 instances** in an Auto Scaling group, with KMS keys (a key per node for the log), rqlite state, the spool and S3 ([#886](https://github.com/truvity/sluis/issues/886)).
 

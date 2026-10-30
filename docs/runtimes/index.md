@@ -14,7 +14,7 @@ A **runtime** is the kind of place sluis runs: how processes are started and wha
 
 The runtime is not the node count and not the cloud account. Both are attributes of an installation, described below. Nor is it the [boundary](/runtimes/boundaries/): an environment, a company or a product, kept apart on an isolation ladder from separate keys up to a separate runtime. The [permission manifest](/architecture/deployment/) of every [actor](/concepts/actors/) is the same on every runtime. The runtime decides how it is turned into units, policies and ACLs, and sluis enforces its least-privilege rules on each one with the means that platform offers.
 
-Each runtime has its own packaging, which is the build output for it: bare-metal takes `.deb` and `.rpm` packages split by function and a tarball, serverless takes a zip per executable and a function per actor, and kubernetes takes one OCI image per process and one Helm chart with presets. There are no build profiles, and `dev` is not a build; see [Packages](/distribution/packages/).
+Each runtime has its own packaging, which is the build output for it: bare-metal takes `.deb` and `.rpm` packages split by function, with a package per driver executable and meta-packages per installation, and a tarball, serverless takes a zip per executable and a function per actor, and kubernetes takes one OCI image per process and one Helm chart with presets. There are no build profiles, and `dev` is not a build; see [Packages](/distribution/packages/).
 
 ## What each runtime provides
 

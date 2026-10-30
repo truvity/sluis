@@ -186,8 +186,8 @@ requirements:
   - id: REQ-AUDIT-027
     area: AUDIT
     split_from: REQ-AUDIT-007
-    statement: "An installation with more than one node or with elastic nodes MUST protect the writer with a lease."
-    rationale: "Two writers fork the chain."
+    statement: "An installation with more than one node or with elastic nodes MUST guarantee one writer per log, by a lease or by a create-if-absent fence on the log store."
+    rationale: "Two writers fork the chain, and on Lambda the blob fence, not the reserved concurrency of 1, is what refuses the second writer."
     level: MUST
     source: design-decision
     status: planned
@@ -199,6 +199,7 @@ requirements:
     decisions: ["OD-31"]
     verification:
       - {kind: test-vectors, ref: "port suite lease"}
+      - {kind: test-vectors, ref: "port suite blob create-if-absent fence"}
   - id: REQ-AUDIT-008
     area: AUDIT
     statement: "The log store MUST be a blob store with an explicit lock mode of none, removable or compliance."
