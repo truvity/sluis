@@ -497,7 +497,7 @@ requirements:
     area: AUTHN
     split_from: REQ-AUTHN-015
     statement: "sluis MUST NOT serve front-channel logout."
-    rationale: "Front-channel logout depends on third-party cookies."
+    rationale: "Front-channel logout depends on third-party cookies, and back-channel logout is the supported path (ADR 0061)."
     level: MUST
     source: design-decision
     status: planned
@@ -525,7 +525,7 @@ requirements:
     area: AUTHN
     split_from: REQ-AUTHN-015
     statement: "sluis MUST NOT serve third-party-initiated login."
-    rationale: "Third-party-initiated login is a login CSRF vector."
+    rationale: "Third-party-initiated login is a login CSRF vector, and no app launcher needs it yet (ADR 0061)."
     level: MUST
     source: design-decision
     status: planned
@@ -542,11 +542,12 @@ requirements:
     rationale: "The flow is not needed for sign-in."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-36, section: "1", depth: Full}
     features: ["#850"]
+    superseded_by: [REQ-AUTHN-063, REQ-AUTHN-064, REQ-AUTHN-065]
     verification:
       - {kind: integration-test, ref: "404 test"}
   - id: REQ-AUTHN-016
@@ -555,13 +556,13 @@ requirements:
     rationale: "Query-only keeps responses simple and avoids form-post browser quirks."
     level: MUST
     source: design-decision
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-34, section: "1", depth: Full}
       - {id: ST-28, section: "3.1.2.5", depth: Partial}
     features: ["#775"]
-    gap: register-gap
+    superseded_by: [REQ-AUTHN-058]
     verification:
       - {kind: integration-test, ref: "query-only response test"}
   - id: REQ-AUTHN-046
@@ -571,13 +572,13 @@ requirements:
     rationale: "Query-only keeps responses simple and avoids form-post browser quirks."
     level: MUST
     source: design-decision
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-34, section: "1", depth: Full}
       - {id: ST-28, section: "3.1.2.5", depth: Partial}
     features: ["#775"]
-    gap: register-gap
+    superseded_by: [REQ-AUTHN-060]
     verification:
       - {kind: integration-test, ref: "response_mode negative test"}
   - id: REQ-AUTHN-017
@@ -866,3 +867,113 @@ requirements:
     features: ["#796"]
     verification:
       - {kind: integration-test, ref: "timing test"}
+  - id: REQ-AUTHN-058
+    area: AUTHN
+    statement: "The authorization endpoint MUST serve response_mode=form_post for the authorization code flow."
+    rationale: "Form post keeps the code out of URLs, history and Referer headers, and some relying parties require it (ADR 0061)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-34, section: "2", depth: Full}
+      - {id: ST-28, section: "3.1.2.5", depth: Partial}
+    features: ["#979"]
+    verification:
+      - {kind: conformance-suite, ref: "Form Post OP plan"}
+  - id: REQ-AUTHN-059
+    area: AUTHN
+    statement: "The form post response page MUST carry a Content-Security-Policy that lets only its own auto-submit script run, by a nonce fresh for each response."
+    rationale: "The page runs a script on behalf of a client's response, so nothing else may run in it (ADR 0061)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-34, depth: Partial}
+      - {id: NC-05, section: "CSP", depth: Partial}
+    features: ["#979", "#796"]
+    verification:
+      - {kind: integration-test, ref: "form post page CSP and nonce test"}
+  - id: REQ-AUTHN-060
+    area: AUTHN
+    statement: "The authorization endpoint MUST answer a response_mode other than query and form_post with invalid_request."
+    rationale: "Only the two response modes of the code flow are served (ADR 0061)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-34, section: "2", depth: Full}
+      - {id: ST-28, section: "3.1.2.5", depth: Partial}
+    features: ["#775", "#979"]
+    verification:
+      - {kind: integration-test, ref: "response_mode negative test"}
+  - id: REQ-AUTHN-061
+    area: AUTHN
+    statement: "The discovery document MUST NOT advertise front-channel logout as supported."
+    rationale: "Discovery is truthful, and front-channel logout is not served (ADR 0061)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-32, section: "3", depth: Full}
+      - {id: ST-29, section: "3", depth: Partial}
+    features: ["#850"]
+    verification:
+      - {kind: integration-test, ref: "discovery metadata test"}
+  - id: REQ-AUTHN-062
+    area: AUTHN
+    statement: "The configuration check MUST refuse a client that declares a frontchannel_logout_uri or an initiate_login_uri."
+    rationale: "A client must not be configured for a flow that sluis does not serve (ADR 0061)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-32, section: "2", depth: Partial}
+      - {id: ST-35, section: "4", depth: Partial}
+    features: ["#789"]
+    verification:
+      - {kind: integration-test, ref: "config check refusal test"}
+  - id: REQ-AUTHN-063
+    area: AUTHN
+    statement: "sluis MAY serve client-initiated backchannel authentication in poll mode after v2 parity."
+    rationale: "A service can then ask for a person's approval on another device with the passkeys that are already planned (ADR 0061)."
+    level: MAY
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-36, section: "5", depth: Partial}
+    features: ["#980"]
+    verification:
+      - {kind: conformance-suite, ref: "CIBA plan for poll mode"}
+  - id: REQ-AUTHN-064
+    area: AUTHN
+    statement: "sluis MUST NOT serve the ping or push token delivery modes of client-initiated backchannel authentication."
+    rationale: "Poll mode covers the use, and ping and push add an outbound call to the client (ADR 0061)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-36, section: "5", depth: Partial}
+    features: ["#980"]
+    verification:
+      - {kind: integration-test, ref: "CIBA delivery-mode negative test"}
+  - id: REQ-AUTHN-065
+    area: AUTHN
+    statement: "A backchannel authentication request MUST be approved only by a passkey assertion made on the approving device."
+    rationale: "An approval is a sign-in, and a notification tap alone proves only that someone holds the device (ADR 0061)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-36, section: "7", depth: Partial}
+      - {id: ST-59, depth: Partial}
+    features: ["#980", "#885"]
+    verification:
+      - {kind: integration-test, ref: "CIBA approval without a passkey assertion is refused"}
