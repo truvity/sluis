@@ -64,12 +64,11 @@ requirements:
     rationale: "Top-ups and consumption are different facts."
     level: MUST
     source: stakeholder-integrator
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    features: ["#915"]
     verification:
       - {kind: integration-test, ref: "effect catalogue test"}
   - id: REQ-QUOTA-010
@@ -79,12 +78,11 @@ requirements:
     rationale: "Top-ups and consumption are different facts."
     level: MUST
     source: stakeholder-integrator
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    features: ["#915"]
     verification:
       - {kind: integration-test, ref: "signed effect test"}
   - id: REQ-QUOTA-005
@@ -185,3 +183,187 @@ requirements:
     features: ["design"]
     verification:
       - {kind: integration-test, ref: "quota limit tighten test"}
+  - id: REQ-QUOTA-014
+    area: QUOTA
+    statement: "`Admit` MUST reserve the requested amount with a time to live that the rule declares, five minutes by default."
+    rationale: "Usage is reserved before work and settled after it."
+    level: MUST
+    source: stakeholder-integrator
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "reservation test"}
+  - id: REQ-QUOTA-015
+    area: QUOTA
+    statement: "A reservation that is neither confirmed nor cancelled MUST be released when it expires and counted in the meters as expired."
+    rationale: "An honest crash costs nothing, and abuse shows in the expired count."
+    level: MUST
+    source: stakeholder-integrator
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "expired reservation test"}
+  - id: REQ-QUOTA-016
+    area: QUOTA
+    statement: "`Confirm` MUST settle no more than the reserved amount unless the rule allows overage."
+    rationale: "A reservation bounds what a confirmation may charge."
+    level: MUST
+    source: stakeholder-integrator
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "confirm bound test"}
+  - id: REQ-QUOTA-017
+    area: QUOTA
+    statement: "Quota MUST remember a request identifier for 24 hours, scoped to the calling client and the method."
+    rationale: "A short window keeps the state small on the hot path."
+    level: MUST
+    source: stakeholder-integrator
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-15, section: "Idempotency-Key", depth: Partial}
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "request id window test"}
+  - id: REQ-QUOTA-018
+    area: QUOTA
+    statement: "After a restore quota MUST rebuild the request identifiers of the last 24 hours from the audit log."
+    rationale: "A retry that straddles a restore must still count once."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-15, section: "Idempotency-Key", depth: Partial}
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "request id rebuild after restore test"}
+  - id: REQ-QUOTA-019
+    area: QUOTA
+    statement: "`entry` MUST copy an `Idempotency-Key` header into the request identifier field and refuse a request whose header and field differ."
+    rationale: "The field is canonical because a header does not survive every transport."
+    level: MUST
+    source: standard
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-15, section: "Idempotency-Key", depth: Full}
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "header mapping test"}
+  - id: REQ-QUOTA-020
+    area: QUOTA
+    statement: "Quota amounts MUST be signed 64-bit integers in a unit declared per meter and per balance."
+    rationale: "Integer arithmetic is exact on every store."
+    level: MUST
+    source: stakeholder-integrator
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "amount representation test"}
+  - id: REQ-QUOTA-021
+    area: QUOTA
+    statement: "`TopUp` MUST accept positive amounts only, from declared clients whose policy allows `quota.topup` on that balance."
+    rationale: "A credential that can add credit must not be able to drain a balance."
+    level: MUST
+    source: stakeholder-integrator
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-12, section: "1", depth: Partial}
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "top-up sign and grant test"}
+  - id: REQ-QUOTA-022
+    area: QUOTA
+    statement: "A balance correction MUST be an `Adjust` call with a reason, allowed only to a declared client or to an operator with step-up."
+    rationale: "Corrections are rare, explained and visible."
+    level: MUST
+    source: stakeholder-integrator
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "adjust grant test"}
+  - id: REQ-QUOTA-023
+    area: QUOTA
+    statement: "A refund MUST be an `Adjust` that names a confirmed event, bounded by that event's amount and refused for an event already refunded."
+    rationale: "A refund traces to what it refunds and cannot exceed it."
+    level: MUST
+    source: stakeholder-integrator
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "refund bound test"}
+  - id: REQ-QUOTA-024
+    area: QUOTA
+    statement: "An application audit record MUST NOT carry an effect on a balance."
+    rationale: "Only quota changes balances, under its compare-and-set, and roll-forward reads one kind of record."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "catalogue balance effect test"}
+  - id: REQ-QUOTA-025
+    area: QUOTA
+    statement: "A quota balance MUST belong to a declared account and be keyed by boundary, company, account and meter."
+    rationale: "Per-customer billing and per-client caps fit one model, and keys carry no personal data."
+    level: MUST
+    source: stakeholder-integrator
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "account key test"}
+  - id: REQ-QUOTA-026
+    area: QUOTA
+    statement: "`sluis config check` MUST refuse an enforcing quota rule that does not declare both its exhaustion and its unavailability behaviour."
+    rationale: "Every risk choice is explicit and reviewed."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "config-check quota rule test"}
+  - id: REQ-QUOTA-027
+    area: QUOTA
+    statement: "An enforcing quota rule MUST use strict enforcement."
+    rationale: "Strict is the one mode built and proven first; soft enforcement comes when a load test shows the need."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "strict-only configuration test"}
+  - id: REQ-QUOTA-028
+    area: QUOTA
+    statement: "A quota limit MUST be either a rate, as a token bucket per second or per minute, or a cap per calendar day or month in UTC."
+    rationale: "Rates cover bursts and calendar caps match invoices."
+    level: MUST
+    source: stakeholder-integrator
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "limit kinds test"}
