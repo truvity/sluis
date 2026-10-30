@@ -6,7 +6,7 @@
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 Rewritten in place on 2026-10-30 (realignment pass; then a named exception for NATS decentralized authentication, and FIPS parity for Rust components).
 Rewritten in place on 2026-10-30 (alignment with 0007, 0058).
-Rewritten in place on 2026-10-31 (decision FIPS1: no FIPS mode and no certified build in v2.0; every algorithm stays within the FIPS-approved set, so that a FIPS build variant can be added later. The result of spike S2, [issue #940](https://github.com/truvity/sluis/issues/940), is kept as context).
+Rewritten in place on 2026-10-31 (decided by the maintainer: no FIPS mode and no certified build in v2.0; every algorithm stays within the FIPS-approved set, so that a FIPS build variant can be added later. The result of spike S2, [issue #940](https://github.com/truvity/sluis/issues/940), is kept as context).
 
 ## Context
 

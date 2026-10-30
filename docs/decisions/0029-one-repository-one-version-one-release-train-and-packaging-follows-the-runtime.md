@@ -7,6 +7,7 @@ Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/slu
 Rewritten in place on 2026-10-30 (realignment pass; then the package split by function, the Lambda, OCI and Helm packaging, one S3-compatible blob driver, and Rust executables on the same train).
 Rewritten in place on 2026-10-30 (two open points of [issue #910](https://github.com/truvity/sluis/issues/910) decided: a package per driver executable with installation meta-packages, the ceremony helper inside `sluis`, and the Lambda audit writer on reserved concurrency 1 with the blob fence; two points stay open).
 Rewritten in place on 2026-10-31 (no `sluis-install-local` meta-package until a native local mode exists, decided by the maintainer).
+Rewritten in place on 2026-10-31 (no FIPS build in the release, after [ADR 0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/); the Rust FIPS open point is closed).
 
 ## Context
 
@@ -26,7 +27,7 @@ Some details of the platforms are hard constraints:
 - The YubiKey driver talks to a smart-card service through C bindings (cgo, against pcsc-lite), so it cannot be cross-compiled on a plain build host.
 - Lambda limits a function to five layers and 250 MB unzipped, with the code, the layers and the extensions counted together. Every process in one function shares the function's role, so the function is the credential scope. A driver extension must come from a layer. For sluis the layer count, not the size, is the binding limit.
 
-This record does not set the compatibility rule between releases (what may break in a minor release). v1 ADR 0007 is the v1 rule for 1.x; the v2 rule is ADR 0053. The name and delivery of the separately pinned, certified FIPS build are ADR 0054; the FIPS build modes themselves are in [0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/). How artifacts are signed is ADR 0030.
+This record does not set the compatibility rule between releases (what may break in a minor release). v1 ADR 0007 is the v1 rule for 1.x; the v2 rule is ADR 0053. The release has no FIPS build ([0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/)). The planned record on a certified FIPS build (ADR 0054) is deferred until a FIPS build variant is added, when a customer needs it. How artifacts are signed is ADR 0030.
 
 ## Decision
 
@@ -35,6 +36,7 @@ This record does not set the compatibility rule between releases (what may break
 - **Every artifact of a release carries the same version.** Packages, tarballs, Lambda zips, images, charts and the console bundle all carry it, and a release publishes all of them together. A component with no change still ships in the release. This continues v1 ADR 0042 for v2.
 - **v2 versions are v2.x.y.** The module path of the main Go module ends in `/v2` (`github.com/truvity/sluis/v2`). Go requires the suffix from major version 2, and it also keeps v1 and v2 importable side by side while the two lines coexist. Any further Go module in the repository takes the same suffix, and all modules are tagged at one commit with one version, as v1 ADR 0042 did.
 - **One build tool: GoReleaser v2, open-source edition.** A release contains Rust executables as well as Go ones, and they are built through the same train, with the same SBOM, signing and provenance. There is one build definition for every artifact below. GoReleaser's Rust builder is documented for simple projects, so a multi-binary Cargo workspace for two architectures is proved by a spike (S10, tracked with ADR 0060) before the first Rust code ships.
+- **No FIPS build in the release.** The Rust executables are built on GoReleaser's open-source path with cargo-zigbuild, with current crates and rustls. A future FIPS build variant would need its own build design, decided when it is added ([0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/)).
 - **The YubiKey driver is built in a native per-architecture CI job** while it needs cgo, inside the userland of the oldest supported distribution, so it runs on every supported glibc. It needs cgo against pcsc-lite, so the amd64 build runs on amd64 and the arm64 build on arm64. The job's outputs join the rest of the release.
 - **One command-line tool: `sluis`, with subcommands** for operators and users. Examples are `sluis config check`, `sluis doctor` and `sluis trust sync`. The actors, drivers, the node agent and the host service are separate executables, one per process, because each runs as its own user, unit, function or container ([0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/)). The ceremonies are `sluis ceremony …` subcommands. The part that drives the root cards is a Rust helper executable under `/usr/libexec/sluis/helpers/`, which ships inside the `sluis` package ([0060](/decisions/0060-the-language-follows-the-executable/)). (the directory name is inferred)
 
@@ -145,10 +147,9 @@ The deb and rpm packages are split by function, and every driver executable is a
 
 These are tracked in [issue #910](https://github.com/truvity/sluis/issues/910):
 
-- whether GHCR accepts three-segment names under the repository prefix (the fallback is `ghcr.io/truvity/sluis/<kind>-<name>`);
-- whether the Rust FIPS build can be static, or needs the glibc base.
+- whether GHCR accepts three-segment names under the repository prefix (the fallback is `ghcr.io/truvity/sluis/<kind>-<name>`).
 
-Decided on 2026-10-30: the ceremony helper ships inside the `sluis` package, and the Lambda audit writer uses a reserved concurrency of 1 on a standard queue with the blob fence (both above).
+Decided on 2026-10-30: the ceremony helper ships inside the `sluis` package, and the Lambda audit writer uses a reserved concurrency of 1 on a standard queue with the blob fence (both above). Closed on 2026-10-31: whether a Rust FIPS build can be static, because the release has no FIPS build.
 
 ## Consequences
 

@@ -6,6 +6,7 @@
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 Rewritten in place on 2026-10-30 (the open points of [issue #910](https://github.com/truvity/sluis/issues/910) decided: fallbacks are candidates chosen when a spike fails, `cloud-cloudflare` is Go, `sluis-node` verifies OpenPGP signatures with Sigstore provenance as a second signal, and the ceremony is a `sluis` subcommand with a Rust helper inside the `sluis` package; OD-16 holds without exception).
 Rewritten in place on 2026-10-31 (`cloud-garage` is Rust, by rule R5).
+Rewritten in place on 2026-10-31 (no FIPS build in v2.0, after spike S2 ([issue #940](https://github.com/truvity/sluis/issues/940)): R8 is no longer FIPS parity, and the AWS drivers stay Rust).
 
 ## Context
 
@@ -20,11 +21,11 @@ The trigger was the slim `entry` (ADR 0007): the one actor that faces the intern
 - **What Rust buys:** no memory corruption through data races, which matters most in the most concurrent process; deterministic destruction and zeroisation of secrets (Go's `runtime/secret` is still an experiment in Go 1.27.3); a smaller footprint and faster cold start; a cleaner record for the HTTP server. On lambda-perf (2026-10-30; arm64, zip, 128 MB, hello world), Go initialised in 46.6 ms using 17 MB and Rust in 18.0 ms using 13.3 MB.
 - **What Rust does not buy:** freedom from parser logic bugs, allocation bombs or panics. Rust's cryptography is usually C underneath, while Go's is pure Go and validated in-tree.
 - **The libraries decide many components.** Go clearly leads for an embeddable OpenID Connect provider, the X.509 CA and the static-ct-api issuance log, the C2SP transparency-log tools, PIV attestation, HPKE, Kubernetes controllers and the vendor SDKs (Google Directory, Cloudflare, GitHub, Slack). Rust clearly leads for the OpenPGP smart card (`openpgp-card` with rPGP, which was audited in 2024-12). Go has no maintained OpenPGP-card library.
-- **The Rust side has known gaps.** Connect for Rust (`connectrpc` 0.9.1, 2026-09-21) is official but before 1.0, with one named maintainer. OpenTelemetry traces in Rust are Beta. The FIPS build of aws-lc-rs needs CMake, Go and a C toolchain, and the current aws-lc-rs binds a module that is still in process at the CMVP, so a certified build pins an older one. GoReleaser's Rust builder warns that workspaces might not work.
+- **The Rust side has known gaps.** Connect for Rust (`connectrpc` 0.9.1, 2026-09-21) is official but before 1.0, with one named maintainer. OpenTelemetry traces in Rust are Beta. The FIPS build of aws-lc-rs needs CMake, Go and a C toolchain, and the current aws-lc-rs binds a module that is still in process at the CMVP, so a certified build pins an older one. Spike S2 confirmed both, and found that the AWS SDK for Rust signs SigV4 requests and S3 checksums with RustCrypto, outside the module. GoReleaser's Rust builder warns that workspaces might not work.
 
 One inconsistency had to be resolved. OD-14 says Rust for the AWS drivers, while the source-layout table put the AWS-backed drivers of the other ports (`aws-kms`, `dynamodb`, `sqs`, the object-store blob driver) in Go.
 
-FIPS mode and the certified build are ADR 0010. The release train and GoReleaser are [0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/). The delivery order is [0039](/decisions/0039-delivery-goes-local-first-then-boards-lambda-and-kubernetes-in-parallel/).
+FIPS is [0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/): no FIPS build in v2.0, and every algorithm within the FIPS-approved set. The release train and GoReleaser are [0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/). The delivery order is [0039](/decisions/0039-delivery-goes-local-first-then-boards-lambda-and-kubernetes-in-parallel/).
 
 ## Decision
 
@@ -37,7 +38,7 @@ FIPS mode and the certified build are ADR 0010. The release train and GoReleaser
 - **R5. Drivers follow their backend's best SDK, with one language per vendor SDK in the build.** AWS, GCP and Azure are Rust. Local backends default to Go. One named exception: `cloud-cloudflare` is Go (below).
 - **R6. Go by default** for business logic, CRUD and integrations. The reasons are delivery speed, stable OpenTelemetry and the wider hiring pool.
 - **R7. No Rust where the only library for a security function is marked experimental or unaudited.** Use a standard interface such as PKCS#11, or stay in Go. The `yubikey` crate is the case in point.
-- **R8. FIPS parity.** A Rust component that performs an approved operation uses aws-lc-rs in FIPS mode in the default build, and a pinned, certified module in the certified build, mirroring ADR 0010. It never uses RustCrypto or ring for an approved operation. A component that performs none is exempt, and its manifest says so.
+- **R8. No FIPS build in v2.0.** Rust components use current crates and rustls, with no FIPS pin, and keep to the FIPS-approved algorithms of ADR 0010. When a FIPS build variant is added, a Rust component that performs an approved operation uses aws-lc-rs in FIPS mode, and the AWS SDK gap (SigV4 signed outside the module) must be solved, or the AWS drivers are built in Go for that variant. The AWS drivers stay Rust (R5).
 - **R9. Both kits pass one conformance suite.** Every component, in either language, uses its language's kit (Connect over Unix sockets with peer credentials, configuration from the JSON Schema, the CLI conventions, OpenTelemetry). A component may move language only once its language's kit passes the suite.
 - **R10. Contracts are on the wire, so a choice is reversible.** A language change is a replacement of one component behind the same contract and suite, never a fork of the contract.
 
@@ -46,8 +47,8 @@ FIPS mode and the certified build are ADR 0010. The release train and GoReleaser
 | Component | Language | Rule | Gate |
 |---|---|---|---|
 | `policy` | Rust | R4 (`cedar-policy`) | None; decided by OD-10 and [0014](/decisions/0014-policy-is-written-in-cedar-and-evaluated-by-a-rust-actor/) |
-| `cloud` port drivers: web identity, platform role, GCP and Azure federation | Rust | R5 | None; decided by OD-14. S2 fixes their FIPS build |
-| AWS-backed drivers of the other ports: `aws-kms`, `dynamodb` (state and lease), `sqs`, `s3-compatible` blob | Rust | R5 | S1 and S2 |
+| `cloud` port drivers: web identity, platform role, GCP and Azure federation | Rust | R5 | None; decided by OD-14 |
+| AWS-backed drivers of the other ports: `aws-kms`, `dynamodb` (state and lease), `sqs`, `s3-compatible` blob | Rust | R5 | S1 |
 | `entry` (slim) | Rust | R2 | S1 and S3 |
 | `sluis-node` | Rust. It verifies OpenPGP signatures, with Sigstore provenance as a second signal | R3 | S1 |
 | `key-holder` | Rust, through PKCS#11 (`cryptoki` with Yubico's `ykcs11`) | R3, R7 | S4 |
@@ -76,7 +77,7 @@ Each conditional verdict holds only once its spike passes. The languages are fix
 | Spike | What it shows | Gates |
 |---|---|---|
 | S1 | Connect for Rust over Unix sockets: `connectrpc` server and client with a peer-credential extension and the default-deny interceptor, against connect-go in both directions; the conformance runner; streaming. Its fallback candidates are in the table below | R2, R3, R5 |
-| S2 | FIPS with aws-lc-rs: the `fips` feature for amd64 and arm64 under GoReleaser; the pin that maps to a certified module; the run-time self-test indicator; the AWS SDK over rustls in FIPS mode against FIPS endpoints | R8, the AWS-backed drivers |
+| S2 | FIPS with aws-lc-rs: the `fips` feature for amd64 and arm64 under GoReleaser; the pin that maps to a certified module; the run-time self-test indicator; the AWS SDK over rustls in FIPS mode against FIPS endpoints. Done on 2026-10-30, passed with conditions; with no FIPS build in v2.0 it gates nothing, and its result is kept for a later FIPS variant | Nothing in v2.0 |
 | S3 | A slim `entry` prototype in both languages, behind the tunnel client and behind the Lambda Web Adapter, with limits, timeouts and 24 hours of fuzzing; p99 latency, memory, cold start and binary size | `entry` |
 | S4 | `key-holder` through `cryptoki` and `ykcs11`: P-384 signing, ECDH, PS256, Ed25519 on firmware 5.7, PIN once, concurrent callers, the release-subkey slot; then YubiHSM 2 and Nitrokey; a zeroisation review of the PIN paths | `key-holder` |
 | S5 | The boards' memory budget: memory under load for every actor and driver, in Go and for the Rust candidates | Fusion defaults, the AWS-backed drivers, the trusted base |
@@ -104,9 +105,9 @@ A fallback is not chosen in advance. When a spike fails, the maintainer decides 
 
 - **The public edge and the trusted base are memory-safe without a garbage collector**, and the processes that hold a PIN or a session can zeroise it. The cost is two languages on the request path and at the trust boundaries, so reviewers must read both.
 - **Most of sluis stays Go**, where its deciding libraries are: the OpenID Connect provider, the CA, the transparency logs, the vendor SDKs and Kubernetes.
-- **One AWS SDK language.** The AWS-backed drivers and the cloud drivers share a toolchain, a FIPS story and a release path.
+- **One AWS SDK language.** The AWS-backed drivers and the cloud drivers share a toolchain and a release path, and a later FIPS variant has one SDK gap to solve, not two.
 - **The YubiKey driver loses its cgo job** if S4 passes, because `cryptoki` loads the PKCS#11 module at run time. The per-architecture native build of [0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/) is then not needed for it. (inferred)
-- **The Rust FIPS build is heavier** and its certified module lags the current one. S2 finds the pin, and the certified build (ADR 0054) names it.
+- **No Rust FIPS build in v2.0.** The Rust components build like any other Rust code. A FIPS variant would bring back the heavier build and a certified pin that lags the current `aws-lc-rs`, and it needs its own build design when it is added (ADR 0010).
 - **The spikes are on the critical path** of the local installation. S1 to S3 are small, and the contracts are fixed first anyway.
 - **Connect for Rust is young.** If it stalls, one of S1's fallback candidates carries the Rust components. tonic is in maintenance only, so the hand-written unary codec is the longer-lived fallback. (inferred)
 - **Two OpenTelemetry stacks.** Rust traces are Beta, so S6 has to show one trace across both languages before the Rust components ship.
@@ -182,11 +183,17 @@ A fallback is not chosen in advance. When a spike fails, the maintainer decides 
 - Cons: the roots sign with OpenPGP, so Sigstore would be a second chain of trust beside them. (inferred)
 - Why not: OpenPGP under both roots is the trust, and Sigstore provenance is a second signal.
 
-### A certified build that is Go-only, or Rust components outside FIPS
+### FIPS parity now: aws-lc-rs in FIPS mode in every Rust build
 
-- Pros: simpler certification, or the simplest build.
-- Cons: a Go-only certified build makes the Rust AWS drivers impossible in it. Rust outside FIPS breaks the decision that FIPS mode is on by default.
-- Why not: mirroring ADR 0010 gives both languages the same story.
+- Pros: one FIPS story in both languages from the first release.
+- Cons: S2 found that the only certified pin freezes rustls at 0.23.43, that the build needs CMake, Go, Perl and a pinned clang and cannot use cargo-zigbuild, and that the AWS SDK for Rust still signs SigV4 outside the module.
+- Why not: no installation that v2.0 targets needs it. ADR 0010 keeps the algorithms within the approved set, so the variant stays possible.
+
+### The AWS drivers in Go, to avoid the SigV4 gap
+
+- Pros: the Go SDK has no such gap, so a FIPS variant would cover the AWS calls fully.
+- Cons: it reverses R5 and splits the cloud drivers across two languages, for a variant that v2.0 does not ship.
+- Why not: the AWS drivers stay Rust. Building them in Go is one of the two answers kept for when the variant is added.
 
 ### Build everything in Go first and swap in Rust later
 
