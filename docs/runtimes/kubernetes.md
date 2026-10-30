@@ -79,9 +79,7 @@ The points [OD-32](/open-decisions/#od-32) to [OD-39](/open-decisions/#od-39) re
 - **A driver is never a pod of its own,** because a socket cannot cross a pod boundary.
 :::
 
-:::caution[Open decision OD-18: What a unit is in the fusion rule on Kubernetes]
-The [fusion rule](/architecture/processes/) says no unit holds a key next to an unauthenticated listener. Options: the pod, or the container as the unit of credentials. The proposal is the container, with a generated check that no container that can use a key also has a listener.
-:::
+**The unit of the fusion rule is the container** ([OD-18](/open-decisions/#od-18), decided 2026-10-30). The [fusion rule](/architecture/processes/) says no unit holds a key next to an unauthenticated listener; on Kubernetes the unit is the container, the scope of its credentials, and a generated check fails the build if any container that can use a key also has a listener.
 
 :::caution[Open decision OD-29: Placement of integrations on Kubernetes]
 Options: integrations as containers of the node pod; each as a pod of its own, called over HTTPS; a per-integration switch in the manifest. The proposal is containers now, and a switch for an integration that needs its own egress rules or its own lifecycle.
@@ -114,9 +112,7 @@ The workload tokens are the cluster's, signed by the cluster's key. They are not
 EKS Pod Identity is used for a pod that holds a single actor, because its credentials belong to the pod and not to a container. The node agent `sluis-node` is not used on Kubernetes.
 :::
 
-:::caution[Open decision OD-19: Cloud identity for pods]
-Options: EKS Pod Identity per pod; projected tokens per container with an audience per actor; per-actor tokens signed by `sluis-node` in the pod; a mix. Pod Identity alone cannot separate the actors of a pod, because every container of the pod can use the pod's credentials. The proposal is projected tokens per container as the default.
-:::
+**Cloud identity for pods** ([OD-19](/open-decisions/#od-19), decided 2026-10-30): projected ServiceAccount tokens per container, one audience per actor, are the default. EKS Pod Identity is used only for a pod that holds a single actor, because every container of a pod can use the pod's credentials. Per-actor tokens signed by `sluis-node` in the pod are only a fallback.
 
 On a cluster outside AWS the cluster's issuer must be reachable by the cloud, or its public keys must be published as static documents, as in [Identity](/concepts/identity/). Setting the API server's issuer is an operator step on the cluster.
 
