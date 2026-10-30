@@ -418,7 +418,7 @@ flows:
       - title: The auditor sends a search
         nodes: [auditor, entry]
         edges: ["auditor>entry"]
-        text: The auditor opens the console or CLI and sends a search with their session token to entry, which maps it to a grant.
+        text: The auditor opens the console or CLI and sends a search with their session to entry, which maps it to a grant.
       - title: entry forwards it to the reader
         nodes: [entry, read]
         edges: ["entry>read"]

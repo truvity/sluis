@@ -151,6 +151,8 @@ A console reaches the reader over a Unix socket in its own install. For an audit
 
 ## Edge
 
+The console's single-page application runs in a static container behind the same ingress as `entry`, so the page and the console API share one origin.
+
 `entry` listens on `127.0.0.1` on every runtime. A gateway cannot route to a loopback address in another pod, and the kubelet's HTTP and TCP probes connect to the pod address, so they cannot reach it either.
 
 :::note[Proposed]

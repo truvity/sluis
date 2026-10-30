@@ -4,6 +4,7 @@
 **Date:** 2026-10-29
 
 Decided by the maintainer. Proposal: [issue #902](https://github.com/truvity/sluis/issues/902). Rewritten in place on 2026-10-29 during the v2 design phase (see "Design phase" in the decisions README). The earlier slug was `0003-environments-are-runtime-kinds`. The delivery-order bullet was edited in place on 2026-10-30 to follow ADR 0039.
+Rewritten in place on 2026-10-30 (realignment pass).
 
 ## Context
 
@@ -33,9 +34,9 @@ Seven named installations were also too many to build and test. The maintainer c
   Any other combination is a possible installation: the rules allow it and `sluis config check` accepts it, but we do not test it.
 - **There are no presets.** The earlier ids T0 to T6 are retired. Visible text uses the four names above.
 - **Delivery order.** Minimal local first, then boards, lambda and kubernetes in parallel ([0039](/decisions/0039-delivery-goes-local-first-then-boards-lambda-and-kubernetes-in-parallel/)).
-- **Packaging follows the runtime.** Bare-metal ships a deb, an rpm and a tarball. Serverless ships a zip per actor. Kubernetes ships an OCI image and a Helm chart. `dev` is an installation, not a build.
+- **Packaging follows the runtime.** Bare-metal ships a deb, an rpm and a tarball. Serverless ships a zip per actor. Kubernetes ships an OCI image and a Helm chart. `dev` is an installation, not a build. The details are in [0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/).
 - **Labels follow.** `runtime:bare-metal`, `runtime:serverless` and `runtime:kubernetes` mark the runtime. `install:local`, `install:boards`, `install:lambda` and `install:kubernetes` mark a tested installation.
-- Configuration layers are ordered defaults, runtime, install file, environment overrides. This replaces the "shape profile". "Installation" is not a configuration key: the install file is the installation, and the tested installations ship as example install files.
+- **"Installation" is not a configuration key.** The install file is the installation, and the tested installations ship as example install files. The runtime is a configuration layer and replaces the "shape profile"; the order of the layers is in [0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/).
 
 ## Consequences
 

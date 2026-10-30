@@ -7,7 +7,7 @@ requirements:
     statement: "The authorization endpoint MUST serve only the authorization code response type."
     rationale: "A single flow keeps the attack surface small and matches current security guidance."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -24,7 +24,7 @@ requirements:
     statement: "The authorization endpoint MUST answer implicit and hybrid response types with unsupported_response_type."
     rationale: "A refused flow must be reported with a code that a client can act on."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -39,7 +39,7 @@ requirements:
     statement: "sluis MUST require PKCE with the S256 method on every authorization code request."
     rationale: "PKCE with a strong method defeats code interception and injection."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -55,7 +55,7 @@ requirements:
     statement: "sluis MUST refuse the plain method and a missing code challenge on an authorization code request."
     rationale: "A downgrade to plain or to no challenge reopens code interception."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -69,7 +69,7 @@ requirements:
     statement: "A client redirect URI MUST be compared by exact string match, with only the port excluded from the comparison for a loopback IP-literal URI registered by a native client."
     rationale: "Exact matching blocks open-redirect and code-leak attacks."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -83,7 +83,7 @@ requirements:
     statement: "A policy that registers a non-loopback http redirect URI MUST be refused at load, for every client type and every installation profile."
     rationale: "Cleartext redirects expose authorization codes to the network."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -97,7 +97,7 @@ requirements:
     statement: "Every authorization response that carries a code or an error MUST include the iss parameter."
     rationale: "The issuer parameter defends against mix-up attacks."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -114,7 +114,7 @@ requirements:
     statement: "Every authorization response MUST return state unchanged when the request carried one."
     rationale: "The client matches a response to its request by state."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -129,7 +129,7 @@ requirements:
     statement: "Discovery MUST advertise authorization_response_iss_parameter_supported."
     rationale: "A relying party learns from discovery that it can require the parameter."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -144,7 +144,7 @@ requirements:
     statement: "Discovery documents MUST list exactly the endpoints, grant types, algorithms and parameters that the installation serves."
     rationale: "A relying party configures itself from discovery, so any untruth misleads it."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -161,7 +161,7 @@ requirements:
     statement: "Discovery documents MUST be served at both the OpenID and the OAuth well-known locations, including the path-inserted URL."
     rationale: "Clients look in either location depending on their library."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -178,7 +178,7 @@ requirements:
     statement: "The issuer in a discovery document MUST equal the iss value byte for byte."
     rationale: "A mismatch breaks issuer validation in every relying party."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -194,7 +194,7 @@ requirements:
     statement: "The authorization endpoint MUST honour prompt=none and prompt=login."
     rationale: "Silent checks must never show UI and must report why interaction is needed."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -209,7 +209,7 @@ requirements:
     statement: "The authorization endpoint MUST answer prompt=none without rendering a page."
     rationale: "A silent check that shows UI breaks embedded clients."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -225,7 +225,7 @@ requirements:
     statement: "The authorization endpoint MUST refuse prompt=none combined with another value."
     rationale: "The combination has no defined meaning."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -238,7 +238,7 @@ requirements:
     statement: "The authorization endpoint MUST force a new authentication when max_age is exceeded."
     rationale: "Relying parties use auth_time to decide freshness."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -255,7 +255,7 @@ requirements:
     statement: "The auth_time claim in issued tokens MUST be the time of the most recent user authentication event."
     rationale: "Relying parties use auth_time to decide freshness."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -271,7 +271,7 @@ requirements:
     statement: "When acr_values are sent, sluis MUST either satisfy one of them or fail with unmet_authentication_requirements."
     rationale: "A silent downgrade tells a relying party the user was strongly authenticated when they were not."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -289,7 +289,7 @@ requirements:
     statement: "sluis MUST NOT silently downgrade a requested authentication level."
     rationale: "A silent downgrade tells a relying party the user was strongly authenticated when they were not."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -304,7 +304,7 @@ requirements:
     statement: "An authentication from an upstream identity provider MUST NOT raise the assurance level above the ceiling configured for that connection."
     rationale: "Upstream claims are not evidence sluis has verified."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -319,7 +319,7 @@ requirements:
     statement: "The claims request parameter MUST be accepted only for an essential acr."
     rationale: "A narrow claims surface avoids undefined disclosure behaviour."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -335,7 +335,7 @@ requirements:
     statement: "The claims request parameter MUST be refused with invalid_request for every other use."
     rationale: "A narrow claims surface avoids undefined disclosure behaviour."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -350,7 +350,7 @@ requirements:
     statement: "Each protocol endpoint MUST accept only the parameters on its closed list."
     rationale: "Refusing instead of ignoring prevents a client from believing a requirement was honoured."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -365,7 +365,7 @@ requirements:
     statement: "Each protocol endpoint MUST refuse any other parameter with invalid_request."
     rationale: "Refusing instead of ignoring prevents a client from believing a requirement was honoured."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -381,7 +381,7 @@ requirements:
     statement: "Each protocol endpoint MUST refuse a repeated security-relevant parameter."
     rationale: "Refusing instead of ignoring prevents a client from believing a requirement was honoured."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -395,7 +395,7 @@ requirements:
     statement: "sluis SHOULD serve pushed authorization requests with a single-use request_uri."
     rationale: "Pushing parameters on the back channel protects integrity and confidentiality of the request."
     level: SHOULD
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: planned
     runtimes: all
     standards:
@@ -411,7 +411,7 @@ requirements:
     statement: "A request_uri SHOULD be bound to the client that pushed it."
     rationale: "A foreign client must not redeem another client's request."
     level: SHOULD
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: planned
     runtimes: all
     standards:
@@ -426,7 +426,7 @@ requirements:
     statement: "A request_uri SHOULD expire within 60 seconds."
     rationale: "A short lifetime limits replay."
     level: SHOULD
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: planned
     runtimes: all
     standards:
@@ -441,7 +441,7 @@ requirements:
     statement: "For a client that requires PAR, the authorization endpoint SHOULD accept only a pushed request_uri."
     rationale: "A client that requires PAR must not fall back to an unprotected request."
     level: SHOULD
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: planned
     runtimes: all
     standards:
@@ -456,7 +456,7 @@ requirements:
     statement: "sluis MAY accept signed request objects (JAR) passed inside a pushed authorization request for clients of a message-signing profile."
     rationale: "Message signing needs non-repudiable requests."
     level: MAY
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -471,7 +471,7 @@ requirements:
     statement: "sluis MUST NOT serve the resource owner password credentials grant."
     rationale: "Each is deprecated or enlarges the attack surface."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -485,7 +485,7 @@ requirements:
     statement: "sluis MUST NOT serve the JWT bearer authorization grant."
     rationale: "The grant is not needed and enlarges the attack surface."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -499,7 +499,7 @@ requirements:
     statement: "sluis MUST NOT serve front-channel logout."
     rationale: "Front-channel logout depends on third-party cookies."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -513,7 +513,7 @@ requirements:
     statement: "sluis MUST NOT serve the session-management iframe."
     rationale: "The iframe depends on third-party cookies."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -527,7 +527,7 @@ requirements:
     statement: "sluis MUST NOT serve third-party-initiated login."
     rationale: "Third-party-initiated login is a login CSRF vector."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -541,7 +541,7 @@ requirements:
     statement: "sluis MUST NOT serve client-initiated backchannel authentication."
     rationale: "The flow is not needed for sign-in."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -554,7 +554,7 @@ requirements:
     statement: "The authorization endpoint MUST serve the query response mode only."
     rationale: "Query-only keeps responses simple and avoids form-post browser quirks."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: open
     runtimes: all
     standards:
@@ -570,7 +570,7 @@ requirements:
     statement: "The authorization endpoint MUST answer any other response_mode with invalid_request."
     rationale: "Query-only keeps responses simple and avoids form-post browser quirks."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: open
     runtimes: all
     standards:
@@ -585,7 +585,7 @@ requirements:
     statement: "sluis MUST support the OAuth device authorization grant for sign-in on a machine without a browser."
     rationale: "Headless command-line tools need an interactive sign-in path."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -601,7 +601,7 @@ requirements:
     statement: "A device authorization MUST use a high-entropy user code."
     rationale: "A short guessable code can be brute-forced."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -616,7 +616,7 @@ requirements:
     statement: "A device authorization MUST enforce a minimum polling interval and answer early polls with slow_down."
     rationale: "Polling must not become a denial of service."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -631,7 +631,7 @@ requirements:
     statement: "A device code and its user code MUST expire after a bounded lifetime."
     rationale: "An unbounded code is a standing credential."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -645,7 +645,7 @@ requirements:
     statement: "A WebAuthn relying-party implementation MUST require user verification."
     rationale: "These checks make passkeys phishing-resistant."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: partial
     runtimes: all
     standards:
@@ -662,7 +662,7 @@ requirements:
     statement: "A WebAuthn relying-party implementation MUST accept only exact origins from an allow-list."
     rationale: "These checks make passkeys phishing-resistant."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: partial
     runtimes: all
     standards:
@@ -678,7 +678,7 @@ requirements:
     statement: "A WebAuthn relying party MUST bind a single-use challenge to each ceremony."
     rationale: "A replayed assertion must never sign a user in."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: partial
     runtimes: all
     standards:
@@ -695,7 +695,7 @@ requirements:
     statement: "A WebAuthn relying party MUST reject a replayed challenge."
     rationale: "A replayed assertion must never sign a user in."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: partial
     runtimes: all
     standards:
@@ -712,7 +712,7 @@ requirements:
     statement: "A WebAuthn relying party MUST reject a signature-counter regression."
     rationale: "A counter regression indicates a cloned authenticator."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: partial
     runtimes: all
     standards:
@@ -728,7 +728,7 @@ requirements:
     statement: "The page that follows an identifier entered for passkey sign-in MUST NOT reveal whether the identifier exists."
     rationale: "A uniform page prevents account enumeration."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: partial
     runtimes: all
     standards:
@@ -742,7 +742,7 @@ requirements:
     statement: "sluis MUST support step-up authentication challenged by a resource server."
     rationale: "Step-up lets a resource demand stronger evidence per action."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -758,7 +758,7 @@ requirements:
     statement: "When a step-up challenge is met, sluis MUST issue a token whose acr and auth_time reflect the new authentication."
     rationale: "A token that hides the new authentication gives the resource server nothing to check."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -773,7 +773,7 @@ requirements:
     statement: "sluis MUST NOT verify end-user passwords."
     rationale: "Passwords are a phishing and storage liability; passkeys and federation replace them."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -787,7 +787,7 @@ requirements:
     statement: "sluis MUST NOT store end-user password verifiers."
     rationale: "A stored verifier is an offline-guessing target."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -801,7 +801,7 @@ requirements:
     statement: "sluis MUST NOT render a password field for end users."
     rationale: "A password field trains users to type passwords into a sign-in page."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -815,7 +815,7 @@ requirements:
     statement: "A recovery sign-in for operators, where offered, MUST use a zero-knowledge password proof (SRP-6a)."
     rationale: "Break-glass access must not expose a reusable verifier."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -830,7 +830,7 @@ requirements:
     statement: "A recovery sign-in for operators MUST be disabled by default."
     rationale: "Break-glass access must not expose a reusable verifier."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -844,7 +844,7 @@ requirements:
     statement: "Identifier, registration, recovery and fallback paths MUST return the same response for known and unknown accounts."
     rationale: "Enumeration helps targeted attacks."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -858,7 +858,7 @@ requirements:
     statement: "Identifier, registration, recovery and fallback paths MUST take the same observable time for known and unknown accounts."
     rationale: "A timing difference is as good as a different response for enumeration."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:

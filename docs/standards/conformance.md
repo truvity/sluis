@@ -90,7 +90,7 @@ Certification is planned after v2 passes the first-wave plans in CI on a tagged 
 
 OpenID plans cover the protocol surface. Two other suites cover what sits underneath.
 
-**The port conformance suite** ([#851](https://github.com/truvity/sluis/issues/851)). Every driver of every [port](/concepts/drivers/) (keys, state, lease, blob, transport, index, witness, cloud) must pass one shared behavioural suite. In v1 the suite ran against memory, the legacy store and DynamoDB; in v2 it lives in `kits/conformance` and runs per driver and per kit language (Go, Rust and TypeScript). A new driver is accepted when it passes; a fork that adds one runs the same suite.
+**The port conformance suite** ([#851](https://github.com/truvity/sluis/issues/851)). Every driver of every [port](/concepts/drivers/) (keys, state, lease, blob, transport, index, witness, cloud, secrets, export) must pass one shared behavioural suite. In v1 the suite ran against memory, the legacy store and DynamoDB; in v2 it lives in `kits/conformance` and runs per driver and per kit language (Go, Rust and TypeScript). A new driver is accepted when it passes; a fork that adds one runs the same suite.
 
 **The kits' conformance vectors** ([#861](https://github.com/truvity/sluis/issues/861)). The shared kits exist in parallel in three languages: the ConnectRPC server and client over Unix sockets with peer credentials, the configuration loader and validator, and the command-line shape. One shared set of vectors runs against all three, so they agree. For configuration, that includes which documents are valid under the generated JSON Schema ([Configuration](/concepts/configuration/)).
 

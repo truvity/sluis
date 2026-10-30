@@ -4,6 +4,7 @@
 **Date:** 2026-10-30
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909). This record continues the one-train rule of v1 ADR 0042 for v2, retires the build profiles of the early v2 design, and renames the package directory that earlier v2 notes called `roles`. Release signing and upload credentials: ADR 0030. Kubernetes pod and chart layout: ADRs 0046 and 0047.
+Rewritten in place on 2026-10-30 (realignment pass).
 
 ## Context
 
@@ -24,7 +25,7 @@ This record does not set the compatibility rule between releases (what may break
 
 ### One repository, one version, one release train
 
-- **Every artifact of a release carries the same version.** Packages, tarballs, Lambda zips, images and charts all carry it, and a release publishes all of them together. A component with no change still ships in the release. This continues v1 ADR 0042 for v2.
+- **Every artifact of a release carries the same version.** Packages, tarballs, Lambda zips, images, charts and the console bundle all carry it, and a release publishes all of them together. A component with no change still ships in the release. This continues v1 ADR 0042 for v2.
 - **v2 versions are v2.x.y.** The module path of the main Go module ends in `/v2` (`github.com/truvity/sluis/v2`). Go requires the suffix from major version 2, and it also keeps v1 and v2 importable side by side while the two lines coexist. Any further Go module in the repository takes the same suffix, and all modules are tagged at one commit with one version, as v1 ADR 0042 did.
 - **One build tool: GoReleaser v2, open-source edition.** The Rust builds are produced through it too. There is one build definition for every artifact below.
 - **The YubiKey driver is built in a native per-architecture CI job.** It needs cgo against pcsc-lite, so the amd64 build runs on amd64 and the arm64 build on arm64. The job's outputs join the rest of the release.
@@ -42,6 +43,10 @@ There are no build profiles. The runtime decides the packaging, and every artifa
 
 - **`dev` is not a build.** What the profile `dev` used to mean is the local installation ([0038](/decisions/0038-the-local-installation-is-docker-compose-with-one-container-per-actor/)), which runs the bare-metal packaging in Docker.
 - **Serverless is zip only.** A zip lets layers and extensions combine. Functions, layers and extensions are published for `x86_64` and `arm64`. The Lambda Web Adapter, pinned to one version, is vendored into sluis's own layer, so a function never references the public AWS layer ([0008](/decisions/0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp/)). Zips are built to fit five layers and 250 MB unzipped.
+- **The console's single-page application is a separate artifact,** deployable on its own. It is a bundle of static files built once per release for every runtime, so the console can be redeployed without touching an actor. (The bundle form and the build per release are inferred from "separate artifact" and the one-train rule.) Each runtime's static host serves it on the same origin as `entry`'s API ([0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/)):
+  - bare-metal: a directory that `entry` serves;
+  - serverless: the bucket behind the API gateway;
+  - kubernetes: a static container behind the ingress, with its image pinned by digest like the others (inferred).
 - **Kubernetes images and charts are referenced by digest.** The chart is built from the release output, so it installs exactly the images released with it. Chart layout and the Kubernetes baseline are ADR 0047.
 - **The install directory is `/usr/libexec/sluis/{actors,drivers,integrations,node,vendor}/<short-name>`.** It is the same in a package and in a tarball. The directory that held the actors is called `actors`; earlier v2 notes called it `roles`, and this rename amends that package layout. File names inside it are unchanged.
 

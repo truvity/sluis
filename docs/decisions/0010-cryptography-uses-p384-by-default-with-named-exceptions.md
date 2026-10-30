@@ -4,6 +4,7 @@
 **Date:** 2026-10-30
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
+Rewritten in place on 2026-10-30 (realignment pass).
 
 ## Context
 
@@ -19,12 +20,14 @@ Which key signs, and where that key lives, is a separate decision ([0011](/decis
 
 ## Decision
 
-- **EC P-384 with ES384 is the default and sluis's internal recommendation.** One curve means one key type in the published key set, one verifier path and one sealing scheme. Anything sluis chooses for itself uses P-384.
+- **EC P-384 with ES384 is the default and sluis's internal recommendation.** One curve means one key type in the published key set, one verifier path and one sealing scheme. Anything sluis chooses for itself uses P-384, including the checkpoints of the audit log and the issuance log (a C2SP signed note with a P-384 key).
 - **sluis supports the FAPI 2.0 algorithm set: PS256, ES256 and EdDSA (Ed25519).** A client or a resource server that follows that profile can be served. ES384 stays the default. PS256 is RSA, so this set is a named exception to "no RSA".
 - **"No RSA" has exactly these exceptions, and each one has its own key.** A key that serves an exception is never shared with another purpose.
   1. **FAPI 2.0.** PS256, as above.
   2. **Cloud federation.** A key that signs a workload token for a cloud may use the algorithm that cloud requires: P-384 (ES384) for AWS, P-256 (ES256) for GCP and RSA-2048 (RS256) for Azure Entra.
   3. **A per-audience RS256 exception.** Some verifiers cannot take an elliptic-curve signature. For an audience that is configured to need RS256, sluis signs that audience's tokens with a separate RSA key. Every other audience keeps getting EC tokens. The RSA public key is published beside the EC keys. The audience, not the caller, decides the algorithm.
+- **A format that fixes its own algorithm is followed, not changed.** The witness cosignatures of the C2SP tlog-cosignature format use Ed25519 or ML-DSA-44, as that specification requires. A witness key is not an authority key of sluis and serves no other purpose. (inferred)
+- **This record governs what sluis signs and seals.** Which algorithms sluis accepts when it verifies a signature made by others, such as a passkey assertion or an upstream provider's token, is decided with those features (passkeys: ADR 0048). (inferred)
 - **How a client or an audience selects a non-default algorithm is client-profile configuration.** It is not part of this record.
 - **Driver support is checked per algorithm, not assumed.** Two facts are known now. PS256 on a YubiKey takes about 2.3 seconds per signature, so it suits a low-volume audience only. Ed25519 in the PIV application needs YubiKey firmware 5.7 or newer. A driver that cannot offer an algorithm refuses it when the installation is checked, not at the first token.
 - **FIPS 140-3 mode is on by default.** The default build runs Go's FIPS 140-3 module with `fips140=on`, using the latest module. That refuses X25519 and ChaCha20 in TLS and runs a pairwise consistency test when a key is generated. Both are acceptable. A separately pinned build uses the CMVP-certified module (certificate #5247, module v1.0.0) for installations that need the certificate itself. BoringCrypto is not used.
@@ -43,7 +46,7 @@ Which key signs, and where that key lives, is a separate decision ([0011](/decis
 - FIPS mode changes what TLS can negotiate. Documentation and `sluis doctor` have to say so. Conformance tests run with `fips140=on` (a test task, not a decision).
 - The certified build is a separate artefact with its own pin and its own release note. It is chosen on purpose and never by accident.
 - No randomness is mixed in. Platforms with a weak generator are caught by `sluis doctor`, which warns where a vendor kernel is older than 5.18. It does not compensate for them.
-- Post-quantum signatures are not part of this record. They are researched separately and change nothing here yet.
+- Post-quantum signatures are not part of this record. A post-quantum root is parked with a dated trigger in ADR 0052, and ML-DSA-44 appears here only as a witness key type that a followed format allows.
 - The site's keys page and the standards register say the same as this record.
 
 ## Roads not taken

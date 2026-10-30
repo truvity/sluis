@@ -7,7 +7,7 @@ requirements:
     statement: "Every successful mint, grant, exchange and administrative change MUST produce an audit record."
     rationale: "An action without a record cannot be reviewed."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -21,7 +21,7 @@ requirements:
     statement: "Every denial or refusal MUST produce an audit record that carries its reason code."
     rationale: "An action without a record cannot be reviewed."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -34,7 +34,7 @@ requirements:
     statement: "Every audit record MUST validate against the schema of its catalogue entry."
     rationale: "A closed catalogue keeps records interpretable."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -48,7 +48,7 @@ requirements:
     statement: "The emitter MUST refuse an unknown action."
     rationale: "A closed catalogue keeps records interpretable."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -61,7 +61,7 @@ requirements:
     statement: "Audit records, logs and traces MUST NOT contain e-mail addresses, names, secrets or tokens."
     rationale: "The trail must not become a personal-data store."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -75,7 +75,7 @@ requirements:
     statement: "An external actor MUST be recorded under a keyed pseudonym."
     rationale: "The trail must not become a personal-data store."
     level: MUST
-    origin: security-review
+    source: security-review
     status: planned
     runtimes: all
     standards:
@@ -88,7 +88,7 @@ requirements:
     statement: "The hash of an audit record MUST be computed over its canonical JSON form."
     rationale: "A canonical form makes hashes reproducible."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -101,7 +101,7 @@ requirements:
     statement: "Audit records of a period MUST be organised in a Merkle tree following the RFC 6962 hash rules."
     rationale: "Proofs let anyone verify the log without trusting the operator."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -116,7 +116,7 @@ requirements:
     statement: "Inclusion and consistency proofs MUST verify offline."
     rationale: "Proofs let anyone verify the log without trusting the operator."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -130,7 +130,7 @@ requirements:
     statement: "Each sealed period MUST be signed over its root with a key from the signing port."
     rationale: "A sealed period is the unit of evidence."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -145,7 +145,7 @@ requirements:
     statement: "A sealed period MUST be immutable after sealing."
     rationale: "A sealed period is the unit of evidence."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -160,7 +160,7 @@ requirements:
     statement: "A sealed period MUST be verifiable offline using only the public key set and the sealed data."
     rationale: "A sealed period is the unit of evidence."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -174,7 +174,7 @@ requirements:
     statement: "There MUST be exactly one writer per log."
     rationale: "Two writers fork the chain."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -189,7 +189,7 @@ requirements:
     statement: "An installation with more than one node or with elastic nodes MUST protect the writer with a lease."
     rationale: "Two writers fork the chain."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -204,7 +204,7 @@ requirements:
     statement: "The log store MUST be a blob store with an explicit lock mode of none, removable or compliance."
     rationale: "The lock mode defines what tamper-evidence the log gives."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -220,7 +220,7 @@ requirements:
     statement: "`sluis config check` MUST report the lock mode of the configured blob driver."
     rationale: "The lock mode defines what tamper-evidence the log gives."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -234,7 +234,7 @@ requirements:
     statement: "A cluster MUST keep one log per node."
     rationale: "Peers narrow the window in which one node can rewrite its log."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -251,7 +251,7 @@ requirements:
     statement: "Where peer witnesses are configured, the other nodes of a cluster MUST be the peer witnesses that co-sign a node's checkpoints, two of three."
     rationale: "Peers narrow the window in which one node can rewrite its log."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -267,7 +267,7 @@ requirements:
     statement: "Where no witness is configured, `sluis config check` MUST warn."
     rationale: "Witnesses are optional but the risk must be visible."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -282,7 +282,7 @@ requirements:
     statement: "The documentation MUST state that, with no witness, a compromised writer can obtain a rewritten checkpoint."
     rationale: "Witnesses are optional but the risk must be visible."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -297,7 +297,7 @@ requirements:
     statement: "sluis MAY adopt a published transparency-log checkpoint and witness protocol so that independent parties can witness a log."
     rationale: "Interoperable witnesses strengthen the log."
     level: MAY
-    origin: design-decision
+    source: design-decision
     status: open
     runtimes: all
     standards:
@@ -316,7 +316,7 @@ requirements:
     statement: "sluis MAY anchor sealed periods externally with a time-stamp authority."
     rationale: "An external anchor bounds the time of a seal."
     level: MAY
-    origin: design-decision
+    source: design-decision
     status: open
     runtimes: all
     standards:
@@ -330,7 +330,7 @@ requirements:
     statement: "The audit emitter MUST be a library inside each application."
     rationale: "The application must not depend on writer availability."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -346,7 +346,7 @@ requirements:
     statement: "The audit emitter MUST be decoupled from the writer by a transport."
     rationale: "The application must not depend on writer availability."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -361,7 +361,7 @@ requirements:
     statement: "In direct transport mode, when the writer is unavailable, the emitter MUST fall back to a local spool."
     rationale: "Direct mode needs durability."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -376,7 +376,7 @@ requirements:
     statement: "The emitter MUST NOT drop records or buffer them only in memory when the writer is unavailable."
     rationale: "Direct mode needs durability."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -390,7 +390,7 @@ requirements:
     statement: "Delivery from the emitter to the writer MUST be at least once."
     rationale: "Networks duplicate; the log must not."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -405,7 +405,7 @@ requirements:
     statement: "The writer MUST deduplicate records by record identifier."
     rationale: "Networks duplicate; the log must not."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -418,7 +418,7 @@ requirements:
     statement: "Credential and administrative changes SHOULD use blocking delivery so that the change fails when its record cannot be written."
     rationale: "A change without a record must not happen."
     level: SHOULD
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -431,7 +431,7 @@ requirements:
     statement: "The search index MUST be rebuildable from the log alone."
     rationale: "The index is a cache, never the record."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -446,7 +446,7 @@ requirements:
     statement: "A reader MUST be able to merge several node logs by time."
     rationale: "The index is a cache, never the record."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -461,7 +461,7 @@ requirements:
     statement: "A clock-synchronisation check MUST run."
     rationale: "Seal times depend on the clock."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -475,7 +475,7 @@ requirements:
     statement: "A seal MUST record the observed clock offset."
     rationale: "Seal times depend on the clock."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -488,7 +488,7 @@ requirements:
     statement: "A subject erasure request MUST be satisfied by destroying a per-subject key."
     rationale: "Erasure and an immutable log need crypto-shredding."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -502,7 +502,7 @@ requirements:
     statement: "Audit records MUST carry enough data to roll state forward after a restore for the record kinds that need it."
     rationale: "Roll-forward replaces a backup of fast-changing data."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -516,7 +516,7 @@ requirements:
     statement: "Audit records MUST NOT carry secrets."
     rationale: "A secret in an immutable log can never be removed."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -529,7 +529,7 @@ requirements:
     statement: "Records MUST be routed to a tenant at write time."
     rationale: "Controllers must not read each other's records."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -543,7 +543,7 @@ requirements:
     statement: "The operator's own view of a tenant's records MUST contain only the class, the outcome and rotating pseudonyms."
     rationale: "Controllers must not read each other's records."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -556,7 +556,7 @@ requirements:
     statement: "A witness MUST be optional in every installation."
     rationale: "Witnesses add dependencies that some installations cannot meet."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -570,7 +570,7 @@ requirements:
     statement: "The audit writer MUST obtain checkpoint signatures from the key-holder."
     rationale: "Only the key-holder touches the log key."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -584,7 +584,7 @@ requirements:
     statement: "The key-holder access list MUST allow only the audit writer to use the log key."
     rationale: "Restricting the key to the writer replaces a separate notary."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -598,7 +598,7 @@ requirements:
     statement: "sluis MUST NOT run a separate notary actor for audit checkpoints."
     rationale: "The notary is folded into the key-holder access list."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -612,7 +612,7 @@ requirements:
     statement: "`sluis config check` MUST refuse direct audit transport on a runtime that has no local disk."
     rationale: "Direct mode falls back to a local spool and so needs a disk."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["serverless"]
     standards:
@@ -626,7 +626,7 @@ requirements:
     statement: "The default audit transport driver MUST be spool on bare-metal and SQS on serverless and kubernetes."
     rationale: "Direct and JetStream are supported but are not defaults."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -640,7 +640,7 @@ requirements:
     statement: "Each node of a cluster MUST have its own audit writer, spool and log key."
     rationale: "One log per node means one writer per log."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -649,3 +649,15 @@ requirements:
     decisions: ["OD-36"]
     verification:
       - {kind: integration-test, ref: "per-node writer test"}
+  - id: REQ-AUDIT-046
+    area: AUDIT
+    statement: "A free-text field in an audit record MUST be bounded in length."
+    rationale: "An immutable log must not hold unbounded typed text."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "free-text bound test"}

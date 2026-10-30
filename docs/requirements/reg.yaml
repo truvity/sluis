@@ -7,7 +7,7 @@ requirements:
     statement: "Registration MUST be reachable by a link from the identifier page."
     rationale: "Any sign-in can lead to registration."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -21,7 +21,7 @@ requirements:
     statement: "Registration MUST be reachable directly by prompt=create, including through a pushed authorization request."
     rationale: "Any relying party can start registration."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -36,7 +36,7 @@ requirements:
     statement: "Registration MUST complete the steps e-mail address, one-time code, display profile, terms acceptance, passkey creation and recovery codes, in this order."
     rationale: "The account gets a factor and a recovery path before any code is issued."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -50,7 +50,7 @@ requirements:
     statement: "The account MUST become live only when registration completes."
     rationale: "A half-registered account must not reach a product."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -64,7 +64,7 @@ requirements:
     statement: "Discovery MUST list create in prompt_values_supported."
     rationale: "Relying parties learn from discovery that they can start registration."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -79,7 +79,7 @@ requirements:
     statement: "No authorization code MUST be issued until the account has a verified e-mail address, a passkey, an acknowledged set of recovery codes and accepted terms."
     rationale: "A half-registered account must not reach a product."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -93,7 +93,7 @@ requirements:
     statement: "Abandoning registration at any step MUST leave the account pending."
     rationale: "Only a complete registration makes an account live."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -107,7 +107,7 @@ requirements:
     statement: "The session of a completed registration MUST have the configured registration assurance level, by default the lowest."
     rationale: "Registration proves little beyond the new factor."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -121,7 +121,7 @@ requirements:
     statement: "Registration mail MUST be sent asynchronously."
     rationale: "Synchronous mail would make the response time depend on the account."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -135,7 +135,7 @@ requirements:
     statement: "The owner of an existing account MUST receive an already-registered notice in place of a code."
     rationale: "Registration must not become an oracle for who is a customer."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -149,7 +149,7 @@ requirements:
     statement: "An e-mail verification code MUST be six digits from a cryptographic random source."
     rationale: "A random code cannot be predicted."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -163,7 +163,7 @@ requirements:
     statement: "An e-mail verification code MUST be single use."
     rationale: "A replayed code must not verify."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -177,7 +177,7 @@ requirements:
     statement: "An e-mail verification code MUST be valid for at most 10 minutes."
     rationale: "A short life limits guessing."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -191,7 +191,7 @@ requirements:
     statement: "An e-mail verification code MUST allow at most 5 attempts."
     rationale: "Attempts must be bounded to resist guessing."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -205,7 +205,7 @@ requirements:
     statement: "At most 5 e-mail verification codes MUST be issued per address per hour."
     rationale: "Bounded issuance limits mail abuse."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -219,7 +219,7 @@ requirements:
     statement: "Only a keyed hash of an e-mail verification code MUST be stored."
     rationale: "A stolen store must not reveal live codes."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -233,7 +233,7 @@ requirements:
     statement: "The account MUST record the verification time of its e-mail address when the code is verified."
     rationale: "E-mail is the contact and notice channel, so its ownership must be proven."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -247,7 +247,7 @@ requirements:
     statement: "Registration MUST record the accepted terms version and time on the account."
     rationale: "The controller must prove consent to its terms."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -261,7 +261,7 @@ requirements:
     statement: "When the current terms version differs from the account's, the next interactive sign-in of a personal account MUST show the terms interstitial before a code is issued."
     rationale: "A change of terms needs fresh consent."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -275,7 +275,7 @@ requirements:
     statement: "A corporate account MUST NOT be shown the terms page."
     rationale: "The organisation's contract covers corporate accounts."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -289,7 +289,7 @@ requirements:
     statement: "A terms acceptance MUST be sent to the control plane as an event that names the account reference."
     rationale: "The control plane needs the record without the internal identifier."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -303,7 +303,7 @@ requirements:
     statement: "A personal account MUST receive recovery codes right after its first passkey."
     rationale: "Passkey-only accounts need self-service recovery."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -317,7 +317,7 @@ requirements:
     statement: "A recovery code MUST carry 80 bits of entropy."
     rationale: "The code must resist offline and online guessing."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -332,7 +332,7 @@ requirements:
     statement: "Recovery codes MUST be shown only once."
     rationale: "A code shown again would have to be stored in clear."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -346,7 +346,7 @@ requirements:
     statement: "The person MUST confirm that the recovery codes are saved before registration continues."
     rationale: "An unconfirmed code set is a false recovery path."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -360,7 +360,7 @@ requirements:
     statement: "A typed recovery code MUST be canonicalised before hashing: uppercase, spaces and hyphens removed, I and L read as 1, O read as 0."
     rationale: "Typing errors must not lock out a person."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -374,7 +374,7 @@ requirements:
     statement: "A recovery code MUST verify only once."
     rationale: "A used code must not work again."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -388,7 +388,7 @@ requirements:
     statement: "Regenerating recovery codes MUST invalidate all old codes."
     rationale: "A leaked old set must stop working."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -402,7 +402,7 @@ requirements:
     statement: "The mail module MUST send verification codes, notices and recovery messages."
     rationale: "Registration, notices and recovery depend on mail."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -416,7 +416,7 @@ requirements:
     statement: "The mail module MUST provide templates for every configured locale."
     rationale: "Messages must reach people in their language."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -430,7 +430,7 @@ requirements:
     statement: "The mail module MUST send through an outbox with retries."
     rationale: "A transient failure must not lose a message."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -444,7 +444,7 @@ requirements:
     statement: "The mail module MUST apply per-address and global abuse limits."
     rationale: "Mail must not become an amplification channel."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -458,7 +458,7 @@ requirements:
     statement: "The mail module MUST sign messages with DKIM on the operator's domain in the production profile."
     rationale: "Unsigned mail is distrusted or spoofed."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -472,7 +472,7 @@ requirements:
     statement: "The built-in mail sink MUST be refused at load in the production profile."
     rationale: "A sink keeps messages readable by the test interface."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -486,7 +486,7 @@ requirements:
     statement: "A pending account and its pointer records MUST expire after a configured time to live, by default 72 hours."
     rationale: "Abandoned registrations must not hold addresses forever."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -500,7 +500,7 @@ requirements:
     statement: "Completing registration MUST make the account permanent."
     rationale: "A live account must not expire as a pending one."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -514,7 +514,7 @@ requirements:
     statement: "Registration and fallback sign-in MUST call a pluggable challenge port."
     rationale: "Bot protection must be replaceable."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -528,7 +528,7 @@ requirements:
     statement: "The none challenge adapter MUST be refused at load in the production profile."
     rationale: "Production must not run without bot protection."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -542,7 +542,7 @@ requirements:
     statement: "A verified recovery code MUST open a session that is restricted to passkey enrolment."
     rationale: "A stolen code must not give access to a regulated entity."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -556,7 +556,7 @@ requirements:
     statement: "A recovery session MUST NOT be able to obtain an authorization code."
     rationale: "The session exists only to enrol a passkey."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -570,7 +570,7 @@ requirements:
     statement: "Every recovery MUST start a cool-down of a configured length, by default 72 hours."
     rationale: "Recovery is the main takeover path."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -584,7 +584,7 @@ requirements:
     statement: "During a cool-down a signed cancel link MUST be sent by e-mail and shown on the account page."
     rationale: "The real owner must be able to stop a takeover."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -598,7 +598,7 @@ requirements:
     statement: "During a cool-down any old authenticator MUST be able to cancel the recovery."
     rationale: "The old factors still belong to the real owner."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -612,7 +612,7 @@ requirements:
     statement: "During a cool-down tokens MUST carry a cool-down marker."
     rationale: "Relying parties can then apply their own caution."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -626,7 +626,7 @@ requirements:
     statement: "During a cool-down the assurance level MUST be capped at the configured cap."
     rationale: "A fresh recovery must not open regulated contexts."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -641,7 +641,7 @@ requirements:
     statement: "Where shared signals are deployed, a recovery MUST emit a recovery-activated signal to contexts."
     rationale: "Contexts can then react to the risk."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -656,7 +656,7 @@ requirements:
     statement: "Recovery without codes MUST be an enrolment action that the control plane issues after identity is re-verified outside sluis."
     rationale: "No single insider may be able to take over an account."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -671,7 +671,7 @@ requirements:
     statement: "The accounts module MUST execute an enrolment action for recovery only with a dual-signed intent."
     rationale: "Two people must agree."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -685,7 +685,7 @@ requirements:
     statement: "A recovery enrolment action MUST revoke all sessions and old factors, including the vault password and one-time password."
     rationale: "The old factors may be in the attacker's hands."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -699,7 +699,7 @@ requirements:
     statement: "The vault provider's own password reset MUST be disabled."
     rationale: "Mailbox control must not equal account control."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -713,7 +713,7 @@ requirements:
     statement: "A relying-party access token, an exchanged token or an administrative intent MUST NOT add, change or remove a factor."
     rationale: "A token leak must never become a persistent takeover."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -727,7 +727,7 @@ requirements:
     statement: "A factor change MUST need a fresh own factor from the person on the account host."
     rationale: "The person, not a token, authorises the change."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -741,7 +741,7 @@ requirements:
     statement: "An e-mail change MUST require a fresh own factor at the second assurance level."
     rationale: "Changing the contact channel is a takeover step."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -755,7 +755,7 @@ requirements:
     statement: "The new address of an e-mail change MUST be verified by code."
     rationale: "The new mailbox must be proven."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -769,7 +769,7 @@ requirements:
     statement: "An e-mail change MUST NOT change any relying-party subject."
     rationale: "Subjects are derived from the account identifier, not the address."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -783,7 +783,7 @@ requirements:
     statement: "Lifecycle rules MUST live in a policy table."
     rationale: "Operators must be able to review the lifecycle."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -797,7 +797,7 @@ requirements:
     statement: "A corporate account MUST be disabled when its connection is removed or after an idle period, and deleted after retention."
     rationale: "An orphaned corporate account is a standing credential."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -811,7 +811,7 @@ requirements:
     statement: "A personal account MUST be deleted after an idle period, with prior notice."
     rationale: "Unused accounts should not be kept forever."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -825,7 +825,7 @@ requirements:
     statement: "Data-subject export and deletion MUST be supported."
     rationale: "The person's rights must be exercisable."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -839,7 +839,7 @@ requirements:
     statement: "Account deletion MUST run in the order hub sign-out, entity response window, hub delete, context disable with grant revocation, vault delete."
     rationale: "Each step depends on the one before."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -853,7 +853,7 @@ requirements:
     statement: "The deletion saga MUST be idempotent under replay and leave no pointer records."
     rationale: "A crashed deletion must be safely retried."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -867,7 +867,7 @@ requirements:
     statement: "Organisation events MUST NOT delete people."
     rationale: "An organisation's decision must not erase a person's personal account."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -881,7 +881,7 @@ requirements:
     statement: "A cohort import MUST create each account live and personal, idempotently per record."
     rationale: "A re-run must not create duplicates."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -895,7 +895,7 @@ requirements:
     statement: "A cohort import MUST NOT merge accounts by e-mail address."
     rationale: "Merging by address would join two people."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -909,7 +909,7 @@ requirements:
     statement: "Password hashes MUST NOT transit sluis during a cohort import."
     rationale: "Offline-guessable verifiers must not pass through the platform."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -923,7 +923,7 @@ requirements:
     statement: "A cohort import MUST create a vault user with the pseudonym only."
     rationale: "The vault must stay blind."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -937,7 +937,7 @@ requirements:
     statement: "Imported password hashes MUST be loaded into the vault by its configuration pipeline under a journaled dual-signed migration intent."
     rationale: "The load is a vault mutation like any other."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -951,7 +951,7 @@ requirements:
     statement: "The accounts module MUST confirm each imported vault user by inventory: exactly one password and no one-time password."
     rationale: "The inventory proves that the import did what was approved."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -965,7 +965,7 @@ requirements:
     statement: "The first sign-in of a migrated account MUST run e-mail code, terms, passkey and recovery codes in that order."
     rationale: "The migrated account gets the same protection as a new one."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -979,7 +979,7 @@ requirements:
     statement: "The e-mail-first path of a migrated account MUST close once the account has a passkey."
     rationale: "Otherwise it would be a reset by e-mail."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -993,7 +993,7 @@ requirements:
     statement: "An imported password MUST become usable as a fallback only after one-time-password enrolment through a ticket."
     rationale: "A password alone is a single factor and gives no evidence."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -1007,7 +1007,7 @@ requirements:
     statement: "A person MUST be able to regenerate recovery codes after a fresh own factor, with a notice."
     rationale: "Codes need replacing after use or loss."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -1021,7 +1021,7 @@ requirements:
     statement: "Recovery codes MUST NOT be offered as a fallback sign-in."
     rationale: "A recovery code is a recovery path, not a sign-in factor."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:

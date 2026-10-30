@@ -1,12 +1,12 @@
 ---
 title: Configuration
-description: "How sluis is configured: an installation, Pkl-defined schema, JSON Schema validation at runtime, the layers, data origins and the explain command."
+description: "How sluis is configured: an installation, a Pkl-defined schema, JSON Schema validation, layers, operator-set records, live reload and explain."
 status: target
 sidebar:
   order: 6
 ---
 
-sluis is configured by files that an operator reads and edits. The design makes four promises about them: a file that is wrong is refused before anything starts; a field that does not exist is an error, not silently ignored; any value can be traced to the layer that set it; and an operational switch can never change who may do what.
+sluis is configured by files that an operator reads and edits, and by the records an operator sets on the console. The design makes four promises about them: a file that is wrong is refused before anything takes effect; a field that does not exist is an error, not silently ignored; any value can be traced to the origin and the layer that set it; and an operational switch can never change who may do what. The rules are [ADR 0015](/decisions/0015-configuration-is-defined-once-in-pkl-and-shipped-as-json-schema/) and [ADR 0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/).
 
 ## Pkl at build time, generated artifacts at runtime
 
@@ -31,19 +31,28 @@ The same schema is checked by a validator in each language sluis is written in:
 
 One shared set of **conformance vectors** runs against all three, so the validators agree on what is valid.
 
-**Strictness comes from the schema itself.** The schema sets `unevaluatedProperties: false`, so an unknown key is an error that names the field, and turns format assertions on, so a field declared as a URL or a duration is checked as one. A retired option that is still set is refused, not ignored.
+**Strictness comes from the schema itself.** The schema sets `unevaluatedProperties: false`, so an unknown key is an error that names the field, and turns format assertions on, so a field declared as a URL or a duration is checked as one. A retired option that is still set in a declared file is refused, not ignored. A record that sluis wrote itself, such as an operator-set record, is read with a retired field ignored, and the field is never written again.
 
-## Data origins
+The schema also carries, for every record kind, its **origin** and, for every field, its **sensitivity** (see [Data](/concepts/data/#origins-and-sensitivity)). CI checks the annotations, and the backup list, the telemetry allowlist and the audit redaction are generated from them.
 
-Not all data in sluis's configuration comes from the same place, and the origin decides who may change it.
+## Declared and operator-set
+
+Every record kind in sluis has one origin ([Data](/concepts/data/#origins-and-sensitivity)). Two of the five are configuration, because they are an operator's intent:
 
 | Origin | What it is | Written by |
 |---|---|---|
-| Declared | Operator-written configuration | The operator, in files under version control |
-| Learned | Facts sluis discovers and stores | sluis, as it runs |
-| Operator secrets | Credentials | Referenced in configuration, **never inlined** |
+| **declared** | Reviewed files or infrastructure as code, delivered read-only | Nobody at run time; the operator, through review and deployment |
+| **operator-set** | A lasting choice a person makes on the console, the CLI or the API, such as the chat channels an integration manages or a runtime switch. An overlay on declared, allowed only for the record kinds that accept it | The actor that owns the record kind, which validates the write; every change is audited under the person's name |
 
-A secret is a reference such as `cred:sluis-int-github.app-key`, resolved at runtime through the `secrets` port (see [Secrets and export](/concepts/secrets/)). The value never appears in a file, in `explain` output, in logs or in a crash dump.
+The **effective configuration** is declared overlaid with operator-set. Learned facts and issued records are data that the configuration refers to, not configuration.
+
+- **Declared locks.** A field that declared sets cannot be changed on the console; the console shows it as locked.
+- **Operator-set fills what declared leaves open.** The order is declared, then operator-set, then the schema default.
+- **Tighten-only switches** (recovery off, a reconciler paused, a lower quota limit) may be moved by an operator in their safe direction even when declared sets them. Moving one back is a declared change that names a new generation.
+- **An object defined in both places is held**: nothing changes on it until one side is removed, or a declared fragment adopts the operator-set record with `adopts: <kind>/<id>@<revision>`.
+- **Authority is declared only.** The one exception is Cedar policies linked from declared templates within a declared delegation policy, which the console may create and remove ([ADR 0014](/decisions/0014-policy-is-written-in-cedar-and-evaluated-by-a-rust-actor/)).
+
+A secret in configuration is a reference such as `cred:sluis-int-github.app-key`, resolved at run time through the `secrets` port (see [Secrets and export](/concepts/secrets/)). The value never appears in a file, in `explain` output, in logs or in a crash dump. A secret put at run time with `sluis secrets put` or on the console is an operator-set secret in sluis's own store.
 
 ## What is configured: an installation
 
@@ -60,16 +69,20 @@ The word **environment** is kept for what differs between development, staging a
 
 ## Layers
 
-Values come from layers. A later layer overrides an earlier one:
+Declared values come from layers. A later layer overrides an earlier one. Layers apply inside declared configuration only; operator-set is an origin, not a layer.
 
 1. **defaults**, built into the schema;
 2. **runtime**, the defaults of the runtime kind (bare-metal, serverless or Kubernetes);
 3. **install**, the file the operator edits (often started from one of the example files);
 4. **environment overrides**, for the values that differ between development, staging and production, including the few fields marked as tunable that a process environment variable may set.
 
-:::note[Proposed]
-This order replaces the older "shape profile" layer with the runtime layer; the tested installations are example files, not a layer. The layering, and the environment overrides as its last layer, are proposed.
-:::
+This order replaces the older "shape profile" layer with the runtime layer; the tested installations are example files, not a layer.
+
+## Live reload
+
+Declared configuration may **live-reload as whole versioned snapshots**, through any channel that delivers it: a file, a ConfigMap, a Lambda layer or AWS AppConfig. A new snapshot is validated as `sluis config check` validates it, swapped atomically and audited with its digest. A snapshot that fails validation is refused, and the version in force stays. No part of a version ever changes: an instance moves from one whole version to the next.
+
+Operator-set values are read live through the `state` port, with a short cache whose lifetime is part of the field's schema.
 
 ## Checking and explaining
 
@@ -78,11 +91,18 @@ sluis config check
 sluis config explain
 ```
 
-`sluis config check` validates the configuration against the schema, and then validates the installation against the requirements that its drivers declare, and refuses a combination that cannot work, such as a Raft-based state store on serverless or a YubiKey on serverless. How the second check works is on [Ports and drivers](/concepts/drivers/#how-sluis-config-check-validates-an-installation). `sluis config explain` prints each field's effective value and the layer that set it.
+`sluis config check` validates the configuration against the schema, and then validates the installation against the requirements that its drivers declare, and refuses a combination that cannot work, such as a Raft-based state store on serverless or a YubiKey on serverless. How the second check works is on [Ports and drivers](/concepts/drivers/#how-sluis-config-check-validates-an-installation). `sluis config explain` prints each field's effective value, its origin and the layer that set it.
+
+Both are **offline by default**, so CI runs them with no call to sluis. With `--live` they also read the operator-set records through the console API, with an operator's credentials: `check --live` lists the objects that are held and the records a new declared fragment would lock or hold, and `explain --live` shows, for an operator-set value, the record id, its revision, who set it and when.
 
 ## Switches and authority
 
-**Operational switches stay separate from authority.** A switch changes how sluis runs: a log level, a timeout, the choice of a driver. Authority says who may do what: policy, grants, the clients that may ask for tokens. The two are different kinds of configuration with different owners and review, and an environment override can reach a switch but never authority. v1 mixed them in one policy file.
+**Operational switches stay separate from authority.** Authority says who may do what: policy, grants, the clients that may ask for tokens. A switch changes how sluis runs, and there are two classes of them:
+
+- **Tunables** (a log level, a timeout, the choice of a driver) are declared, and an environment override may reach them.
+- **Runtime switches** (recovery off, a paused reconciler, an acknowledged breaker) are operator-set, read live, and tighten-only where they touch safety.
+
+Neither reaches authority. v1 mixed them in one policy file.
 
 ## Examples
 
@@ -144,6 +164,13 @@ public_url                    = https://sluis.example.com  install   /etc/sluis/
 drivers.yubikey-piv.instance  = shared                install   /etc/sluis/install.yaml:10
 log.level                     = debug                 environment override   SLUIS_LOG_LEVEL (tunable)
 integrations.github.app_key   = cred:sluis-int-github.app-key   install   (reference, not resolved)
+```
+
+With `--live`, an operator-set value shows where it came from (illustrative output; the record ids are examples):
+
+```text
+slack.acme.channels.ops       = #ops                  operator-set   record slack-channel/ops rev 4, set by an operator on 2026-10-30
+recovery.disabled_generations = [3]                   operator-set   tighten-only, record recovery-switch rev 2
 ```
 
 For where each file lives on a node, see [Drivers](/concepts/drivers/).

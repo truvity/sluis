@@ -19,10 +19,12 @@ Every major component is a ConnectRPC contract, even when caller and callee shar
 | **Certificates and quota** | PKI, SSH CA, quota, backup, restore | Issue X.509 and SSH certificates, admit metered operations, and protect and recover the install (see [Backup and restore](/concepts/backup/)). Quota (the quota engine and its quota state) is a separate piece, combinable with sluis, and its placement is derived from the port and driver rules, see [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived) ([OD-38](/open-decisions/#od-38), [OD-33](/open-decisions/#od-33)) |
 | **Audit and trust** | audit writer, witness coordinator, audit indexer, audit query, trust log, static publisher | Take records from every other component, seal them in batches, sign the batch heads through the keys port, and serve them back ([Audit](/concepts/audit/)). The indexer, the search index and the reader are the separate Search piece; its placement is derived from the port and driver rules, see [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived) ([OD-32](/open-decisions/#od-32)) |
 | **Integrations** | upstream, workload verifier, facts source, credential minter, provisioner, notifier | Talk to one external system each ([Integrations](/concepts/integrations/)). Return facts, or carry out effects core has authorized |
-| **Ports** | keys, state, lease, blob, transport, index, cloud, and for audit also witness | Libraries linked into the component that needs them. Never a hop |
+| **Ports** | keys, state, lease, blob, transport, index, cloud, secrets and export, and for audit also witness | Libraries linked into the component that needs them. Never a hop |
 | **Drivers** | the technology behind one port | See [Drivers](/concepts/drivers/) and the table below |
 
 The groups map onto [actors](/architecture/processes/) (see also [Actors](/concepts/actors/)): `entry` hosts the front, authn, sessions, exchange, client registry and console; `signer` hosts the key ring; `policy` hosts the decision point; `ca` hosts PKI and SSH; the audit components split across the `writer`, the `witness`, the `indexer` and the `reader`; `quota` is its own actor; and each integration runs as its own process. There is no notary actor (agreed, [OD-39](/open-decisions/#od-39)): the writer asks `key-holder` to sign, and its access list lets only the writer use the log key.
+
+The console component in `entry` is the console API and the browser's backend: the session is an HttpOnly cookie, and the browser holds no token. It reads through the components it calls and routes each operator-set write to the component that owns the record kind, which validates it ([ADR 0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/)). The single-page application is a separate artifact, served on the same origin by each runtime's static host.
 
 ## Integration contracts
 
@@ -101,7 +103,7 @@ A port is the narrowest interface that every driver can honour and every user ne
 
 | Port | Operations | Notes |
 | ---- | ---------- | ----- |
-| **state** | `Get`, `Create`, `CompareAndSwap`, `DeleteIf`, `List`, `WriteBatch`, `Adjust` | Two consistency levels, strong and local. An atomic write batch keeps the audit batch row, its dedupe record and the index cursor together; a conditional adjust makes quota one atomic update (quota state is the state port with compare-and-set). A scope object `{owner, connection}` isolates callers; no one builds key strings |
+| **state** | `Get`, `Create`, `CompareAndSwap`, `DeleteIf`, `List`, `WriteBatch`, `Adjust` (proposed) | Two consistency levels, strong and local. An atomic write batch keeps the audit batch row, its dedupe record and the index cursor together. Quota state is the state port with compare-and-set; a conditional adjust (`Adjust`), like `DeleteIf` and `List`, is a proposed further operation (ADR 0057; the decided operations are in [ADR 0017](/decisions/0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite/)). A scope object `{owner, connection}` isolates callers; no one builds key strings |
 | **index** | `Apply`, `Cursor`, `Query`, `Rebuild` | The search index of the audit trail. Query syntax never leaks past the driver. Drivers: sqlite, rqlite (proposed), postgres, or none (a scan) |
 | **keys** | `Describe`, `Sign`, `Wrap`, `Unwrap`, `Derive`, `Agree`, `PublicKey` | See below. Callers name a key purpose, never an ARN or a slot |
 | **blob** | `PutIfAbsent`, `Put`, `Get`, `List`, `Delete`, `Capabilities` | Immutability is the common case. `Capabilities` reports the lock mode (none, removable or compliance), versioning and maximum object size. The audit log is a blob with a lock mode |
@@ -310,7 +312,7 @@ flowchart LR
   ports --> drivers
 ```
 
-The ports are keys, state, lease, blob, transport, index and cloud, plus witness for audit. The identity path actors include the key ring, which reaches the ports through its drivers like every other actor, and the `tick` scheduler, whose edges are in view 3.
+The ports are keys, state, lease, blob, transport, index, cloud, secrets and export, plus witness for audit. The identity path actors include the key ring, which reaches the ports through its drivers like every other actor, and the `tick` scheduler, whose edges are in view 3.
 
 Rules the graph encodes:
 
@@ -337,8 +339,8 @@ Every record kind has exactly one component that writes it. Others read through 
 | Minted-credential records (recent credentials, caller caps) | mint broker |
 | Leases per target; the desired-state projections per connection | tick scheduler; grants export |
 | Per-target tick reports | the ticked integration |
-| Console-set configuration layer | console. Integrations return *learned* entries to the console, which writes them |
-| Issued-certificate and SSH-certificate ledgers, CRL and KRL state | PKI; SSH CA |
+| Operator-set records of a kind (console channels, runtime switches, console-connected tenants) | the one component that owns the kind, on a request routed by the console. An integration may own an operator-set kind of its own (the chat integration's console channels) and is then its only writer; it never writes learned and operator-set data of the same object |
+| Issued-certificate and SSH-certificate ledgers, CRL and KRL state | PKI; SSH CA. The ledger exists for revocation and roll-forward, not for serial uniqueness: serials are random 128-bit values |
 | Trust log tiles | trust log, the only appender; ceremony tools submit through it |
 | Audit batch objects, the `audit_batches` sequence, dedupe records | audit writer. Erasure and purge commands are appended by the writer on request, never by their requesters |
 | The last signed head | audit writer, through `key-holder`; the witness stores its co-signatures in the blob |
@@ -347,7 +349,7 @@ Every record kind has exactly one component that writes it. Others read through 
 | Backup archives and manifests | backup |
 | Throttle counters | web surface |
 
-Two cases need a rule rather than a name. A GitHub App's catalogue record is written by two flows, so its fields are split by origin: learned fields (ids, installation) are written by the integration only; fields that carry authority are declared in configuration and written by no one at run time. And the held fact set is a copy with an expiry, not a source: the integration owns the snapshot, the facts broker owns the held record.
+Two cases need a rule rather than a name. A GitHub App's catalogue record is written by two flows, so it is split into kinds by origin ([ADR 0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)): the ids and installation the vendor returned are issued records (pins), written by the integration only; fields that carry authority are declared in configuration and written by no one at run time. And the held fact set is a copy with an expiry, not a source: the integration owns the snapshot, the facts broker owns the held record.
 
 ## Integration invariants
 

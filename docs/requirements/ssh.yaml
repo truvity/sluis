@@ -7,7 +7,7 @@ requirements:
     statement: "sluis MUST issue SSH user certificates that are short-lived."
     rationale: "Short-lived certificates remove authorised_keys sprawl."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -22,7 +22,7 @@ requirements:
     statement: "An SSH user certificate MUST carry the permitted principals."
     rationale: "Principals bind the certificate to accounts."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -36,7 +36,7 @@ requirements:
     statement: "An SSH user certificate MUST have restricted critical options."
     rationale: "Unrestricted options widen what a certificate allows."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -49,7 +49,7 @@ requirements:
     statement: "sluis MUST issue SSH host certificates."
     rationale: "Host certificates remove trust-on-first-use."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal"]
     standards:
@@ -63,7 +63,7 @@ requirements:
     statement: "Documented host setup MUST use an authorised-principals file so that principals map to accounts."
     rationale: "Host certificates remove trust-on-first-use."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal"]
     standards:
@@ -77,7 +77,7 @@ requirements:
     statement: "sluis MUST publish an SSH key revocation list in the OpenSSH binary format."
     rationale: "Hosts need a revocation source."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: ["bare-metal"]
     standards:
@@ -90,7 +90,7 @@ requirements:
     statement: "An operator MAY run an OpenPubkey-style SSH sign-in next to sluis, but sluis does not provide one."
     rationale: "v1 offered this mode; v2 uses sluis's own SSH CA only, so it is not carried over."
     level: MAY
-    origin: v1-parity
+    source: v1-parity
     status: out-of-scope
     runtimes: all
     standards:

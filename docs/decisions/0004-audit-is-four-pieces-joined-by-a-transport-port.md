@@ -4,6 +4,7 @@
 **Date:** 2026-10-29
 
 Decided by the maintainer. Proposal: [issue #903](https://github.com/truvity/sluis/issues/903). Rewritten in place on 2026-10-29 during the v2 design phase (see "Design phase" in the decisions README).
+Rewritten in place on 2026-10-30 (realignment pass).
 
 ## Context
 
@@ -29,7 +30,7 @@ A cluster has several nodes. If every node wrote to one shared log, that log wou
   - **direct**: the emitter streams to the writer, over a Unix socket on the same host or over mutual TLS.
   - **queue**: the emitter puts records into a queue and the writer receives them. Queue drivers are **spool**, **SQS** and **NATS JetStream**.
 
-  The defaults stay as they were: spool on bare-metal, SQS on serverless and Kubernetes. Direct and NATS JetStream are supported drivers with no default. A writer on the same node as sluis is one installation's placement, not part of the model.
+  The default transport follows the runtime: spool on bare-metal, SQS on serverless and Kubernetes. Direct and NATS JetStream are supported drivers with no default. A writer on the same node as sluis is one installation's placement, not part of the model.
 - **In direct mode the emitter falls back to a local spool** when the writer is down. Direct mode therefore needs a disk, so it is not available on serverless.
 - **Combined pieces share driver instances.** When pieces are combined in one installation, even with sluis, they use the same driver instances. Quota is therefore a separate piece that can be combined with sluis.
 
@@ -43,12 +44,13 @@ A cluster has several nodes. If every node wrote to one shared log, that log wou
 ### Search and quota
 
 - **Quota meters by default and enforces per policy rule.** A policy rule may enforce quota for chosen subjects or audiences. Enforcement needs state with compare-and-set on the mint path. Strict quota is switched on in production only after the load test.
-- **Serverless may run the indexer and reader with a postgres index.** The default index of the lambda installation stays `none`; that default is a proposal.
+- **Serverless may run the indexer and reader with a postgres index.**
 - **The postgres index is one driver with a provisioning mode:**
-  - `rds` or `aurora` on AWS. On serverless, through a connection proxy (proposed).
+  - `rds` or `aurora` on AWS. How a serverless function reaches it is in ADR 0022.
   - `cnpg` on Kubernetes, in the same cluster.
   - `external`: a connection string only; sluis provisions nothing. Examples: a CloudNativePG cluster in another Kubernetes cluster behind a load balancer, or a Postgres that someone runs on bare metal. Exposing a database through a load balancer is not a driver; from sluis's side it is `external`.
-- **A replicated SQLite index (`rqlite`) is proposed** for the boards installation ([0003](/decisions/0003-runtimes-are-runtime-kinds/)), so that the reader can run on any node. Its full-text support has to be verified first.
+- **The other index drivers and the default index of each tested installation are in ADR 0022.** Among them is a replicated SQLite index (`rqlite`) for the boards, so that the reader can run on any node; it is proposed (ADR 0022).
+- **The search index and the quota meters are derived data,** rebuilt from the log and never evidence. Quota limits are declared and quota balances are issued records ([0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
 
 ## Consequences
 
@@ -64,7 +66,7 @@ A cluster has several nodes. If every node wrote to one shared log, that log wou
 - Serverless installations gain search. They need a Postgres service, which is a dependency to provision and check with `sluis config check`.
 - Four transport modes and drivers (direct, spool, SQS, NATS JetStream) and three provisioning modes for postgres need tests and docs.
 - The `external` mode puts connection security and availability with the operator. sluis cannot check more than the connection string and a reachability probe.
-- Still proposed: the rqlite index driver, the `none` default index on lambda, and the connection proxy on serverless. They stay marked as proposals in the docs until they are decided.
+- The index drivers beyond postgres, the default index of each tested installation and the connection from serverless to Postgres are decided in ADR 0022. The docs mark them as proposed until then.
 
 ## Roads not taken
 

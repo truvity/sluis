@@ -7,7 +7,7 @@ requirements:
     statement: "sluis MUST validate the policy document against its schema at load."
     rationale: "A misread policy is an authorization bug."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -21,7 +21,7 @@ requirements:
     statement: "sluis MUST refuse to start on a policy violation, with an error that names the offending path."
     rationale: "A misread policy is an authorization bug."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -34,7 +34,7 @@ requirements:
     statement: "A request MUST be denied unless a policy grant explicitly allows it."
     rationale: "Deny by default is the base of least privilege."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -48,7 +48,7 @@ requirements:
     statement: "Grant names MUST follow the declared vocabulary, with wildcards matching only where the vocabulary allows."
     rationale: "Deny by default is the base of least privilege."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -62,7 +62,7 @@ requirements:
     statement: "The policy engine MUST evaluate a policy language with a published grammar and a corpus of conformance cases."
     rationale: "A decision engine that fails open is a bypass."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -77,7 +77,7 @@ requirements:
     statement: "The policy engine MUST fail closed when it cannot evaluate."
     rationale: "A decision engine that fails open is a bypass."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -91,7 +91,7 @@ requirements:
     statement: "A change to policy that weakens a recorded assurance rule, adds an exchange grant or widens a sector MUST require an approval attestation from a second person."
     rationale: "Risky changes need two people."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -101,3 +101,29 @@ requirements:
     verification:
       - {kind: integration-test, ref: "attestation tests"}
       - {kind: manual, ref: "process review"}
+  - id: REQ-POLICY-008
+    area: POLICY
+    statement: "A policy snapshot that fails validation on reload MUST be refused while the policy in force stays."
+    rationale: "A bad policy must never replace a good one."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-12, section: "Cedar", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "policy reload refusal test"}
+  - id: REQ-POLICY-009
+    area: POLICY
+    statement: "A template-linked policy MUST be refused unless the declared delegation policy allows that link."
+    rationale: "Links made on the console stay within reviewed bounds."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-12, section: "Cedar", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "delegation bound test"}

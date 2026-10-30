@@ -4,6 +4,7 @@
 **Date:** 2026-10-30
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
+Rewritten in place on 2026-10-30 (realignment pass).
 
 ## Context
 
@@ -23,9 +24,9 @@ The algorithms are a separate decision ([0010](/decisions/0010-cryptography-uses
 
 - **An authority key signs in place.** The non-extractable key signs each digest itself, in the key service or on the card, and never leaves that store. There are no derived signing keys: a key is never used to certify a short-lived software key that signs in its place. There is no burst key.
 - **There is one key for each purpose.** X.509 keys are separate for each trust domain (intermediates per trust domain: ADR 0031). The SSH user CA and the SSH host CA are separate keys. The token-signing key, the audit log key and the grant key are separate keys. An exception of [0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/) has its own key too. A key that is used for two purposes can be abused through the weaker of them.
-- **On AWS, the layout follows how KMS works.** One symmetric key serves every sealing need, separated by an encryption context. One P-384 signing key exists for each authority purpose, so each key policy names exactly one actor. KMS allows one usage for each key, and a signing call takes no encryption context, so this is the only way to say that only one actor may sign with one key.
+- **On AWS, the layout follows how KMS works.** One symmetric key serves every sealing need inside the installation, separated by an encryption context. The key that wraps a backup archive is not that key: it may live in a separate account, and only the restore role may decrypt with it (ADR 0035). One P-384 signing key exists for each authority purpose, so each key policy names exactly one actor. KMS allows one usage for each key, and a signing call takes no encryption context, so this is the only way to say that only one actor may sign with one key.
 - **On a YubiKey, there are no symmetric keys.** Sealing uses ECDH and HKDF in the style of HPKE, with a P-384 key held in a slot. Sealing needs no hardware. Opening does. Older sealing keys stay in retired slots after a rotation so that what they sealed can still be opened. The slot plan is on the keys page.
-- **The `keys` port has `wrap` and `unwrap` beside `sign` and `public-key`.** A caller protects a data key with them without the key that protects it leaving the device. On AWS this is an encrypt call with a context that names the purpose. On a YubiKey it is ECDH and HKDF. A backup archive's data key is wrapped this way.
+- **The `keys` port has `wrap` and `unwrap` beside `sign` and `public-key`** ([0002](/decisions/0002-actors-declare-ports-placement-is-derived/)). A caller protects a data key with them without the key that protects it leaving the device. On AWS this is an encrypt call with a context that names the purpose. On a YubiKey it is ECDH and HKDF. A backup archive's data key is wrapped this way.
 - **CA serial numbers are random and 128 bits long.** No serial ledger is needed.
 
 ### The key rule
@@ -82,7 +83,7 @@ A YubiKey root with KMS intermediates is allowed but is not a main pattern.
 ### The card slot map
 
 - **A documented, versioned map says which card slot serves which purpose.** It has a reservation per purpose, and ranges kept for rotation and future use. It covers PIV slots `9a`, `9c`, `9d` and `9e`, the retired slots `82` to `95`, and the OpenPGP applet keys on the root cards.
-- **Defaults ship in code, and an installation may override them in configuration.** There is a default map for each card role: root card and node card.
+- **Defaults ship in code, and an installation may override them in declared configuration.** There is a default map for each card role: root card and node card.
 - **`sluis config check`, `sluis ceremony` and node initialisation refuse a collision and a purpose with no slot.** The map records each slot's attestation in the registry.
 - **The exact slot numbers are decided in ADR 0032**, with the ceremonies. The keys page shows the proposed numbers.
 
@@ -96,7 +97,7 @@ A YubiKey root with KMS intermediates is allowed but is not a main pattern.
 
 ## Consequences
 
-- No key can be exported, so a backup never holds one. A restore on new hardware means new keys and a new certificate for each public key. The roots and the runbook are what make that safe.
+- No key can be exported, so a backup never holds one. A restore on new hardware means new keys and a new certificate for each public key. The roots and the runbook are what make that safe. Secrets that are not keys, such as a vendor-issued App key, are archived sealed, and the escrow of the sealing key never copies a key out of its device ([0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
 - Signing speed is set by the store, not by software. A YubiKey signs P-384 at about 120 ms, or about 8 signatures a second, and the measured peak is a tenth of that. KMS costs about $2.62 a month at the measured volume. A software key is only for development and for CI.
 - Every purpose adds a key, a policy and a rotation schedule. In return a key policy names one actor and one use.
 - Two roots mean two trust anchors to publish, document and watch. Clients see two certificates for one intermediate, and some path builders do not try the second. A server presents one chain. These effects are documented on the keys page. Revocation state is open and belongs to ADR 0031.
@@ -105,7 +106,6 @@ A YubiKey root with KMS intermediates is allowed but is not a main pattern.
 - A root card is touched for every signature, so a root signs only in a ceremony, and a ceremony needs a card holder.
 - `sluis config check` has to know the key modes, the floor and the slot map. The tests need a virtual card or a software stand-in for the signer, and rehearsals on a real card.
 - A key born in a slot of the map is attested there, so a reviewer can compare the registry with the map.
-- The `keys` port gains `wrap` and `unwrap`, which amends the port contract in [0002](/decisions/0002-actors-declare-ports-placement-is-derived/).
 - The keys page, the hardware page and the release-signing page say the same as this record.
 
 ## Roads not taken

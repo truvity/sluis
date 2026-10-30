@@ -6,7 +6,7 @@ sidebar:
   order: 9
 ---
 
-sluis holds secrets, because it has to: a GitHub App key learned through a manifest flow, a chat token, a credential it minted, a generated client secret. This page says which secrets sluis keeps, which it publishes, and which it refuses to keep.
+sluis holds secrets, because it has to: a GitHub App key that the vendor issued through a manifest flow, a chat token, a credential it minted, a generated client secret. This page says which secrets sluis keeps, which it publishes, and which it refuses to keep.
 
 ## The scope
 
@@ -25,6 +25,19 @@ The line between the ports is the one in [Ports and drivers](/concepts/drivers/)
 - `state` holds records, with one writer per record kind.
 - `secrets` holds values that are read. A listing returns names and never values, and a value is never logged.
 
+## Where a secret comes from
+
+A secret's origin decides who wrote it and whether it is backed up ([Data](/concepts/data/#origins-and-sensitivity)):
+
+| Origin | Example | Lives in | In a backup |
+|---|---|---|---|
+| declared, by reference | a vendor root token the operator keeps in their own store | the operator's store, read through a source | no; sluis only names it |
+| operator-set | a secret put with `sluis secrets put` or pasted on the console | sluis's own store | yes, sealed |
+| issued by a vendor | a GitHub App key from the manifest flow, a chat bot token | sluis's own store | yes, sealed |
+| issued by sluis | a generated client secret, a minted credential | sluis's own store, or not stored if short-lived | durable ones yes, sealed |
+
+A secret is never in an audit record (a fingerprint and a revision only), in telemetry or in a log line.
+
 ## The secrets port
 
 :::note[Proposed]
@@ -36,20 +49,20 @@ Interface (illustrative): `get`, `put` with an expected revision, `delete` and `
 Drivers are of two kinds, and the port says so in its capability flags:
 
 - **Stores** are writable. An installation has exactly one. Examples are a parameter store on AWS, a KV store such as OpenBao, and `sealed-state`.
-- **Sources** are read-only. They deliver operator secrets and the bootstrap secrets, such as a YubiKey PIN: a systemd credential, a mounted file, an environment variable (development only).
+- **Sources** are read-only. They deliver the secrets that declared configuration references and the bootstrap secrets, such as a YubiKey PIN: a systemd credential, a mounted file, an environment variable (development only).
 
 The bootstrap rule is that **the credentials of the store come from a source, never from the store**.
 
 | Flag | Why it matters |
 |---|---|
-| `writable` | A learned secret cannot be written to a source |
+| `writable` | A vendor-issued secret, or one an operator puts at run time, cannot be written to a source |
 | `encryption` | `none`, `backend` or `envelope`. `sluis config check` refuses `none` outside a local installation |
 | `versioned` | Overlapping rotation needs at least the previous revision |
 | `consumer-readable` and `per-path-grants` | Needed if the store is also where an export is read from |
 
 ### Sealed state
 
-A **sealed-state** driver stores values as records in `state`, encrypted under a key that the `keys` port holds. On [boards](/runtimes/installations/#boards) it is the bootstrap, because there is no cloud store to hold learned secrets. With a YubiKey the sealing is an ECDH and HKDF exchange against the public half of a key in the card's sealing slot (see [Keys](/concepts/keys/#yubikey-layout)). Sealing needs no hardware; only opening does.
+A **sealed-state** driver stores values as records in `state`, encrypted under a key that the `keys` port holds. On [boards](/runtimes/installations/#boards) it is the bootstrap, because there is no cloud store to hold vendor-issued secrets. With a YubiKey the sealing is an ECDH and HKDF exchange against the public half of a key in the card's sealing slot (see [Keys](/concepts/keys/#yubikey-layout)). Sealing needs no hardware; only opening does.
 
 Sealed state is **allowed on every runtime when it is done properly** (agreed). This replaces the stricter v1 rule on sealed state. A store the cloud provides is still the usual choice where there is one, but it is no longer the only permitted one.
 
@@ -60,7 +73,7 @@ A dedicated decision record is still to come. It has to fix:
 - a re-seal path, for when the sealing key rotates;
 - recovery when a sealing key is lost;
 - one immutable item per version, with compare-and-set on the record;
-- what a backup contains and how it behaves.
+- how sealed values behave in a backup beyond the rule already agreed: they are archived sealed, with an escrow ceremony for the sealing key ([ADR 0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
 
 Until it is written, the driver is a design, not a promise. `sealed-state` is for sluis's internal values. Nobody outside sluis can read it, so an exported value on such an installation goes out through a drop (below). The PIN of the card itself comes from a source, a systemd credential.
 :::

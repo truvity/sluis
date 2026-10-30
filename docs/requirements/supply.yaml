@@ -7,7 +7,7 @@ requirements:
     statement: "Release artifacts MUST be signed."
     rationale: "Users verify what they install."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -22,7 +22,7 @@ requirements:
     statement: "The verification procedure for release signatures MUST be published."
     rationale: "Users verify what they install."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -36,7 +36,7 @@ requirements:
     statement: "Releases MUST carry build provenance."
     rationale: "Provenance proves the build."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -51,7 +51,7 @@ requirements:
     statement: "The provenance level of a release MUST be stated."
     rationale: "Provenance proves the build."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -66,7 +66,7 @@ requirements:
     statement: "Releases MUST include a software bill of materials in a standard format."
     rationale: "Dependency transparency."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: partial
     runtimes: all
     standards:
@@ -80,7 +80,7 @@ requirements:
     statement: "Each release signing primary key MUST be generated on a hardware token under a documented ceremony."
     rationale: "The primary key must stay offline."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -96,7 +96,7 @@ requirements:
     statement: "Each node's release-signing subkey MUST be bound under both OpenPGP primary keys, with an expiry."
     rationale: "The primary keys stay on their cards while one shared subkey signs, so one signature verifies under either."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -110,7 +110,7 @@ requirements:
     statement: "The public release keys SHOULD be published through several independent channels."
     rationale: "One channel is a single point of trust."
     level: SHOULD
-    origin: design-decision
+    source: design-decision
     status: open
     runtimes: all
     standards:
@@ -125,7 +125,7 @@ requirements:
     statement: "Changes to authentication, token, key and audit code MUST require two human approvals including a security owner."
     rationale: "Review is a control."
     level: MUST
-    origin: security-review
+    source: security-review
     status: open
     runtimes: all
     standards:
@@ -140,7 +140,7 @@ requirements:
     statement: "Release signing MUST use two OpenPGP primary keys, one on each hardware token of a pair."
     rationale: "One primary per card keeps each card's attestation."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -155,7 +155,7 @@ requirements:
     statement: "An OpenPGP primary key MUST NOT be copied between hardware tokens."
     rationale: "A copied primary key loses its attestation."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -169,7 +169,7 @@ requirements:
     statement: "A release-signing subkey MUST be revoked under both OpenPGP primary keys."
     rationale: "gpg and gpgv ignore a revocation made under only one primary, so a verifier that holds a single certificate would still accept the subkey."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:
@@ -182,7 +182,7 @@ requirements:
     statement: "A release MUST carry one signature that verifies under either primary key's certificate."
     rationale: "A verifier should need only one of the two certificates."
     level: MUST
-    origin: design-decision
+    source: design-decision
     status: planned
     runtimes: all
     standards:

@@ -7,7 +7,7 @@ requirements:
     statement: "Changes to the sign-in, code and refresh paths MUST update the recorded read and write budgets and state the reason."
     rationale: "Budgets prevent silent cost growth."
     level: MUST
-    origin: v1-parity
+    source: v1-parity
     status: planned
     runtimes: all
     standards:
@@ -20,7 +20,7 @@ requirements:
     statement: "Mass revocation of sessions MUST be paginated, asynchronous and idempotent."
     rationale: "A large revocation must not exceed a time budget."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:

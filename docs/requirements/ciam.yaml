@@ -7,7 +7,7 @@ requirements:
     statement: "An installation MAY host end-user accounts."
     rationale: "Hosting accounts is a product decision."
     level: MAY
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -22,7 +22,7 @@ requirements:
     statement: "A hosted account record MUST have a closed schema."
     rationale: "Hosting accounts is a product decision."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -37,7 +37,7 @@ requirements:
     statement: "A hosted account MUST be in exactly one of the states pending, live, disabled, suspended or deleted."
     rationale: "Hosting accounts is a product decision."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -51,7 +51,7 @@ requirements:
     statement: "Account creation MUST NOT be possible for a product on a person's behalf."
     rationale: "Consent for account creation belongs to the person."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -65,7 +65,7 @@ requirements:
     statement: "An installation MAY keep a registry of sectors, each with its own non-rotating key for pairwise subjects."
     rationale: "Pairwise subjects need a key per sector."
     level: MAY
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -80,7 +80,7 @@ requirements:
     statement: "A consent gate for a delegated agent MUST show one page that names the scopes and the offline-access sentence."
     rationale: "Consent is local to the entity."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -96,7 +96,7 @@ requirements:
     statement: "Consent for a delegated agent MUST be recorded outside the central installation."
     rationale: "Consent is local to the entity."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -111,7 +111,7 @@ requirements:
     statement: "A refresh of an offline grant MUST re-check the consent status."
     rationale: "Fast revocation is the control."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -127,7 +127,7 @@ requirements:
     statement: "A revoked consent MUST end the grant."
     rationale: "Fast revocation is the control."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -142,7 +142,7 @@ requirements:
     statement: "sluis MAY transmit shared signals about session and credential changes to registered receivers over a standard framework."
     rationale: "Receivers want push notification."
     level: MAY
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -157,7 +157,7 @@ requirements:
     statement: "Recovery codes MUST be stored only as keyed hashes."
     rationale: "A recovery path must not be the weakest path."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -172,7 +172,7 @@ requirements:
     statement: "A recovery MUST impose a cool-down that limits the assurance of the resulting session."
     rationale: "A recovery path must not be the weakest path."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -186,7 +186,7 @@ requirements:
     statement: "sluis MUST NOT offer a reset by e-mail."
     rationale: "Resets are account-takeover paths."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -201,7 +201,7 @@ requirements:
     statement: "sluis MUST NOT offer an anonymous reset endpoint."
     rationale: "Resets are account-takeover paths."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -216,7 +216,7 @@ requirements:
     statement: "sluis MUST NOT offer a reset by support staff."
     rationale: "Resets are account-takeover paths."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: open
     runtimes: all
     standards:
@@ -230,7 +230,7 @@ requirements:
     statement: "sluis MUST NOT act as strong customer authentication of a regulated entity or verify transaction-text signatures."
     rationale: "A boundary on claims."
     level: MUST
-    origin: stakeholder-ciam
+    source: stakeholder-ciam
     status: out-of-scope
     runtimes: all
     standards:

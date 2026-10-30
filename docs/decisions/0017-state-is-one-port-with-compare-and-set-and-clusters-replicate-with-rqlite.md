@@ -4,10 +4,11 @@
 **Date:** 2026-10-30
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
+Rewritten in place on 2026-10-30 (realignment pass).
 
 ## Context
 
-sluis keeps records: sessions, the signing ring, directory facts and counters. Most of its security rests on who may change which of them, and on what happens when two callers change one at once.
+sluis keeps records: sessions, the signing ring's metadata, directory facts, operator-set configuration, quota balances and meters. Most of its security rests on who may change which of them, and on what happens when two callers change one at once.
 
 v1 put everything that is not a blob behind one State port (v1 ADR 0027, on `master`). It worked on one key at a time with compare-and-swap by revision, listing by prefix and a lifetime, and it filtered expired records on read because a store may delete them late. It had two engines: NATS JetStream on Kubernetes and DynamoDB on AWS. The JetStream half was removed on 2026-10-04, because no deployment ran it, and the DynamoDB half stands. Before that port, sessions lived in a replicated cache whose asynchronous replication could lose a write that had been acknowledged, so a failover signed everybody out and could bring a rotated refresh token back to life.
 
@@ -28,8 +29,10 @@ Two other facts shape the answer. Drivers are services on Unix sockets, and the 
 ### One writer owns each record kind
 
 - **Every record kind has exactly one writer**: one actor that may create and change it. Other actors may read it if their manifest says so.
-- **`state-owner` enforces it** for the stores that have one login and cannot tell callers apart: rqlite and the embedded store. It is a shared driver that owns the store. It authenticates each caller by peer credentials and checks the call against an access list of caller actor, record kind and operation. The store's own listener is closed to every other process, and every use is audited.
+- **`state-owner` enforces it** for the stores that have one login and cannot tell callers apart: rqlite and the embedded store. It is a shared driver that owns the store. It authenticates each caller by peer credentials and checks the call against an access list of caller actor, record kind and operation. It refuses every writer that is not the kind's owner, operator-set writes included. The store's own listener is closed to every other process, and every use is audited.
 - **The enforcement is outside the actors because the store cannot do it.** rqlite has no row-level permissions, and a rule that lives in each actor's code is a rule a compromised actor can skip. Where the backend can tell callers apart, as DynamoDB can under IAM, the same access list is generated for each actor's own driver instance, from the same manifests ([0005](/decisions/0005-three-zoom-levels-contracts-and-a-permission-manifest/)). (inferred)
+- **Operator-set records are written by the kind's owning actor,** on a request routed through the console API, and the manifest says which kinds accept them ([0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)). The console never writes a record itself.
+- **Namespaces are per origin and trust class, with one writer per kind.** When pieces of an installation share one driver instance ([0004](/decisions/0004-audit-is-four-pieces-joined-by-a-transport-port/)), operator-set records, learned facts, issued records, sessions and quota state sit in separate namespaces, and the access list keeps each writer to its own kind.
 
 ### One lease port, with fencing
 
@@ -64,12 +67,13 @@ Two other facts shape the answer. Drivers are services on Unix sockets, and the 
 ### Sealed values in state
 
 - **State may hold a sealed value on every runtime, when it is sealed properly.** A sealed value is a record that holds ciphertext under a key that the `keys` port keeps. This supersedes v1's retirement of sealing: v1 ADR 0028 (on `master`) sealed written secrets in the state store, and two days later sealing was retired in favour of a secrets store that holds the secret, with state holding only the record that names it.
-- **What "properly" means is a record of its own, ADR 0034.** It will fix the encryption context and the additional authenticated data, a re-seal path, recovery when a sealing key is lost, one immutable item for each version with compare-and-set on the record that names it, and how a backup treats sealed values. The sealed-state driver and its details belong to that record and not to this one.
+- **What "properly" means is a record of its own, ADR 0034.** It will fix the encryption context and the additional authenticated data, a re-seal path, recovery when a sealing key is lost, and one immutable item for each version with compare-and-set on the record that names it. The sealed-state driver and its details belong to that record and not to this one.
+- **A backup archives sealed values sealed,** with an escrow ceremony for the sealing key ([0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)). The archive format is ADR 0035.
 
 ### Not decided here
 
 - Kubernetes state beyond DynamoDB: ADR 0047.
-- Further operations on the port beyond get, put with a precondition, cas and expiry (delete, listing by prefix, watch), which v1's state port had: ADR 0057.
+- Further operations on the port beyond get, put with a precondition, cas and expiry (delete, listing by prefix, a conditional adjust of a counter, watch or a change feed), which v1's state port had or the design pages propose: ADR 0057.
 - The sealing format and the secrets port: ADR 0034.
 - The `rqlite` index driver, which uses rqlite for search and not for state: ADR 0022. Full-text search (FTS5) was checked on rqlite v10.6.6 on 2026-10-30 and is compiled in, on a single node and in a three-node cluster with replication, and in the arm64 image. The result belongs to that record, and nothing here depends on it.
 
@@ -83,7 +87,7 @@ Two other facts shape the answer. Drivers are services on Unix sockets, and the 
 - A read at the default level on a follower is forwarded to the leader, and a local read on a follower can be stale. Measured on 2026-10-30, a local read straight after an acknowledged write missed it every time, and the follower caught up within about 50 ms. Linearizable and the default level were never stale. Callers choose the level per read.
 - A reap timeout that is shorter than a planned outage removes a healthy node. The timeout is a setting to be set against rolling updates and restarts. (inferred)
 - On a full power loss the cluster comes back only when a quorum is up. When keys are locked until an operator unlocks them, the cluster waits for that too.
-- A snapshot copy of the database is not the backup. The backup is a logical archive read through the ports ([0004](/decisions/0004-audit-is-four-pieces-joined-by-a-transport-port/) describes the audit side, ADR 0035 the rest), so it is the same on every driver.
+- A snapshot copy of the database is not the backup. The backup is a logical archive read through the ports (ADR 0035), so it is the same on every driver. Which record kinds it holds follows from their origin ([0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
 - State holds no secret in the clear. A secret is either in the secrets port or sealed.
 - `sluis config check` refuses a driver that does not fit the runtime, such as rqlite or the embedded driver on serverless, and refuses an actor that needs a lease with no lease driver.
 
@@ -146,5 +150,5 @@ Two other facts shape the answer. Drivers are services on Unix sockets, and the 
 ### Leave sealed state out of v2
 
 - Pros: v1 retired sealing within two days, in favour of a secrets store. Every installation with a secrets store would have one model for secrets.
-- Cons: an installation with no secrets store, such as the boards, would have no place to put a learned secret. v1's retirement was made where a managed store already existed. (inferred)
+- Cons: an installation with no secrets store, such as the boards, would have no place to put a vendor-issued secret. v1's retirement was made where a managed store already existed. (inferred)
 - Why not: sealed values are allowed on every runtime when sealed properly. The rules for that are ADR 0034.

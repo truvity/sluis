@@ -4,6 +4,7 @@
 **Date:** 2026-10-30
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
+Rewritten in place on 2026-10-30 (realignment pass).
 
 ## Context
 
@@ -23,7 +24,7 @@ v2 is a rewrite, and it is several processes. It needs one method that says how 
   - **L3, processes:** what runs where, with which credentials, and what enforces that in each runtime? It produces the actors, one permission manifest per actor, packaging, and the enforcement for each runtime.
 - **Every major component is a ConnectRPC contract, even when caller and callee share a process.** In-process calls use an in-memory transport, so moving a component into its own process changes configuration, not code. The same contract is served over a Unix socket with peer credentials locally, a Lambda invoke on AWS, and HTTPS with mutual TLS remotely.
 - **Contracts are written in Protobuf.** The `proto/` directory is the source of every contract. A contract change is reviewed there first.
-- **The permission manifest, one per actor, is the spine.** It states, for that actor, which record kinds it reads and writes, which secrets and keys it may use, which hosts it may reach, which actors may call it and which actors it calls. It is derived from L1 (the operations on each resource) and L2 (data ownership and the call graph). The manifests live in `manifest/`.
+- **The permission manifest, one per actor, is the spine.** It states, for that actor, which record kinds it reads and writes, which of the kinds it owns accept operator-set writes, which secrets and keys it may use, which hosts it may reach, which actors may call it and which actors it calls. The origin and sensitivity of each record kind come from the configuration schema ([0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)); the manifest names the writer. It is derived from L1 (the operations on each resource) and L2 (data ownership and the call graph). The manifests live in `manifest/`.
 - **Nothing that enforces least privilege is written by hand. The manifest generates it, for every runtime:**
   - IAM policies and trust policies;
   - key policies, with one actor per key;
@@ -31,7 +32,8 @@ v2 is a rewrite, and it is several processes. It needs one method that says how 
   - systemd units and sandbox drop-ins;
   - network rules (nftables, Kubernetes network policies);
   - the call graph, which is default deny: one interceptor in every process refuses a call that is not an edge of the reviewed graph;
-  - the deny-matrix tests and the blast-radius report of every actor.
+  - the deny-matrix tests and the blast-radius report of every actor;
+  - with the schema's origin and sensitivity annotations, the backup list, the telemetry allowlist and the audit redaction ([0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
 - **Enforcement is tested, not assumed.** The deny matrix is generated from the same data. For every pair of actors, actor X is denied actor Y's records, secrets, keys and sockets, and the test proves it.
 - **A change in permissions is a change in one file.** A pull request that adds a use case says which component owns each step and which actor's manifest changes. The blast-radius report for every actor is checked in, so a reviewer sees what the change grants.
 
