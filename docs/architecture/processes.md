@@ -66,7 +66,7 @@ A backend that can authorise each caller is used with **per-actor credentials an
 
 It has no internet egress, loads no plugins and has no reconcile logic: one code path per operation, fuzz-tested decoding, a rate limit and an audit record per signature. Its blast radius is every key on the card, and that price is paid once, in a small audited process. See [The mediating driver](/concepts/drivers/#the-mediating-driver).
 
-There is **no `state-owner`**. State on a cluster of boards is **one rqlite cluster per (boundary, owning actor)**, `sluis-rqlite@<boundary>-<actor>`: the owner has the only user with `execute`, declared readers have `query`-only users, and each cluster has its own port, certificate and systemd sandbox. How an actor unit that runs with `PrivateNetwork=yes` reaches its cluster's TCP client port is still open ([ADR 0008](/decisions/0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp/#not-decided-here), [issue #910](https://github.com/truvity/sluis/issues/910)).
+There is **no `state-owner`**. State on a cluster of boards is **one rqlite cluster per (boundary, owning actor)**, `sluis-rqlite@<boundary>-<actor>`: the owner has the only user with `execute`, declared readers have `query`-only users, and each cluster has its own port, certificate and systemd sandbox. The unit of a `per-actor` rqlite driver reaches its cluster's TCP client port through a narrow rule instead of `PrivateNetwork=yes`: `IPAddressDeny=any`, `IPAddressAllow=` for its cluster only, and a client certificate per cluster ([ADR 0008](/decisions/0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp/#how-a-per-actor-rqlite-driver-reaches-its-cluster)).
 
 The **node agent** (`sluis-node`, bare-metal only) is the root-owned process that is the node's trusted base. It issues a short-lived workload JWT per uid, brokers cloud credentials, pulls and verifies signed configuration and binaries, and starts units. Everything in [Deployment](/architecture/deployment/) depends on it staying small. It does not run on serverless or on Kubernetes.
 
@@ -96,7 +96,7 @@ Every component ships as its own executable, in one language ([Source layout](/a
 
 The directory names and the layout are agreed (PK-1), and the directory is called `actors/` (agreed; it amends the layout, which first called it `roles/`). The executable names above are illustrative. Actors are pinned by the unit: the executable a unit starts is the only code in that process, so an actor cannot contain another actor's code. Packaging follows the runtime, and is agreed ([ADR 0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/), [ADR 0038](/decisions/0038-the-local-installation-is-docker-compose-with-one-container-per-actor/)):
 
-- **Bare-metal** ships `.deb` and `.rpm` packages **split by function** (`sluis`, `sluis-node`, `sluis-server`, `sluis-drivers`, `sluis-driver-yubikey`, `sluis-audit-writer`, `sluis-audit-search`, `sluis-quota`, `sluis-host`, `sluis-console`), and a tarball. The packages ship **systemd template units** only, `sluis-<actor>@.service` and `.socket`; a **systemd generator** in the package reads `/etc/sluis/install.yaml` and creates the instances and their `sysusers.d` entries.
+- **Bare-metal** ships `.deb` and `.rpm` packages **split by function** (`sluis`, `sluis-node`, `sluis-server`, one `sluis-driver-<name>` per driver executable with its system dependencies, `sluis-audit-writer`, `sluis-audit-search`, `sluis-quota`, `sluis-host`, `sluis-console`), with a meta-package per bare-metal installation such as `sluis-install-boards`, and a tarball. The packages ship **systemd template units** only, `sluis-<actor>@.service` and `.socket`; a **systemd generator** in the package reads `/etc/sluis/install.yaml` and creates the instances and their `sysusers.d` entries.
 - **Serverless** ships **one function per actor and one zip per executable**; drivers reach a function as one Rust `aws` extension, and sluis uses at most three layers of its own.
 - **Kubernetes** runs **one OCI image per process**, carrying the packages' binaries byte for byte, pinned by digest, and installed with **one Helm chart with presets**.
 
@@ -114,7 +114,7 @@ The same actors run on every runtime. What changes is who starts them, what they
 | **Calls between actors** | Unix sockets | Unix sockets on the node; the Raft ports of the rqlite clusters are the only TCP ports between nodes | Lambda invoke, authorized by a resource policy on an alias | Unix sockets within a pod, on a socket volume mounted into the permitted callers. No call crosses a pod boundary; the audit transport is the only link between pods |
 | **Node agent** | `sluis-node` | `sluis-node` on every node | None: the platform attests the function | None: the platform's token is used |
 | **Mediating driver** | `key-holder`, for a card on the node | The same, on every node | None: KMS key policies do the job | None: KMS key policies do the job |
-| **Actors that declare instances: exactly 1** | Run once | Need the lease port, on the state store | A lease on DynamoDB, or a FIFO queue with one message group (to verify) | Need the lease port, on the state store (DynamoDB) |
+| **Actors that declare instances: exactly 1** | Run once | Need the lease port, on the state store | A reserved concurrency of 1 on a standard SQS queue, fenced by create-if-absent on the blob | Need the lease port, on the state store (DynamoDB) |
 | **Tested installation** | local | boards | lambda | kubernetes |
 
 ### Bare-metal, one node
@@ -191,12 +191,12 @@ On serverless the same actors are separate Lambda functions with no `sluis-node`
 ### Kubernetes
 
 :::note[Proposed]
-On Kubernetes the actors are containers of a node pod and of an audit pod, cut at the audit transport ([OD-17](/open-decisions/#od-17)). The audit side is being redesigned as a separate audit installation ([OD-31](/open-decisions/#od-31)). The first release targets Amazon EKS with AWS KMS ([OD-20](/open-decisions/#od-20)), and SQS is the transport for now ([OD-22](/open-decisions/#od-22)). See [Kubernetes](/runtimes/kubernetes/).
+On Kubernetes the actors are containers of a node pod and of an audit pod, cut at the audit transport ([OD-17](/open-decisions/#od-17)). Audit is a separate audit installation ([OD-31](/open-decisions/#od-31), decided), and each integration runs in a pod of its own ([OD-29](/open-decisions/#od-29), decided). The first release targets Amazon EKS with AWS KMS ([OD-20](/open-decisions/#od-20)), and SQS is the transport for now ([OD-22](/open-decisions/#od-22)). See [Kubernetes](/runtimes/kubernetes/).
 :::
 
 ## The audit installation
 
-Audit is built from the same ports as the rest of sluis and adds one port, the witness. Audit is made of four separate pieces ([OD-37](/open-decisions/#od-37), decided): the **emitter** (a library inside each end application, not a process), the **log** (the writer, a blob with a lock mode, and the witness), **Search** and **Quota**. The **transport** (direct, or a queue) is a port, not a piece. Each piece can be its own installation, and pieces combined in one installation, even with sluis, share driver instances. A writer on the same node as sluis is one installation's choice. A separate audit installation connected over the network is another, and is the direction of [OD-31](/open-decisions/#od-31).
+Audit is built from the same ports as the rest of sluis and adds one port, the witness. Audit is made of four separate pieces ([OD-37](/open-decisions/#od-37), decided): the **emitter** (a library inside each end application, not a process), the **log** (the writer, a blob with a lock mode, and the witness), **Search** and **Quota**. The **transport** (direct, or a queue) is a port, not a piece. Each piece can be its own installation, and pieces combined in one installation, even with sluis, share driver instances. A writer on the same node as sluis is one installation's choice. A separate audit installation connected over the network is another, and is the decided direction of [OD-31](/open-decisions/#od-31); a co-located profile shares the installation's driver instances, with the defence-in-depth layers per actor unchanged.
 
 | Part | Placement | Where it is decided |
 | ---- | --------- | ------------------- |

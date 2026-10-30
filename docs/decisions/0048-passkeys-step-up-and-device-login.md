@@ -1,10 +1,10 @@
 # 0048 — Passkeys, step-up and device login
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-10-30
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
-The open point at the end of the decision is tracked in [issue #910](https://github.com/truvity/sluis/issues/910).
+Rewritten in place on 2026-10-30 (the open point of [issue #910](https://github.com/truvity/sluis/issues/910) decided: device login is postponed; the record is Accepted).
 
 ## Context
 
@@ -17,7 +17,7 @@ The boundary model adds two constraints ([0009](/decisions/0009-one-installation
 - **Hosts.** The group issuer is `https://sluis.example.com`. Each environment's issuer is `https://sluis.<env>.example.com`, one origin per host. The boundary hosts are siblings of the group host, not under it.
 - **A compromised front must not reach a sensitive boundary.** Each boundary runs its own slim `entry@<boundary>` with no sign-in of its own, and the group issuer is its upstream. If a boundary trusted the front's word for a second factor, a compromised front could act there.
 
-The standards exist: WebAuthn for passkeys, RFC 9470 for a resource to ask for a stronger or fresher sign-in, and RFC 8628 for signing in on a machine with no browser. The standards register lists RFC 8628 as a target in v2 ([#855](https://github.com/truvity/sluis/issues/855)) and passkeys as planned ([#885](https://github.com/truvity/sluis/issues/885)).
+The standards exist: WebAuthn for passkeys, RFC 9470 for a resource to ask for a stronger or fresher sign-in, and RFC 8628 for signing in on a machine with no browser. Until this record, the standards register listed RFC 8628 as a target in v2 ([#855](https://github.com/truvity/sluis/issues/855)) and passkeys as planned ([#885](https://github.com/truvity/sluis/issues/885)).
 
 ## Decision
 
@@ -46,9 +46,11 @@ The standards exist: WebAuthn for passkeys, RFC 9470 for a resource to ask for a
 - **Single sign-on is otherwise transparent.** A person taps a passkey only where a boundary's policy demands fresh MFA.
 - **The CLI signs in once.** `sluis login` signs in at the group issuer. Tokens for each environment then come by token exchange at that boundary's own token endpoint, without a prompt. The front never sees a boundary's tokens.
 
-### Open point
+### Device login is postponed
 
-- **Device login (RFC 8628).** Signing in on a machine with no browser is a target in v2 ([#855](https://github.com/truvity/sluis/issues/855)), and the endpoints on the architecture page are proposed. How it is built is not decided: which actor serves it, how the verification page asks for a passkey or a full sign-in, and whether a tap on the verifying device satisfies a boundary's step-up for the token issued to the device. Tracked in [issue #910](https://github.com/truvity/sluis/issues/910). It keeps this record Proposed.
+- **Device login (RFC 8628) is postponed** ([#855](https://github.com/truvity/sluis/issues/855)). It is not part of v2's first target. The standards register lists it as planned for later.
+- **Its design is left to the issue:** which actor serves it, how the verification page asks for a passkey or a full sign-in, and whether a tap on the verifying device satisfies a boundary's step-up for the token issued to the device.
+- **Passkeys are a target in v2** ([#885](https://github.com/truvity/sluis/issues/885)), and the register says so.
 
 ## Consequences
 
@@ -58,6 +60,7 @@ The standards exist: WebAuthn for passkeys, RFC 9470 for a resource to ask for a
 - A boundary that verifies passkeys keeps its own challenges and the public keys it needs, so a passkey works there even when the front is compromised. (that the boundary keeps the public keys is inferred)
 - MFA rules live in each boundary's policy, so production can demand more than development without a change in code.
 - The conformance work includes the WebAuthn conformance tool and RFC 9470's challenge format. (inferred)
+- A person on a machine with no browser signs in another way until device login ships, for example with `sluis login` on a machine that has one. (inferred)
 - Threats addressed: T-5, T-6 and T-7, see the [threat model](/security/threat-model/).
 
 ## Roads not taken
@@ -85,6 +88,12 @@ The standards exist: WebAuthn for passkeys, RFC 9470 for a resource to ask for a
 - Pros: no upstream sign-in at all. (inferred)
 - Cons: sluis would become the provider of record for people's accounts, with recovery and enrolment of its own. (inferred)
 - Why not: sluis stays a broker. A full upstream sign-in is still required every N days and for high-privilege grants.
+
+### Device login in the first v2 target
+
+- Pros: people on headless machines sign in without a browser from the start.
+- Cons: three design questions, the verifying actor, the verification page and step-up for the device's token, before the passkey work is done. (inferred)
+- Why not: the maintainer postponed it ([#855](https://github.com/truvity/sluis/issues/855)).
 
 ### A fixed interval in code
 

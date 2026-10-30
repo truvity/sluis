@@ -180,7 +180,7 @@ The set of actors is the same on every [runtime](/runtimes/). What changes is ho
 | Kubernetes (proposed) | A container per actor, in a node pod or an audit pod |
 
 :::note[Proposed]
-On Kubernetes an actor is a container with its own user id and its own token audience, and a pod holds several actors. This replaces one pod, with one ServiceAccount, per actor. The layout is a node pod plus a separate audit side ([OD-17](/open-decisions/#od-17)); the audit side is being redesigned as a separate audit installation ([OD-31](/open-decisions/#od-31)). See [Kubernetes](/runtimes/kubernetes/).
+On Kubernetes an actor is a container with its own user id and its own token audience, and a pod holds several actors. This replaces one pod, with one ServiceAccount, per actor. The layout is a node pod plus a separate audit side ([OD-17](/open-decisions/#od-17)); audit is a separate audit installation ([OD-31](/open-decisions/#od-31), decided), and each integration runs in a pod of its own ([OD-29](/open-decisions/#od-29)). See [Kubernetes](/runtimes/kubernetes/).
 :::
 
 See [Runtimes](/runtimes/) for each runtime and the tested installations, and [Processes](/architecture/processes/) for what runs where.

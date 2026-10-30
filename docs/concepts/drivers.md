@@ -93,7 +93,7 @@ More cards per node are an option for later. The OpenPGP cards of the roots are 
 
 **There is no `state-owner`.** rqlite is light enough to run **one cluster per (boundary, owning actor)** (measured at about 7 to 9 MB idle and 16 to 26 MB loaded per node, plus about 30 MB shared per host). The owning actor gets an rqlite user with `execute`, and each declared reader a user with `query` only. Each cluster runs as a systemd template instance, `sluis-rqlite@<boundary>-<actor>`, with its own port from a port scheme and its own certificate, mutual TLS between nodes and to clients, and a sandbox that lets it write its data directory only (which also contains SQLite's `ATTACH`-creates-files hole). The footprint is measured again on the boards.
 
-**Not decided yet: how an actor reaches its own cluster.** An actor that needs no network runs with `PrivateNetwork=yes` and `RestrictAddressFamilies=AF_UNIX`, but rqlite's client API is a TCP port, so the actor's `per-actor` rqlite driver cannot reach its own cluster from inside that sandbox. A narrow `IPAddressAllow=` rule, a Unix-socket listener in rqlite (not supported today) and a per-actor sidecar unit are the options. It is an open point of [ADR 0008](/decisions/0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp/#not-decided-here), tracked on [issue #910](https://github.com/truvity/sluis/issues/910).
+**How an actor reaches its own cluster** (decided 2026-10-30). rqlite's client API is a TCP port, so the unit of a `per-actor` rqlite driver does not run with `PrivateNetwork=yes`. It gets a narrow rule instead: `IPAddressDeny=any`, `IPAddressAllow=` for its own cluster's addresses only, and `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`, plus a client certificate per cluster. Actors that need no network keep `PrivateNetwork=yes`. If rqlite adds a Unix-socket listener (proposed upstream, not merged), the driver moves to it ([ADR 0008](/decisions/0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp/#how-a-per-actor-rqlite-driver-reaches-its-cluster)).
 
 ## Defence in depth
 
@@ -124,6 +124,7 @@ Every port is protected in **three layers**, and all three are generated from on
 | lease | all | On the state store, independent of the Raft leader | |
 | blob | fs | A directory per uid, mode 0700 | |
 | blob | s3-compatible | IAM prefix conditions on AWS; R2 temporary credentials scoped to a prefix, from `cloud-cloudflare` | A bucket per boundary; Object Lock on S3 |
+| blob | s3-compatible on Garage | A key per bucket, per (boundary, actor), with an expiry, from `cloud-garage` | A bucket per actor; a Garage cluster per boundary; lock mode `none` |
 | transport | direct-unix | The peer uid at the receiver | |
 | transport | direct-mtls | The SPIFFE ID in the client certificate | |
 | transport | spool | A directory per producer uid | |
@@ -140,6 +141,7 @@ Every port is protected in **three layers**, and all three are generated from on
 | cloud | platform role | The platform's identity | |
 | cloud | gcp / azure | The cloud's federation | |
 | cloud | cloudflare | R2 temporary credentials, scoped to a bucket and a prefix | |
+| cloud | garage | A scoped admin token that creates a key per (boundary, actor) with an expiry | A Garage cluster per boundary |
 
 ### Postgres drivers
 
@@ -275,7 +277,18 @@ There is **one blob driver for object stores, `s3-compatible`**, and the separat
 - on AWS, from STS through web identity or the platform role, scoped by IAM prefix conditions;
 - on Cloudflare R2, from the **`cloudflare` cloud driver**, which runs as `cloud-cloudflare@<boundary>` and mints R2 **temporary credentials** scoped to the bucket and the prefix. They are minted locally, as an HS256 token signed with the parent token's secret. The parent token is per boundary and is stored sealed.
 
-Long-lived R2 tokens can be scoped to a bucket only; a prefix scope exists only on temporary credentials, and R2 has no OIDC federation (checked 2026-09-26). The `cloudflare` cloud driver is separate from the company integration `cloudflare@<company>`, which mints Cloudflare tokens for people and jobs ([Cloudflare](/integrations/cloudflare/)); the two share a library.
+Long-lived R2 tokens can be scoped to a bucket only; a prefix scope exists only on temporary credentials, and R2 has no OIDC federation (checked 2026-09-26). The `cloudflare` cloud driver is separate from the company integration `cloudflare@<company>`, which mints Cloudflare tokens for people and jobs ([Cloudflare](/integrations/cloudflare/)); the two share a library, and both are written in Go ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)).
+
+### Garage
+
+[Garage](https://garagehq.deuxfleurs.fr/) is a **supported backend of the same `s3-compatible` driver** (decided 2026-10-30), and the primary blob store of the [boards](/runtimes/installations/#boards), which run it themselves. Per its documentation (read 2026-10-30) Garage has no Object Lock, versioning, bucket policies or ACLs; its permissions are per key and per bucket, with no prefixes; and its admin API v2 has scoped admin tokens. So:
+
+- the **`garage` cloud driver**, `cloud-garage@<boundary>`, holds a scoped admin token and creates a **key per (boundary, actor) with an expiry**;
+- each actor has **a bucket of its own**, because a key's rights are per bucket, and each boundary has its own Garage cluster;
+- the lock mode is **`none`**, so the audit log's tamper evidence comes from the peer witnesses;
+- on the boards the audit log has an **off-site copy on R2**.
+
+A spike comes first: conditional writes (`If-None-Match: *`), Garage's memory on the boards, and key expiry. If conditional writes are missing, the writer relies on its per-node log plus a lease ([ADR 0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/)).
 
 ## Capability flags
 
@@ -286,6 +299,7 @@ Two ports carry flags that an actor can require, so that "any driver for this po
 | Driver | Lock mode | What it means |
 |---|---|---|
 | `fs` | `none` | Nothing stops a local administrator from changing a file. The audit trail is tamper-evident only if witnesses co-sign its heads. |
+| `s3-compatible` on Garage | `none` | Garage has no object lock and no versioning. The audit trail is tamper-evident through the witnesses. |
 | `s3-compatible` on Cloudflare R2 | `removable` | An object lock exists, but an account administrator can remove it. |
 | `s3-compatible` on AWS S3 | `compliance` | Object Lock in compliance mode: not even the account's root can shorten the retention. |
 

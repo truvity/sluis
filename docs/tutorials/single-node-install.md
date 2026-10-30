@@ -65,7 +65,7 @@ apt update
 apt install sluis
 ```
 
-The package installs the actors, drivers and the node agent (`sluis-node`) under `/usr/libexec/sluis/{actors,drivers,integrations,node,vendor}/<short-name>`, creates one system user per actor, and installs one systemd unit per actor and driver. It enables nothing yet.
+The package installs the actors, drivers and the node agent (`sluis-node`) under `/usr/libexec/sluis/{actors,drivers,integrations,node,helpers,vendor}/<short-name>`, creates one system user per actor, and installs one systemd unit per actor and driver. It enables nothing yet.
 
 ```sh
 # Example

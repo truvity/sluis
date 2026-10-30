@@ -1,10 +1,10 @@
 # 0013 — The ca and ssh-ca actors are the X.509 and SSH certificate authorities, and SSH uses only sluis's own CA
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-10-30
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
-The open point at the end of the decision is tracked in [issue #910](https://github.com/truvity/sluis/issues/910).
+Rewritten in place on 2026-10-30 (the open point of [issue #910](https://github.com/truvity/sluis/issues/910) decided: ACME in `ca` comes after the first release; the record is Accepted).
 
 ## Context
 
@@ -82,9 +82,10 @@ Four things shape the answer.
 - Cedar's datetime support, for time-boxed grants.
 - For each file `sshd` uses, whether it is read at each login or needs a reload.
 
-### Open point
+### ACME comes after the first release
 
-- **ACME in `ca`.** The maintainer wants hosts to be able to get TLS certificates from `ca` by ACME (RFC 8555), and whether `ca` serves it is not yet decided. If it does, `sluis-host` stays only the SSH host service, and hosts get their TLS certificates with an ordinary ACME client (the last part is inferred). Tracked in [issue #910](https://github.com/truvity/sluis/issues/910). It keeps this record Proposed.
+- **`ca` serves ACME (RFC 8555) after the first release** ([#978](https://github.com/truvity/sluis/issues/978)). Hosts then get their TLS certificates with an ordinary ACME client, and `sluis-host` stays only the SSH host service. (the ordinary client is inferred)
+- **Until then a host gets a TLS certificate by sending a CSR to `ca`'s issue call**, through the enrolment API of [0012](/decisions/0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials/) or the certificate module of `sluis-host`.
 
 ## Consequences
 
@@ -99,6 +100,12 @@ Four things shape the answer.
 - Threats addressed: T-8, T-9, T-19, T-20 and T-26, see the [threat model](/security/threat-model/).
 
 ## Roads not taken
+
+### ACME in the first release
+
+- Pros: hosts would use a standard client from the start, and `sluis-host` would never carry a certificate module.
+- Cons: one more protocol surface in `ca` before the first release, with its challenges and account state. (inferred)
+- Why not: the maintainer put it after the first release. The CSR path covers hosts until then.
 
 ### opkssh as a second SSH path
 

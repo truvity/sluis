@@ -18,13 +18,14 @@ The node agent signs each token with the **node's non-extractable key**, so a to
 
 The token's `sub` is the actor instance's name, **`<actor>@<boundary>`** ([Actors](/concepts/actors/#naming)), and the cloud role's trust policy pins it. This is credential brokering, not mediation: the node agent hands each actor a token of its own, and the cloud enforces what that token may do ([Ports and drivers](/concepts/drivers/#per-actor-and-shared-instances)).
 
-## Per-node OIDC issuers
+## One issuer per boundary
 
-Each node is its own OIDC issuer.
+The boundary's issuer is the issuer of these tokens, by default (decided 2026-10-30, [ADR 0012](/decisions/0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials/)).
 
-- The issuer publishes a **static discovery document** and a **JWKS** containing public keys only, at an HTTPS URL served from the distribution bucket. Nothing runs to serve them.
-- The issuer URL is `https://<issuer>/nodes/<node>/`, one per node.
-- The cloud role of an actor **trusts only the issuers of the nodes that run that actor**. A compromised node can therefore mint credentials only for the actors it was allowed to run, never for another node's.
+- Its **JWKS** holds public keys only: **one key per node card**, three on the boards, plus the next keys while a key rotates. Each node signs with its own card's key, under the one issuer.
+- The issuer publishes a **static discovery document** and the JWKS. Nothing runs to serve them.
+- **Per-node issuers are optional**, at `https://<issuer>/nodes/<node>/`, for a fleet whose nodes run different sets of actors. There the cloud role of an actor **trusts only the issuers of the nodes that run that actor**, so a compromised node can mint credentials only for the actors it was allowed to run.
+- Where every node runs the same actors, as on the boards, per-node issuers would protect nothing more. The cost of one issuer is that a compromised node can mint a token for any actor of its boundary until its key leaves the key set.
 
 AWS bounds this design: a JWKS holds at most 100 EC keys, an account has at most 100 OIDC providers, the issuer URL must be `https` with no port and no query, and the token must carry `iat`.
 
@@ -86,9 +87,9 @@ sequenceDiagram
   D->>A: API call
 ```
 
-The driver calls `AssumeRoleWithWebIdentity` with the role ARN and the workload JWT. STS fetches the discovery document and the JWKS from the issuer bucket, and caches them. It verifies the signature, `iss`, `aud` and `sub` against the role's trust policy, then returns temporary AWS credentials. The driver calls the AWS service with them.
+The driver calls `AssumeRoleWithWebIdentity` with the role ARN and the workload JWT. STS fetches the discovery document and the JWKS from the issuer, and caches them. It verifies the signature, `iss`, `aud` and `sub` against the role's trust policy, then returns temporary AWS credentials. The driver calls the AWS service with them.
 
-The driver never holds a key. A token for an actor other than the caller cannot be requested, because the node agent decides the actor from the uid and not from the request. And the IAM role's trust policy names this node's issuer and this actor's `sub`, so the same token is refused for every other actor.
+The driver never holds a key. A token for an actor other than the caller cannot be requested, because the node agent decides the actor from the uid and not from the request. And the IAM role's trust policy names the boundary's issuer (or, with per-node issuers, this node's) and this actor's `sub`, so the same token is refused for every other actor.
 
 ## IAM Roles Anywhere
 

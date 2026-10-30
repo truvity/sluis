@@ -56,9 +56,7 @@ The other actors put their audit records into the queue, the SQS transport drive
 - **Configuration.** Declared configuration arrives in a Lambda layer or through the AWS AppConfig API (not the AppConfig agent layer), as whole versioned snapshots. A function may live-reload a new snapshot: it is validated, swapped atomically and audited, and a snapshot that fails validation leaves the version in force ([ADR 0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
 - **Single instance.** An actor that declares exactly one instance (the audit writer) is fenced by create-if-absent on the blob, so a second instance cannot fork the log.
 
-:::note[Proposed]
-A reserved concurrency of 1 was planned to stand in for the writer's lease. With an SQS trigger that is still to be verified: an event source mapping starts at a concurrency of 2, and a reserved concurrency of 1 throttles it. The safe forms are a FIFO queue with one message group, or a lease on DynamoDB.
-:::
+The writer runs with a **reserved concurrency of 1 on a standard SQS queue** (decided 2026-10-30). An event source mapping starts at a concurrency of 2, so the limit throttles it and messages return to the queue. Correctness comes from the create-if-absent fence, not from the limit, and the throttling is measured at the Lambda step ([ADR 0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)).
 
 ## Keys
 

@@ -923,7 +923,7 @@ flows:
       - title: The issuer is trusted per node
         nodes: [downstream]
         edges: []
-        text: "Each node publishes a static discovery document and JWKS (public keys only) at https://<issuer>/nodes/<node>/, served from the distribution bucket. A cloud role trusts only the issuers of the nodes that run that actor, so a compromised node can mint only its own roles. AWS allows at most 100 EC keys in a JWKS and 100 OIDC providers per account."
+        text: "The boundary's issuer publishes a static discovery document and JWKS (public keys only) with one key per node card. Per-node issuers at https://<issuer>/nodes/<node>/ are optional, for fleets whose nodes run different actors; there a cloud role trusts only the issuers of the nodes that run that actor. AWS allows at most 100 EC keys in a JWKS and 100 OIDC providers per account."
   - id: audit
     title: Audit write
     why: A request becomes evidence, and a record reaches the index.

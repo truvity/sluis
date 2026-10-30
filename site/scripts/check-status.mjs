@@ -99,8 +99,15 @@ try {
   console.error(`check-status: cannot read ${relative(root, registry)}: ${e.message}`);
   process.exit(1);
 }
-if (ids.open.size === 0 || ids.decided.size === 0) {
-  console.error(`check-status: ${relative(root, registry)} has ${ids.open.size} open and ${ids.decided.size} decided OD-<n> rows; an empty table proves nothing`);
+// The "Open" table may be empty once every point is decided; the "Decided" table may not, because
+// a registry with no rows at all means the parser read nothing. The "Open" heading must still be there,
+// so that an aside always has a table to be checked against.
+if (!/^##\s+Open\s*$/im.test(readFileSync(registry, 'utf8'))) {
+  console.error(`check-status: ${relative(root, registry)} has no "## Open" section`);
+  process.exit(1);
+}
+if (ids.decided.size === 0) {
+  console.error(`check-status: ${relative(root, registry)} has ${ids.open.size} open and ${ids.decided.size} decided OD-<n> rows; an empty registry proves nothing`);
   process.exit(1);
 }
 // One message for an id that an aside may not cite.

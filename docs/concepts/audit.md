@@ -67,9 +67,7 @@ The rule is **exactly one writer per log**, not one per installation. A log is t
 
 **The writer is fenced by the blob store itself.** A batch object is created only if it does not exist yet (`If-None-Match: *`), so a second writer that believes it holds the log cannot overwrite a batch or fork the log: its create fails. The lease, where one is needed, lives on the state store with a fencing token ([Data](/concepts/data/#leases-and-fencing-tokens)).
 
-:::note[Proposed]
-On serverless the writer was planned with a reserved concurrency of 1 in place of the lease. With an SQS trigger that is still to be verified: an event source mapping starts at a concurrency of 2, and a reserved concurrency of 1 throttles it. The safe forms are a FIFO queue with one message group, or a lease on DynamoDB, with the create-if-absent fence in either case.
-:::
+**On serverless the writer runs with a reserved concurrency of 1 on a standard SQS queue** (decided 2026-10-30). An event source mapping starts at a concurrency of 2, so the limit throttles it, and throttled messages return to the queue. Correctness comes from the create-if-absent fence, not from the limit. The cost of the throttling is measured at the Lambda step ([ADR 0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)).
 
 **A cluster keeps one log per node.** Each node has its own writer, its own spool and its own log key. The other nodes are that log's **peer witnesses**, which is the 2-of-3 co-signing on a three-node cluster. Readers merge the logs by time. No writer reads another node's spool, so there is nothing to elect and **no writer lease is needed**, and when one node is down the other nodes keep writing their own logs.
 
@@ -107,11 +105,14 @@ The installation defaults stay as they are ([OD-34](/open-decisions/#od-34)): th
 
 **Direct mode falls back to a local spool when the writer is down** ([OD-35](/open-decisions/#od-35)). The emitter keeps the record on its own disk and replays it when the writer returns. The consequence is that direct mode needs a disk, so it is not available on serverless, which fits the [compatibility table](/concepts/drivers/#which-drivers-fit-which-runtime). An in-memory buffer is not offered, because it would lose records.
 
-:::caution[Open decision OD-31: Audit as a separate installation]
-The audit side is being redesigned as its own installation, connected to sluis over the network. The actors are decided (no notary), and an emitter is authenticated by the transport driver's own layer (above). Open: the co-located profile for a small install. The lean is that audit is its own installation, and sluis emits over a direct stream or a queue through the transport port.
+## Audit is its own installation
 
-OD-31 is the existing audit split. The points that refine it are decided: [OD-32](/open-decisions/#od-32) (placement is derived), [OD-33](/open-decisions/#od-33) (quota metering and enforcement), [OD-34](/open-decisions/#od-34) to [OD-36](/open-decisions/#od-36) (the transport defaults, direct mode, and the optional witness), [OD-37](/open-decisions/#od-37) and [OD-38](/open-decisions/#od-38) (the four pieces) and [OD-39](/open-decisions/#od-39) (the audit actors).
-:::
+**Audit is its own installation**, connected to sluis over the network, and sluis emits over a direct stream or a queue through the transport port ([OD-31](/open-decisions/#od-31), decided 2026-10-30). The actors are decided (no notary), and an emitter is authenticated by the transport driver's own layer (above). The points that refine it are decided too: [OD-32](/open-decisions/#od-32) (placement is derived), [OD-33](/open-decisions/#od-33) (quota metering and enforcement), [OD-34](/open-decisions/#od-34) to [OD-36](/open-decisions/#od-36) (the transport defaults, direct mode, and the optional witness), [OD-37](/open-decisions/#od-37) and [OD-38](/open-decisions/#od-38) (the four pieces) and [OD-39](/open-decisions/#od-39) (the audit actors).
+
+- **The co-located profile** for a small install shares the installation's driver instances, as combined pieces do ([OD-37](/open-decisions/#od-37)). The defence-in-depth layers stay per actor, unchanged: each audit actor still has its own scope, its own backend identity and, at L3 and above, its own store ([Defence in depth](/concepts/drivers/#defence-in-depth)).
+- **A separate audit installation runs its own `entry`** ([OD-26](/open-decisions/#od-26), decided 2026-10-30). A console of another installation calls it with a short-lived token.
+- **Audit gets the same split as sluis** (the decided direction; the details are for the audit records): a slim router `entry`, the API, which is the `reader`, and a console of its own.
+- **On the boards the log lives on Garage, with an off-site copy on R2.** Garage has no lock (lock mode `none`), so the peer witnesses carry the log's tamper evidence ([Ports and drivers](/concepts/drivers/#garage)).
 
 ## The formats are the C2SP ones
 

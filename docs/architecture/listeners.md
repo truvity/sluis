@@ -10,7 +10,7 @@ An actor or driver that listens on a TCP port can be reached by anything that ca
 
 ## The rule
 
-- **`entry`'s public API is the only listener that faces the edge.** On bare-metal it is a Unix socket, and `cloudflared` forwards to it as a Unix-socket origin, so `entry` runs with `PrivateNetwork=yes` and no network at all. Where the edge cannot reach a Unix socket, the listener is TCP bound to `127.0.0.1`: the Lambda Web Adapter on serverless, the edge relay on Kubernetes.
+- **`entry`'s public API is the only listener that faces the edge.** On bare-metal it is a Unix socket, and `cloudflared` forwards to it as a Unix-socket origin, so `entry` runs with `PrivateNetwork=yes` and no network at all. On Kubernetes it is a Unix socket too, and the key-less edge relay in the pod forwards to it. Where the edge cannot reach a Unix socket, the listener is TCP bound to `127.0.0.1`: the Lambda Web Adapter on serverless.
 - **Every other actor and every driver listens on Unix sockets only**, under `/run/sluis/<actor>/`, one socket per instance, `/run/sluis/<actor>/<boundary>.sock`. Never a key-holding actor, never a driver, has a TCP listener.
 - **The Raft ports of the rqlite clusters, over mTLS, are the only TCP ports between nodes.** No actor is reachable from another node.
 - **Every Unix socket is mode 0660, with a group generated from the manifest.** The group is the set of actors allowed to call the socket. The callee reads the caller's uid, gid and pid with `SO_PEERCRED`, maps the uid to an actor, and checks the call graph, default deny. `key-holder` goes further: each caller has a socket of its own, in a directory only that caller can open.
@@ -19,11 +19,9 @@ An actor or driver that listens on a TCP port can be reached by anything that ca
 On Kubernetes the group cannot do this job, because supplementary groups are set for a whole pod and not for a container. The proposal is that reachability is generated from the manifest **by group on a host and by mount on Kubernetes**: each callee has its own volume for its socket directory, mounted read-only into exactly the containers that the call graph allows. The callee still maps the peer's user id to an actor and checks the call graph. The pid is not used on Kubernetes, because containers have separate PID namespaces. See [Kubernetes](/runtimes/kubernetes/#what-runs-where).
 :::
 
-:::note[Proposed]
-**An exception for the edge relay (OD-24).** The rule above says that only `entry`'s API listens on TCP. On Kubernetes the proposal adds one exception: a key-less **edge relay** in the same pod listens on the pod address and forwards to `entry` on `127.0.0.1`, so that a Gateway API implementation or an Ingress controller can route to the pod. The relay holds no key. `entry` itself stays on `127.0.0.1`. If the maintainer prefers to keep the rule as it is, the alternative is `cloudflared` only on Kubernetes, at the price of working with a gateway. See [OD-24](/open-decisions/#od-24).
-:::
+**An exception for the edge relay** ([OD-24](/open-decisions/#od-24), decided 2026-10-30). The rule above says that only `entry`'s API listens on TCP. On Kubernetes there is one exception: a key-less **edge relay** in the same pod listens on the pod address and forwards to `entry`'s Unix socket, so that a Gateway API implementation or an Ingress controller can route to the pod. The relay holds no key, and `entry` is not bound to the pod address. A `cloudflared` sidecar is a supported mode, with no inbound listener at all.
 
-Where `entry` listens on TCP, it is bound to the loopback address, never to `0.0.0.0` or a pod or network address (on Kubernetes see below), so the node opens no inbound port: the security group or host firewall needs no inbound rule for sluis. The port is set in configuration; this site uses `8080` as an example.
+Where `entry` listens on TCP, it is bound to the loopback address, never to `0.0.0.0` or a pod or network address (on Kubernetes it is a Unix socket, see below), so the node opens no inbound port: the security group or host firewall needs no inbound rule for sluis. The port is set in configuration; this site uses `8080` as an example.
 
 An example of the socket directory on one node (illustrative):
 
@@ -65,7 +63,7 @@ Three details keep this safe:
 
 ## Where `entry`'s listener is, per runtime
 
-The API is the same on every runtime; the listener follows the edge connector. It is a Unix socket on bare metal, and a loopback TCP port only where the connector needs one: inside the Lambda sandbox for the Web Adapter, and on Kubernetes as proposed in ADR 0046. The tested installations are the worked examples.
+The API is the same on every runtime; the listener follows the edge connector. It is a Unix socket on bare metal and on Kubernetes, and a loopback TCP port only where the connector needs one: inside the Lambda sandbox for the Web Adapter. The tested installations are the worked examples.
 
 | Runtime and installation | Listener | Who connects |
 | ------------------------ | -------- | ------------ |
@@ -73,13 +71,11 @@ The API is the same on every runtime; the listener follows the edge connector. I
 | bare-metal: boards | A Unix socket | `cloudflared` on the same board, a tunnel to the installation's public hostname |
 | bare-metal on a virtual machine (a possible installation, not a tested one) | A Unix socket | `cloudflared` on the same instance |
 | serverless: lambda | `127.0.0.1:<port>` inside the function's sandbox | The Lambda Web Adapter, pinned at v1.1.0 and vendored into sluis's own layer. The edge in front of the function is API Gateway |
-| kubernetes: EKS (proposed) | `entry` on `127.0.0.1:<port>`, bridged in the pod, as below | An edge relay in the same pod (proposed default), or `cloudflared` |
+| kubernetes: EKS | `entry` on a Unix socket, bridged in the pod, as below | An edge relay in the same pod (the default), or `cloudflared` |
 
 On serverless the loopback port is inside a micro-VM that holds only sluis's own processes. It is not reachable from the network.
 
-:::note[Proposed]
-On Kubernetes the loopback port is not reachable from outside the pod, and a gateway reaches a pod by its address. The proposal keeps the listener on `127.0.0.1` and bridges it from inside the pod, in one of two modes: a key-less edge relay on the pod address that forwards to `entry`, which is the default, or a `cloudflared` sidecar that connects to the loopback port and accepts no inbound connection. The kubelet probes `entry` with an `exec` probe, which runs inside the container's network namespace. Binding the pod address in `entry` is not proposed, because it would put an unauthenticated listener on the pod network. Details and options are on [Kubernetes](/runtimes/kubernetes/#edge) and in [OD-24](/open-decisions/#od-24).
-:::
+On Kubernetes a gateway reaches a pod by its address, so `entry`'s socket is bridged from inside the pod ([OD-24](/open-decisions/#od-24), decided 2026-10-30), in one of two modes: a key-less edge relay on the pod address that forwards to `entry`'s Unix socket, which is the default, or a `cloudflared` sidecar that connects out and accepts no inbound connection. The kubelet probes `entry` with an `exec` probe, which runs inside its container. `entry` is not bound to the pod address, because that would put an unauthenticated listener on the pod network. Details are on [Kubernetes](/runtimes/kubernetes/#edge).
 
 ## The console's static host
 
