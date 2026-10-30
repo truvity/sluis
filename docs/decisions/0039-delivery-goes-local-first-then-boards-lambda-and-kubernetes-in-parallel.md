@@ -39,7 +39,7 @@ Foundations come first in any order. The build, the process and driver patterns,
   - **lambda:** `aws-kms`, `dynamodb`, `sqs`, `s3`.
   - **kubernetes:** `aws-kms`, `dynamodb`, `sqs`, `s3` and the Kubernetes Lease.
 
-  The list names the drivers decided here for each port except the index. The index driver of each installation is decided in ADR 0022, and the Kubernetes pod layout and chart in ADRs 0046 and 0047.
+  The list names the drivers decided here for each port except the index. The index driver of each installation is decided in [0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/), and the Kubernetes pod layout and chart in ADRs 0046 and 0047.
 - **EC2 is not a delivery target.** A virtual machine is bare-metal, so an EC2 installation is a possible installation, allowed by the rules and untested.
 - **The order is reviewed when each installation ships.** A change of order is a new record.
 
@@ -48,7 +48,7 @@ Foundations come first in any order. The build, the process and driver patterns,
 - Until the first installation of step 2 ships, v2 has no production installation, because local is not one. The checks that need a cloud account, a cluster or the board hardware wait for step 2.
 - Step 2 puts three installations in flight at once. It needs enough hands to keep them moving, and a test harness that can run all four ([0003](/decisions/0003-runtimes-are-runtime-kinds/)).
 - A defect in a shared piece, found on one installation, can block the other two. The shared foundations in step 1 are the guard against that, and anything that every installation needs is built before step 2.
-- The boards installation depends on the index driver that ADR 0022 chooses. A full-text test on a three-node rqlite cluster (2026-10-30) worked. It has not been run on arm64 board hardware, and the cost of writes on eMMC is not measured. Both are inputs to ADR 0022.
+- The boards installation depends on the index driver that [0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/) chooses. A full-text test on a three-node rqlite cluster (2026-10-30) worked. It has not been run on arm64 board hardware, and the cost of writes on eMMC is not measured. Both are inputs to [0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/).
 - The kubernetes installation was "later" and is now in step 2. Its pod layout, edge and chart are not decided yet (ADRs 0046 and 0047), so it may take longer than the other two. The order allows that; it does not wait for it.
 - The sluis v1 line continues while v2 grows. v1 is supported until the maintainers' production deployments run v2 ([0001](/decisions/0001-v1-and-v2-lines/)), which is a fact and not a date, so this record sets no date either.
 - Every place that names the older order is corrected: the roadmap page, the installations page and the delivery-order bullet in [0003](/decisions/0003-runtimes-are-runtime-kinds/), which was edited in place for this.

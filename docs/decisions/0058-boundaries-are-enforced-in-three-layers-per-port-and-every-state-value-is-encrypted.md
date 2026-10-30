@@ -6,6 +6,7 @@
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 Rewritten in place on 2026-10-30 (threat IDs from the threat model added to the consequences).
 Rewritten in place on 2026-10-30 (a narrow network rule per unit for the `per-actor` rqlite driver, and Garage as a supported backend of the blob driver with a `cloud-garage` credential driver, primary on the boards with an off-site copy of the audit log on R2).
+Rewritten in place on 2026-10-31 (`cloud-garage` is Rust, as ADR 0060 now says, and the off-site copy of the audit log is an hourly job, as ADR 0021 decides).
 
 ## Context
 
@@ -103,10 +104,10 @@ The node's YubiKey is the one backend left that cannot tell callers apart.
 ### Garage: a supported backend of the same blob driver
 
 - **Garage is a supported backend of `s3-compatible`.** It is the primary blob store on the boards, which run it themselves.
-- **Its credentials come from a `cloud-garage@<boundary>` driver.** It holds a scoped admin token, and creates a key per (boundary, actor) with an expiry through Garage's admin API. The admin token is stored sealed. (that it is sealed is inferred from the parent token's rule)
+- **Its credentials come from a `cloud-garage@<boundary>` driver,** written in Rust by rule R5 of [0060](/decisions/0060-the-language-follows-the-executable/). It holds a scoped admin token, and creates a key per (boundary, actor) with an expiry through Garage's admin API. The admin token is stored sealed. (that it is sealed is inferred from the parent token's rule)
 - **A bucket per actor,** because Garage's permissions are per bucket and have no prefixes. Layer 2 is the key with rights on its own bucket only. Layer 3 is the bucket per actor, and a Garage cluster per boundary.
 - **The lock mode is `none`.** Garage has no Object Lock and no versioning, so the audit log's tamper evidence comes from the peer witnesses.
-- **The audit log has an off-site copy on R2.** On the boards the log is copied from Garage to an R2 bucket, so losing the boards does not lose the log. (that the copy uses `cloud-cloudflare` credentials is inferred)
+- **The audit log has an off-site copy on R2.** On the boards an hourly job of the audit installation copies new log objects from Garage to an R2 bucket, so losing the boards loses at most the last hour of the log ([0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)). (that the copy uses `cloud-cloudflare` credentials is inferred)
 - **A spike comes first.** It checks conditional writes (`If-None-Match: *`), Garage's memory on the boards, and key expiry. If conditional writes are missing, the create-if-absent fence is not there, and the writer relies on its per-node log plus a lease on the state store.
 
 ### PostgreSQL
