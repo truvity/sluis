@@ -31,7 +31,8 @@ sidebar:
 | `sluis-host` | Rust |
 | The AWS driver and the other cloud drivers | Rust |
 | `policy` and its Cedar engine (the `cedar-policy` crate) | Rust |
-| `sluis-ceremony`, the ceremony tool (`openpgp-card` and rPGP) | Rust, as an executable of its own |
+| The ceremony's OpenPGP-card helper (`openpgp-card` and rPGP), run by `sluis ceremony` | Rust, as a helper inside the `sluis` package |
+| `cloud-cloudflare` | Go, sharing the library of the `cloudflare@<company>` integration (an exception to R5) |
 | `session`, `exchange`, `console`, `quota`, `signer`, `ca`, `ssh-ca` | Go |
 | The audit actors (`writer`, `witness`, `indexer`, `reader`) | Go |
 | Integrations | Go |
@@ -39,11 +40,11 @@ sidebar:
 | The cert-manager issuer | Go |
 | Console | TypeScript |
 
-Every Rust choice is **gated by its spike**, and the languages are fixed from the spikes before the first code of step 1 ([Roadmap](/roadmap/#spikes-before-code)): Connect for Rust over Unix sockets and a slim `entry` built in both languages decide `entry`; PKCS#11 through `cryptoki` decides `key-holder`; the OpenPGP-card ceremony decides `sluis-ceremony`; FIPS with `aws-lc-rs` decides the AWS drivers. A Rust choice that fails its spike falls back to Go.
+Every Rust choice is **gated by its spike**, and the languages are fixed from the spikes before the first code of step 1 ([Roadmap](/roadmap/#spikes-before-code)): Connect for Rust over Unix sockets and a slim `entry` built in both languages decide `entry`; PKCS#11 through `cryptoki` decides `key-holder`; the OpenPGP-card ceremony decides the ceremony's card helper; FIPS with `aws-lc-rs` decides the AWS drivers. When a Rust choice fails its spike, its fallback is chosen then from the written-down candidates ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)).
 
 There is no Rust JOSE driver; tokens are standard JWS/JWT, so any language verifies them against the published key set.
 
-The command-line tool is one `sluis` binary with subcommands for operators and for users; the ceremony tool is the one separate executable. An actor can be written in either language, because every contract is ConnectRPC and every integration is out of process. The language choice is per executable; the contracts do not change.
+The command-line tool is one `sluis` binary with subcommands for operators and for users, including `sluis ceremony`; the ceremony's Rust card helper is an executable the CLI runs, shipped in the same package. An actor can be written in either language, because every contract is ConnectRPC and every integration is out of process. The language choice is per executable; the contracts do not change.
 
 ## Shared kits
 
@@ -69,7 +70,7 @@ actors/<actor>/
 drivers/<driver>/
 integrations/<integration>/
 node/agent/
-cli/sluis/  cli/sluis-ceremony/
+cli/sluis/  cli/ceremony-card/
 host/sluis-host/
 console/
 manifest/       permission manifests, one per actor
@@ -87,7 +88,7 @@ docs/  site/
 | `kits/` | The shared kits above, one directory per language, plus the conformance suite |
 | `actors/`, `drivers/`, `integrations/` | One directory per component, matching the layout under `/usr/libexec/sluis/` that the [packages](/architecture/processes/#packaging) install. The directory is called `actors` (agreed; it amends the layout, which first called it `roles`) |
 | `node/agent/` | The node agent (`sluis-node`) |
-| `cli/sluis/`, `cli/sluis-ceremony/` | The one `sluis` binary, with subcommands for operators and users, and the separate ceremony tool |
+| `cli/sluis/`, `cli/ceremony-card/` | The one `sluis` binary, with subcommands for operators and users, and the Rust OpenPGP-card helper that `sluis ceremony` runs (the directory name is inferred) |
 | `host/sluis-host/` | The SSH host service ([SSH](/integrations/ssh/)) |
 | `console/` | The TypeScript console |
 | `manifest/` | The permission manifests, one per actor. They generate the IAM policies, key policies, shared-driver ACLs, systemd units, network rules and the deny-matrix tests |

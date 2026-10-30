@@ -35,7 +35,7 @@ A driver choice that used to be a per-shape decision now reads as "this installa
 | Installation | keys | state, lease | transport | blob | index | witness |
 |---|---|---|---|---|---|---|
 | local | yubikey-piv through the host's `pcscd` | embedded, local lock | spool | fs | sqlite | none |
-| boards | yubikey-piv, one per node | rqlite, one cluster per owning actor | spool | s3-compatible on R2 | rqlite (proposed driver) | peer |
+| boards | yubikey-piv, one per node | rqlite, one cluster per owning actor | spool | s3-compatible on Garage, with an off-site copy of the audit log on R2 | rqlite (proposed driver) | peer |
 | lambda | aws-kms | dynamodb | sqs | s3-compatible on S3 | none (proposed) | none |
 | kubernetes | aws-kms | dynamodb | sqs | s3-compatible on S3 | postgres on cnpg (proposed) | none |
 
@@ -118,7 +118,8 @@ Three single-board computers (arm64, 2 GB RAM, eMMC), each with its own YubiKey,
 ```mermaid
 flowchart TB
   edge["Cloudflare edge"]
-  r2["Blob store<br/>(Cloudflare R2)"]
+  garage["Blob store<br/>(Garage, on the nodes)"]
+  r2["R2<br/>(off-site audit copy)"]
   subgraph n1["Node 1"]
     cfd1["cloudflared"] -- "Unix socket" --> c1["entry + actors"]
     c1 --> kh1["key-holder"] --> yk1["YubiKey 1"]
@@ -143,16 +144,17 @@ flowchart TB
   r1 <-- "Raft, mTLS" --> r2n
   r2n <-- "Raft, mTLS" --> r3
   r1 <-- "Raft, mTLS" --> r3
-  w1 -.-> r2
-  w2 -.-> r2
-  w3 -.-> r2
+  w1 -.-> garage
+  w2 -.-> garage
+  w3 -.-> garage
+  garage -. "copy" .-> r2
 ```
 
-- **Drivers:** yubikey-piv with one YubiKey per node, through `key-holder`, and the slot plan on [bare-metal](/runtimes/bare-metal/#keys); rqlite for state and lease, one cluster per (boundary, owning actor); the spool for transport on each node; the `s3-compatible` blob driver on Cloudflare R2, with temporary credentials from the `cloudflare` cloud driver; and the index on rqlite. The rqlite index is a **proposed new driver**: a replicated SQLite, so the reader can run on any node. Its full-text search (FTS5) was tested on a three-node cluster on 2026-10-30; native arm64 hardware and the fsync cost on eMMC are still to be measured.
+- **Drivers:** yubikey-piv with one YubiKey per node, through `key-holder`, and the slot plan on [bare-metal](/runtimes/bare-metal/#keys); rqlite for state and lease, one cluster per (boundary, owning actor); the spool for transport on each node; the `s3-compatible` blob driver on **Garage**, which runs on the boards, with a key per (boundary, actor) and a bucket per actor from the `cloud-garage` credential driver, and an **off-site copy of the audit log on R2**; and the index on rqlite. Garage comes after a spike: conditional writes (`If-None-Match: *`), its memory on the boards and key expiry ([ADR 0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/)). The rqlite index is a **proposed new driver**: a replicated SQLite, so the reader can run on any node. Its full-text search (FTS5) was tested on a three-node cluster on 2026-10-30; native arm64 hardware and the fsync cost on eMMC are still to be measured.
 - **Keys:** a node's key is its own. No key is shared between nodes, so losing a board loses one key, not the install's. Sealing uses ECDH plus HKDF with the node's `9d` key.
-- **Audit:** the pieces run on the same nodes and share driver instances. **There is one log per node** ([the agreed rule](/concepts/audit/): exactly one writer per log, not one per installation). Each node has its own writer, spool and log key, and the other two nodes are its peer witnesses, the agreed 2-of-3 co-signing. Readers merge the logs by time. A writer asks its node's `key-holder` to sign checkpoints, and there is no notary. Batches are created with `If-None-Match: *`, so with one log per node no writer lease is needed.
-- **Identity and edge:** each node runs its own `cloudflared`, which forwards to `entry`'s Unix socket, and each node is its own issuer for workload tokens, `https://<issuer>/nodes/<node>/`. The public hostname is `sluis.example.com`.
-- **Limits and residual risk:** Raft tolerates the loss of one node of three. A node's YubiKey and PIN guard its key; physical access to a board with its key and PIN allows signing as that node, which peer witnessing limits for the audit logs but not for tokens. R2's lock can be removed by a Cloudflare account administrator, so the logs get their tamper evidence from the witnesses, not from the bucket. Mixed distributions widen what has to be tested.
+- **Audit:** the pieces run on the same nodes and share driver instances. **There is one log per node** ([the agreed rule](/concepts/audit/): exactly one writer per log, not one per installation). Each node has its own writer, spool and log key, and the other two nodes are its peer witnesses, the agreed 2-of-3 co-signing. Readers merge the logs by time. A writer asks its node's `key-holder` to sign checkpoints, and there is no notary. Batches are created with `If-None-Match: *`, so with one log per node no writer lease is needed. If the Garage spike finds no conditional writes, each writer relies on its per-node log plus a lease on the state store.
+- **Identity and edge:** each node runs its own `cloudflared`, which forwards to `entry`'s Unix socket, and the boundary's issuer is the issuer for workload tokens, with one key per node's YubiKey in its key set ([ADR 0012](/decisions/0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials/)). The public hostname is `sluis.example.com`.
+- **Limits and residual risk:** Raft tolerates the loss of one node of three. A node's YubiKey and PIN guard its key; physical access to a board with its key and PIN allows signing as that node, which peer witnessing limits for the audit logs but not for tokens; with one issuer per boundary such a token can name any actor of the boundary. Garage has no lock (lock mode `none`), and R2's lock can be removed by a Cloudflare account administrator, so the logs get their tamper evidence from the witnesses, not from the bucket. Mixed distributions widen what has to be tested.
 
 ## lambda
 
@@ -170,7 +172,7 @@ flowchart LR
 ```
 
 - **Drivers:** aws-kms for keys, DynamoDB for state and lease, an SQS queue for transport (a function's disk does not outlive its sandbox), the `s3-compatible` blob driver on S3. The default index is `none` (proposed): a separate installation holds the index, or the scan from the CLI is used. A `postgres` index (`rds` or `aurora` through RDS Proxy, proposed) is allowed ([OD-12](/open-decisions/#od-12), revised).
-- **Writer:** the audit writer is fenced by create-if-absent on the bucket. Whether a reserved concurrency of 1 can stand in for its lease with an SQS trigger is to be verified; the safe forms are a FIFO queue with one message group or a lease on DynamoDB. It signs checkpoints with the log key in KMS, under a key policy that names only its role; there is no `key-holder` and no notary.
+- **Writer:** the audit writer runs with a reserved concurrency of 1 on a standard SQS queue. Correctness comes from the blob fence: every batch is created only if absent, so a second instance cannot fork the log. The throttling this causes is measured at the Lambda step ([ADR 0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)). It signs checkpoints with the log key in KMS, under a key policy that names only its role; there is no `key-holder` and no notary.
 - **Witness:** none by default. `sluis config check` warns about it ([OD-36](/open-decisions/#od-36)); an `external` witness is the way to add one.
 - **Transport:** the direct mode needs a disk for its fallback spool ([OD-35](/open-decisions/#od-35)), so it is not available on serverless.
 - **Identity and edge:** the function's IAM role is its identity. API Gateway sits in front of `entry`, through the Lambda Web Adapter to `entry`'s loopback port.
@@ -183,7 +185,8 @@ A node pod and an audit pod, a container per actor, on Amazon EKS with AWS KMS. 
 - **Drivers:** aws-kms for keys ([OD-20](/open-decisions/#od-20)), DynamoDB for state ([OD-21](/open-decisions/#od-21)) and for the lease (a Kubernetes Lease driver is in the backlog), SQS for transport for now ([OD-22](/open-decisions/#od-22)), the `s3-compatible` blob driver on S3, and `postgres` on `cnpg` for the index (proposed; the `external` mode takes a connection string only).
 - **Witness:** none by default. A peer witness in the same cluster is not independent, so an `external` witness is the useful one.
 - **Identity:** projected ServiceAccount tokens, one audience per actor ([OD-19](/open-decisions/#od-19)).
-- **Edge:** an edge relay or `cloudflared` ([OD-24](/open-decisions/#od-24)).
+- **Edge:** a key-less edge relay in the pod that forwards to `entry`'s Unix socket, or a `cloudflared` sidecar ([OD-24](/open-decisions/#od-24), decided).
+- **Integrations:** a pod per integration, with its own egress NetworkPolicy ([OD-29](/open-decisions/#od-29), decided).
 - **Tests:** a kind smoke test on every pull request, and a real EKS cluster nightly (proposed).
 
 ## Other installations

@@ -184,7 +184,7 @@ https://www.googleapis.com/auth/admin.directory.domain.readonly
 **Keyless, with Workload Identity Federation.** An organisation can forbid creating service-account keys. Delegation then works without a key:
 
 1. Create a service account, with no key, and grant it domain-wide delegation for the four scopes.
-2. Create a workload identity pool and an OIDC provider that trusts sluis's node issuer (`https://<issuer>/nodes/<node>/`), mapping the token's subject to the role that reads the directory.
+2. Create a workload identity pool and an OIDC provider that trusts the boundary's workload issuer (or a node's issuer, `https://<issuer>/nodes/<node>/`, where per-node issuers are used), mapping the token's subject to the role that reads the directory.
 3. Let that pool principal impersonate the service account, and let the service account sign a delegation assertion for itself.
 4. At run time the directory integration exchanges its workload token for a short-lived federated identity, impersonates the service account, has it sign an assertion naming the dedicated admin, and exchanges that for a short-lived access token for the Directory API.
 
@@ -237,7 +237,7 @@ Accounts trust sluis as a web identity provider. Two kinds of object are needed 
 3. Apply the template with your infrastructure tool.
 4. Check with `aws sts get-caller-identity` on a profile that `sluis aws-config` wrote. A mismatched `aud` fails as an access-denied error on the assume call.
 
-For **sluis's own actors on a self-hosted node** the same pattern is generated per node: the provider is the node's issuer (`https://<issuer>/nodes/<node>/`), and an actor's cloud role trusts only the issuers of the nodes that run it ([Identity](/concepts/identity/)). AWS allows 100 providers per account and 100 EC keys in a key set.
+For **sluis's own actors on a self-hosted node** the same pattern is generated per boundary: the provider is the boundary's issuer, whose key set holds one key per node card. Where a fleet uses per-node issuers (`https://<issuer>/nodes/<node>/`), it is generated per node, and an actor's cloud role trusts only the issuers of the nodes that run it ([Identity](/concepts/identity/)). AWS allows 100 providers per account and 100 EC keys in a key set.
 
 For **AWS roles that call sluis**, each account turns on outbound identity federation, and the role's policy allows `sts:GetWebIdentityToken` for one audience, one algorithm and a short duration. The operator declares the account's issuer in the verifier block.
 

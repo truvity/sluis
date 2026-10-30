@@ -5,6 +5,7 @@
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 Rewritten in place on 2026-10-30 (threat IDs from the threat model added to the consequences).
+Rewritten in place on 2026-10-30 (a narrow network rule per unit for the `per-actor` rqlite driver, and Garage as a supported backend of the blob driver with a `cloud-garage` credential driver, primary on the boards with an off-site copy of the audit log on R2).
 
 ## Context
 
@@ -17,6 +18,7 @@ Several facts about the backends shape the answer. All were checked on the dates
 - **rqlite authorises per endpoint only.** There is nothing per table, per row or per database. A user with `execute` can also run `ATTACH` with an arbitrary path, and the file is created on the node's filesystem. On `query` connections `ATTACH` is refused since v10.6.3. Verified on rqlite v10.6.6 on 2026-10-30.
 - **rqlite is light.** Measured on 2026-10-30 (v10.6.6, x86_64): about 7 to 9 MB of private memory per node when idle and 16 to 26 MB with a few thousand rows, plus about 30 MB of shared binary text once per host. Several independent clusters on the same three hosts worked side by side.
 - **A YubiKey has one PIN.** Every process that can talk to the card can use every key on it, so the card cannot tell callers apart.
+- **Garage has no Object Lock, no versioning, no bucket policies and no ACLs.** Its permissions are per key and per bucket (read, write, owner), with no prefixes. Its admin API v2 has scoped admin tokens, and its lifecycle support is partial. Conditional writes are not documented. Read in Garage's documentation on 2026-10-30.
 - **Cloudflare R2's long-lived tokens are scoped to a bucket only.** Prefix scoping exists only on temporary credentials, which are derived from a parent token. R2 has no OIDC federation. Verified on 2026-09-26.
 - **Other backends do check callers natively:** DynamoDB with IAM conditions on the leading key, KMS with key policies and encryption-context conditions, PostgreSQL with roles, grants and row-level security, NATS with accounts and permission templates on scoped signing keys.
 
@@ -85,6 +87,7 @@ The node's YubiKey is the one backend left that cannot tell callers apart.
 - **Each rqlite unit is sandboxed by systemd** so that it can write only its own data directory. That contains `ATTACH`, which an `execute` user can otherwise use to create files anywhere the rqlite user can write.
 - **Node-to-node and client traffic use mutual TLS**, with a certificate for each cluster. A node of one cluster then cannot join another.
 - **Clusters run from a systemd template**, `sluis-rqlite@<boundary>-<actor>`, with a port scheme for their HTTP and Raft ports.
+- **A `per-actor` rqlite driver reaches its cluster through a narrow network rule per unit**, not through `PrivateNetwork=yes`: `IPAddressDeny=any`, `IPAddressAllow=` for its own cluster only, and `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`, plus a client certificate for that cluster. It moves to a Unix socket if rqlite adds one ([0008](/decisions/0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp/)).
 - **The memory figures above come from a desktop.** The boards are measured in spike S5 ([0060](/decisions/0060-the-language-follows-the-executable/)).
 
 ### Blob: one S3-compatible driver, with credentials from the `cloud` port
@@ -96,6 +99,15 @@ The node's YubiKey is the one backend left that cannot tell callers apart.
 - **The parent token is per boundary, and it is stored sealed.**
 - **`cloud-cloudflare@<boundary>` is separate from the company integration `cloudflare@<company>`.** They share a library, not a credential.
 - **Layer 3 is a bucket per boundary**, with Object Lock on S3.
+
+### Garage: a supported backend of the same blob driver
+
+- **Garage is a supported backend of `s3-compatible`.** It is the primary blob store on the boards, which run it themselves.
+- **Its credentials come from a `cloud-garage@<boundary>` driver.** It holds a scoped admin token, and creates a key per (boundary, actor) with an expiry through Garage's admin API. The admin token is stored sealed. (that it is sealed is inferred from the parent token's rule)
+- **A bucket per actor,** because Garage's permissions are per bucket and have no prefixes. Layer 2 is the key with rights on its own bucket only. Layer 3 is the bucket per actor, and a Garage cluster per boundary.
+- **The lock mode is `none`.** Garage has no Object Lock and no versioning, so the audit log's tamper evidence comes from the peer witnesses.
+- **The audit log has an off-site copy on R2.** On the boards the log is copied from Garage to an R2 bucket, so losing the boards does not lose the log. (that the copy uses `cloud-cloudflare` credentials is inferred)
+- **A spike comes first.** It checks conditional writes (`If-None-Match: *`), Garage's memory on the boards, and key expiry. If conditional writes are missing, the create-if-absent fence is not there, and the writer relies on its per-node log plus a lease on the state store.
 
 ### PostgreSQL
 
@@ -141,6 +153,7 @@ The node's YubiKey is the one backend left that cannot tell callers apart.
 | lease | all drivers | On the state store, independent of the Raft leader | |
 | blob | `fs` | A directory per uid, mode 0700 | |
 | blob | `s3-compatible` | IAM prefix conditions on AWS; R2 temporary credentials with prefixes through `cloud-cloudflare` | A bucket per boundary; Object Lock on S3 |
+| blob | `s3-compatible` on Garage | A key per bucket, per (boundary, actor), with an expiry, from `cloud-garage` | A bucket per actor; a Garage cluster per boundary; lock mode `none` |
 | transport | `direct-unix` | The peer uid, checked by the receiver | |
 | transport | `direct-mtls` | The SPIFFE ID in the client certificate | |
 | transport | `spool` | A directory per producer uid | |
@@ -157,6 +170,7 @@ The node's YubiKey is the one backend left that cannot tell callers apart.
 | cloud | platform role | – | |
 | cloud | GCP and Azure federation | – | |
 | cloud | `cloud-cloudflare` | R2 temporary credentials | |
+| cloud | `cloud-garage` | A scoped admin token that creates keys per (boundary, actor) with an expiry | A Garage cluster per boundary |
 
 A dash means that the decision names no layer-2 check for that driver yet.
 
@@ -172,6 +186,8 @@ A dash means that the decision names no layer-2 check for that driver yet.
 - **Content-aware signing changes the `keys` contract for `key-holder`.** A sign call carries the content to be signed. (inferred)
 - **Credential brokering puts minting on the hot path of start-up**, not of every read. A broker that is down stops new credentials, not existing ones. (inferred)
 - **One blob driver serves AWS and Cloudflare.** The difference between them moves to the `cloud` port, where credentials are scoped to a prefix on both. A bucket can therefore be shared between actors safely, which a long-lived R2 token could not do.
+- **Garage gives the boards a blob store of their own, at a cost.** A bucket per actor means more buckets, the log has no lock, so the witnesses carry its tamper evidence, and the off-site copy on R2 is one more job to run and monitor. If the spike finds no conditional writes, the boards' writers need a lease, which one log per node otherwise avoids. (inferred)
+- **A unit with a `per-actor` rqlite driver has a network stack**, limited by its per-unit address rule and by the per-cluster certificate rather than by a namespace.
 - **PostgreSQL needs more set-up:** a migration role, a group role per boundary, a pool per role and version 15 or newer. Self-run PostgreSQL clients get certificates from `ca`.
 - **This record changes three accepted records.** [0002](/decisions/0002-actors-declare-ports-placement-is-derived/) and [0008](/decisions/0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp/) name `state-owner` as a mediating driver, and [0017](/decisions/0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite/) has `state-owner` enforce one writer per record kind, runs one rqlite cluster per installation behind it, and lists a Kubernetes Lease driver. Where they disagree with this record, this record is the reasoning, and they are realigned in place during the design phase.
 - **The driver page and the requirements catalogue follow.** The per-driver table belongs on the drivers page, and the isolation test vectors are requirements with one clause each.
@@ -226,6 +242,18 @@ A dash means that the decision names no layer-2 check for that driver yet.
 - Pros: each driver tuned to its store.
 - Cons: two drivers for one protocol. Long-lived R2 tokens are bucket-wide, so a driver holding one has access to the whole bucket.
 - Why not: R2 speaks the S3 API, and temporary credentials scoped to a prefix give it the same layer 2 as IAM conditions on AWS.
+
+### Garage behind prefixes in a shared bucket
+
+- Pros: fewer buckets, as on S3 and R2.
+- Cons: Garage's keys have no prefix scope, so every actor with a key on the bucket could write every prefix. (inferred)
+- Why not: a bucket per actor gives Garage a layer-2 check of its own.
+
+### R2 as the primary blob store on the boards
+
+- Pros: a provider-run store off site, with a lock that an account administrator can remove.
+- Cons: the boards depend on the internet for every batch. (inferred)
+- Why not: Garage on the boards is the primary, and R2 holds the off-site copy of the audit log.
 
 ### PostgreSQL isolation through session variables
 

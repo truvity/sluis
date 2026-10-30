@@ -148,7 +148,7 @@ requirements:
     standards:
       - {id: ST-26, section: "1", depth: Full}
       - {id: NC-03, section: "8417", depth: Full}
-    features: ["design"]
+    features: ["#927"]
     gap: account-hosting-scope
     verification:
       - {kind: conformance-suite, ref: "SSF plans"}

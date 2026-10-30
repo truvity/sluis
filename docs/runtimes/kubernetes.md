@@ -6,9 +6,9 @@ sidebar:
   order: 3
 ---
 
-The kubernetes runtime, the [kubernetes](/runtimes/installations/#kubernetes) installation, is in design and test scope now (see [OD-7](/open-decisions/#od-7)), and it is built after local, in parallel with boards and lambda. Everything on this page is the design as proposed, except the points that [agreed decisions](/open-decisions/) already fix: sluis writes no Kubernetes objects, a driver talks to its actor over a Unix socket, and the audit path is the one in [Audit](/concepts/audit/). The pod layout ([OD-17](/open-decisions/#od-17)), AWS KMS only ([OD-20](/open-decisions/#od-20)), DynamoDB only ([OD-21](/open-decisions/#od-21)) and the SQS transport ([OD-22](/open-decisions/#od-22)) are decided.
+The kubernetes runtime, the [kubernetes](/runtimes/installations/#kubernetes) installation, is in design and test scope now (see [OD-7](/open-decisions/#od-7)), and it is built after local, in parallel with boards and lambda. Everything on this page is the design as proposed, except the points that [agreed decisions](/open-decisions/) already fix: sluis writes no Kubernetes objects, a driver talks to its actor over a Unix socket, and the audit path is the one in [Audit](/concepts/audit/). The pod layout ([OD-17](/open-decisions/#od-17)), AWS KMS only ([OD-20](/open-decisions/#od-20)), DynamoDB only ([OD-21](/open-decisions/#od-21)) and the SQS transport ([OD-22](/open-decisions/#od-22)) are decided. So are, since 2026-10-30, the edge relay ([OD-24](/open-decisions/#od-24)), the audit installation's own `entry` ([OD-26](/open-decisions/#od-26)), the runner for the EKS tests ([OD-27](/open-decisions/#od-27)), the baseline ([OD-28](/open-decisions/#od-28)), a pod per integration ([OD-29](/open-decisions/#od-29)) and the co-located audit profile ([OD-31](/open-decisions/#od-31)).
 
-On Kubernetes an actor is a container with its own user id and its own cloud identity. The containers of one node form a pod, and the audit path forms a second pod, cut at the audit transport ([OD-17](/open-decisions/#od-17)). The first release supports Amazon EKS with AWS KMS ([OD-20](/open-decisions/#od-20)), and a cluster with no key mode that the floor allows refuses to start. The audit side is being redesigned as a separate audit installation; see [OD-31](/open-decisions/#od-31).
+On Kubernetes an actor is a container with its own user id and its own cloud identity. The containers of one node form a pod, and the audit path forms a second pod, cut at the audit transport ([OD-17](/open-decisions/#od-17)). The first release supports Amazon EKS with AWS KMS ([OD-20](/open-decisions/#od-20)), and a cluster with no key mode that the floor allows refuses to start. Audit is a separate audit installation ([OD-31](/open-decisions/#od-31), decided).
 
 :::note[Proposed]
 The chart renders everything from the permission manifest, and sluis itself calls no Kubernetes API. The maintainer has not yet agreed the rest of the proposals on this page. Other clusters are specified where a decision is open.
@@ -25,19 +25,20 @@ flowchart LR
     direction TB
     relay["edge relay<br/>no key"]
     entry["entry"]
-    core["session, exchange, console,<br/>signer, policy, ca, ssh-ca,<br/>quota, integrations"]
+    core["session, exchange, console,<br/>signer, policy, ca, ssh-ca,<br/>quota"]
     drv["drivers<br/>(sidecars)"]
-    relay -- "127.0.0.1" --> entry
+    relay -- "Unix socket" --> entry
     entry -- "Unix sockets" --> core
     core --> drv
   end
+  node -- "HTTPS" --> integ["Integration pods<br/>one per integration"]
   node --> keys["Keys<br/>(KMS on EKS)"]
   node --> state["State"]
 ```
 
-The gateway reaches the edge relay. The drivers reach the keys and the state.
+The gateway reaches the edge relay. The drivers reach the keys and the state. Each integration runs in a pod of its own.
 
-The node pod runs two or three replicas. A request enters through the edge relay and never leaves the pod: the actors and their drivers call each other over Unix sockets.
+The node pod runs two or three replicas. A request enters through the edge relay, and the actors and their drivers call each other over Unix sockets inside the pod. A call to an integration leaves the pod for that integration's pod ([OD-29](/open-decisions/#od-29)).
 
 ### The audit pod
 
@@ -55,11 +56,9 @@ flowchart LR
 
 The audit pod runs two replicas, and one of them writes. The transport is the only link between the two pods. Where the reader runs is derived, not fixed ([Audit](#audit) below).
 
-:::caution[Open decision OD-31: Audit as a separate installation]
-The audit side is being redesigned as its own installation, connected to sluis over the network. The actors of the audit installation are decided: the writer, the witness, the indexer and the reader, with no notary. An emitter is authenticated by the transport driver's own layer: a queue policy per sender role on SQS, the client certificate's SPIFFE ID on `direct-mtls`, NATS accounts on NATS JetStream ([Audit](/concepts/audit/#the-transport)). Open: a co-located profile for a small install. The lean is that audit is its own installation, and sluis emits over TCP or a queue through the transport port.
+**Audit is its own installation** ([OD-31](/open-decisions/#od-31), decided 2026-10-30), connected to sluis over the network, and sluis emits over TCP or a queue through the transport port. The actors of the audit installation are the writer, the witness, the indexer and the reader, with no notary. An emitter is authenticated by the transport driver's own layer: a queue policy per sender role on SQS, the client certificate's SPIFFE ID on `direct-mtls`, NATS accounts on NATS JetStream ([Audit](/concepts/audit/#the-transport)). A **co-located profile** for a small install shares the installation's driver instances, and the defence-in-depth layers stay per actor, unchanged.
 
 The points [OD-32](/open-decisions/#od-32) to [OD-39](/open-decisions/#od-39) refine this one, and all of them are decided. Placement is derived from the port and driver rules (OD-32). Quota meters by default and enforces per policy rule (OD-33). Audit is four pieces that share driver instances when combined (OD-37 and OD-38). The installation defaults for the transport stay, with direct and NATS JetStream supported but not a default (OD-34); direct mode falls back to a local spool when the writer is down (OD-35); a witness is optional (OD-36); and there is no notary actor (OD-39).
-:::
 
 ## What runs where
 
@@ -68,22 +67,21 @@ The points [OD-32](/open-decisions/#od-32) to [OD-39](/open-decisions/#od-39) re
 - sluis does not write Kubernetes objects. It exports, and clusters pull. cert-manager and trust-manager stay as clients of sluis. The chart renders no Role, RoleBinding, ClusterRole or ClusterRoleBinding, because sluis needs no access to the Kubernetes API.
 
 - **Two pod kinds, cut along the audit transport** ([OD-17](/open-decisions/#od-17)).
-  - The **node pod** holds every actor on the synchronous call graph: `entry`, `session`, `console`, `exchange`, `signer`, `policy`, `ca`, `ssh-ca`, `quota` and the integrations, with their drivers and the edge container. Each container is named for its actor instance, such as `ca-prod`, with a ServiceAccount of the same name. It runs as a Deployment of two or three replicas spread over zones. Replicas exist for availability, not throughput.
+  - The **node pod** holds the core actors on the synchronous call graph: `entry`, `session`, `console`, `exchange`, `signer`, `policy`, `ca`, `ssh-ca` and `quota`, with their drivers and the edge relay.
+  - **Each integration is a pod of its own** ([OD-29](/open-decisions/#od-29), decided), with its own egress NetworkPolicy, so the node pod's allow-list does not carry every integration's hosts. The node pod calls it over HTTPS. Each container is named for its actor instance, such as `ca-prod`, with a ServiceAccount of the same name. It runs as a Deployment of two or three replicas spread over zones. Replicas exist for availability, not throughput.
   - The **audit pod** holds the writer and the indexer. One replica writes at a time, chosen by a lease on the state store with a fencing token, and every batch is created with `If-None-Match: *`, so a second writer cannot fork the log. The only link between the two pods is the audit transport, so no call crosses a pod boundary.
   - One pod per node with every actor a container is the layout inside each pod. One pod per actor with mutual TLS between pods was rejected: it gives every actor a TCP listener and needs a certificate for every pod from `ca`.
-  - The audit side is being redesigned as a separate audit installation, connected to sluis over the network; see [OD-31](/open-decisions/#od-31).
+  - Audit is a separate audit installation, connected to sluis over the network ([OD-31](/open-decisions/#od-31), decided).
 
 :::note[Proposed]
 - **An actor is a container.** Each actor and each driver runs as its own container with a unique user id, a read-only root file system, no capabilities, no privilege escalation and the runtime default seccomp profile. Drivers are native sidecars, so the platform starts them before the actors that call them.
 - **The mount is the first lock.** Each callee has its own volume for its socket directory, and that volume is mounted read-only only into the containers that the call graph allows. On Kubernetes this replaces the socket group of the hosts, because a container cannot have its own supplementary groups. The callee still checks the peer's user id.
-- **A driver is never a pod of its own,** because a socket cannot cross a pod boundary.
+- **A driver is never a pod of its own,** because a socket cannot cross a pod boundary. An integration is an actor, not a driver, so it can be (above).
 :::
 
 **The unit of the fusion rule is the container** ([OD-18](/open-decisions/#od-18), decided 2026-10-30). The [fusion rule](/architecture/processes/) says no unit holds a key next to an unauthenticated listener; on Kubernetes the unit is the container, the scope of its credentials, and a generated check fails the build if any container that can use a key also has a listener.
 
-:::caution[Open decision OD-29: Placement of integrations on Kubernetes]
-Options: integrations as containers of the node pod; each as a pod of its own, called over HTTPS; a per-integration switch in the manifest. The proposal is containers now, and a switch for an integration that needs its own egress rules or its own lifecycle.
-:::
+**Integrations run in a pod each** ([OD-29](/open-decisions/#od-29), decided 2026-10-30). Each integration's pod has its own egress NetworkPolicy, listing only the hosts that integration needs, and its own lifecycle. The node pod calls it over HTTPS. The other options were containers of the node pod, with one shared egress list, and a per-integration switch in the manifest.
 
 ## Keys
 
@@ -143,28 +141,18 @@ A volume spool, with a writer in every replica, is proposed for clusters outside
 **Witness:** optional ([OD-36](/open-decisions/#od-36)). A peer witness inside the same cluster is not independent, so an `external` witness is the useful one; `sluis config check` warns when there is none.
 :::
 
-:::caution[Open decision OD-26: Reaching a separate audit install]
-A console reaches the reader over a Unix socket in its own install. For an audit install in another place, options: the audit install runs its own `entry` in front of the reader; or the console calls it as a remote plugin over HTTPS with a token. The proposal is the first.
-:::
+**A separate audit installation runs its own `entry`** ([OD-26](/open-decisions/#od-26), decided 2026-10-30). A console reaches the reader over a Unix socket in its own installation. For an audit installation in another place, the console calls the audit installation's `entry` with a short-lived token. Audit gets the same split as sluis: a slim router `entry`, the API, which is the `reader`, and its own console. The details are for the audit records.
 
 ## Edge
 
 The console's single-page application runs as **its own Deployment and image**, behind the same gateway as `entry` by path, so the page and the console API share one origin. It is a key-less listener that serves static files only ([Listeners](/architecture/listeners/#the-consoles-static-host)).
 
-On bare-metal `entry` listens on a Unix socket, and on serverless on `127.0.0.1` inside the sandbox. The proposal for Kubernetes keeps it on `127.0.0.1` in its container. A gateway cannot route to a loopback address in another pod, and the kubelet's HTTP and TCP probes connect to the pod address, so they cannot reach it either.
+On bare-metal `entry` listens on a Unix socket, and on serverless on `127.0.0.1` inside the sandbox. A gateway cannot route to a socket or a loopback address in another pod, and the kubelet's HTTP and TCP probes connect to the pod address, so a container in the same pod bridges it ([OD-24](/open-decisions/#od-24), decided 2026-10-30), in one of two modes:
 
-:::note[Proposed]
-`entry` keeps its loopback listener. A container in the same pod bridges it, in one of two modes:
+- **Edge relay (the default).** A key-less container in the pod listens on the pod address and forwards to `entry`'s Unix socket in a shared volume. A Service targets its port, so any Gateway API implementation or Ingress controller can route to it. The relay serves a health endpoint for the gateway, passes the client address in `X-Forwarded-For`, and removes that header from requests unless they come from a configured trusted proxy. A certificate can be configured when the hop from the gateway must be encrypted. The relay is written in Rust, like `entry` ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)).
+- **`cloudflared` (supported).** A sidecar that connects out to the edge and forwards to `entry`'s Unix socket, as `cloudflared` does on the boards installation. The pod accepts no inbound connection at all.
 
-- **Edge relay (the default).** A small container that holds no key listens on the pod address and forwards to `entry` on `127.0.0.1`. A Service targets its port, so any Gateway API implementation or Ingress controller can route to it. The relay serves a health endpoint for the gateway, passes the client address in `X-Forwarded-For`, and removes that header from requests unless they come from a configured trusted proxy. A certificate can be configured when the hop from the gateway must be encrypted.
-- **`cloudflared`.** A sidecar that connects out to the edge and to `entry`'s loopback port, as `cloudflared` does on the boards installation, where it reaches a Unix socket instead. The pod accepts no inbound connection at all.
-
-The kubelet probes `entry` with an `exec` probe, which runs inside the container's network namespace and reaches the loopback port. `entry` is not bound to the pod address.
-:::
-
-:::caution[Open decision OD-24: Edge on Kubernetes]
-Options: a `cloudflared` sidecar; a key-less edge relay on the pod address; `entry` bound to the pod address. The relay is a second TCP listener, so the rule in [Listeners](/architecture/listeners/) that only `entry`'s API listens on TCP would gain the relay as an exception. The proposal is the relay as the default and `cloudflared` as a supported mode. Binding the pod address in `entry` is not proposed.
-:::
+The relay is a second TCP listener, so the rule in [Listeners](/architecture/listeners/) that only `entry`'s API listens on TCP has the relay as its one exception on Kubernetes. The relay holds no key. `entry` is not bound to the pod address, and the kubelet probes it with an `exec` probe, which runs inside its container. (that `entry` listens on a socket in a shared volume on Kubernetes follows from the decision that the relay forwards to its Unix socket)
 
 ## Packaging
 
@@ -181,7 +169,7 @@ The permission manifest generates:
 - for each container, a unique `runAsUser`, `runAsNonRoot`, a read-only root file system, dropped capabilities, `allowPrivilegeEscalation: false` and the runtime default seccomp profile;
 - for each pod, `shareProcessNamespace: false`;
 - the socket volumes and the token volumes described above, each mounted only where the call graph allows;
-- a NetworkPolicy for each pod kind that allows the gateway to reach the edge port and nothing else inbound, and egress to DNS and the allowed cloud endpoints;
+- a NetworkPolicy for each pod kind that allows the gateway to reach the edge port and nothing else inbound, and egress to DNS and the allowed cloud endpoints; for each integration pod, a NetworkPolicy that admits only the node pod and allows egress to that integration's hosts only;
 - optionally a CiliumNetworkPolicy, because a plain NetworkPolicy cannot match host names, and Cilium can express egress by FQDN with default deny;
 - a PodDisruptionBudget, zone spread and a rolling update that never takes a replica away before its replacement is ready;
 - the infrastructure code for the cloud side: the issuer registration, the roles, the key policies, the tables and the queue.
@@ -189,9 +177,7 @@ The permission manifest generates:
 The namespace carries the Pod Security label `restricted`. The render is tested against it.
 :::
 
-:::caution[Open decision OD-28: Kubernetes baseline]
-Which Kubernetes version and features the chart requires: native sidecars, the `restricted` Pod Security level, projected tokens, and a CNI that enforces NetworkPolicy. Whether OpenShift, which assigns user ids by namespace range, and sandboxed runtimes are supported. The proposal is native sidecars and `restricted` required, Cilium optional, and OpenShift and sandboxed runtimes outside the first release.
-:::
+**The Kubernetes baseline** ([OD-28](/open-decisions/#od-28), decided 2026-10-30). The chart requires native sidecars, the `restricted` Pod Security level, projected ServiceAccount tokens and a CNI that enforces NetworkPolicy. Cilium is optional, for egress by FQDN. OpenShift, which assigns user ids by namespace range, and sandboxed runtimes such as gVisor and Kata are not in the first cut.
 
 ## Testing
 
@@ -199,20 +185,18 @@ Which Kubernetes version and features the chart requires: native sidecars, the `
 The runtime is tested in three parts.
 
 - **Smoke test on kind, on every pull request.** The chart installs under the `restricted` level. A first test confirms that `SO_PEERCRED` identifies the peer by user id across the containers of one pod. The rest checks the socket reachability matrix, the NetworkPolicy deny matrix, the edge, the probes, a rolling upgrade, and that the render contains no RBAC objects. It runs without cloud credentials, with the chart's `kubernetes-dev` preset.
-- **A real EKS cluster in the development account,** as a job of the integration-test workflow that runs on the private runner, nightly and on release candidates, never on a pull request. It covers what kind cannot: the cluster's issuer into the cloud, key policies per actor, IAM conditions on the state, and the queue.
+- **A real EKS cluster in the development account,** as a job of the integration-test workflow, nightly and on release candidates, never on a pull request. The job runs on a short-lived runner inside the development VPC, against the cluster's private API endpoint ([OD-27](/open-decisions/#od-27)). It covers what kind cannot: the cluster's issuer into the cloud, key policies per actor, IAM conditions on the state, and the queue.
 - **A cluster outside AWS** joins the matrix when a key mode for it exists.
 :::
 
 **The development profile for the smoke test** ([OD-25](/open-decisions/#od-25), decided) is the chart's `kubernetes-dev` preset. A smoke test on kind has no KMS, and the floor refuses a software key in production, so the preset allows a software key on the terms of the [local](/runtimes/installations/#local) installation.
 
-:::caution[Open decision OD-27: Reaching a development EKS cluster from the integration job]
-Options: a public API endpoint limited to the private runner's address; an ephemeral runner inside the development network against a private endpoint. The proposal is the first, if the runner's address is stable.
-:::
+**The EKS test job runs inside the VPC** ([OD-27](/open-decisions/#od-27), decided 2026-10-30): a short-lived runner in the development VPC reaches a private API endpoint, so the cluster's API is not public. The other option was a public endpoint limited to the runner's address.
 
 ## Limits and residual risk
 
 - Identity is as strong as the cluster. A cluster administrator, a compromised node or a permissive admission policy can mint a token for any audience of a ServiceAccount, or open a shell in a container. A cluster is one trust domain.
-- A network policy and the cloud's view of the pod are per pod. All containers of a pod share its egress allow-list, so the allow-list is the union of what every container needs. An integration with a long list of hosts is the candidate for its own pod (OD-29).
+- A network policy and the cloud's view of the pod are per pod. All containers of a pod share its egress allow-list, so the allow-list is the union of what every container needs. That is why each integration has a pod of its own, with its own list ([OD-29](/open-decisions/#od-29)).
 - Separation between containers depends on unique user ids, on no container being able to change its user id, and on `shareProcessNamespace` being false. The generator and the tests enforce all three, and `SO_PEERCRED` behaviour has to be confirmed on every container runtime that is claimed.
 - A pod has many containers, one for each actor and each driver. Memory and start-up time are measured, not assumed.
 - Do not run the install that signs in to a cluster on that same cluster without the [recovery](/concepts/audit/) path, which needs no Kubernetes.

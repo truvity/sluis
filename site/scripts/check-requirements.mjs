@@ -18,12 +18,15 @@
 //   L16 a standard that no requirement cites (warning)
 //   L17 an out-of-scope record is a MUST NOT or a MAY and has a verification
 //   OD  every decision id is a row of docs/open-decisions.md
+//   COV the coverage figures on docs/standards/conformance.md equal the catalogue: the share of
+//       requirements (not withdrawn), and of MUSTs, whose verification includes an external suite
+//       or a vector set (`conformance-suite` or `test-vectors`). --write-coverage rewrites the block.
 //
 // No dependency beyond `yaml`: the JSON Schema subset the schema uses is checked by the small
 // validator below. Errors fail the run; warnings print and do not, unless --strict is given.
 //
-// usage: site/scripts/check-requirements.mjs [--strict] [dir]   (dir defaults to docs/requirements)
-import { readFileSync, readdirSync } from 'node:fs';
+// usage: site/scripts/check-requirements.mjs [--strict] [--write-coverage] [dir]   (dir defaults to docs/requirements)
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
@@ -31,6 +34,7 @@ import { parse } from 'yaml';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const args = process.argv.slice(2);
 const strict = args.includes('--strict');
+const writeCoverage = args.includes('--write-coverage');
 const dir = resolve(args.find((a) => !a.startsWith('--')) ?? join(root, 'docs', 'requirements'));
 
 // ---- public safety: patterns, not names. A hit is an error; the data must not need an exception.
@@ -241,7 +245,48 @@ for (const s of standardsDoc.standards) {
   if (!cited.has(s.id) && s.register) W(`L16 standard ${s.id} (${s.name}) is a register row that no requirement cites`);
 }
 
+// COV
+const coverage = computeCoverage(reqs);
+checkCoverage(coverage);
+
 finish(reqs.length);
+
+// The share of requirements whose verification includes an external suite or vector set.
+function computeCoverage(all) {
+  const EXTERNAL = new Set(['conformance-suite', 'test-vectors']);
+  const live = all.filter((r) => r.status !== 'withdrawn');
+  const external = (r) => r.verification.some((v) => EXTERNAL.has(v.kind));
+  const musts = live.filter((r) => r.level === 'MUST');
+  return {
+    total: live.length,
+    external: live.filter(external).length,
+    musts: musts.length,
+    mustsExternal: musts.filter(external).length,
+  };
+}
+
+// The generated block between the coverage markers of the conformance page. Only the default
+// catalogue has a page; a run against another directory computes the figures and checks nothing.
+function checkCoverage(c) {
+  const share = (a, b) => (b === 0 ? '0.0' : ((100 * a) / b).toFixed(1));
+  const body = [
+    '| Requirements | Externally checked | Share |',
+    '|---|---|---|',
+    `| All, not withdrawn (${c.total}) | ${c.external} | ${share(c.external, c.total)}% |`,
+    `| MUST (${c.musts}) | ${c.mustsExternal} | ${share(c.mustsExternal, c.musts)}% |`,
+  ].join('\n');
+  console.log(`check-requirements: coverage ${c.external}/${c.total} (${share(c.external, c.total)}%), MUST ${c.mustsExternal}/${c.musts} (${share(c.mustsExternal, c.musts)}%)`);
+  if (dir !== join(root, 'docs', 'requirements')) return;
+  const page = join(root, 'docs', 'standards', 'conformance.md');
+  const text = readFileSync(page, 'utf8');
+  const m = /(<!-- coverage:begin[^>]*-->\n)([\s\S]*?)(<!-- coverage:end -->)/.exec(text);
+  if (!m) return E(`COV ${relative(root, page)}: no coverage:begin / coverage:end markers`);
+  const want = `${body}\n`;
+  if (m[2] === want) return;
+  if (!writeCoverage) return E(`COV ${relative(root, page)}: the coverage block is stale; run site/scripts/check-requirements.mjs --write-coverage`);
+  writeFileSync(page, text.slice(0, m.index) + m[1] + want + m[3] + text.slice(m.index + m[0].length));
+  console.log(`check-requirements: wrote the coverage block of ${relative(root, page)}`);
+}
 
 function finish(n) {
   for (const m of warnings) console.warn(`warning: ${m}`);

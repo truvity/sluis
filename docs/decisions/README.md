@@ -57,8 +57,8 @@ A rewritten record says so in one line under its proposal link, with the date. O
 | [0009](0009-one-installation-per-boundary.md) | Boundaries are environments, companies and products on an isolation ladder, and a boundary on its own runtime is an installation federated by declared trust | Accepted |
 | [0010](0010-cryptography-uses-p384-by-default-with-named-exceptions.md) | Cryptography uses EC P-384 by default, in FIPS mode, with named exceptions | Accepted |
 | [0011](0011-authority-keys-sign-in-place-and-never-leave-their-store.md) | Authority keys sign in place and never leave their store | Accepted |
-| [0012](0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials.md) | Machine identity follows SPIFFE: proofs are exchanged for short-lived credentials | Proposed |
-| [0013](0013-ca-and-ssh-ca-are-the-certificate-authorities-and-ssh-uses-only-sluis-own-ca.md) | The ca and ssh-ca actors are the X.509 and SSH certificate authorities, and SSH uses only sluis's own CA | Proposed |
+| [0012](0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials.md) | Machine identity follows SPIFFE: proofs are exchanged for short-lived credentials | Accepted |
+| [0013](0013-ca-and-ssh-ca-are-the-certificate-authorities-and-ssh-uses-only-sluis-own-ca.md) | The ca and ssh-ca actors are the X.509 and SSH certificate authorities, and SSH uses only sluis's own CA | Accepted |
 | [0014](0014-policy-is-written-in-cedar-and-evaluated-by-a-rust-actor.md) | Policy is written in Cedar and evaluated by a Rust policy actor | Accepted |
 | [0015](0015-configuration-is-defined-once-in-pkl-and-shipped-as-json-schema.md) | Configuration is defined once in Pkl and shipped as JSON Schema | Accepted |
 | [0016](0016-data-has-an-origin-and-a-sensitivity.md) | Data has an origin and a sensitivity | Accepted |
@@ -67,7 +67,7 @@ A rewritten record says so in one line under its proposal link, with the date. O
 | [0033](0033-database-access-uses-short-lived-credentials.md) | Database access uses short-lived credentials | Accepted |
 | [0038](0038-the-local-installation-is-docker-compose-with-one-container-per-actor.md) | The local installation is Docker Compose with one container per actor, the published images and minimal drivers | Accepted |
 | [0039](0039-delivery-goes-local-first-then-boards-lambda-and-kubernetes-in-parallel.md) | Delivery goes local first, then boards, lambda and kubernetes in parallel | Accepted |
-| [0048](0048-passkeys-step-up-and-device-login.md) | Passkeys, step-up and device login | Proposed |
+| [0048](0048-passkeys-step-up-and-device-login.md) | Passkeys, step-up and device login | Accepted |
 | [0058](0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted.md) | Boundaries are enforced in three layers per port, by the driver, and every state value is encrypted | Accepted |
 | [0059](0059-each-boundary-has-its-own-issuer-and-tokens-carry-one-audience.md) | Each boundary has its own issuer; tokens carry one audience that names a registered client | Accepted |
 | [0060](0060-the-language-follows-the-executable.md) | The language follows the executable: Go by default, Rust at the edge, in the trusted base and in cloud drivers | Accepted |
