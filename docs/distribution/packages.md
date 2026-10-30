@@ -46,13 +46,15 @@ Examples of driver packages and what they bring:
 | `sluis-driver-rqlite` | Ships `rqlited` under `vendor/` and the `sluis-rqlite@.service` template |
 | `sluis-driver-aws` | The one Rust `aws` driver executable |
 
-No package depends on a driver package except the meta-packages. The lambda and kubernetes installations have no `.deb` or `.rpm`, so they have no meta-package, and the local installation runs the images under Docker ([ADR 0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)).
+No package depends on a driver package except the meta-packages. The lambda and kubernetes installations have no `.deb` or `.rpm`, so they have no meta-package, and the local installation runs the images under Docker, so there is no `sluis-install-local` until a native local mode exists (decided 2026-10-31, [ADR 0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)).
 
 The ceremonies need no package of their own. `sluis ceremony …` runs a Rust helper that drives the OpenPGP cards, shipped in the `sluis` package under `/usr/libexec/sluis/helpers/`. On the offline live USB system the same `sluis` runs with the same configuration: a ceremony is prepared online, run offline, and completed and published online ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)).
 
 The packages ship systemd **template units** only, `sluis-<actor>@.service` and `sluis-<actor>@.socket`, and a systemd generator that reads `/etc/sluis/install.yaml` and creates the instances ([Bare-metal](/runtimes/bare-metal/#what-runs-where)). sluis does not generate packages per installation.
 
 The **console's single-page application** is a separate artifact: a bundle of static files with the release's version, deployable on its own. Each runtime's static host serves it on the same origin as `entry`'s API: a directory that `entry` serves on bare-metal, the bucket behind the API gateway on serverless, a static container behind the ingress on Kubernetes ([ADR 0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)).
+
+The **audit console** is a bundle of its own, built from the same source tree on the same release train, and served by the audit installation's static host on the audit front's origin ([ADR 0062](/decisions/0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own/)). Its package and image are named with the build ([#985](https://github.com/truvity/sluis/issues/985)).
 
 ## The R2 layout
 

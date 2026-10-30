@@ -108,18 +108,18 @@ shapes:
   boards:
     log_key: "each node signs its own log with its own YubiKey, through the shared key-holder, which lets only that node's writer use the key. One log per node"
     witness: "peer: the other two nodes cosign each node's log (2-of-3). Optional, and sluis config check warns when there is none"
-    blob: "Garage on the boards, through the s3-compatible driver with keys from the cloud-garage credential driver, plus an off-site R2 copy of the audit log (after a spike)"
-    lock: "lock mode none (Garage has no object lock); the peer witnesses protect the history"
+    blob: "Garage on the boards, through the s3-compatible driver with keys from the cloud-garage credential driver, plus an off-site R2 copy of the audit log that an hourly job of the audit installation makes, not the writer (after a spike)"
+    lock: "lock mode none (Garage has no object lock); the peer witnesses protect the history, which is what lets a production log run here"
     cluster: "three nodes; each node has its own writer, spool and log; the audit pieces run on the same nodes and share driver instances"
-    index_placement: "rqlite, a replicated SQLite (a proposed driver), so the reader can run on any node; its full-text search was tested on a three-node cluster, and native arm64 and eMMC are still to be measured. Where Search runs is derived from the port and driver rules"
+    index_placement: "rqlite, a replicated SQLite (ADR 0022), so the reader can run on any node; its full-text search was tested on a three-node cluster, and the board spike measures native arm64 and eMMC, with sqlite on the indexer's node as the fallback. Where Search runs is derived from the port and driver rules"
   lambda:
     log_key: "one KMS key, used only by the writer function's IAM role through its key policy. One log; the function's role is the isolation"
     witness: "none by default (optional); an external witness is possible. There is no peer"
     blob: "an S3 bucket"
     lock: "lock mode compliance (Object Lock), per install"
     cluster: "managed by the platform; the writer runs with a reserved concurrency of 1 on a standard SQS queue, and correctness comes from create-if-absent on the bucket; the throttling is measured at the Lambda step"
-    index_placement: "None by default (proposed); a postgres index through RDS Proxy is allowed, and otherwise a separate Search installation holds the search index"
-    note: "The default index here is none (proposed). Serverless may run the indexer and the reader with a postgres index, through RDS Proxy (proposed). With no index, the indexer and the reader of a separate Search installation read the same blob: on Kubernetes with Postgres (cnpg, or external with a connection string), or on a server with sqlite. Where Search runs is derived from the port and driver rules. A small install can run sluis audit search from the CLI, which builds a local sqlite index from the chain. The search index is a rebuildable cache; the chain in the blob is the record."
+    index_placement: "postgres on Aurora by default (ADR 0022), reached through RDS Proxy with IAM authentication; the indexer and the reader run in the VPC"
+    note: "The default index here is postgres on Aurora (ADR 0022), reached through RDS Proxy with IAM authentication and one database role per actor kind. Where Search runs is derived from the port and driver rules. A small install can also run sluis audit search from the CLI, which builds a local sqlite index from the log. The search index is a rebuildable cache; the log in the blob is the record."
 
 # ---------------------------------------------------------------------------
 # The map
@@ -263,8 +263,8 @@ nodes:
     title: reader
     l2: queries, audits reads
     l3: derived placement
-    l2_lambda: separate Search install
-    l3_lambda: default none (proposed)
+    l2_lambda: Lambda function
+    l3_lambda: postgres on Aurora
     does: "Search, the reader. Answers search from the search index and records each read. Where it runs is derived from the port and driver rules: with a sqlite index on a cluster, the reader runs on the indexer's node; with an rqlite or postgres index it can run on any node. On serverless it can run with a postgres index."
     holds: Read on the blob; the search index
     never: Write on the blob; any signing key
@@ -409,8 +409,8 @@ flows:
         edges: ["indexer>statedrv", "indexer>blobdrv", "indexer>index", "statedrv>statestore", "blobdrv>archive"]
         text: The indexer follows audit_batches from its cursor, fetches each new batch object and applies it to the search index, then advances the cursor. Lag is the leader sequence minus that cursor. Where Search runs is derived from the port and driver rules.
         variants:
-          - { shapes: [boards], text: "The index is rqlite (a proposed driver), replicated across the nodes, so the reader can run on any node. The reader merges the three logs by time." }
-          - { shapes: [lambda], text: "The default here is no search index of its own (proposed); a postgres index through RDS Proxy is allowed. With no index, the indexer of a separate Search installation follows the chain in the same blob and keeps the index there." }
+          - { shapes: [boards], text: "The index is rqlite (ADR 0022), replicated across the nodes, so the reader can run on any node. The reader merges the three logs by time." }
+          - { shapes: [lambda], text: "The index here is postgres on Aurora, reached through RDS Proxy. The indexer follows the log's checkpoints in the same bucket and keeps the index there." }
   - id: search
     title: An auditor searches
     why: The reader answers from the search index; the read is itself audited.
@@ -558,7 +558,7 @@ promises:
     text: The writer asks the keys driver to sign the batch head. The driver's access list (or the key policy on AWS) lets only the writer use the log key, and the writer cannot read it. The witness holds nothing the writer holds, and cannot write a batch.
     status: agreed
   - title: A witness is optional, and the risk of none is documented
-    text: sluis config check warns when an installation has no witness. With no witness and no notary, a compromised writer can get a rewritten checkpoint signed. A compliance lock on s3 still prevents overwriting objects, but not a split view.
+    text: sluis config check warns when an installation has no witness. With no witness and no notary, a compromised writer can get a rewritten checkpoint signed. A compliance lock on s3 still prevents overwriting objects, but not a split view. In production a log needs a compliance lock or a witness, and sluis config check refuses anything else there (ADR 0021).
     status: agreed
   - title: The search index is a projection, never the evidence
     text: Losing a search index costs search time and no evidence. The blob and the seals are the record, and verification never trusts the index or state.
@@ -610,8 +610,8 @@ chain:
       text: With no witness and no notary, a compromised writer can get a rewritten checkpoint signed. A compliance lock on s3 still prevents overwriting objects, but not a split view. A witness is optional, and sluis config check warns when there is none.
       status: agreed
     - title: Seal granularity
-      text: A seal covers the batches since the previous seal. The cadence (hourly, or after N batches) is not yet decided.
-      status: proposed
+      text: A batch is sealed at 256 records or 5 seconds after its first record, whichever comes first, and an empty batch is never sealed. Each batch ends with a seal entry that records its count, the writer instance and the observed clock offset (ADR 0021).
+      status: agreed
 
 lag:
   leader: 120
@@ -623,8 +623,8 @@ lag:
 
 index_notes:
   - title: One search index per node, or one replicated index
-    text: A sqlite index (SQLite with FTS5) is one file fed by the ordered audit_batches sequence in replicated state. On boards a replicated rqlite index is proposed, so the reader can run on any node; its full-text support must be verified. A node that was down catches up in order from its cursor, and a new node replays from zero. Purges and erasures are entries in the same sequence. Where Search runs is derived from the port and driver rules.
-    status: proposed
+    text: A sqlite index (SQLite with FTS5) is one file fed by the ordered audit_batches sequence in replicated state. On boards the index is a replicated rqlite index (ADR 0022), so the reader can run on any node; its full-text support was verified on a three-node cluster, and the board spike confirms it on the hardware. A node that was down catches up in order from its cursor, and a new node replays from zero. Purges and erasures are entries in the same sequence. Where Search runs is derived from the port and driver rules.
+    status: agreed
   - title: Rebuilding
     text: The search index can be thrown away. A node rebuilds by replaying audit_batches from zero and fetching each batch object.
     status: agreed

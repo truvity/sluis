@@ -114,7 +114,7 @@ The final form is agreed:
 The drivers behind the ports differ by installation (see [Ports and drivers by installation](/concepts/drivers/#ports-and-drivers-by-installation)). Two choices matter for data:
 
 - **State** is the embedded single-node store on one node, **rqlite on Raft** across the three boards, with **one cluster per (boundary, owning actor)**, and **DynamoDB** on serverless and on Kubernetes, with a table per boundary. The Raft peer traffic is each cluster's own port over mutual TLS.
-- **Index** is `sqlite` on a single server, and `rqlite` on a cluster of boards (proposed, so the reader can run on any node). It is `postgres` on Kubernetes (the `cnpg` mode, or `external` with any connection string). Serverless may run the indexer and the reader with a `postgres` index through RDS Proxy (proposed); the default of the lambda installation is no index (proposed), and the reader and its index then run in a separate Search installation that reads the same bucket. The search index is derived from the audit batches and can always be rebuilt from them.
+- **Index** is `sqlite` on a single server, and `rqlite` on a cluster of boards, so the reader can run on any node. It is `postgres` on Kubernetes (the `cnpg` mode, or `external` with any connection string), and `postgres` on Aurora on the lambda installation, reached through RDS Proxy ([ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)). The search index is derived from the audit batches and can always be rebuilt from them.
 
 ## Secrets
 

@@ -62,8 +62,8 @@ shapes:
         status: agreed
       - text: "The blob is Garage, an S3-compatible store on the boards, through the one s3-compatible driver with keys from the cloud-garage credential driver (a bucket per actor). Garage has no object lock (lock mode none), so the peer witnesses are what protects against a rewritten history, and an off-site R2 copy keeps the audit log if the boards are lost. A spike comes first: conditional writes for the blob fence, memory on the boards and key expiry."
         status: agreed
-      - text: "The index is rqlite, a replicated SQLite, so the reader can run on any node. This is a proposed index driver (ADR 0022). Its full-text support (FTS5) was verified on a three-node cluster on 2026-10-30; arm64 board hardware and the cost of writes on eMMC are not measured yet."
-        status: proposed
+      - text: "The index is rqlite, a replicated SQLite, so the reader can run on any node (ADR 0022). Its full-text support (FTS5) was verified on a three-node cluster on 2026-10-30; the board spike measures arm64 board hardware and the cost of writes on eMMC, and if it fails the boards fall back to sqlite on the indexer's node."
+        status: agreed
       - text: "The boards run the vendor's Ubuntu 22.04 for now, as a declared exception. systemd 249 has no LoadCredentialEncrypted=, so units use plain LoadCredential=, and sluis doctor warns about kernel 5.10. Building Ubuntu 26.04 and Rocky 10.2 images is a backlog task."
         status: agreed
   - id: lambda
@@ -74,12 +74,12 @@ shapes:
     nodes: 0
     node_agent: false
     edge: lwa
-    ports: { keys: aws, state: aws, blob: s3, transport: sqs, index: remote }
+    ports: { keys: aws, state: aws, blob: s3, transport: sqs, index: postgres }
     keys: AWS KMS
     state: DynamoDB
     use: Integration tests and tutorials. Built in parallel with boards and kubernetes after local.
     notes:
-      - text: "The default index here is none (proposed). Serverless may run the indexer and the reader with a postgres index, through RDS Proxy (proposed). With no index, the reader and its search index run in a separate Search installation that reads the same bucket: on Kubernetes with Postgres (cnpg, or external with a connection string), or on a server with sqlite. Where Search runs is derived from the port and driver rules. A small install can run sluis audit search from the CLI, which builds a local sqlite index from the chain. The search index is a rebuildable cache; the chain in the blob is the record."
+      - text: "The default index here is postgres on Aurora (ADR 0022), reached through RDS Proxy with IAM authentication and one database role per actor kind; the indexer and the reader run in the VPC. Where Search runs is derived from the port and driver rules. A small install can also run sluis audit search from the CLI, which builds a local sqlite index from the log. The search index is a rebuildable cache; the log in the blob is the record."
         status: agreed
       - text: "The transport is an SQS queue here. Direct mode is not available on serverless, because its fallback is a local spool and a function has no disk."
         status: agreed
@@ -317,17 +317,17 @@ drivers:
     instance: shared
     shared_name: null
     binary: drivers/rqlite
-    does: "The index port on rqlite, a replicated SQLite, so the reader can run on any node. A projection of the batch stream, never the evidence. This is a proposed index driver (ADR 0022); its full-text support (FTS5) was verified on 2026-10-30."
+    does: "The index port on rqlite, a replicated SQLite, so the reader can run on any node. A projection of the batch stream, never the evidence. It is the index of the boards (ADR 0022); its full-text support (FTS5) was verified on 2026-10-30."
     holds: The replicated index tables
     backing: rqlite (replicated SQLite)
-    status: proposed
+    status: agreed
   remote:
     port: index
     title: none here
     instance: file
     shared_name: null
     binary: null
-    does: "The default index of the lambda installation is none (proposed); a postgres index through RDS Proxy is allowed. With no index, the reader and its search index run in a separate Search installation that reads the same bucket (Kubernetes with Postgres, or a server with sqlite). The search index is a rebuildable cache; the chain in the blob is the record."
+    does: "An index in another installation. The lambda installation's default is postgres on Aurora (ADR 0022); an installation that chooses none leaves search to a separate Search installation that reads the same bucket. The search index is a rebuildable cache; the log in the blob is the record."
     holds: Nothing
     backing: an index in a separate audit install
     status: agreed
@@ -337,7 +337,7 @@ drivers:
     instance: per-actor
     shared_name: null
     binary: drivers/postgres
-    does: "The index port on Postgres, one driver with a provisioning mode: rds or aurora on AWS (through RDS Proxy on serverless, proposed), cnpg on Kubernetes (proposed), or external, a connection string only. Exposing CNPG through a load balancer is not a driver of its own; it is external."
+    does: "The index port on Postgres, one driver with a provisioning mode: rds or aurora on AWS (the lambda default is aurora, reached through RDS Proxy with IAM authentication), cnpg on Kubernetes (its default), or external, a connection string only. Exposing CNPG through a load balancer is not a driver of its own; it is external."
     holds: Nothing
     backing: Postgres
     status: agreed
@@ -980,8 +980,8 @@ flows:
         edges: ["indexer>drv-state", "indexer>drv-blob", "indexer>store-index", "reader>store-index"]
         text: The indexer follows audit_batches from its cursor, fetches each new batch and applies it to the index; the reader answers queries from it. Verification never trusts the index. The audit explorer shows lag and the integrity chain.
         variants:
-          - { shapes: [boards], text: "The index is rqlite (a proposed driver), so the reader can run on any node. Readers merge the three logs by time." }
-          - { shapes: [lambda], text: "The default here is no search index of its own (proposed). With none, the indexer and the reader of a separate Search installation follow the chain in the same bucket." }
+          - { shapes: [boards], text: "The index is rqlite (ADR 0022), so the reader can run on any node. Readers merge the three logs by time." }
+          - { shapes: [lambda], text: "The index here is postgres on Aurora, reached through RDS Proxy; the indexer follows the log's checkpoints in the bucket and the reader serves from the index." }
 
 # ---------------------------------------------------------------------------
 # Open points that touch the architecture
@@ -992,7 +992,7 @@ open_points: []
 cluster:
   - { process: edge connector, where: every node, status: proposed }
   - { process: quota, where: "derived from the port and driver rules: a separate piece, combinable with sluis and sharing its driver instances; metering by default, enforcement per policy rule", status: agreed }
-  - { process: "Search (indexer, search index, reader)", where: "derived from the port and driver rules: with an rqlite index (proposed) the reader runs on any node; with a sqlite index it runs on the indexer's node", status: agreed }
+  - { process: "Search (indexer, search index, reader)", where: "derived from the port and driver rules: with an rqlite or postgres index the reader runs on any node; with a sqlite index it runs on the indexer's node", status: agreed }
   - { process: entry, where: "every node, on a Unix socket behind that node's edge connector, with no network", status: agreed }
   - { process: "session, console, exchange", where: "every node, beside entry. session and exchange each keep their state in their own rqlite cluster; console keeps none", status: agreed }
   - { process: "signer, policy, ca, ssh-ca", where: "every node; an earlier draft made each single-active, with a named lease and a fencing token, and standbys on the other nodes", status: proposed }
