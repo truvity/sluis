@@ -57,10 +57,14 @@ A rewritten record says so in one line under its proposal link, with the date. O
 | [0009](0009-one-installation-per-boundary.md) | There is one installation per boundary, and a boundary is an environment or a regulated entity | Accepted |
 | [0010](0010-cryptography-uses-p384-by-default-with-named-exceptions.md) | Cryptography uses EC P-384 by default, in FIPS mode, with named exceptions | Accepted |
 | [0011](0011-authority-keys-sign-in-place-and-never-leave-their-store.md) | Authority keys sign in place and never leave their store | Accepted |
+| [0012](0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials.md) | Machine identity follows SPIFFE: proofs are exchanged for short-lived credentials | Proposed |
+| [0013](0013-ca-and-ssh-ca-are-the-certificate-authorities-and-ssh-uses-only-sluis-own-ca.md) | The ca and ssh-ca actors are the X.509 and SSH certificate authorities, and SSH uses only sluis's own CA | Proposed |
 | [0014](0014-policy-is-written-in-cedar-and-evaluated-by-a-rust-actor.md) | Policy is written in Cedar and evaluated by a Rust policy actor | Accepted |
 | [0015](0015-configuration-is-defined-once-in-pkl-and-shipped-as-json-schema.md) | Configuration is defined once in Pkl and shipped as JSON Schema | Accepted |
 | [0016](0016-data-has-an-origin-and-a-sensitivity.md) | Data has an origin and a sensitivity | Accepted |
 | [0017](0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite.md) | State is one port with compare-and-set; one writer owns each record kind; clusters replicate with rqlite | Accepted |
 | [0029](0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime.md) | One repository, one version, one release train, and packaging follows the runtime | Accepted |
+| [0033](0033-database-access-uses-short-lived-credentials.md) | Database access uses short-lived credentials | Accepted |
 | [0038](0038-the-local-installation-is-docker-compose-with-one-container-per-actor.md) | The local installation is Docker Compose with one container per actor and minimal drivers | Accepted |
 | [0039](0039-delivery-goes-local-first-then-boards-lambda-and-kubernetes-in-parallel.md) | Delivery goes local first, then boards, lambda and kubernetes in parallel | Accepted |
+| [0048](0048-passkeys-step-up-and-device-login.md) | Passkeys, step-up and device login | Proposed |
