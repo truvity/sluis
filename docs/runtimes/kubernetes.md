@@ -130,9 +130,9 @@ Whether a Postgres state driver, for example on CNPG, with a database role for e
 ## Audit
 
 - **Reader:** where the reader runs is derived from the port and driver rules ([OD-32](/open-decisions/#od-32)). With a `postgres` index it can run in any pod that reaches the database, so this page does not fix it to one pod.
-- **Index:** `postgres`, in the `cnpg` mode (proposed): a CloudNativePG (CNPG) cluster in the same Kubernetes cluster. The `external` mode takes a connection string only, for a database someone else runs, such as a CNPG cluster in another Kubernetes cluster behind a load balancer. Exposing CNPG through a load balancer is not a driver of its own; from sluis's side it is `external`. See [The postgres index driver](/concepts/drivers/#the-postgres-index-driver).
+- **Index:** `postgres`, in the `cnpg` mode ([ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)): a CloudNativePG (CNPG) cluster in the same Kubernetes cluster. The `external` mode takes a connection string only, for a database someone else runs, such as a CNPG cluster in another Kubernetes cluster behind a load balancer. Exposing CNPG through a load balancer is not a driver of its own; from sluis's side it is `external`. See [The postgres index driver](/concepts/drivers/#the-postgres-index-driver).
 - The sealed batches go to the blob store, and the writer asks the `key-holder` to sign checkpoints into the hash chain, as on every runtime. The `key-holder`'s access list lets only the writer use the log key; there is no notary actor ([OD-39](/open-decisions/#od-39)).
-- A separate audit installation, which holds the indexer, the reader and the index for an installation that has no index of its own, such as [serverless](/runtimes/serverless/), runs from the same chart with the `audit-install` preset.
+- A separate audit installation, which holds the indexer, the reader and the index for an installation that chose no index of its own, runs from the same chart with the `audit-install` preset.
 - **Transport:** SQS is the audit transport on Kubernetes ([OD-22](/open-decisions/#od-22), [OD-34](/open-decisions/#od-34)), as on Lambda. `direct` and NATS JetStream are supported but are not the default; in `direct` mode, a writer that is down means the emitter falls back to a local spool ([OD-35](/open-decisions/#od-35)), which needs a volume. Producers may only send, and the writer receives. Blocking on the archive is not used, because a request must never wait for the writer, the archive or the index.
 
 :::note[Proposed]
@@ -141,7 +141,7 @@ A volume spool, with a writer in every replica, is proposed for clusters outside
 **Witness:** optional ([OD-36](/open-decisions/#od-36)). A peer witness inside the same cluster is not independent, so an `external` witness is the useful one; `sluis config check` warns when there is none.
 :::
 
-**A separate audit installation runs its own `entry`** ([OD-26](/open-decisions/#od-26), decided 2026-10-30). A console reaches the reader over a Unix socket in its own installation. For an audit installation in another place, the console calls the audit installation's `entry` with a short-lived token. Audit gets the same split as sluis: a slim router `entry`, the API, which is the `reader`, and its own console. The details are for the audit records.
+**Every audit installation has its own front** ([OD-26](/open-decisions/#od-26), [ADR 0062](/decisions/0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own/)): a slim router `entry` on its own host, `sluis-audit.<env>.example.com`, the API, which is the `reader`, its own `session` and `console`, and a console bundle of its own. On Kubernetes the audit `entry` gets its own edge relay or `cloudflared` sidecar and its own route at the gateway (inferred from the edge rules below). A console of another installation calls the audit `entry` with an exchanged token whose `aud` is the audit client id, valid for at most 5 minutes and bound to the console's X.509-SVID by mutual TLS.
 
 ## Edge
 
