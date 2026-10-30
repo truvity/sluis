@@ -144,6 +144,7 @@ export default defineConfig({
         { label: 'Concepts', items: [{ autogenerate: { directory: 'concepts' } }] },
         { label: 'Integrations', items: [{ autogenerate: { directory: 'integrations' } }] },
         { label: 'Architecture', items: [{ autogenerate: { directory: 'architecture' } }] },
+        { label: 'Security', items: [{ autogenerate: { directory: 'security' } }] },
         { label: 'Runtimes', items: [{ autogenerate: { directory: 'runtimes' } }] },
         { label: 'Tutorials', items: [{ autogenerate: { directory: 'tutorials' } }] },
         { label: 'Distribution', items: [{ autogenerate: { directory: 'distribution' } }] },
@@ -172,7 +173,12 @@ export default defineConfig({
           // The two explorer pages are MDX (they import components), and the
           // validator collects no headings from an MDX page, so a link to one
           // would always fail; the pages themselves are still built and checked.
-          exclude: ['/v1/', '/v1/**', '/decisions/', '/decisions/**', '/architecture/explorer/', '/architecture/audit-explorer/'],
+          // The requirements pages are generated in src/pages from the catalogue
+          // (custom pages the validator cannot see); lychee checks links to them.
+          exclude: [
+            '/v1/', '/v1/**', '/decisions/', '/decisions/**', '/architecture/explorer/', '/architecture/audit-explorer/',
+            '/requirements/', '/requirements/**',
+          ],
         }),
         starlightLlmsTxt({
           projectName: 'sluis',

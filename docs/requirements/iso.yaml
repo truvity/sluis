@@ -1,0 +1,816 @@
+# ISO: Isolation between boundaries, actors, companies and tenants.
+# Each record is a control from the threat model (docs/security/threat-model.md). Its test vectors name the
+# threat (T-n) and the layer that must refuse: layer 1 is the port library in the actor, layer 2 is the
+# driver's or backend's own check of the caller's platform identity, layer 3 is physical separation at
+# level L3 or L4. A vector runs with the other layers switched off in the isolation harness, so each layer
+# is proven on its own.
+schema: 1
+area: ISO
+requirements:
+  # ---- the harness
+  - id: REQ-ISO-001
+    area: ISO
+    statement: "The isolation harness MUST be able to run every isolation vector with one chosen layer enabled and the other layers switched off."
+    rationale: "A layer that is only ever tested behind another layer is not tested at all."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-103, depth: Partial}
+    features: ["#877", "#851"]
+    verification:
+      - {kind: integration-test, ref: "harness self-test: each layer switch is observed off in the driver, the backend policy and the store layout before a vector runs"}
+  - id: REQ-ISO-002
+    area: ISO
+    statement: "The isolation harness MUST reject as void a vector whose attempt is refused even with every layer switched off."
+    rationale: "A vector that cannot succeed with no protection proves nothing when it fails with protection."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-103, depth: Partial}
+    features: ["#877"]
+    verification:
+      - {kind: integration-test, ref: "harness self-test: a deliberately broken vector (wrong prefix spelling) is reported void, not passed"}
+
+  # ---- layer 1: the port library
+  - id: REQ-ISO-003
+    area: ISO
+    statement: "The port library MUST derive the scope of every keys, state, blob and transport call from the calling actor's own identity and boundary, never from a field of the request."
+    rationale: "A scope taken from the request lets any caller name another boundary's data."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-103, depth: Partial}
+    features: ["#851", "#863"]
+    verification:
+      - {kind: test-vectors, ref: "T-11 layer 1, layers 2 and 3 off: actor X passes boundary env-b in a request field; the call is scoped to X's own prefix and env-b is never reached"}
+      - {kind: test-vectors, ref: "T-12 layer 1, layers 2 and 3 off: actor X asks the blob port for an object under actor Y's prefix; refused by the library"}
+
+  # ---- keys
+  - id: REQ-ISO-004
+    area: ISO
+    statement: "A keys driver MUST refuse a sign, decrypt or unwrap call for a key outside the caller's boundary and purpose, judged by the caller's platform identity."
+    rationale: "The driver's own check holds when the actor's library is bypassed or compromised."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-103, depth: Partial}
+    features: ["#800", "#851"]
+    verification:
+      - {kind: test-vectors, ref: "T-8 layer 2, layers 1 and 3 off: ca@env-a requests env-b's CA key; refused by the key-holder ACL or the KMS key policy"}
+      - {kind: test-vectors, ref: "T-8 layer 2, layers 1 and 3 off: ca@env-a requests its own boundary's token-signing key; refused (wrong purpose)"}
+  - id: REQ-ISO-005
+    area: ISO
+    statement: "At level L4, a boundary's authority keys MUST be held in that boundary's own account, cluster or hosts."
+    rationale: "Physical separation still holds when a key policy or an ACL is wrong."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-8 layer 3, layers 1 and 2 off: ca@env-a's credentials call env-b's key; refused because the key is in env-b's account or hosts"}
+  - id: REQ-ISO-006
+    area: ISO
+    statement: "The key-holder MUST sign for the ca purpose only a parseable TBSCertificate that is within the purpose's constraints."
+    rationale: "Content-aware signing stops a caller that holds the CA key from using it for another protocol or a wider certificate."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: [bare-metal, kubernetes]
+    standards:
+      - {id: ST-62, section: "4.1", depth: Partial}
+    features: ["#913", "#914"]
+    verification:
+      - {kind: test-vectors, ref: "T-9: the ca purpose is asked to sign a JWS signing input; refused (content-aware)"}
+      - {kind: test-vectors, ref: "T-9: the ca purpose is asked to sign a TBSCertificate with basicConstraints CA true outside its constraints; refused"}
+      - {kind: test-vectors, ref: "x509-limbo and Wycheproof malformed-DER inputs fed to the ca purpose; every unparseable input refused"}
+  - id: REQ-ISO-007
+    area: ISO
+    statement: "The key-holder MUST sign for the ssh-ca purpose only an OpenSSH certificate body."
+    rationale: "An SSH CA key that signs arbitrary bytes can be turned into a signer for any protocol."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: [bare-metal, kubernetes]
+    standards:
+      - {id: ST-65, depth: Partial}
+    features: ["#913", "#914"]
+    verification:
+      - {kind: test-vectors, ref: "T-9: the ssh-ca purpose is asked to sign a TBSCertificate; refused (content-aware)"}
+  - id: REQ-ISO-008
+    area: ISO
+    statement: "The key-holder MUST sign for a token purpose only a JWS signing input."
+    rationale: "A token key that signs certificates would let a token signer mint a CA."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: [bare-metal, kubernetes]
+    standards:
+      - {id: ST-49, section: "5.1", depth: Partial}
+    features: ["#869", "#914"]
+    verification:
+      - {kind: test-vectors, ref: "T-9: a token purpose is asked to sign a TBSCertificate or an OpenSSH certificate body; refused (content-aware)"}
+  - id: REQ-ISO-009
+    area: ISO
+    statement: "The key-holder MUST serve each caller on its own Unix socket, in a directory that only that caller can open."
+    rationale: "A socket per caller makes the operating system the first judge of who may ask."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: [bare-metal, kubernetes]
+    standards: []
+    features: ["#866", "#914"]
+    verification:
+      - {kind: test-vectors, ref: "T-24 layer 2, peer-uid check off: a process under another uid opens ca@env-a's key-holder socket; refused by the directory permissions"}
+  - id: REQ-ISO-010
+    area: ISO
+    statement: "The key-holder MUST refuse a connection whose peer uid is not the uid its socket was made for."
+    rationale: "The peer-uid check is a second factor when a socket's directory permissions are wrong."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: [bare-metal, kubernetes]
+    standards: []
+    features: ["#914"]
+    verification:
+      - {kind: test-vectors, ref: "T-24 layer 2, directory permissions off (socket left world-writable): uid B connects to uid A's socket; refused by the peer-uid check"}
+  - id: REQ-ISO-011
+    area: ISO
+    statement: "The key-holder MUST write an audit record for every signature it makes, naming the caller and the purpose."
+    rationale: "A compromised key-holder or caller is found by its signatures, so each one must be on the record."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: [bare-metal, kubernetes]
+    standards: []
+    features: ["#914", "#837"]
+    verification:
+      - {kind: integration-test, ref: "T-10: sign N times through two callers; the audit log holds N records with caller and purpose, and a signature without a record fails the test"}
+  - id: REQ-ISO-012
+    area: ISO
+    statement: "A driver whose backend authorises each caller natively MUST use a credential per actor and no mediator."
+    rationale: "A mediator in front of a backend that can tell callers apart only adds a process that can be compromised for all of them."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#863"]
+    verification:
+      - {kind: test-vectors, ref: "T-10 config check corpus: an install file that routes aws-kms, DynamoDB or PostgreSQL through a shared mediator; refused"}
+
+  # ---- state
+  - id: REQ-ISO-013
+    area: ISO
+    statement: "A state driver MUST refuse a read or write outside the caller's own prefix, judged by the caller's platform identity."
+    rationale: "The store's own check holds when the actor's library is bypassed or compromised."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-103, depth: Partial}
+    features: ["#851"]
+    verification:
+      - {kind: test-vectors, ref: "T-11 layer 2, layers 1 and 3 off: actor X writes prefix Y; refused by the rqlite user, DynamoDB LeadingKeys, PostgreSQL RLS or file owner"}
+      - {kind: test-vectors, ref: "T-11 layer 2, layers 1 and 3 off: actor X reads prefix Y of a kind it is not a declared reader of; refused"}
+  - id: REQ-ISO-014
+    area: ISO
+    statement: "The rqlite driver MUST run one cluster per boundary and owning actor, with execute rights for the owner and query rights only for the declared readers."
+    rationale: "rqlite has no row-level permissions, so the cluster and its users are the unit of separation."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: [bare-metal]
+    standards: []
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-11 layer 2: a declared reader sends an execute to the owner's cluster; refused (query-only user)"}
+      - {kind: test-vectors, ref: "T-11 layer 2: actor X presents its own client certificate to actor Y's cluster; refused (a certificate per cluster)"}
+  - id: REQ-ISO-015
+    area: ISO
+    statement: "The postgres driver MUST separate instances of one actor kind with forced row-level security that tests group-role membership and never a session variable."
+    rationale: "A policy that trusts a session variable is bypassed by any caller that sets it."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-11 layer 2, layer 1 off: the env-a role selects env-b rows of the same kind; zero rows"}
+      - {kind: test-vectors, ref: "T-11 layer 2: the env-a role sets a session variable naming env-b; zero rows"}
+      - {kind: test-vectors, ref: "T-11 layer 2: the table owner role is used by an actor; refused (actors never own tables)"}
+  - id: REQ-ISO-016
+    area: ISO
+    statement: "At level L3 and above, each boundary MUST have its own state store."
+    rationale: "A separate store still holds when every in-store check is wrong."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-11 layer 3, layers 1 and 2 off: an actor of env-a addresses env-b's records; not found, because they are in another store"}
+  - id: REQ-ISO-017
+    area: ISO
+    statement: "The port library MUST encrypt every state value with AES-256-GCM under a data key per boundary and record kind."
+    rationale: "Encryption keeps records secret from a store, its admins and its backups even when every access check fails."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-88, depth: Partial}
+      - {id: ST-106, depth: Partial}
+    features: ["#851", "#800"]
+    verification:
+      - {kind: test-vectors, ref: "T-14, layers 2 and 3 off: actor X reads Y's record by a raw driver call; ciphertext only, and unwrapping Y's data key is refused"}
+      - {kind: test-vectors, ref: "Wycheproof AES-GCM vectors"}
+  - id: REQ-ISO-018
+    area: ISO
+    statement: "The port library MUST bind each encrypted value to its boundary, record kind, key and version as additional authenticated data."
+    rationale: "Without that binding a store admin can move a valid ciphertext to another key or boundary."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#851"]
+    verification:
+      - {kind: test-vectors, ref: "T-14: a store admin moves a ciphertext to another key of the same kind; decryption fails"}
+      - {kind: test-vectors, ref: "T-14: a ciphertext copied from env-a to the same key name in env-b; decryption fails"}
+  - id: REQ-ISO-019
+    area: ISO
+    statement: "The keys port MUST unwrap a record kind's data key only for the writer of that kind and its declared readers."
+    rationale: "The unwrap check is what turns a leaked ciphertext into nothing."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#800"]
+    verification:
+      - {kind: test-vectors, ref: "T-11 layer 2: an actor that is not a declared reader asks to unwrap the data key; refused by the key-holder ACL or the KMS encryption-context condition"}
+  - id: REQ-ISO-020
+    area: ISO
+    statement: "A record key MUST NOT contain personal data."
+    rationale: "Keys are visible to the store and its admins even though values are encrypted."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#863"]
+    verification:
+      - {kind: test-vectors, ref: "T-14 manifest lint corpus: a record-key template that uses a field of sensitivity personal or secret; refused"}
+
+  # ---- blob
+  - id: REQ-ISO-021
+    area: ISO
+    statement: "A blob driver MUST refuse a write outside the caller's own prefix, judged by the caller's platform identity."
+    rationale: "The bucket's own check holds when the actor's library is bypassed or compromised."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-103, depth: Partial}
+    features: ["#851"]
+    verification:
+      - {kind: test-vectors, ref: "T-12 layer 2, layers 1 and 3 off: actor X puts an object under Y's prefix; refused by an IAM prefix condition, a prefix-scoped temporary credential or the directory owner"}
+  - id: REQ-ISO-022
+    area: ISO
+    statement: "The port library MUST create a blob only if no blob of that name exists."
+    rationale: "Create-if-absent means a compromised writer cannot rewrite what was already written."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#851", "#837"]
+    verification:
+      - {kind: test-vectors, ref: "T-12: a second write of an existing audit batch name; refused with a precondition failure"}
+  - id: REQ-ISO-023
+    area: ISO
+    statement: "At level L3 and above, each boundary MUST have its own bucket."
+    rationale: "A separate bucket still holds when a prefix condition is wrong."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-12 layer 3, layers 1 and 2 off: an actor of env-a writes into env-b's bucket; refused because its credentials do not reach that bucket"}
+
+  # ---- transport
+  - id: REQ-ISO-024
+    area: ISO
+    statement: "A transport driver MUST refuse a message whose sender identity is not allowed for its destination, judged at the receiver or the broker."
+    rationale: "A sender that can write to another actor's queue can forge that actor's events."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-103, depth: Partial}
+    features: ["#851"]
+    verification:
+      - {kind: test-vectors, ref: "T-13 layer 2, layers 1 and 3 off: role X sends to a queue whose policy names only role Y; refused by the queue policy"}
+      - {kind: test-vectors, ref: "T-13 layer 2: a Unix-socket or spool sender with a foreign peer uid; refused at the receiver"}
+  - id: REQ-ISO-025
+    area: ISO
+    statement: "The nats-jetstream driver MUST give each actor instance its own NATS user, limited to its own subjects in its boundary's account."
+    rationale: "NATS accounts and permission templates are the per-caller check of this backend."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: [kubernetes]
+    standards:
+      - {id: NC-17, depth: Partial}
+      - {id: ST-102, depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-13 layer 2, layers 1 and 3 off: user X publishes on actor Y's audit subject; refused by the permission template"}
+      - {kind: test-vectors, ref: "T-13 layer 2: a user of env-a subscribes to a subject of env-b's account; nothing is delivered"}
+  - id: REQ-ISO-026
+    area: ISO
+    statement: "At level L3 and above, each boundary MUST have its own queues or streams."
+    rationale: "A separate queue still holds when a queue policy is wrong."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-13 layer 3, layers 1 and 2 off: an actor of env-a sends to env-b's queue; refused because its credentials do not reach it"}
+
+  # ---- tokens and issuers
+  - id: REQ-ISO-027
+    area: ISO
+    statement: "sluis MUST refuse a sender-constrained access or refresh token that is presented without proof of possession of its bound key."
+    rationale: "A token copied in transit, for example by a compromised entry, must be useless without the client's key."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-18, section: "7.1", depth: Partial}
+      - {id: ST-19, section: "3", depth: Partial}
+    features: ["#912"]
+    verification:
+      - {kind: test-vectors, ref: "T-1: a copied DPoP-bound refresh token at the token endpoint with no proof, or a proof by another key; refused"}
+      - {kind: test-vectors, ref: "T-1: a copied certificate-bound access token over a TLS connection with another client certificate; refused"}
+  - id: REQ-ISO-028
+    area: ISO
+    statement: "The single audience of a token that sluis issues to a client MUST be a client ID registered at the issuing boundary's issuer."
+    rationale: "A readable client ID that each relying party pins stops a token for one client being accepted by another."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-52, section: "4.1.3", depth: Partial}
+      - {id: ST-56, section: "3.9", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-2: a token with aud for client X presented to client Y's reference verifier; refused"}
+  - id: REQ-ISO-029
+    area: ISO
+    statement: "sluis MUST NOT copy an RFC 8707 resource value into the aud claim of any token, and maps it to a registered client ID instead."
+    rationale: "A resource URL in aud would make the audience whatever the requester wrote."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-08, section: "2", depth: Partial}
+    features: ["#791"]
+    verification:
+      - {kind: test-vectors, ref: "T-2: an authorization request with resource set to a URL; the issued aud is the mapped client ID, and an unmapped resource is refused with invalid_target"}
+  - id: REQ-ISO-030
+    area: ISO
+    statement: "Every relying-party snippet that sluis prints MUST pin both the issuer and the audience."
+    rationale: "A relying party that pins only one of them accepts tokens of another boundary or another client."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.3.7", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-3: each printed snippet, applied to its reference relying party, is fed a token of another issuer and a token of another client; both refused"}
+  - id: REQ-ISO-031
+    area: ISO
+    statement: "Each environment boundary MUST have its own issuer with its own token-signing keys and key set."
+    rationale: "A token signed in one environment then cannot verify in another, whatever its claims say."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-50, depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-3: a token signed by env-a's key with iss set to env-b's issuer; refused at env-b because the kid is not in its key set"}
+
+  # ---- across boundaries
+  - id: REQ-ISO-032
+    area: ISO
+    statement: "A boundary MUST decide every request that reaches it from another boundary with its own policy, whatever the sending boundary decided."
+    rationale: "A compromised front or sending boundary then cannot grant what the target forbids."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-12, depth: Partial}
+    features: ["#892"]
+    verification:
+      - {kind: test-vectors, ref: "T-5: the front forwards a request it marked allowed and env-b's policy denies it; refused at env-b"}
+  - id: REQ-ISO-033
+    area: ISO
+    statement: "A boundary whose policy demands fresh multi-factor authentication MUST verify the person's passkey assertion over a challenge it issued itself."
+    rationale: "A compromised front cannot then act in a sensitive boundary on a person's behalf."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "7.2", depth: Partial}
+      - {id: ST-24, section: "3", depth: Partial}
+    features: ["#885"]
+    verification:
+      - {kind: test-vectors, ref: "T-5: an assertion over a challenge issued by the front is replayed at the production boundary; refused"}
+      - {kind: test-vectors, ref: "T-5: the front forwards a request with no assertion; answered with insufficient_user_authentication"}
+  - id: REQ-ISO-034
+    area: ISO
+    statement: "Every passkey verifier of an installation MUST refuse an assertion whose origin is not one of that installation's own sluis hosts."
+    rationale: "The relying-party ID is the registrable parent domain, so any other host under it could otherwise collect a usable assertion."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "7.2", depth: Partial}
+    features: ["#885"]
+    verification:
+      - {kind: test-vectors, ref: "T-6: an assertion whose client data names origin other.example.com under the same relying-party ID; refused"}
+      - {kind: test-vectors, ref: "T-6: an assertion from sluis.devel.example.com presented to a verifier whose allow-list lacks it; refused"}
+  - id: REQ-ISO-035
+    area: ISO
+    statement: "A boundary MUST challenge a session whose last authentication is older than that boundary's freshness rule with an RFC 9470 step-up."
+    rationale: "A stolen cookie then reaches only the boundaries with a loose freshness rule, and only for as long as the rule allows."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-24, section: "3", depth: Full}
+    features: ["#885", "#916"]
+    verification:
+      - {kind: test-vectors, ref: "T-7: a valid session cookie whose passkey use is older than the production rule; answered with insufficient_user_authentication and acr_values"}
+  - id: REQ-ISO-036
+    area: ISO
+    statement: "The compiled policy MUST forbid a subject of one company any grant in another company's scope unless a partner grant allows it."
+    rationale: "A company-ceiling guard written as a forbid holds against any permit, including a wrong one."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-12, depth: Partial}
+    features: ["#892", "#852"]
+    verification:
+      - {kind: test-vectors, ref: "T-16: a company C subject asks for a grant in company D's scope with no partner grant; refused by the ceiling guard"}
+      - {kind: test-vectors, ref: "T-16 positive control: the same request with a partner grant; allowed"}
+  - id: REQ-ISO-037
+    area: ISO
+    statement: "The policy build MUST fail when the bundle of one environment contains a policy scoped to another environment."
+    rationale: "Policy comes from one source, so the compiler is where a leak between environments is cheapest to stop."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-12, depth: Partial}
+    features: ["#892", "#852"]
+    verification:
+      - {kind: test-vectors, ref: "T-17: a policy bundle for env-a that contains an env-b-scoped policy; the build fails"}
+  - id: REQ-ISO-038
+    area: ISO
+    statement: "A signing actor MUST refuse a grant that is not signed by its own environment's grant key."
+    rationale: "A grant key per environment keeps a decision made for one environment from being spent in another."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#892"]
+    verification:
+      - {kind: test-vectors, ref: "T-18 layer 2: a grant signed by policy@env-a is presented to signer@env-b; refused"}
+  - id: REQ-ISO-039
+    area: ISO
+    statement: "sluis MUST take the subject of an issued certificate, SVID or workload token from the requester's authenticated identity, never from the request."
+    rationale: "Issuance bound to the requester stops one workload or host asking for another's identity."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-109, section: "2", depth: Partial}
+      - {id: ST-107, section: "2", depth: Partial}
+    features: ["#913", "#870"]
+    verification:
+      - {kind: test-vectors, ref: "T-20: workload A requests an X.509-SVID for workload B's SPIFFE ID; refused"}
+      - {kind: test-vectors, ref: "T-20: host A renews with a CSR naming host B; refused"}
+  - id: REQ-ISO-040
+    area: ISO
+    statement: "An actor MUST accept a call from another boundary only over mutual TLS with a client certificate whose SPIFFE ID is in a trust domain it declares as trusted."
+    rationale: "The trust domain is the boundary, so the certificate itself says where the caller comes from."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-109, section: "5", depth: Partial}
+      - {id: ST-108, section: "2", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-21: a client certificate from an undeclared trust domain; refused"}
+      - {kind: test-vectors, ref: "T-21: a certificate of env-a's trust domain whose path names an env-b actor; refused as an env-a caller"}
+  - id: REQ-ISO-041
+    area: ISO
+    statement: "A JWT-SVID for a call between actors of different boundaries MUST carry the target's SPIFFE ID as its only audience."
+    rationale: "A token addressed to one actor must not be spendable at another."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-110, section: "3.2", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-21: a JWT-SVID for target X presented to target Y; refused"}
+
+  # ---- entry
+  - id: REQ-ISO-042
+    area: ISO
+    statement: "The entry actor MUST have no network access except its child actors' sockets or invocations."
+    rationale: "A compromised entry that cannot connect out cannot send what it sees anywhere."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#866", "#796"]
+    verification:
+      - {kind: test-vectors, ref: "T-4: entry opens a TCP or UDP socket; refused by the sandbox (Unix sockets only)"}
+      - {kind: test-vectors, ref: "T-4: entry connects to a socket that is not one of its children's; refused"}
+  - id: REQ-ISO-043
+    area: ISO
+    statement: "The entry actor MUST NOT hold a key, a secret or state of its own."
+    rationale: "What entry does not hold cannot be stolen from it."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#863"]
+    verification:
+      - {kind: test-vectors, ref: "T-4 manifest corpus: an entry manifest that declares a keys, secrets or state port; the generator refuses it"}
+
+  # ---- enrolment and trust bundles
+  - id: REQ-ISO-044
+    area: ISO
+    statement: "An enrolling client MUST prove its enrolment token with an HMAC over its CSR and a fresh server nonce, and never send the token itself."
+    rationale: "A token that never travels cannot be copied in transit."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-06, depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-22: a recorded HMAC replayed with an old nonce; refused"}
+      - {kind: test-vectors, ref: "T-22: an HMAC over another CSR than the one sent; refused"}
+  - id: REQ-ISO-045
+    area: ISO
+    statement: "sluis MUST refuse an enrolment token after its last allowed use or its expiry."
+    rationale: "A single-use or counted token bounds what a stolen copy can enrol."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-22: a single-use enrolment token used a second time; refused"}
+  - id: REQ-ISO-046
+    area: ISO
+    statement: "The aws-iid verifier MUST accept an instance identity document once per instance."
+    rationale: "Any process on the instance can read the document, so its second use is the one to refuse."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-22: a second enrolment with the same instance identity document; refused"}
+  - id: REQ-ISO-047
+    area: ISO
+    statement: "An enrolment request MUST be encrypted end to end with HPKE to the enrolment public key carried in the signed bundle."
+    rationale: "The edge and entry then cannot read or alter an enrolment."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-61, section: "5.1", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-22: entry flips one byte of an enrolment ciphertext; decryption fails at the exchange actor"}
+      - {kind: test-vectors, ref: "RFC 9180 appendix A test vectors"}
+  - id: REQ-ISO-048
+    area: ISO
+    statement: "sluis trust sync MUST refuse a trust bundle whose spiffe_sequence is lower than the one it holds."
+    rationale: "Refusing a lower sequence stops a rollback to a bundle that still trusts a removed root."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: [bare-metal, kubernetes]
+    standards:
+      - {id: ST-108, section: "4.1", depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-23: a validly signed trust bundle with a lower spiffe_sequence; refused, and the anchors on disk are unchanged"}
+  - id: REQ-ISO-049
+    area: ISO
+    statement: "sluis trust sync MUST refuse a trust bundle that is not signed by a key certified by both roots."
+    rationale: "One compromised root then cannot rewrite what every host trusts."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: [bare-metal, kubernetes]
+    standards:
+      - {id: ST-108, depth: Partial}
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-23: a bundle signed by a key certified by one root only; refused"}
+  - id: REQ-ISO-050
+    area: ISO
+    statement: "Enrolment by any path other than manual approval MUST pin the root fingerprint."
+    rationale: "Web PKI gives reachability, not trust, so a client must know which roots it is joining."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-23: enrolment against a server with a valid web certificate but other roots; refused"}
+
+  # ---- integrations
+  - id: REQ-ISO-051
+    area: ISO
+    statement: "Each integration instance MUST run as its own process with its own platform identity, one per vendor tenant."
+    rationale: "A compromised integration then reaches only its own tenant's credential and state."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#863"]
+    verification:
+      - {kind: test-vectors, ref: "T-15 layer 2, layers 1 and 3 off: google-signin@company-a reads company-b's client secret; refused"}
+  - id: REQ-ISO-052
+    area: ISO
+    statement: "An integration MUST NOT hold an authority key."
+    rationale: "Integrations hold vendor credentials, so they must not also be able to sign for sluis."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#863"]
+    verification:
+      - {kind: test-vectors, ref: "T-15 manifest corpus: an integration manifest that declares a signing purpose; the generator refuses it"}
+
+  # ---- operators and configuration
+  - id: REQ-ISO-053
+    area: ISO
+    statement: "The console MUST refuse a change by an operator outside the company and environment scope delegated to that operator."
+    rationale: "A mistake or a stolen operator session then stays inside one delegation."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-25: an operator delegated for company A edits a company B record; refused and audited"}
+      - {kind: test-vectors, ref: "T-25: an operator delegated for devel edits a production machine-plane record; refused and audited"}
+  - id: REQ-ISO-054
+    area: ISO
+    statement: "sluis config check MUST refuse a driver whose backend has no per-caller check unless the installation is at level L3 or above for that port."
+    rationale: "Such a driver has no layer 2, so only layer 3 can stand in for it."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#864"]
+    verification:
+      - {kind: test-vectors, ref: "T-25 config check corpus: an install file with such a driver shared by two boundaries at level L2; refused"}
+  - id: REQ-ISO-055
+    area: ISO
+    statement: "The drift test MUST fail when a deployed ACL, IAM or KMS policy, unit, socket or service account differs from what the manifest generates."
+    rationale: "Generated policies help only while what is deployed still matches them."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#863"]
+    verification:
+      - {kind: integration-test, ref: "T-25: widen one generated policy by hand in a test installation; the drift test fails and names it"}
+
+  # ---- shared hosts and clusters
+  - id: REQ-ISO-056
+    area: ISO
+    statement: "The trust policy of every cloud role that an actor assumes MUST pin the subject to that actor at its boundary."
+    rationale: "A node token of one actor must not open another actor's or another boundary's role."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-46, depth: Partial}
+    features: ["#870"]
+    verification:
+      - {kind: test-vectors, ref: "T-24 layer 2: the node token of ca@devel is used to assume prod's ca role; refused by the trust policy"}
+  - id: REQ-ISO-057
+    area: ISO
+    statement: "A container MUST mount only its own actor's key-holder socket."
+    rationale: "A pod that sees another actor's socket is one permission mistake away from using it."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: [kubernetes]
+    standards: []
+    features: ["#876"]
+    verification:
+      - {kind: test-vectors, ref: "T-24 chart corpus: every rendered preset mounts at most one key-holder socket per container, its own"}
+
+  # ---- people and companies
+  - id: REQ-ISO-058
+    area: ISO
+    statement: "A grant of one directory account MUST NOT be usable through a person link from another directory account."
+    rationale: "A person link records that two accounts are one person; it must not merge what each company granted."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-19: account A of company C holds a grant, and linked account B of company D asks for it; refused"}
+  - id: REQ-ISO-059
+    area: ISO
+    statement: "Destroying a company's audit tenant key MUST leave every audit record of that company unreadable."
+    rationale: "A company that leaves is promised that its records are crypto-shredded, not merely hidden."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#837"]
+    verification:
+      - {kind: integration-test, ref: "T-26: export, then destroy the tenant key; the reader fails to decrypt every record of that company and still reads the others"}
+  - id: REQ-ISO-060
+    area: ISO
+    statement: "After a company boundary is disconnected, sluis MUST refuse sign-in and token exchange through that company's upstreams."
+    rationale: "Disconnecting is the first step of a company leaving and must take effect at once."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["design"]
+    verification:
+      - {kind: test-vectors, ref: "T-26: a valid upstream ID token of the disconnected company at sign-in and at the token endpoint; refused"}
