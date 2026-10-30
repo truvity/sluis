@@ -98,6 +98,8 @@ OpenID plans cover the protocol surface. Two other suites cover what sits undern
 
 **Policy tests** ([#852](https://github.com/truvity/sluis/issues/852)). The policy has its own tests for the grant naming, the matchers and the lifetimes.
 
+**The isolation vectors.** Every control of the [threat model](/security/threat-model/) has test vectors in the [isolation area](/requirements/iso/) of the requirements catalogue. Each vector is an attempt that must fail at a named layer (the port library, the driver's or backend's own check, or physical separation) while the harness switches the other layers off ([#877](https://github.com/truvity/sluis/issues/877)). A vector that is refused even with every layer off is void, so a passing run proves each layer on its own.
+
 **The deny matrix.** The permission manifest generates tests that prove an actor cannot do what its manifest does not say ([Architecture](/architecture/)).
 
 ## Where to follow it
