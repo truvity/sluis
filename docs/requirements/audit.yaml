@@ -490,12 +490,12 @@ requirements:
     rationale: "Erasure and an immutable log need crypto-shredding."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-78, section: "8785", depth: Partial}
     features: ["#840"]
-    gap: stakeholder-only
+    superseded_by: [REQ-AUDIT-057]
     verification:
       - {kind: integration-test, ref: "erasure test"}
   - id: REQ-AUDIT-019
@@ -662,3 +662,504 @@ requirements:
     features: ["design"]
     verification:
       - {kind: integration-test, ref: "free-text bound test"}
+  - id: REQ-AUDIT-047
+    area: AUDIT
+    statement: "The writer MUST seal a batch when it holds 256 records or when its first record is 5 seconds old, whichever comes first, and never seal an empty batch."
+    rationale: "A short bound keeps the index and the witnesses within seconds while an idle log signs nothing."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-75, section: "1", depth: Partial}
+    features: ["#838"]
+    verification:
+      - {kind: integration-test, ref: "seal bound test"}
+  - id: REQ-AUDIT-048
+    area: AUDIT
+    statement: "Each sealed batch MUST end with a seal entry, inside the tree, that records its record count, the writer instance and the observed clock offset."
+    rationale: "The offset inside the tree is cosigned by the witnesses with everything else."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-75, section: "1", depth: Partial}
+      - {id: ST-80, section: "5905", depth: Partial}
+    features: ["#838"]
+    verification:
+      - {kind: integration-test, ref: "seal entry test"}
+  - id: REQ-AUDIT-049
+    area: AUDIT
+    statement: "The writer MUST ask every configured witness to cosign each new checkpoint, at most once per witness every 5 seconds, and ask again for the latest checkpoint every 5 minutes while the log is idle."
+    rationale: "The unwitnessed window stays about one seal, and a reader can prove freshness to within 5 minutes."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-74, section: "1", depth: Partial}
+      - {id: ST-73, section: "1", depth: Partial}
+    features: ["#838"]
+    verification:
+      - {kind: integration-test, ref: "witness cadence test"}
+  - id: REQ-AUDIT-050
+    area: AUDIT
+    statement: "Every checkpoint of an audit log MUST also be written once, create-if-absent, under its tree size below the log's prefix."
+    rationale: "The checkpoint history must survive on a store with no versioning."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-72, section: "1", depth: Partial}
+      - {id: ST-75, section: "1", depth: Partial}
+      - {id: ST-103, section: "test plan", depth: Full}
+    features: ["#837"]
+    verification:
+      - {kind: test-vectors, ref: "port suite blob create-if-absent fence"}
+      - {kind: integration-test, ref: "checkpoint history test"}
+  - id: REQ-AUDIT-051
+    area: AUDIT
+    statement: "An audit record identifier MUST be a UUIDv7 set by the emitter."
+    rationale: "A standard, time-ordered id lets the writer bound how long it remembers ids."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-02, section: "5.7", depth: Partial}
+    features: ["#802", "#837"]
+    verification:
+      - {kind: integration-test, ref: "record id format test"}
+  - id: REQ-AUDIT-052
+    area: AUDIT
+    statement: "The writer MUST remember record identifiers for duplicate removal for 14 days."
+    rationale: "The window must outlast the longest queue retention of a supported transport."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["#837"]
+    verification:
+      - {kind: integration-test, ref: "late redelivery test"}
+  - id: REQ-AUDIT-053
+    area: AUDIT
+    statement: "The writer MUST quarantine and report a record older than its duplicate-removal window instead of writing it."
+    rationale: "A record outside the window could be a duplicate that the writer can no longer recognise."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["#837"]
+    verification:
+      - {kind: integration-test, ref: "quarantine test"}
+  - id: REQ-AUDIT-054
+    area: AUDIT
+    statement: "A blocking emit MUST return only once the record is durable in the transport: accepted by the queue, acknowledged by the writer, or fsync'd to the local spool."
+    rationale: "A change must not happen when its record could still be lost, and must not wait for a seal."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    features: ["#802"]
+    verification:
+      - {kind: integration-test, ref: "blocking emit durability test"}
+  - id: REQ-AUDIT-055
+    area: AUDIT
+    statement: "Each audit log entry MUST be a clear envelope plus the record encrypted with HPKE to its company's audit tenant key, or to the boundary's own audit key for a machine-plane record."
+    rationale: "A shred must leave a company's records unreadable while the operator still sees the envelope."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-61, section: "5", depth: Partial}
+    features: ["#840"]
+    verification:
+      - {kind: test-vectors, ref: "HPKE test vectors"}
+      - {kind: integration-test, ref: "entry envelope test"}
+  - id: REQ-AUDIT-056
+    area: AUDIT
+    statement: "The leaf hash of an audit log MUST cover the whole entry, ciphertext included."
+    rationale: "A log must still verify after a company's key is shredded."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-77, section: "2.1", depth: Partial}
+    features: ["#838", "#840"]
+    verification:
+      - {kind: integration-test, ref: "verify after shred test"}
+  - id: REQ-AUDIT-057
+    area: AUDIT
+    statement: "A person's erasure request MUST be met by deleting the mapping from that person's pseudonym to the person, which is kept outside the log."
+    rationale: "Records carry pseudonyms only, so deleting the mapping removes the link to the person without a key per subject."
+    level: MUST
+    source: stakeholder-ciam
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#840"]
+    verification:
+      - {kind: integration-test, ref: "erasure by pseudonym mapping test"}
+  - id: REQ-AUDIT-058
+    area: AUDIT
+    statement: "In a production boundary `sluis config check` MUST refuse an audit log store whose lock mode is not compliance unless a peer or external witness is configured."
+    rationale: "A production log without a lock and without a witness must not start by accident."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-74, section: "1", depth: Partial}
+    features: ["#837"]
+    verification:
+      - {kind: integration-test, ref: "config-check production lock-mode refusal test"}
+  - id: REQ-AUDIT-059
+    area: AUDIT
+    statement: "Outside production `sluis config check` MUST warn about an audit log store that has neither a compliance lock nor a witness."
+    rationale: "Development and staging may run unprotected logs, but the risk must be visible."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-74, section: "1", depth: Partial}
+    features: ["#837"]
+    verification:
+      - {kind: integration-test, ref: "config-check lock-mode warning test"}
+  - id: REQ-AUDIT-060
+    area: AUDIT
+    statement: "Every audit log in a production boundary MUST declare its retention period, with no built-in default."
+    rationale: "A period locked in compliance mode cannot be shortened, so it must be chosen consciously."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#837"]
+    verification:
+      - {kind: integration-test, ref: "config-check retention test"}
+  - id: REQ-AUDIT-061
+    area: AUDIT
+    statement: "The declared retention MUST be enforced as per-object retention on a compliance store, as the bucket lock rule on R2, and as a lifecycle rule or an expiry sweeper on a store with no lock."
+    rationale: "Each backend has its own means, and the declared period must mean the same on all of them."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-103, section: "test plan", depth: Full}
+    features: ["#837"]
+    verification:
+      - {kind: test-vectors, ref: "port suite blob retention"}
+      - {kind: integration-test, ref: "retention per backend test"}
+  - id: REQ-AUDIT-062
+    area: AUDIT
+    statement: "An audit log expiry sweeper MUST hold a delete right on expired log objects only."
+    rationale: "The sweeper is the one credential that may delete from the log."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#837"]
+    verification:
+      - {kind: integration-test, ref: "sweeper delete-right denial test"}
+  - id: REQ-AUDIT-063
+    area: AUDIT
+    statement: "sluis MUST NOT place or lift legal holds on the audit log, and each hold placed with the store's own means is recorded as an audit record under the person's name."
+    rationale: "Holds stay with cloud IAM and a break-glass role, and the log still shows who held what."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["design"]
+    verification:
+      - {kind: integration-test, ref: "hold record test"}
+  - id: REQ-AUDIT-064
+    area: AUDIT
+    statement: "The company shred procedure MUST check for a standing legal hold on that company's audit records before the key is destroyed."
+    rationale: "Nothing in sluis stops a shred during a hold, so the procedure has to."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["design"]
+    manual_reason: "The check is a step of the promotion runbook, which an operator runs."
+    verification:
+      - {kind: manual, ref: "runbook review"}
+  - id: REQ-AUDIT-065
+    area: AUDIT
+    statement: "On the boards a scheduled job of the audit installation, not the writer, MUST copy new audit log objects to the off-site R2 copy at least every hour, create-if-absent."
+    rationale: "The writer stays away from R2, at the cost of up to an hour of log with no off-site copy."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: ["bare-metal"]
+    standards:
+      - {id: ST-75, section: "1", depth: Partial}
+    features: ["#984"]
+    verification:
+      - {kind: integration-test, ref: "off-site copy test"}
+  - id: REQ-AUDIT-066
+    area: AUDIT
+    statement: "A reader MUST NOT claim an order between records of different node logs that are closer in time than those logs' recorded clock offsets."
+    rationale: "Within one log the order is exact; across logs it is only as good as the clocks."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-80, section: "5905", depth: Partial}
+    features: ["#839"]
+    verification:
+      - {kind: integration-test, ref: "merge order test"}
+  - id: REQ-AUDIT-067
+    area: AUDIT
+    statement: "The search index MUST keep full text only over the fields that the catalogue marks searchable."
+    rationale: "Full text over everything would index personal fields."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-103, section: "test plan", depth: Full}
+    features: ["#839"]
+    verification:
+      - {kind: test-vectors, ref: "port suite index"}
+      - {kind: integration-test, ref: "searchable fields test"}
+  - id: REQ-AUDIT-068
+    area: AUDIT
+    statement: "Shredding a company's audit tenant key MUST purge that company's rows from the search index and exclude them from every later rebuild."
+    rationale: "The index holds readable copies, so a shred is complete only when it reaches them."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#839"]
+    verification:
+      - {kind: integration-test, ref: "index purge after shred test"}
+  - id: REQ-AUDIT-069
+    area: AUDIT
+    statement: "A `postgres` search index MUST enforce row-level security on its company column."
+    rationale: "The database's own check backs the reader's grant filter."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: ["serverless", "kubernetes"]
+    standards: []
+    features: ["#839"]
+    verification:
+      - {kind: integration-test, ref: "index row-level security test"}
+  - id: REQ-AUDIT-070
+    area: AUDIT
+    statement: "Full-text search MUST match words without stemming, folding diacritics, with the same matches on every index driver."
+    rationale: "One conformance suite needs the same answer from every driver."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-103, section: "test plan", depth: Full}
+    features: ["#839"]
+    verification:
+      - {kind: test-vectors, ref: "port suite index full text"}
+  - id: REQ-AUDIT-071
+    area: AUDIT
+    statement: "An index rebuild MUST build a new generation beside the serving one and switch the reader to it atomically."
+    rationale: "Search stays up during a rebuild, and a failed rebuild leaves the old index serving."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#839"]
+    verification:
+      - {kind: integration-test, ref: "rebuild switch test"}
+  - id: REQ-AUDIT-072
+    area: AUDIT
+    statement: "The reader MUST return a record with an inclusion proof against a cosigned checkpoint."
+    rationale: "A record can then be proven to an outsider."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-77, section: "2.1.1", depth: Partial}
+      - {id: ST-73, section: "1", depth: Partial}
+    features: ["#839"]
+    verification:
+      - {kind: integration-test, ref: "get with proof test"}
+  - id: REQ-AUDIT-073
+    area: AUDIT
+    statement: "The reader MUST ask `policy` for a grant on every call and apply it as a mandatory filter of the query."
+    rationale: "Least privilege per company is enforced in one policy language."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-12, section: "1", depth: Partial}
+    features: ["#839"]
+    verification:
+      - {kind: integration-test, ref: "reader grant filter test"}
+  - id: REQ-AUDIT-074
+    area: AUDIT
+    statement: "Every read of the audit log through the reader MUST itself be audited with the rule that granted it."
+    rationale: "Reads of the trail must be accountable."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#839"]
+    verification:
+      - {kind: integration-test, ref: "read audit test"}
+  - id: REQ-AUDIT-075
+    area: AUDIT
+    statement: "The default search index MUST be `postgres` on Aurora on the lambda installation and `postgres` on CloudNativePG on the kubernetes installation."
+    rationale: "Search works out of the box on every tested installation."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: ["serverless", "kubernetes"]
+    standards: []
+    features: ["#839"]
+    verification:
+      - {kind: integration-test, ref: "default index test"}
+  - id: REQ-AUDIT-076
+    area: AUDIT
+    statement: "Serverless functions MUST reach a `postgres` index through RDS Proxy with IAM authentication and one database role per actor kind."
+    rationale: "Short-lived functions must not exhaust connections, and each actor kind keeps its own role."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: ["serverless"]
+    standards: []
+    features: ["#839"]
+    verification:
+      - {kind: integration-test, ref: "RDS Proxy IAM role test"}
+  - id: REQ-AUDIT-077
+    area: AUDIT
+    statement: "An audit installation MUST run its own `entry` on its own host, also when the audit pieces are combined with sluis."
+    rationale: "The audit front is the same shape on every installation."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#985"]
+    verification:
+      - {kind: integration-test, ref: "audit front topology test"}
+  - id: REQ-AUDIT-078
+    area: AUDIT
+    statement: "The audit console's browser session MUST be held by the audit installation's own `session` actor as an HttpOnly cookie, with no token in the browser."
+    rationale: "The audit console must work on its own without tokens in the browser."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-05, section: "cookie prefixes", depth: Partial}
+    features: ["#985"]
+    verification:
+      - {kind: integration-test, ref: "audit session cookie test"}
+  - id: REQ-AUDIT-079
+    area: AUDIT
+    statement: "A write from the audit console MUST go through the audit installation's `console` actor to the actor that owns its record kind, never through the reader."
+    rationale: "The reader stays read-only, and each owner validates its own writes."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#985"]
+    verification:
+      - {kind: integration-test, ref: "audit console write routing test"}
+  - id: REQ-AUDIT-080
+    area: AUDIT
+    statement: "The audit console MUST be a static bundle of its own, built on the release train, that works with no sluis installation beside it."
+    rationale: "A smaller bundle allows a tighter content security policy and proves the console stands alone."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#985"]
+    verification:
+      - {kind: integration-test, ref: "stand-alone audit console test"}
+  - id: REQ-AUDIT-081
+    area: AUDIT
+    statement: "A console of another installation MUST reach the audit front with an exchanged token whose `aud` is the audit client id, whose lifetime is at most 5 minutes and which is bound to the console's X.509-SVID by mutual TLS."
+    rationale: "The person's identity reaches the reader, and a copied token is useless."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-07, section: "2", depth: Partial}
+      - {id: ST-19, section: "3", depth: Partial}
+    features: ["#985"]
+    verification:
+      - {kind: integration-test, ref: "cross-console token test"}
+  - id: REQ-AUDIT-082
+    area: AUDIT
+    statement: "The audit front MUST accept only tokens of the issuer of the environment boundary whose log it holds."
+    rationale: "A token for one environment's log must not open another's."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#985"]
+    verification:
+      - {kind: integration-test, ref: "audit front issuer test"}
+  - id: REQ-AUDIT-083
+    area: AUDIT
+    statement: "The audit console MUST show the log's health: the age of the latest checkpoint, the witness cosignatures, the index lag and the lag of the off-site copy."
+    rationale: "Integrity problems must be visible to the people who read the log, not only in metrics."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#985"]
+    verification:
+      - {kind: integration-test, ref: "log health view test"}
+  - id: REQ-AUDIT-084
+    area: AUDIT
+    statement: "`sluis audit verify` and `sluis audit read` MUST work from the bucket alone with read-only cloud credentials and no `entry`, reader or sign-in."
+    rationale: "Auditors and incident responders are never locked out by the front or the issuer."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#838", "#985"]
+    verification:
+      - {kind: integration-test, ref: "bucket-only verify and read test"}
+  - id: REQ-AUDIT-085
+    area: AUDIT
+    statement: "The audit front's host MUST be a sibling of its boundary's sluis host, never a child of it or a path on it."
+    rationale: "A sibling inherits no cookie scope, and one origin per host holds."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "5.1.4.1", depth: Partial}
+    features: ["#985"]
+    verification:
+      - {kind: integration-test, ref: "audit host origin test"}
