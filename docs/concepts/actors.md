@@ -135,7 +135,7 @@ On a small node there is not enough memory for every actor to be its own process
 Both halves are checked. The first means fusion never grants an actor something it did not already have in its own unit, it only puts the two together. The second keeps the line that matters most: a process that is reachable without authentication, such as `entry` behind the edge connector, never also holds a key. The rule is tested: a configuration that fuses actors in a way that breaks it fails the build.
 
 :::note[Proposed]
-On Kubernetes the "unit" of this rule is proposed to be the **credential scope**, which is the container, because one pod holds several actors, each with its own token audience. Read literally, a pod that holds `entry` and `signer` would break the second half. With the container as the unit, the build checks that no container that can use a key also has a listener. Which meaning of "unit" applies is [OD-18](/open-decisions/#od-18).
+On Kubernetes the "unit" of this rule is the **credential scope**, which is the container, because one pod holds several actors, each with its own token audience. Read literally, a pod that holds `entry` and `signer` would break the second half. With the container as the unit, the build checks that no container that can use a key also has a listener. This is decided as [OD-18](/open-decisions/#od-18).
 :::
 
 ## Actors on every runtime
