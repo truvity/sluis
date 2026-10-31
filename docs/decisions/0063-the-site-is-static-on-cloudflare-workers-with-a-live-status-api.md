@@ -62,6 +62,7 @@ The project board's `Product milestone` field is a single-select with four optio
 ### Live data
 
 - **A read-only GitHub App owned by the organisation reads the live data.** Its permissions are issues, metadata, organisation projects, actions and checks, all read-only. Its private key is a Worker secret.
+- **The build reads the project board with the same App,** so the build-time snapshot has the board's data. Each build, in GitHub Actions and in Workers Builds alike, mints a one-hour token for the repository with `issues: read` and `organization_projects: read` only, from the App's client id and private key (a build variable and a build secret in Workers Builds; since 2026-10-31).
 - **GitHub webhooks refresh a KV document within seconds.** The Worker checks each delivery's signature before it acts on it.
 - **A cron every 15 minutes is the safety net** for missed deliveries. It uses conditional requests, so an unchanged answer costs little.
 - **CI posts coverage and conformance summaries to the API, authenticated by the GitHub Actions OIDC token.** No secret is stored for it. A pull request from a fork gets no OIDC token, so it cannot post.

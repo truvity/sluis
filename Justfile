@@ -22,10 +22,12 @@ site-build: site-install
 
 # Front-matter descriptions of 40 to 160 characters, a valid status, and
 # registered open-decision ids on every page in docs/, and the requirements
-# catalogue in docs/requirements/ (schema, statement rules, traceability, public safety).
+# catalogue in docs/requirements/ (schema, statement rules, traceability, public safety),
+# and the tests of the status token script (site/scripts/mint-status-token.mjs).
 site-lint: site-install check-requirements
     site/scripts/check-descriptions.mjs
     site/scripts/check-status.mjs
+    node --test site/scripts/mint-status-token.test.mjs
 
 # The requirements catalogue in docs/requirements/: every file valid against
 # requirements.schema.json (ids REQ-<AREA>-NNN), ids unique across files, and the

@@ -6,7 +6,9 @@
 #
 # Workers Builds settings (ADR 0063): root directory `site`, build command
 # `scripts/cf-build.sh`, deploy command `yarn wrangler deploy`, build variable
-# SLUIS_STATUS_KV_ID, no build watch paths (a change under docs/ must build too).
+# SLUIS_STATUS_KV_ID, build variable SLUIS_STATUS_APP_CLIENT_ID and build secret
+# SLUIS_STATUS_APP_KEY (the status page's GitHub token), no build watch paths (a change
+# under docs/ must build too).
 # It runs on a laptop the same way, without the variable and without deploying:
 #
 #   SLUIS_TARGET=workers site/scripts/cf-build.sh     (any directory)
@@ -20,6 +22,12 @@
 #   GH_TOKEN               a token that can read the project board, for the status
 #                          page; without it the page says its project data is not
 #                          available (the build goes on and says so)
+#   SLUIS_STATUS_APP_CLIENT_ID, SLUIS_STATUS_APP_KEY
+#                          in Workers Builds (WORKERS_CI) with no GH_TOKEN: the client id
+#                          and the private key (a PEM, or the base64 of a PEM) of the
+#                          read-only sluis-status GitHub App. The build mints a short-lived
+#                          token from them (mint-status-token.mjs) as GH_TOKEN, as site.yaml
+#                          does. Both or neither; a failed mint fails the build
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -35,6 +43,26 @@ die() { echo "cf-build: $*" >&2; exit 1; }
 if [ -n "${WORKERS_CI:-}" ] && [ -z "${SLUIS_STATUS_KV_ID:-}" ]; then
   die "SLUIS_STATUS_KV_ID is not set. Add it as a build variable of the Worker (Settings, Build, Variables and secrets)."
 fi
+
+# The status page's GitHub token. In GitHub CI site.yaml mints it from the sluis-status App;
+# Workers Builds does the same here. Both settings or neither: a half-set pair, or a mint
+# that fails, fails the build, so a configured status page never silently loses its data.
+if [ -n "${WORKERS_CI:-}" ] && [ -z "${GH_TOKEN:-}" ]; then
+  if [ -n "${SLUIS_STATUS_APP_CLIENT_ID:-}" ] && [ -n "${SLUIS_STATUS_APP_KEY:-}" ]; then
+    command -v node >/dev/null || die "node is not installed; it mints the status page's GitHub token"
+    owner_repo=${repo_url#*://github.com/}
+    owner_repo=${owner_repo%.git}
+    if ! GH_TOKEN=$(site/scripts/mint-status-token.mjs --owner "${owner_repo%%/*}" --repo "${owner_repo#*/}") || [ -z "$GH_TOKEN" ]; then
+      die "could not mint the status page's GitHub token from the sluis-status App (the reason is above); fix SLUIS_STATUS_APP_CLIENT_ID and SLUIS_STATUS_APP_KEY, or remove both to build without the project board"
+    fi
+    export GH_TOKEN
+    say "minted a read-only GitHub token from the sluis-status App for the status page"
+  elif [ -n "${SLUIS_STATUS_APP_CLIENT_ID:-}${SLUIS_STATUS_APP_KEY:-}" ]; then
+    die "set both SLUIS_STATUS_APP_CLIENT_ID and SLUIS_STATUS_APP_KEY, or neither"
+  fi
+fi
+# The key has done its job; the install and the build do not need it.
+unset SLUIS_STATUS_APP_KEY
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "$root is not a git checkout; the build needs git history for the v1 tag and Git LFS"
 

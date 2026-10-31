@@ -32,7 +32,7 @@ The `Justfile` holds the recipes, and CI runs the same recipes. Run the recipe, 
 | `just check-yaml-ext` | YAML files use `.yaml` |
 | `just check-agent-links` | `AGENTS.md` exists, `CLAUDE.md` imports it, and every path that they and the skills point to exists |
 | `just site-check` | The site: `site-lint`, `site-build`, `site-render` and `site-links` |
-| `just site-lint` | Page descriptions and statuses, open-decision ids, the requirements catalogue |
+| `just site-lint` | Page descriptions and statuses, open-decision ids, the requirements catalogue, and the tests of `site/scripts/mint-status-token.mjs` |
 | `just site-build` | A strict site build: no warning and no broken internal link |
 | `just site-links` | Every link in the built site, internal and external |
 | `just site-render` | Every diagram is drawn, in light and dark mode |
@@ -46,7 +46,7 @@ The site is built from `docs/` and `site/` with Astro Starlight, and every page 
 
 - `just site-dev` serves it on `http://localhost:4321` with live reload; it runs `astro dev`.
 - `just site-build` makes the strict build into `site/dist`, the same build CI checks.
-- The [project status](/status/) page and `/data/repo.json` are built with the rest ([ADR 0063](/decisions/0063-the-site-is-static-on-cloudflare-workers-with-a-live-status-api/)). The page reads the v2 project board during the build, with the token in `GH_TOKEN` or `GITHUB_TOKEN`. Reading an organisation's project needs a token that may read it: locally, `GH_TOKEN=$(gh auth token) devbox run -- just check`. The `GITHUB_TOKEN` of GitHub Actions cannot read organisation projects, so a CI build says "project data not available at build time" on the page and in its log, and does not fail. `site/scripts/check-repo-json.mjs` checks `/data/repo.json` against its schema, `site/public/data/repo.schema.json`, and against the records it is built from.
+- The [project status](/status/) page and `/data/repo.json` are built with the rest ([ADR 0063](/decisions/0063-the-site-is-static-on-cloudflare-workers-with-a-live-status-api/)). The page reads the v2 project board during the build, with the token in `GH_TOKEN` or `GITHUB_TOKEN`. Reading an organisation's project needs a token that may read it: locally, `GH_TOKEN=$(gh auth token) devbox run -- just check`. The `GITHUB_TOKEN` of GitHub Actions cannot read organisation projects, so `site.yaml` mints a short-lived read-only token from the `sluis-status` GitHub App instead (`actions/create-github-app-token`, with the repository variable `SLUIS_STATUS_APP_CLIENT_ID` and the secret `SLUIS_STATUS_APP_KEY`); a pull request build has neither, says "project data not available at build time" on the page and in its log, and does not fail. `site/scripts/check-repo-json.mjs` checks `/data/repo.json` against its schema, `site/public/data/repo.schema.json`, and against the records it is built from.
 
 How the site is hosted is decided in [ADR 0063](/decisions/0063-the-site-is-static-on-cloudflare-workers-with-a-live-status-api/). Today `site.yaml` publishes it to GitHub Pages, and the build for Cloudflare Workers is ready but not yet deployed (the live status API and the cutover are separate issues). The build has two targets, chosen by `SLUIS_TARGET` (`pages`, the default, or `workers`; Workers Builds sets `WORKERS_CI`, which selects `workers`). They build the same pages.
 
@@ -67,7 +67,11 @@ How the site is hosted is decided in [ADR 0063](/decisions/0063-the-site-is-stat
   | Build command | `scripts/cf-build.sh`, not `yarn build`: it fetches the Git LFS files, builds the v1 documentation under `/v1/` and writes `build.json` with the commit |
   | Deploy command | `yarn wrangler deploy`, not `npx wrangler deploy`: `npx` does not find the binaries that Yarn 4 installs (`sh: wrangler: not found`), and `yarn` runs the pinned `wrangler` of the `site` workspace |
   | Build variable | `SLUIS_STATUS_KV_ID`, the id of the KV namespace for the `STATUS` binding. It lives only in the operator's Cloudflare account and is never committed |
+  | Build variable | `SLUIS_STATUS_APP_CLIENT_ID`, the client id of the `sluis-status` GitHub App. It is the same value as the repository variable of that name, and not a secret |
+  | Build secret | `SLUIS_STATUS_APP_KEY`, the private key of the `sluis-status` GitHub App, as the PEM or as base64 of the PEM (a dashboard secret can mangle newlines, which base64 avoids). Never committed |
   | Build watch paths | None, because a change under `docs/` must build too |
+
+  The two `SLUIS_STATUS_APP_*` settings go together. With both, `cf-build.sh` runs `scripts/mint-status-token.mjs`, which signs a JWT for the App, finds its installation on the organisation and asks for a one-hour token on this repository with `issues: read` and `organization_projects: read` only (the permissions of `site.yaml`), and exports it as `GH_TOKEN` for the status page build. If minting fails, the build fails with the step that failed. With neither, the build warns "no GH_TOKEN" and the status page says its project data is not available. A `GH_TOKEN` that is already set is used as it is. `node --test site/scripts/mint-status-token.test.mjs` (part of `just site-lint`) tests the key formats, the JWT and the two API calls against a fake GitHub, with no network.
 
   A build starts on a push to `main`. Connecting the repository or changing a setting does not build the commit that is already there; the next push does. `workers_dev` and `preview_urls` stay `false` in `site/wrangler.jsonc`.
 - Security headers and redirects are files in the repository, and the Worker, its KV namespace and the custom domain are declared in the operator's own infrastructure code, outside it. The repository's CI holds no Cloudflare credential, and neither does `just site-workers`.
