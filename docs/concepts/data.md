@@ -87,7 +87,7 @@ The contract has no unconditional put. A caller changes a record only against th
 
 ### The atomic batch
 
-A **write batch** applies several writes together or none of them. The audit `writer` uses it to register a batch in the sequence, record the ids it deduplicated and move its cursor, so a crash cannot leave one without the others. The next number of the sequence is allocated by a compare-and-swap inside the same batch.
+A **write batch** applies several writes together or none of them. The audit `writer` uses it to register the sealed batches of its audit log and its usage log in the sequence, record the ids it deduplicated and move its cursor, so a crash cannot leave one without the others, and the two logs never disagree ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)). The next number of the sequence is allocated by a compare-and-swap inside the same batch.
 
 ### Conditional adjust
 

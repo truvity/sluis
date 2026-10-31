@@ -51,7 +51,7 @@ The language of each executable is fixed from a set of **spikes**, run before th
 | [S1](https://github.com/truvity/sluis/issues/939) | Connect for Rust over Unix sockets: interoperation with connect-go in both directions, peer credentials, the default-deny interceptor, streaming |
 | [S2](https://github.com/truvity/sluis/issues/940) | FIPS with `aws-lc-rs`: builds for amd64 and arm64, a certified module pin, the AWS SDK for Rust in FIPS mode. **Done** (2026-10-30): passed with conditions. With no FIPS build in v2.0 (decided 2026-10-31), its result is kept for a later FIPS variant |
 | [S3](https://github.com/truvity/sluis/issues/941) | A slim `entry` prototype in both languages: latency, memory, Lambda cold start and size, and a day of fuzzing |
-| [S4](https://github.com/truvity/sluis/issues/942) | `key-holder` through PKCS#11 (`cryptoki` with `ykcs11`): every algorithm and slot on [Keys](/concepts/keys/), concurrent callers, PIN handling |
+| [S4](https://github.com/truvity/sluis/issues/942) | `key-holder` through PKCS#11 (`cryptoki` with `ykcs11`) against `piv-go`: every algorithm and slot on [Keys](/concepts/keys/), concurrent callers, PIN handling. **Done** for YubiKey PIV (2026-10-31): `key-holder` is Go with `piv-go`, which holds the card exclusively. The release-subkey slot, YubiHSM 2, Nitrokey and the zeroisation review are still to run |
 | [S5](https://github.com/truvity/sluis/issues/943) | The memory budget on the boards: each actor and driver under load, in each language, against the 2 GB budget |
 | [S6](https://github.com/truvity/sluis/issues/944) | OpenTelemetry from Rust: one trace across a Go and Rust hop |
 | [S7](https://github.com/truvity/sluis/issues/945) | Configuration in Rust: the same conformance vectors as the Go structs |
@@ -62,7 +62,7 @@ One more spike comes before the boards' blob store, not before step 1: **Garage 
 
 ## Architecture decision records
 
-The records are on [Decisions](/decisions/), with their status. During the design phase the maintainer may rewrite them in place; on 2026-10-30 every record was realigned to one set of decisions. The audit records followed on 2026-10-31: the log ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/), Proposed while the record format stays open in [#910](https://github.com/truvity/sluis/issues/910)), search ([ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)), quota ([ADR 0023](/decisions/0023-quotas-api-is-idempotent-and-its-data-follows-the-origin-model/)) and the audit installation's front ([ADR 0062](/decisions/0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own/), built in [#985](https://github.com/truvity/sluis/issues/985)).
+The records are on [Decisions](/decisions/), with their status. During the design phase the maintainer may rewrite them in place; on 2026-10-30 every record was realigned to one set of decisions. The audit records followed on 2026-10-31: the log ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/), Accepted since its record format was decided the same day: plain OCSF events, with a parallel usage log in CloudEvents for quota and billing), search ([ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)), quota ([ADR 0023](/decisions/0023-quotas-api-is-idempotent-and-its-data-follows-the-origin-model/)) and the audit installation's front ([ADR 0062](/decisions/0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own/), built in [#985](https://github.com/truvity/sluis/issues/985)).
 
 ## Technical backlog
 
@@ -86,7 +86,7 @@ The shape of the repository, the build, the patterns every component follows, an
 | [#939](https://github.com/truvity/sluis/issues/939) | Spike S1: Connect for Rust over Unix sockets |
 | [#940](https://github.com/truvity/sluis/issues/940) | Spike S2: FIPS with aws-lc-rs |
 | [#941](https://github.com/truvity/sluis/issues/941) | Spike S3: a slim entry prototype in Go and in Rust |
-| [#942](https://github.com/truvity/sluis/issues/942) | Spike S4: key-holder through cryptoki and ykcs11 |
+| [#942](https://github.com/truvity/sluis/issues/942) | Spike S4: key-holder through cryptoki and ykcs11 (done for YubiKey PIV: Go with piv-go) |
 | [#943](https://github.com/truvity/sluis/issues/943) | Spike S5: board memory budget |
 | [#944](https://github.com/truvity/sluis/issues/944) | Spike S6: OpenTelemetry from Rust |
 | [#945](https://github.com/truvity/sluis/issues/945) | Spike S7: configuration in Rust |
