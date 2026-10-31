@@ -46,6 +46,9 @@ hack/fetch-mermaid.sh
 
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
+# A plugin prints a banner that MkDocs 2.0 will break existing sites. v1 pins
+# mkdocs==1.6.1 in hack/pages-requirements.txt, so the banner does not apply.
+export DISABLE_MKDOCS_2_WARNING=true
 "$venv/bin/mkdocs" build --strict -f mkdocs.v1.yaml -d "$out"
 test -f "$out/assets/vendor/mermaid.min.js" || { echo "build-v1: the v1 site has no Mermaid bundle, so every diagram would show as source" >&2; exit 1; }
 hack/pages-site.sh "$out"
