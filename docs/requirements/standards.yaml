@@ -8,6 +8,8 @@
 # ST-48 keeps its id for SPIRE as prior art, which sluis does not deploy.
 # The optional OpenID plans (ADR 0061, decided 2026-10-30): Form Post (ST-34) is a v2 target; Front-Channel Logout (ST-32)
 # and 3rd Party-Initiated Login (ST-35) are not planned; CIBA (ST-36) is planned later, in poll mode, after v2 parity.
+# The audit record formats (ADR 0021, decided 2026-10-31): OCSF (ST-114) is the audit record; CloudEvents (ST-100) is back on
+# the page for the usage log, not as an audit envelope; FOCUS (ST-115) names the columns of the finance export.
 schema: 1
 standards:
   - {id: ST-01, name: "RFC 6749 OAuth 2.0", group: "OAuth", register: true, url: "https://www.rfc-editor.org/rfc/rfc6749"}
@@ -109,7 +111,7 @@ standards:
   - {id: ST-97, name: "ConnectRPC / gRPC / Protobuf", group: "Data", register: true, url: "https://connectrpc.com/"}
   - {id: ST-98, name: "OpenTelemetry / OTLP", group: "Data", register: true, url: "https://opentelemetry.io/docs/specs/otlp/"}
   - {id: ST-99, name: "W3C Trace Context", group: "Data", register: true, url: "https://www.w3.org/TR/trace-context/"}
-  - {id: ST-100, name: "CloudEvents", group: "Data", register: false, url: "https://cloudevents.io/"}
+  - {id: ST-100, name: "CloudEvents", group: "Data", register: true, url: "https://cloudevents.io/"}
   - {id: ST-101, name: "RFC 9457 Problem Details", group: "Data", register: false, url: "https://www.rfc-editor.org/rfc/rfc9457"}
   - {id: ST-102, name: "NATS JetStream", group: "Data", register: false, url: "https://docs.nats.io/nats-concepts/jetstream"}
   - {id: ST-103, name: "Port conformance suite", group: "Ports", register: true}
@@ -123,6 +125,8 @@ standards:
   - {id: ST-111, name: "SPIFFE Federation (later)", group: "Workload", register: true, url: "https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Federation.md"}
   - {id: ST-112, name: "SPIFFE Workload Endpoint (later)", group: "Workload", register: true, url: "https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Workload_Endpoint.md"}
   - {id: ST-113, name: "SPIFFE Workload API (later)", group: "Workload", register: true, url: "https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Workload_API.md"}
+  - {id: ST-114, name: "OCSF 1.x", group: "Transparency", register: true, url: "https://schema.ocsf.io/"}
+  - {id: ST-115, name: "FinOps FOCUS", group: "Data", register: true, url: "https://focus.finops.org/"}
   - {id: NC-01, name: "RFC 8176 Authentication Method Reference Values", group: "Candidate", register: true}
   - {id: NC-02, name: "RFC 9562 UUIDv4", group: "Candidate", register: true}
   - {id: NC-03, name: "Security Event Tokens: RFC 8417, 8935 push, 8936 poll", group: "Candidate", register: false}

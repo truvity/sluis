@@ -238,13 +238,14 @@ requirements:
     rationale: "A retry that straddles a restore must still count once."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
     runtimes: all
     standards:
       - {id: NC-15, section: "Idempotency-Key", depth: Partial}
     features: ["#915"]
     verification:
       - {kind: integration-test, ref: "request id rebuild after restore test"}
+    superseded_by: [REQ-QUOTA-030]
   - id: REQ-QUOTA-019
     area: QUOTA
     statement: "`entry` MUST copy an `Idempotency-Key` header into the request identifier field and refuse a request whose header and field differ."
@@ -313,12 +314,13 @@ requirements:
     rationale: "Only quota changes balances, under its compare-and-set, and roll-forward reads one kind of record."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
     runtimes: all
     standards: []
     features: ["#915"]
     verification:
       - {kind: integration-test, ref: "catalogue balance effect test"}
+    superseded_by: [REQ-QUOTA-029]
   - id: REQ-QUOTA-025
     area: QUOTA
     statement: "A quota balance MUST belong to a declared account and be keyed by boundary, company, account and meter."
@@ -367,3 +369,68 @@ requirements:
     features: ["#915"]
     verification:
       - {kind: integration-test, ref: "limit kinds test"}
+  - id: REQ-QUOTA-029
+    area: QUOTA
+    statement: "A balance effect MUST be written only as a usage event of a message that `quota` emits, never in an audit record."
+    rationale: "Only quota changes balances, under its compare-and-set, and roll-forward reads one log."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-100, section: "1.0.2", depth: Partial}
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "catalogue balance effect test"}
+  - id: REQ-QUOTA-030
+    area: QUOTA
+    statement: "After a restore quota MUST rebuild the request identifiers of the last 24 hours from the usage log."
+    rationale: "A retry that straddles a restore must still count once."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-15, section: "Idempotency-Key", depth: Partial}
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "request id rebuild from the usage log test"}
+  - id: REQ-QUOTA-031
+    area: QUOTA
+    statement: "After a restore quota MUST roll its balances forward from the usage log."
+    rationale: "No top-up or adjustment that reached the log is lost."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-100, section: "1.0.2", depth: Partial}
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "balance roll-forward from the usage log test"}
+  - id: REQ-QUOTA-032
+    area: QUOTA
+    statement: "Quota MUST derive its meters and hourly aggregates from the usage log."
+    rationale: "Meters cost nothing on the hot path and can always be rebuilt from the facts."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-100, section: "1.0.2", depth: Partial}
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "meter rebuild from the usage log test"}
+  - id: REQ-QUOTA-033
+    area: QUOTA
+    statement: "The finance export derived from the usage log SHOULD use the column names of FinOps FOCUS for the usage it reports."
+    rationale: "A billing system that reads FOCUS reads sluis usage with little mapping."
+    level: SHOULD
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-115, section: "1.4", depth: Partial}
+    features: ["#915"]
+    verification:
+      - {kind: integration-test, ref: "finance export columns test"}

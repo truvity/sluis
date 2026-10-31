@@ -1163,3 +1163,173 @@ requirements:
     features: ["#985"]
     verification:
       - {kind: integration-test, ref: "audit host origin test"}
+  - id: REQ-AUDIT-086
+    area: AUDIT
+    statement: "Every audit record MUST be an OCSF 1.x event that uses only core classes, objects and profiles, with no vendor extension and no `unmapped` object."
+    rationale: "A plain OCSF event is read by any OCSF-aware tool with no sluis schema."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "base event and core classes", depth: Full}
+    features: ["#841"]
+    verification:
+      - {kind: test-vectors, ref: "catalogue example records through the OCSF schema validator"}
+  - id: REQ-AUDIT-087
+    area: AUDIT
+    statement: "The writer MUST store the canonical bytes of an audit record exactly as the emitter produced them."
+    rationale: "Any re-encoding would change the hash and could change the record."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-78, section: "8785", depth: Partial}
+      - {id: ST-114, section: "base event", depth: Partial}
+    features: ["#837"]
+    verification:
+      - {kind: integration-test, ref: "emit-to-read byte equality test"}
+  - id: REQ-AUDIT-088
+    area: AUDIT
+    statement: "Each sluis release MUST pin one OCSF version and name it in the `metadata.version` of every audit record it writes."
+    rationale: "A record of any age is read and validated by the version it names."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "metadata", depth: Partial}
+    features: ["#841"]
+    verification:
+      - {kind: integration-test, ref: "pinned OCSF version test"}
+  - id: REQ-AUDIT-089
+    area: AUDIT
+    statement: "The build MUST fail when the audit catalogue uses an OCSF class, attribute or enum value that the pinned OCSF version marks deprecated."
+    rationale: "OCSF deprecates often, and an upgrade must be a deliberate, checked change."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "deprecation", depth: Partial}
+    features: ["#841"]
+    verification:
+      - {kind: integration-test, ref: "deprecated OCSF item check in CI"}
+  - id: REQ-AUDIT-090
+    area: AUDIT
+    statement: "An audit record MUST name its actor in `actor.user.uid` as `<actor>@<boundary>`, with the actor's kind in `actor.user.type_id`."
+    rationale: "One actor name serves every layer, and every principal has one home in the record."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "actor", depth: Partial}
+    features: ["#841"]
+    verification:
+      - {kind: test-vectors, ref: "catalogue example records through the OCSF schema validator"}
+  - id: REQ-AUDIT-091
+    area: AUDIT
+    statement: "A stored audit record MUST hold enum ids only, with no enum captions, observables or enrichments."
+    rationale: "Derived data stays out of the hashed evidence and is added on export."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "base event", depth: Partial}
+    features: ["#841"]
+    verification:
+      - {kind: integration-test, ref: "lean record test"}
+  - id: REQ-AUDIT-092
+    area: AUDIT
+    statement: "The audit export MUST be NDJSON of OCSF events that carry the log's boundary in `metadata.log_name`."
+    rationale: "A record taken out of its log must still say which boundary it belongs to."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "metadata", depth: Partial}
+    features: ["#839"]
+    verification:
+      - {kind: integration-test, ref: "export format test"}
+  - id: REQ-AUDIT-093
+    area: AUDIT
+    statement: "The writer MUST write the usage part of a message to a usage log that has its own prefix or bucket, log key, checkpoints and retention, apart from the audit log."
+    rationale: "Billing data keeps its own format, retention and readers, apart from security records."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-75, section: "1", depth: Partial}
+    features: ["#837", "#915"]
+    verification:
+      - {kind: integration-test, ref: "two log kinds test"}
+  - id: REQ-AUDIT-094
+    area: AUDIT
+    statement: "The writer MUST register the sealed batches of the audit log and of the usage log, the removed duplicate ids and its transport cursor in one atomic state batch."
+    rationale: "One registration keeps the two logs consistent without a dual write."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-103, section: "test plan", depth: Full}
+    features: ["#837"]
+    verification:
+      - {kind: integration-test, ref: "crash between seals test"}
+  - id: REQ-AUDIT-095
+    area: AUDIT
+    statement: "A usage event MUST be a CloudEvents 1.0 event in the structured JSON format, in RFC 8785 canonical form."
+    rationale: "A usage-event standard serves metering and billing readers without a security schema."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-100, section: "1.0.2 JSON event format", depth: Full}
+      - {id: ST-78, section: "8785", depth: Partial}
+    features: ["#841", "#915"]
+    verification:
+      - {kind: integration-test, ref: "usage event format test"}
+  - id: REQ-AUDIT-096
+    area: AUDIT
+    statement: "The writer MUST ask every configured witness to cosign the checkpoints of the usage log as it does for the audit log."
+    rationale: "Balance effects and meters need the same tamper evidence as security records."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-74, section: "1", depth: Partial}
+    features: ["#838"]
+    verification:
+      - {kind: integration-test, ref: "usage log cosignature test"}
+  - id: REQ-AUDIT-097
+    area: AUDIT
+    statement: "A usage log entry MUST be encrypted with HPKE to its company's audit tenant key, as an audit log entry is."
+    rationale: "Usage reveals a company's activity, and a shred must reach it too."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-61, section: "5", depth: Partial}
+    features: ["#837"]
+    verification:
+      - {kind: integration-test, ref: "usage entry encryption test"}
+  - id: REQ-AUDIT-098
+    area: AUDIT
+    statement: "The indexer MUST NOT follow or index the usage log."
+    rationale: "Nobody searches usage, and the indexer then needs no key for it."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    features: ["#839"]
+    verification:
+      - {kind: integration-test, ref: "indexer log kind test"}
