@@ -10,6 +10,12 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 dir="$(mktemp -d)"
 trap 'rm -rf "$dir"' EXIT
 
+# A git hook runs this with GIT_DIR (and friends) pointing at the real
+# repository, and they win over `git -C`: the scratch repository below would
+# be the real one, and the commits and tags meant for it would land on the
+# branch being pushed.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX
+
 # A repository with master, a tag on it, and a tag on a branch master never had.
 repo="$dir/repo"
 git init -q -b master "$repo"

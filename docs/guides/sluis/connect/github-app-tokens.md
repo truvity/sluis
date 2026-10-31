@@ -94,36 +94,6 @@ groups:
 
 `job_workflow_ref` is the file defining the job: the called file for a reusable workflow. `workflow_ref` is the file the run started from. See [policy groups](../../../reference/sluis/policy-groups.md#proof-to-groups).
 
-### A pull-request run: read only
-
-A pull request runs the workflow files it proposes, so whoever may push a branch to the repository chooses what the job does. Pin such a job to the merge ref of every pull request, and grant it reads of named repositories only, such as private modules the build downloads:
-
-```yaml
-# policy
-groups:
-  all:app:pull-request:
-    matchers:
-      - github:
-          repository: example-org/app
-          ref: refs/pull/*/merge
-          event_name: pull_request
-          workflow_ref: example-org/app/.github/workflows/ci.yml@refs/pull/*/merge
-```
-
-```yaml
-# values: githubApps.catalogue
-- id: modules
-  org: example-org
-  permissions: {contents: read}
-  installation: selected
-  grants:
-    - group: all:app:pull-request
-      repositories: [lib, sdk]
-      permissions: {contents: read}
-```
-
-GitHub gives a pull request from a fork no identity token, so only branches of the repository itself reach the issuer. An installation that declares its jobs with `policy/compile` gets this enforced: `ValidateGitHubJobs` admits `refs/pull/*/merge` with `pull_request` alone, and `ValidateGitHubPullRequestGrants` refuses a grant to such a job of anything above `read`, or of a repository pattern.
-
 ## 4. Know which grant applies
 
 Among the App's grants whose group the proof holds, in catalogue order, the first that covers the whole request mints the token.
