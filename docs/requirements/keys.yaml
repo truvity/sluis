@@ -63,6 +63,7 @@ requirements:
       - {id: ST-37, section: "5.4", depth: Full}
       - {id: ST-106, section: "test plan", depth: Full}
     features: ["design"]
+    issues: [912, 800]
     verification:
       - {kind: test-vectors, ref: "Wycheproof ECDSA, RSA PSS and EdDSA"}
       - {kind: conformance-suite, ref: "FAPI2-SP"}
@@ -78,6 +79,7 @@ requirements:
     standards:
       - {id: ST-51, section: "3", depth: Partial}
     features: ["design"]
+    issues: [912, 800]
     verification:
       - {kind: integration-test, ref: "default-algorithm test"}
   - id: REQ-KEYS-004
@@ -92,6 +94,7 @@ requirements:
       - {id: ST-51, section: "3", depth: Partial}
       - {id: ST-88, section: "1", depth: Partial}
     features: ["design"]
+    issues: [800]
     gap: register-gap
     verification:
       - {kind: integration-test, ref: "driver declaration test"}
@@ -108,6 +111,7 @@ requirements:
       - {id: ST-51, section: "3", depth: Partial}
       - {id: ST-88, section: "1", depth: Partial}
     features: ["design"]
+    issues: [800, 864]
     gap: register-gap
     verification:
       - {kind: integration-test, ref: "config-check matrix per driver"}
@@ -192,6 +196,7 @@ requirements:
       - {id: ST-62, section: "5280", depth: Partial}
       - {id: ST-65, section: "1", depth: Partial}
     features: ["design"]
+    issues: [800]
     manual_reason: "The rule constrains key configuration; a reviewer checks the key-purpose table for each release."
     verification:
       - {kind: manual, ref: "key-purpose table review"}
@@ -208,6 +213,7 @@ requirements:
       - {id: ST-62, section: "5280", depth: Partial}
       - {id: ST-65, section: "1", depth: Partial}
     features: ["design"]
+    issues: [800]
     manual_reason: "The rule constrains key configuration; a reviewer checks the key-purpose table for each release."
     verification:
       - {kind: manual, ref: "key-purpose table review"}
@@ -238,6 +244,7 @@ requirements:
     standards:
       - {id: ST-88, section: "1", depth: Full}
     features: ["design"]
+    issues: [868]
     manual_reason: "A claim in the documentation and the release notes is checked by reading them."
     verification:
       - {kind: manual, ref: "documentation and release-note review"}
@@ -253,6 +260,7 @@ requirements:
       - {id: ST-88, section: "1", depth: Partial}
       - {id: ST-89, section: "6", depth: Partial}
     features: ["design"]
+    issues: [868]
     verification:
       - {kind: integration-test, ref: "algorithm allow-list test over the signing, sealing and derivation code paths"}
       - {kind: manual, ref: "algorithm inventory review per release"}
@@ -280,6 +288,7 @@ requirements:
     standards:
       - {id: ST-88, section: "1", depth: Partial}
     features: ["design"]
+    issues: [800, 836]
     verification:
       - {kind: integration-test, ref: "alert-rule test (key-ring)"}
   - id: REQ-KEYS-019
@@ -294,6 +303,7 @@ requirements:
     standards:
       - {id: ST-88, section: "1", depth: Partial}
     features: ["design"]
+    issues: [836, 951]
     verification:
       - {kind: integration-test, ref: "alert-rule test (actor)"}
   - id: REQ-KEYS-020
@@ -308,6 +318,7 @@ requirements:
     standards:
       - {id: ST-88, section: "1", depth: Partial}
     features: ["design"]
+    issues: [836]
     verification:
       - {kind: integration-test, ref: "alert-rule test (upstream key set)"}
   - id: REQ-KEYS-012

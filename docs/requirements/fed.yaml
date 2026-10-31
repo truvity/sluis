@@ -78,6 +78,7 @@ requirements:
     standards:
       - {id: ST-28, section: "5.7", depth: Full}
     features: ["design"]
+    issues: [916]
     verification:
       - {kind: integration-test, ref: "link-key test"}
   - id: REQ-FED-014
@@ -92,6 +93,7 @@ requirements:
     standards:
       - {id: ST-28, section: "5.7", depth: Full}
     features: ["design"]
+    issues: [916]
     verification:
       - {kind: integration-test, ref: "e-mail link negative test"}
   - id: REQ-FED-003
@@ -105,6 +107,7 @@ requirements:
     standards:
       - {id: ST-10, section: "2.4", depth: Full}
     features: ["design"]
+    issues: [916]
     verification:
       - {kind: integration-test, ref: "mix-up tests"}
   - id: REQ-FED-015
@@ -119,6 +122,7 @@ requirements:
     standards:
       - {id: ST-10, section: "2.4", depth: Full}
     features: ["design"]
+    issues: [916]
     verification:
       - {kind: integration-test, ref: "missing-iss test"}
   - id: REQ-FED-004
@@ -133,6 +137,7 @@ requirements:
       - {id: ST-28, section: "3.1.2.1", depth: Partial}
       - {id: NC-01, section: "8176", depth: Partial}
     features: ["design"]
+    issues: [916]
     verification:
       - {kind: integration-test, ref: "trust-policy matrix"}
   - id: REQ-FED-005
@@ -146,6 +151,7 @@ requirements:
     standards:
       - {id: ST-28, section: "3.1.2", depth: Partial}
     features: ["design"]
+    issues: [916]
     verification:
       - {kind: integration-test, ref: "claim allow-list test"}
   - id: REQ-FED-016
@@ -160,6 +166,7 @@ requirements:
     standards:
       - {id: ST-28, section: "3.1.2", depth: Partial}
     features: ["design"]
+    issues: [916]
     verification:
       - {kind: integration-test, ref: "role-claim negative test"}
   - id: REQ-FED-017
@@ -174,6 +181,7 @@ requirements:
     standards:
       - {id: ST-28, section: "3.1.2", depth: Partial}
     features: ["design"]
+    issues: [916]
     verification:
       - {kind: integration-test, ref: "unsolicited-response negative test"}
   - id: REQ-FED-006
@@ -203,6 +211,7 @@ requirements:
       - {id: ST-29, section: "4", depth: Full}
       - {id: ST-07, section: "2", depth: Partial}
     features: ["design"]
+    issues: [916, 963]
     verification:
       - {kind: integration-test, ref: "peer integration test"}
   - id: REQ-FED-008

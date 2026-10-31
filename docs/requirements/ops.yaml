@@ -208,6 +208,7 @@ requirements:
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
+    issues: [864, 960]
     verification:
       - {kind: integration-test, ref: "authority origin refusal test"}
   - id: REQ-OPS-016
@@ -220,6 +221,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [960]
     verification:
       - {kind: integration-test, ref: "declared lock test"}
   - id: REQ-OPS-017
@@ -232,6 +234,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [960]
     verification:
       - {kind: integration-test, ref: "double definition hold test"}
   - id: REQ-OPS-018
@@ -244,6 +247,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [960]
     verification:
       - {kind: integration-test, ref: "operator-set audit record test"}
   - id: REQ-OPS-019
@@ -257,6 +261,7 @@ requirements:
     standards:
       - {id: ST-103, section: "test plan", depth: Partial}
     features: ["design"]
+    issues: [960]
     verification:
       - {kind: integration-test, ref: "operator-set writer refusal test"}
   - id: REQ-OPS-020
@@ -269,6 +274,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [864]
     verification:
       - {kind: integration-test, ref: "learned key refusal test"}
   - id: REQ-OPS-021
@@ -282,6 +288,7 @@ requirements:
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
+    issues: [977]
     verification:
       - {kind: integration-test, ref: "failed reload test"}
   - id: REQ-OPS-022
@@ -294,6 +301,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [960]
     verification:
       - {kind: integration-test, ref: "tighten-only switch test"}
   - id: REQ-OPS-023
@@ -306,6 +314,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [864]
     verification:
       - {kind: integration-test, ref: "explain origin test"}
   - id: REQ-OPS-024
@@ -318,5 +327,6 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [997]
     verification:
       - {kind: integration-test, ref: "notify-then-pull test"}

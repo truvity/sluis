@@ -87,6 +87,7 @@ requirements:
       - {id: ST-20, section: "7523 2.2", depth: Full}
       - {id: ST-28, section: "9", depth: Full}
     features: ["design"]
+    issues: [912]
     verification:
       - {kind: conformance-suite, ref: "FAPI2-SP"}
       - {kind: integration-test, ref: "happy-path test"}
@@ -103,6 +104,7 @@ requirements:
       - {id: ST-20, section: "7523 2.2", depth: Full}
       - {id: ST-28, section: "9", depth: Full}
     features: ["design"]
+    issues: [912]
     verification:
       - {kind: integration-test, ref: "alg=none and HS256 tests"}
       - {kind: integration-test, ref: "claim mismatch tests"}
@@ -119,6 +121,7 @@ requirements:
       - {id: ST-20, section: "7523 2.2", depth: Full}
       - {id: ST-28, section: "9", depth: Full}
     features: ["design"]
+    issues: [912]
     verification:
       - {kind: integration-test, ref: "lifetime test"}
   - id: REQ-CLIENT-019
@@ -134,6 +137,7 @@ requirements:
       - {id: ST-20, section: "7523 2.2", depth: Full}
       - {id: ST-28, section: "9", depth: Full}
     features: ["design"]
+    issues: [912]
     verification:
       - {kind: integration-test, ref: "replay test"}
   - id: REQ-CLIENT-005

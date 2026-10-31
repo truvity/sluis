@@ -275,6 +275,7 @@ requirements:
       - {id: ST-74, section: "1", depth: Partial}
     features: ["design"]
     decisions: ["OD-36"]
+    issues: [838]
     verification:
       - {kind: integration-test, ref: "config-check warning test"}
   - id: REQ-AUDIT-030
@@ -290,6 +291,7 @@ requirements:
       - {id: ST-74, section: "1", depth: Partial}
     features: ["design"]
     decisions: ["OD-36"]
+    issues: [838]
     manual_reason: "A statement in the documentation is checked by reading it."
     verification:
       - {kind: manual, ref: "documentation review"}
@@ -425,6 +427,7 @@ requirements:
     standards:
       - {id: ST-97, section: "1", depth: Partial}
     features: ["design"]
+    issues: [841, 802]
     verification:
       - {kind: integration-test, ref: "blocked-write test"}
   - id: REQ-AUDIT-016
@@ -564,6 +567,7 @@ requirements:
       - {id: ST-74, section: "1", depth: Partial}
     features: ["design"]
     decisions: ["OD-36"]
+    issues: [838, 955]
     verification:
       - {kind: integration-test, ref: "no-witness installation test"}
   - id: REQ-AUDIT-040
@@ -578,6 +582,7 @@ requirements:
       - {id: ST-49, section: "7515", depth: Partial}
     features: ["design"]
     decisions: ["OD-39"]
+    issues: [838]
     verification:
       - {kind: integration-test, ref: "checkpoint signing test"}
   - id: REQ-AUDIT-041
@@ -592,6 +597,7 @@ requirements:
       - {id: ST-88, section: "1", depth: Partial}
     features: ["design"]
     decisions: ["OD-39"]
+    issues: [838, 951]
     verification:
       - {kind: integration-test, ref: "key access denial test"}
   - id: REQ-AUDIT-042
@@ -606,6 +612,7 @@ requirements:
       - {id: ST-49, section: "7515", depth: Partial}
     features: ["design"]
     decisions: ["OD-39"]
+    issues: [838]
     verification:
       - {kind: integration-test, ref: "actor inventory test"}
   - id: REQ-AUDIT-043
@@ -620,6 +627,7 @@ requirements:
       - {id: ST-97, section: "1", depth: Partial}
     features: ["design"]
     decisions: ["OD-35"]
+    issues: [802]
     verification:
       - {kind: integration-test, ref: "config-check refusal test"}
   - id: REQ-AUDIT-044
@@ -634,6 +642,7 @@ requirements:
       - {id: ST-97, section: "1", depth: Partial}
     features: ["design"]
     decisions: ["OD-34"]
+    issues: [802]
     verification:
       - {kind: integration-test, ref: "default driver test"}
   - id: REQ-AUDIT-045
@@ -660,6 +669,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [841]
     verification:
       - {kind: integration-test, ref: "free-text bound test"}
   - id: REQ-AUDIT-047
@@ -884,6 +894,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [837]
     verification:
       - {kind: integration-test, ref: "hold record test"}
   - id: REQ-AUDIT-064
@@ -896,6 +907,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [973, 837]
     manual_reason: "The check is a step of the promotion runbook, which an operator runs."
     verification:
       - {kind: manual, ref: "runbook review"}

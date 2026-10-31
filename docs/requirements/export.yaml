@@ -56,6 +56,7 @@ requirements:
       - {id: ST-95, section: "age", depth: Full}
       - {id: NC-10, section: "PIV", depth: Partial}
     features: ["design"]
+    issues: [798]
     verification:
       - {kind: test-vectors, ref: "age vectors"}
   - id: REQ-EXPORT-005
@@ -71,6 +72,7 @@ requirements:
       - {id: ST-95, section: "age", depth: Full}
       - {id: NC-10, section: "PIV", depth: Partial}
     features: ["design"]
+    issues: [798]
     verification:
       - {kind: integration-test, ref: "recipient-only test"}
   - id: REQ-EXPORT-006

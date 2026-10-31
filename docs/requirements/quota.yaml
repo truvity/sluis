@@ -14,6 +14,7 @@ requirements:
       - {id: ST-97, section: "1", depth: Partial}
     features: ["design"]
     decisions: ["OD-33"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "metering-only and enforcing configurations"}
   - id: REQ-QUOTA-002
@@ -28,6 +29,7 @@ requirements:
       - {id: NC-15, section: "Idempotency", depth: Partial}
     features: ["design"]
     decisions: ["OD-33"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "concurrent admit test"}
   - id: REQ-QUOTA-009
@@ -43,6 +45,7 @@ requirements:
       - {id: NC-15, section: "Idempotency", depth: Partial}
     features: ["design"]
     decisions: ["OD-33"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "k6 load test"}
   - id: REQ-QUOTA-003
@@ -56,6 +59,7 @@ requirements:
     standards:
       - {id: NC-15, section: "Idempotency-Key", depth: Full}
     features: ["design"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "retry test"}
   - id: REQ-QUOTA-004
@@ -96,6 +100,7 @@ requirements:
     standards:
       - {id: NC-15, section: "Idempotency-Key", depth: Full}
     features: ["design"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "duplicate top-up test"}
   - id: REQ-QUOTA-006
@@ -110,6 +115,7 @@ requirements:
       - {id: NC-15, section: "Idempotency-Key", depth: Partial}
     features: ["design"]
     decisions: ["OD-35"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "exhaustion test"}
   - id: REQ-QUOTA-011
@@ -125,6 +131,7 @@ requirements:
       - {id: NC-15, section: "Idempotency-Key", depth: Partial}
     features: ["design"]
     decisions: ["OD-35"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "outage test"}
   - id: REQ-QUOTA-007
@@ -168,6 +175,7 @@ requirements:
       - {id: ST-97, section: "1", depth: Partial}
     features: ["design"]
     decisions: ["OD-33"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "load test"}
   - id: REQ-QUOTA-013
@@ -181,6 +189,7 @@ requirements:
     standards:
       - {id: ST-97, section: "1", depth: Partial}
     features: ["design"]
+    issues: [915, 960]
     verification:
       - {kind: integration-test, ref: "quota limit tighten test"}
   - id: REQ-QUOTA-014
