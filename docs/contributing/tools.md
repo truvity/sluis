@@ -1,7 +1,7 @@
 ---
 title: Tools, checks and verification
 description: Where the sluis tools come from, which recipe runs a check, how to run commands from an agent shell, and when a result counts as verified.
-status: shipped
+status: partial
 sidebar:
   order: 2
 ---
@@ -38,6 +38,20 @@ The `Justfile` holds the recipes, and CI runs the same recipes. Run the recipe, 
 | `just site-render` | Every diagram is drawn, in light and dark mode |
 
 Read the recipe, and the workflow in `.github/workflows/` that calls it, to know what CI really runs. Build and test recipes for the code arrive with the code, and this table grows with them.
+
+## The site
+
+The site is built from `docs/` and `site/` with Astro Starlight, and every page is prerendered into static files.
+
+- `just site-dev` serves it on `http://localhost:4321` with live reload; it runs `astro dev`.
+- `just site-build` makes the strict build into `site/dist`, the same build CI checks.
+
+How the site is hosted is decided in [ADR 0063](/decisions/0063-the-site-is-static-on-cloudflare-workers-with-a-live-status-api/), and not built yet. Today `site.yaml` publishes it to GitHub Pages. The target:
+
+- The static output is served as assets on Cloudflare Workers, through the `@astrojs/cloudflare` adapter. With the adapter, `astro dev` runs the site in `workerd`, Cloudflare's runtime, so the `/api/*` routes and the status page's server island run locally as they do in production.
+- Cloudflare's build service, Workers Builds, builds and deploys from the repository. Each pull request gets a preview of the site. The repository's CI holds no Cloudflare credential.
+- Security headers are in a `_headers` file and redirects in a `_redirects` file, both in the repository.
+- The Worker, its KV namespace and the custom domain are declared in the operator's own infrastructure code, outside this repository. The repository holds no account id and no namespace id.
 
 ## Commands from an agent shell
 

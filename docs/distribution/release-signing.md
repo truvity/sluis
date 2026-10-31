@@ -156,7 +156,7 @@ The name of the signature file is not decided. The commands use `SHA256SUMS.asc`
 How a user finds and verifies the public key is under research. The plan is to use several independent channels, so one compromised channel cannot replace the key:
 
 - keys.openpgp.org;
-- the Web Key Directory, direct method, on sluis.id (static files work on GitHub Pages);
+- the Web Key Directory, direct method, on sluis.id (static files, served as assets on Cloudflare Workers, [ADR 0063](/decisions/0063-the-site-is-static-on-cloudflare-workers-with-a-live-status-api/));
 - DNS `OPENPGPKEY` records (RFC 7929), if DNSSEC is enabled on the zone;
 - `SECURITY.md` in the repository;
 - the GitHub release;

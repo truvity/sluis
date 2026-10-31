@@ -76,3 +76,4 @@ A rewritten record says so in one line under its proposal link, with the date. O
 | [0060](0060-the-language-follows-the-executable.md) | The language follows the executable: Go by default, Rust at the edge, in the trusted base and in cloud drivers | Accepted |
 | [0061](0061-optional-openid-plans-form-post-is-supported-ciba-comes-later.md) | Optional OpenID plans: form post is supported; front-channel logout and third-party-initiated login are not; CIBA comes later in poll mode | Accepted |
 | [0062](0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own.md) | An audit installation has its own front: a slim entry, the reader as its API, and a console of its own | Accepted |
+| [0063](0063-the-site-is-static-on-cloudflare-workers-with-a-live-status-api.md) | The site is static on Cloudflare Workers, with a live status API | Accepted |
