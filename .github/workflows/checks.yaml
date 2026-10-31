@@ -61,6 +61,34 @@ jobs:
       - run: devbox run -- site/scripts/build-v1.sh v1-src site/dist
       - run: devbox run -- site/scripts/check-built.sh site/dist
 
+  # The Cloudflare Workers build (ADR 0063): what Workers Builds will run, minus the
+  # deploy. The strict build for the Worker, v1 under /v1/, the headers and redirects
+  # checks, and `wrangler deploy --dry-run` with a fake KV id. No Cloudflare credential.
+  workers:
+    name: workers (build, headers, dry-run deploy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          lfs: true
+          persist-credentials: false
+      - name: Find the newest stable v1 tag
+        id: v1
+        run: |
+          set -euo pipefail
+          read -r tag commit < <(site/scripts/latest-v1-tag.sh "https://github.com/$GITHUB_REPOSITORY")
+          echo "v1 documentation: $tag ($commit)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.v1.outputs.tag }}
+          path: v1-src
+          lfs: true
+          persist-credentials: false
+      - uses: truvity/ci-actions/setup-devbox@eae9926515d96296eeed99aa358d2957a89647e8 # v3.3.1
+      - run: devbox run -- just site-workers
+
   workflows:
     name: workflows (actionlint)
     runs-on: ubuntu-latest
@@ -102,16 +130,16 @@ jobs:
 
   # One name to require. A job that was skipped or cancelled is not a pass.
   checks:
-    needs: [site, v1, workflows, rules]
+    needs: [site, v1, workers, workflows, rules]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Every check succeeded
         env:
-          RESULTS: ${{ needs.site.result }} ${{ needs.v1.result }} ${{ needs.workflows.result }} ${{ needs.rules.result }}
+          RESULTS: ${{ needs.site.result }} ${{ needs.v1.result }} ${{ needs.workers.result }} ${{ needs.workflows.result }} ${{ needs.rules.result }}
         run: |
-          echo "site v1 workflows rules: $RESULTS"
+          echo "site v1 workers workflows rules: $RESULTS"
           for r in $RESULTS; do
             [ "$r" = "success" ] || { echo "::error::a check did not succeed"; exit 1; }
           done
