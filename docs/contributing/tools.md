@@ -65,7 +65,7 @@ How the site is hosted is decided in [ADR 0063](/decisions/0063-the-site-is-stat
   | Production branch | `main`. Builds for non-production branches are off, so there is no build per pull request |
   | Root directory | `site` |
   | Build command | `scripts/cf-build.sh`, not `yarn build`: it fetches the Git LFS files, builds the v1 documentation under `/v1/` and writes `build.json` with the commit |
-  | Deploy command | `npx wrangler deploy` |
+  | Deploy command | `yarn wrangler deploy`, not `npx wrangler deploy`: `npx` does not find the binaries that Yarn 4 installs (`sh: wrangler: not found`), and `yarn` runs the pinned `wrangler` of the `site` workspace |
   | Build variable | `SLUIS_STATUS_KV_ID`, the id of the KV namespace for the `STATUS` binding. It lives only in the operator's Cloudflare account and is never committed |
   | Build watch paths | None, because a change under `docs/` must build too |
 
