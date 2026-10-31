@@ -1,57 +1,35 @@
 ---
 title: Contributing
-description: How to take part in sluis. The rules live in the repository; this page points to them and will grow into a short guide.
+description: How to take part in sluis v2, for people and AI agents alike. The working rules, one page per task, and the repository files that hold the rest.
 status: shipped
 ---
 
-The rules for taking part are kept in the repository, so they apply wherever the code is read:
+People and AI agents work on sluis by the same rules. The rules are written once, on the pages below; the files in the repository point here instead of repeating them.
 
-- [CONTRIBUTING.md](https://github.com/truvity/sluis/blob/main/CONTRIBUTING.md): how to propose and make a change.
-- [GOVERNANCE.md](https://github.com/truvity/sluis/blob/main/GOVERNANCE.md): who decides what.
-- [SECURITY.md](https://github.com/truvity/sluis/blob/main/SECURITY.md): how to report a vulnerability privately.
-- [Decisions](/decisions/): the architecture decision records.
+Who decides what is in [GOVERNANCE.md](https://github.com/truvity/sluis/blob/main/GOVERNANCE.md). How to propose a feature or a decision is in [CONTRIBUTING.md](https://github.com/truvity/sluis/blob/main/CONTRIBUTING.md). A suspected vulnerability goes through [SECURITY.md](https://github.com/truvity/sluis/blob/main/SECURITY.md), never through an issue or a pull request. Questions and ideas are welcome as [issues](https://github.com/truvity/sluis/issues).
 
-Questions and ideas are welcome as [issues](https://github.com/truvity/sluis/issues).
+## The pages
 
-## Writing target-state pages
+Read the page for what you are about to do, then do it.
 
-The pages on this site describe the **target state** of sluis v2: what it is meant to be, until it is built. A page is not a promise that the thing exists, so it says how far it has got.
+| Before you | Read |
+|---|---|
+| create a branch, commit, push, open a pull request or answer a review | [Branches and pull requests](/contributing/workflow/) |
+| run a build, a test or a check, or add a tool | [Tools, checks and verification](/contributing/tools/) |
+| propose, write or rewrite a decision record | [Decision records](/contributing/decisions/) |
+| add or change a requirement | [Requirements](/contributing/requirements/) |
+| run a spike or write up research | [Spikes and research](/contributing/research/) |
+| create or edit a page of this site | [Target-state pages](/contributing/pages/) and [Writing style](/contributing/writing/) |
+| write a name, an address, an id or anything secret | [Public content and secrets](/contributing/public-content/) |
+| contribute with an AI agent, or run a team of agents | [AI agents](/contributing/agents/) |
 
-### Status
+## The repository files
 
-Every page has a required `status` in its front matter, shown as a badge next to the title and checked in CI:
+- `CONTRIBUTING.md`: the entry for a new contributor, the two release lines, and how to propose a feature or a decision.
+- `GOVERNANCE.md`: roles, how a decision is made, review rules and the release numbering.
+- `SECURITY.md`: how to report a vulnerability privately.
+- `AGENTS.md`: the short form of these pages for an AI agent, with the page to read before each kind of change. `CLAUDE.md` loads it for Claude Code.
+- `.claude/skills/` and `.claude/agents/`: task and role wrappers for Claude Code that point back to these pages. They hold no rules of their own.
+- `docs/decisions/README.md` and `docs/requirements/README.md`: the formats of the decision records and of the requirements catalogue.
 
-| Status | Badge | Meaning |
-|---|---|---|
-| `target` | Target state | Describes the design; not built yet. |
-| `partial` | Partly built | Describes the design; part of it is built and part is not. |
-| `shipped` | Shipped | Describes what has been built and released. |
-
-The status also starts the page in `llms.txt`. Change it in the same pull request that builds the thing, and a page marked `shipped` describes what shipped. When a page and a [decision record](/decisions/) disagree, the record is the reasoning and the page is fixed.
-
-### Diagrams
-
-Mermaid diagrams (a ```` ```mermaid ```` fence) are drawn at their natural size. One wider than the page column scrolls inside its box, and the **Expand** button opens it fullscreen with pan and zoom. A diagram that needs the scrolling and the zoom to be read is too big; keep it to a size a reader takes in at a glance:
-
-- At most about 6 participants in a sequence diagram.
-- Short labels, on nodes and on messages: a few words, not a sentence. Put the detail in the text beside the diagram.
-- Split a big flow into steps: several small diagrams, each with a heading and a line of prose, read better than one large one.
-- Prefer `flowchart LR` for a wide flowchart, with a few nodes per column, over `TB` with a long row.
-
-### Asides
-
-How settled a point is shows in how it is written:
-
-- Plain prose is **agreed**.
-- `:::note[Proposed]` is the design as proposed, awaiting the maintainer.
-- `:::caution[Open decision OD-n: short title]` is undecided and lists the options. The id must be a row of the "Open" table on [Open decisions](/open-decisions/); `just site-lint` refuses an id that is not there, and refuses an id that has been decided. A decided point is written as plain prose.
-
-```md
-:::note[Proposed]
-Each node agent holds its own signing key.
-:::
-
-:::caution[Open decision OD-24: Edge on Kubernetes]
-Options: a `cloudflared` sidecar, or a key-less edge relay on the pod address.
-:::
-```
+When a repository file and a page disagree, the page is the rule and the file is fixed.
