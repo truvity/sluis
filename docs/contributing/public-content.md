@@ -25,7 +25,7 @@ Internal reasoning that needs real names stays internal; only the final, generic
 
 CI scans every tracked text file for content that must not be public, such as account-id-shaped numbers, private key blocks and token prefixes (`just check-public`). Maintainers run additional checks before merging. A pass is not permission: the rule above is.
 
-One exception is not yours to remove: the links that Cloudflare itself posts on commits and pull requests (the Workers Builds check runs and bot comments) contain the operator's Cloudflare account identifier. The maintainer accepts them as a Cloudflare-generated identifier, not a secret, and does not remove them. A contributor still never writes an account identifier in the repository, a commit message, an issue or a pull request.
+Cloudflare posts nothing on commits or pull requests any more; the links it posted on older commits contain the operator's Cloudflare account identifier, which the maintainer accepts and does not remove, and a contributor never writes an account identifier in the repository, a commit message, an issue or a pull request.
 
 ## Secrets
 
