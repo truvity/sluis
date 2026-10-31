@@ -161,7 +161,7 @@ The `policy` actor is written in Rust with the `cedar-policy` crate, and Cedar i
 
 ## The fusion rule
 
-On a small node there is not enough memory for every actor to be its own process (an estimate is 15 to 30 MB resident per Go process, and a small node also runs the state store). So two actors may be **fused** into one unit when the rule allows it:
+On a small node memory is tight, and the node also runs the state store, so two actors may be **fused** into one unit when the rule allows it. On a 2 GB board, spike S5 measured on 2026-10-31 about 10 MiB of private memory per Go actor stand-in under load and about 1 MiB per Rust one, and a tier-0 board with 30 actors, each in its own process, stayed under its memory ceiling in either language ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)). The rule:
 
 > Two actors may share a unit only if the unit's manifest is the union of theirs, and no unit holds a key next to an unauthenticated listener.
 
