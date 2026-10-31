@@ -17,11 +17,12 @@ sidebar:
 | R3 | Rust for the trusted base, with one named exception: `key-holder` is Go |
 | R4 | Go where the deciding library is Go-only, or best in Go |
 | R5 | A driver follows its backend's best SDK: AWS, GCP and Azure are Rust |
-| R6 | Go by default |
+| R6 | Go by default, except on the smallest board tier (R11) |
 | R7 | No Rust where the only library for a security function is experimental or unaudited |
 | R8 | No FIPS build in v2.0; when a FIPS variant is added, Rust uses `aws-lc-rs` in FIPS mode, mirroring [ADR 0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/) |
 | R9 | The kits of both languages pass one conformance suite |
 | R10 | Contracts are on the wire, so a choice can be reversed |
+| R11 | On the smallest board tier an actor prefers Rust, unless a serious trade-off is named; the list per actor is in ADR 0060 |
 
 | Executable | Language |
 |---|---|
