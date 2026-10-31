@@ -40,10 +40,10 @@ function fixture(files, commits = []) {
 
 // Run `check` on `files`; `want` is 'pass' or 'fail'; `has`/`lacks` are strings the output must
 // or must not contain (case-insensitive).
-function expect(name, check, files, want, { env = {}, has = [], lacks = [], commits = [] } = {}) {
+function expect(name, check, files, want, { env = {}, has = [], lacks = [], commits = [], script = join(here, `${check}.mjs`), target = '' } = {}) {
   cases++;
   const dir = fixture(files, commits);
-  const res = spawnSync(process.execPath, [join(here, `${check}.mjs`), dir], {
+  const res = spawnSync(process.execPath, [script, join(dir, target)], {
     encoding: 'utf8',
     env: { ...process.env, PUBLIC_CONTENT_DENYLIST: '', REQUIRE_DENYLIST: '', PR_TITLE: '', PR_BODY: '', BASE: 'base', ...env },
   });
@@ -99,6 +99,32 @@ expect('a record not in the index', 'decisions', adr({}, ''), 'fail', { has: ['n
 expect('an index row without a file', 'decisions', adr({}, row('0001', 'we-use-the-example', 'Accepted') + row('0003', 'gone', 'Accepted')), 'fail', { has: ['0003 has no record'] });
 expect('a file name that is not kebab-case', 'decisions', adr({ 'docs/decisions/0004_Bad.md': record({ num: '0004' }) }), 'fail', { has: ['0004_Bad.md'] });
 expect('two records with one number', 'decisions', adr({ 'docs/decisions/0001-again.md': record() }), 'fail', { has: ['also used by'] });
+
+// ---- requirements catalogue: the evidence of a done record (L18). A scratch catalogue of one area,
+// built with the real schema and vocabulary, one record, and the files its `tests` may name.
+const reqIndex = readFileSync(join(repo, 'docs/requirements/index.yaml'), 'utf8');
+const vocabulary = /^ {2}vocabulary:\n(?: {4}.*\n)+/m.exec(reqIndex)[0];
+const catalogueFiles = (record, extra = {}) => ({
+  'docs/requirements/requirements.schema.json': readFileSync(join(repo, 'docs/requirements/requirements.schema.json'), 'utf8'),
+  'docs/requirements/standards.yaml': 'standards:\n  - {id: ST-01, name: "Example standard", group: "Example", register: false}\n',
+  'docs/requirements/index.yaml': `schema: 1\ncatalogue:\n  title: "example"\n  checked: "2026-10-31"\n${vocabulary}  areas:\n    EX: {title: "Example area", file: ex.yaml}\n  gaps:\n    example-gap: "A gap that the scratch catalogue declares."\n  glossary:\n    term: "A glossary entry of the scratch catalogue."\n`,
+  'docs/requirements/ex.yaml': `schema: 1\narea: EX\nrequirements:\n  - id: REQ-EX-001\n    area: EX\n    statement: "An example MUST do one thing."\n    rationale: "The scratch catalogue needs one record."\n    level: MUST\n    source: design-decision\n    runtimes: all\n    standards: []\n    verification:\n      - {kind: integration-test, ref: "the example test"}\n${record}`,
+  'docs/open-decisions.md': '| OD-1 | A decision |\n',
+  ...extra,
+});
+const reqCheck = join(repo, 'site/scripts/check-requirements.mjs');
+const reqExpect = (name, files, want, opts = {}) => expect(name, 'check-requirements', files, want, { script: reqCheck, target: 'docs/requirements', ...opts });
+const withTests = (...paths) => `    tests:\n${paths.map((t) => `      - ${t}\n`).join('')}`;
+const testFile = (text = 'func Test(t *testing.T) { t.Run("REQ-EX-001/case", nil) }\n') => ({ 'tests/example_test.go': text });
+reqExpect('a planned record needs no tests', catalogueFiles('    status: planned\n    features: [design]\n'), 'pass', { has: ['1 requirements'] });
+reqExpect('a done record with an existing test file that names it', catalogueFiles(`    status: done\n${withTests('tests/example_test.go')}`, testFile()), 'pass');
+reqExpect('a done record without tests', catalogueFiles('    status: done\n'), 'fail', { has: ['L18 REQ-EX-001', 'needs tests'] });
+reqExpect('a done record whose test file is missing', catalogueFiles(`    status: done\n${withTests('tests/missing_test.go')}`), 'fail', { has: ['L18 REQ-EX-001', 'tests/missing_test.go is not a file'] });
+reqExpect('a done record whose test path is a directory', catalogueFiles(`    status: done\n${withTests('tests')}`, testFile()), 'fail', { has: ['tests is not a file'] });
+reqExpect('a done record whose test file does not name it', catalogueFiles(`    status: done\n${withTests('tests/example_test.go')}`, testFile('func Test(t *testing.T) {}\n')), 'fail', { has: ['does not name REQ-EX-001'] });
+reqExpect('a done record whose test path leaves the repository', catalogueFiles(`    status: done\n${withTests('../outside_test.go')}`), 'fail', { has: ['L1', 'tests'] });
+reqExpect('an empty tests list', catalogueFiles('    status: done\n    tests: []\n'), 'fail', { has: ['fewer than 1 items'] });
+reqExpect('a planned record that names a missing test file', catalogueFiles(`    status: planned\n    features: [design]\n${withTests('tests/missing_test.go')}`), 'fail', { has: ['tests/missing_test.go is not a file'] });
 
 // ---- C4 public content. The token-shaped strings are assembled here, not written out.
 const pub = (text) => ({ 'README.md': `# Example\n\n${text}\n` });

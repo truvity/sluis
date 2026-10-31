@@ -10,7 +10,7 @@ export interface Verification { kind: 'conformance-suite' | 'test-vectors' | 'in
 export interface Req {
   id: string; area: string; split_from?: string; statement: string; rationale: string;
   level: 'MUST' | 'SHOULD' | 'MAY'; source: string; status: string; runtimes: 'all' | string[];
-  standards: StandardRef[]; features: ('parity' | 'design')[]; decisions?: string[]; issues?: number[]; verification: Verification[];
+  standards: StandardRef[]; features: ('parity' | 'design')[]; decisions?: string[]; issues?: number[]; tests?: string[]; verification: Verification[];
   gap?: string; manual_reason?: string; superseded_by?: string[];
 }
 export interface Area { code: string; title: string; file: string; scopeOpen: boolean; reqs: Req[] }
@@ -28,6 +28,7 @@ export const KIND_LABEL: Record<string, string> = {
   manual: 'manual review',
 };
 export const STATUS_HINT: Record<string, string> = {
+  done: 'Implemented, and the named tests pass.',
   planned: 'Covered by an agreed feature or design.',
   partial: 'The plan is weaker than the requirement.',
   open: 'Needs a decision or has no plan.',

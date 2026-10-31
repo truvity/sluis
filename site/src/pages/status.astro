@@ -113,7 +113,7 @@ const label = (g: Group, i: number) => (g.milestone ? `${i + 1}. ${g.name}` : g.
             <th scope="col" title="status: open, not decided yet">Undecided</th>
             <th scope="col" title="status: planned">Planned</th>
             <th scope="col" title="status: partial">Partial</th>
-            <th scope="col" title="status: done">Done</th>
+            <th scope="col" title="status: done, set by hand in the pull request that adds the passing tests">Done</th>
             <th scope="col" title="Has a verification other than manual review">Auto-verifiable</th>
             <th scope="col" class="ps-first">Accepted</th>
             <th scope="col">Proposed</th>
@@ -224,7 +224,7 @@ const label = (g: Group, i: number) => (g.milestone ? `${i + 1}. ${g.name}` : g.
       The page is built with the site, as decided in <a href={ADR}>ADR 0063</a>. The groups and their order are the options of the
       project's <code>{FIELD}</code> field, read from GitHub during the build; adding or reordering an option changes the page at the next
       build. Requirement and decision status come from the repository (<code>docs/requirements/</code> and <code>docs/decisions/</code>)
-      and are published as <a href="/data/repo.json"><code>/data/repo.json</code></a>. A requirement is placed under the earliest
+      and are published as <a href="/data/repo.json"><code>/data/repo.json</code></a>. A requirement is <code>done</code> only when a pull request set it together with the passing test. A requirement is placed under the earliest
       milestone of the issues it links, a decision record under the milestone of its proposal issue, and the current milestone is the
       first one that still has open issues. The issue figures are a snapshot of the board at build time; a live layer will refresh
       them, and add conformance, tests and CI, from the project's status API.

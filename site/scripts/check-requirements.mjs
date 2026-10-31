@@ -20,6 +20,8 @@
 //   L15 an open or partial record names an open decision or a declared gap key; gap is allowed on no other status
 //   L16 a standard that no requirement cites (warning)
 //   L17 an out-of-scope record is a MUST NOT or a MAY and has a verification
+//   L18 a done record names its evidence: `tests` lists repository paths, each a file that exists
+//       inside the repository and that names the record's id (a test carries its id in its name)
 //   ISS a planned or partial record links the issues that deliver it (one warning with the count;
 //       the summary line gives the count per area). The schema checks the numbers themselves.
 //   OD  every decision id is a row of docs/open-decisions.md
@@ -31,8 +33,8 @@
 // validator below. Errors fail the run; warnings print and do not, unless --strict is given.
 //
 // usage: site/scripts/check-requirements.mjs [--strict] [--write-coverage] [dir]   (dir defaults to docs/requirements)
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 
@@ -41,6 +43,7 @@ const args = process.argv.slice(2);
 const strict = args.includes('--strict');
 const writeCoverage = args.includes('--write-coverage');
 const dir = resolve(args.find((a) => !a.startsWith('--')) ?? join(root, 'docs', 'requirements'));
+const repoDir = resolve(dir, '..', '..'); // the repository the catalogue sits in: the `tests` paths are relative to it
 
 // ---- public safety: patterns, not names. A hit is an error; the data must not need an exception.
 // A ticket key is LETTERS-DIGITS; the prefixes below are standards, algorithms and the catalogue's own ids.
@@ -215,7 +218,7 @@ for (const r of reqs) {
 
   // L10
   // The free text of a record; ids, enums and standard references are not prose.
-  for (const text of [r.statement, r.rationale, r.manual_reason ?? '', ...r.verification.map((v) => v.ref)]) {
+  for (const text of [r.statement, r.rationale, r.manual_reason ?? '', ...r.verification.map((v) => v.ref), ...(r.tests ?? [])]) {
     for (const [rx, what] of DENY) if (rx.test(text)) E(`L10 ${i}: ${what} in ${JSON.stringify(text.slice(0, 60))}`);
     if (PRIVATE?.test(text) && !denied.has(i)) { denied.add(i); E(`L10 ${i}: matches a deny-listed term`); }
     if (URLISH.test(text)) E(`L10 ${i}: a URL that is not under .example`);
@@ -234,6 +237,7 @@ for (const r of reqs) {
     if (!register.has(s.id)) E(`L13 ${i}: standard ${s.id} is not a row of standards.yaml`);
     if (s.depth === 'Full' && !s.section) W(`L13 ${i}: standard ${s.id} has depth Full but no section`);
   }
+  checkTests(r);
   if (r.status === 'planned' && !r.issues?.length && !r.features?.length) E(`L14 ${i}: a planned record needs issues, or features parity or design`);
   for (const d of r.decisions ?? []) if (!decisionIds.has(d)) E(`OD ${i}: ${d} is not a row of docs/open-decisions.md`);
   if ((r.status === 'open' || r.status === 'partial') && !(r.decisions?.length) && !r.gap) E(`L15 ${i}: an ${r.status} record needs a decision id or a gap key`);
@@ -248,6 +252,21 @@ for (const r of reqs) {
   if (r.status === 'withdrawn' && !r.superseded_by?.length) E(`L4 ${i}: a withdrawn record needs superseded_by`);
   for (const s of r.superseded_by ?? []) if (!byId.has(s)) E(`L4 ${i}: superseded_by ${s} does not exist`);
   if (r.superseded_by && r.status !== 'withdrawn') E(`L4 ${i}: superseded_by is set on a ${r.status} record`);
+}
+
+// L18: the evidence of a done record. A test file that was named but does not hold the id proves nothing.
+function checkTests(r) {
+  if (r.status === 'done' && !r.tests?.length) E(`L18 ${r.id}: a done record needs tests, the repository paths of its passing tests`);
+  for (const t of r.tests ?? []) {
+    const file = resolve(repoDir, t);
+    if (t.split('/').includes('..') || !file.startsWith(repoDir + sep)) { E(`L18 ${r.id}: tests path ${t} leaves the repository`); continue; }
+    let text;
+    try {
+      if (!statSync(file).isFile()) throw new Error('not a file');
+      text = readFileSync(file, 'utf8');
+    } catch { E(`L18 ${r.id}: tests path ${t} is not a file in the repository`); continue; }
+    if (!text.includes(r.id)) E(`L18 ${r.id}: tests path ${t} does not name ${r.id}`);
+  }
 }
 
 // the index and the register carry text too
