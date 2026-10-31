@@ -396,12 +396,23 @@ The finer points of the mapping (decided 2026-10-31):
 - Cons: the toolkit is pre-1.0, and a minor release may break the writer.
 - Why not: it runs in CI on the catalogue's example records, and the writer enforces the catalogue's JSON Schema (decided 2026-10-31).
 
-### The fence in the state store, a signing proxy, or both
+### The fence as compare-and-set on the checkpoint in the state store
 
-- Compare-and-set on the checkpoint in the state store. Pros: it works on any blob backend, Garage included. Cons: the authority over the log moves from the log store to state, a second store the writer must reach on every seal.
-- A signing proxy in front of the blob store that refuses overwrites. Pros: any backend, and a place for finer scopes. Cons: a mediator on the trusted path that holds a master key and re-implements the store's policy.
-- Both. Cons: two mechanisms to build, test and keep in agreement.
+- Pros: it works on any blob backend, including those without conditional writes.
+- Cons: the authority over the log moves from the log store to state, a second store the writer must reach on every seal.
 - Why not: the store that holds the log is the fence, and only backends that can fence are supported (decided 2026-10-31).
+
+### The fence as a signing proxy in front of the blob store
+
+- Pros: any backend, and a place for finer scopes.
+- Cons: a mediator on the trusted path that holds a master key and re-implements the store's policy.
+- Why not: the same reason; the store that holds the log is the fence (decided 2026-10-31).
+
+### Both the state-store fence and a signing proxy
+
+- Pros: either mechanism covers a backend the other cannot.
+- Cons: two mechanisms to build, test and keep in agreement.
+- Why not: the same reason, with twice the work (decided 2026-10-31).
 
 ### OCSF's `unmapped` object for sluis fields
 
