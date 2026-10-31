@@ -12,6 +12,8 @@ sluis writes a tamper-evident audit trail. This page explains the ideas. The act
 
 **Every success is audited.** When an actor does something for a caller, such as issuing a token, minting a credential or changing a record, it appends an audit record. Every actor is therefore a producer.
 
+**What was used goes to a usage log beside it.** An action that uses something, such as a metered call or a quota top-up, sends one message with an audit part and a usage part, and the writer puts each part into its own log. See [Records](#records-ocsf-events-and-a-usage-log).
+
 ## The four pieces
 
 Audit is built from the same [ports and drivers](/concepts/drivers/) as the rest of sluis. It defines only one port of its own, the witness. It is made of **four separate pieces**. This is agreed ([OD-37](/open-decisions/#od-37) and [OD-38](/open-decisions/#od-38)).
@@ -19,7 +21,7 @@ Audit is built from the same [ports and drivers](/concepts/drivers/) as the rest
 | Piece | What it is | Ports it uses |
 |---|---|---|
 | **Emitter** | A library inside each end application, configured by that application. It is not a process. It appends the record | **transport**, as a producer |
-| **Log** | The **writer**, the **blob** and the **witness**. The writer receives records, validates and de-duplicates them, groups them into sealed batches and writes them to the log store. The log store is a blob with a lock mode. The witness co-signs batch heads, so that a single party cannot rewrite history | transport (as the receiver), blob, keys, witness, optionally lease |
+| **Log** | The **writer**, the **blob** and the **witness**. The writer receives records, validates and de-duplicates them, groups them into sealed batches and writes them to the log store, as two log kinds: the audit log and the usage log. The log store is a blob with a lock mode. The witness co-signs batch heads, so that a single party cannot rewrite history | transport (as the receiver), blob, keys, witness, optionally lease |
 | **Search** | The **indexer**, the **index** and the **reader**. The indexer builds the search index from the log store, and the reader serves queries | **index**, **blob** |
 | **Quota** | The **quota engine** and its **state**. Quota state is `state` with compare-and-set | **state** (with compare-and-set) |
 
@@ -127,11 +129,37 @@ sluis follows published specifications and invents no format for the log (agreed
 
 The rows are in the [standards register](/standards/#transparency-and-audit). A record's hash is computed over its canonical JSON form (RFC 8785).
 
-**The layout.** Each log has one prefix, `audit/<boundary>/<log>/`, with the `tlog-tiles` paths below it. Every checkpoint is also written once to `checkpoints/<size>`, create-if-absent, so the full checkpoint history survives on a store with no versioning; the `checkpoint` object that the format rewrites is a convenience pointer. Catalogues and schemas are written once below `audit/<boundary>/catalogue/`. A checkpoint's origin line is `<installation host>/audit/<boundary>/<log>` ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)).
+**The layout.** Each log has one prefix, `<kind>/<boundary>/<log>/` with `<kind>` either `audit` or `usage`, and the `tlog-tiles` paths below it; the usage log may also have a bucket of its own. Every checkpoint is also written once to `checkpoints/<size>`, create-if-absent, so the full checkpoint history survives on a store with no versioning; the `checkpoint` object that the format rewrites is a convenience pointer. Catalogues and schemas are written once below `<kind>/<boundary>/catalogue/`, and a schema entry in the log names the ones in force, so witnesses cosign them. A checkpoint's origin line is `<installation host>/<kind>/<boundary>/<log>` ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)).
 
-:::note[Open: the record format]
-The format of an audit record is not decided yet. The maintainer wants a standards-based format, and OCSF is being researched; the point is tracked in [issue #910](https://github.com/truvity/sluis/issues/910), and [ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/) stays Proposed until it is settled. The rules on this page hold whatever the format is.
-:::
+## Records: OCSF events and a usage log
+
+The record formats follow published standards too ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/), decided 2026-10-31).
+
+**An audit record is a plain OCSF 1.x event, with no sluis extension.** It uses OCSF's core classes, such as Authentication for a sign-in or a token grant, User Management for an issued credential or certificate, Entity Management for a console write, and API Activity for a quota call. The sluis action is `metadata.event_code`, the company `metadata.tenant_uid`, the record id `metadata.uid`, and the actor `actor.user.uid = <actor>@<boundary>`. Everything else sluis needs comes from where it already is:
+
+| What | Where |
+|---|---|
+| The boundary | The log: each log belongs to one boundary. An export writes it into `metadata.log_name` |
+| Data origin and sensitivity | The catalogue entry that `metadata.event_code` names |
+| The catalogue version | The schema entry written in the log |
+| The grant | OCSF's `policy` and `authorizations` objects |
+| Certificate details | OCSF's `certificate` object |
+| A key that was used | Core resource objects, with the key's id |
+| The pseudonym key epoch | Encoded in the pseudonym |
+| The trace id | `metadata.correlation_uid` |
+
+- **The same bytes end to end.** The emitter writes the record as RFC 8785 canonical JSON; the transport carries those bytes, the writer stores them unchanged, and the reader returns them as they are. Nothing re-encodes a record.
+- **The OCSF version is pinned per release** and named in every record (`metadata.version`); its compiled schema is stored in the log.
+- **The stored form is lean,** ids only. An export adds the enum captions, the `observables` and an integrity attestation that points back to the log entry, and is written as NDJSON.
+- **An extension comes only for a real gap.** A check of the mapping against the OCSF schema and its validator is running now (2026-10-31); a minimal extension is proposed only if it finds a concept with no valid core home.
+
+**The usage log holds what was used,** as CloudEvents 1.0 events in structured JSON, canonical by RFC 8785, shaped like OpenMeter's usage events: the `type` selects a meter, the `subject` is the account, and `data` holds the account, the meter, the unit, an integer amount with its sign, the request id and the subject's pseudonym.
+
+- **One writer, two log kinds.** The emitter sends one message, with an audit part and an optional usage part. The writer splits it, and registers both logs' sealed batches in one atomic state batch with the duplicate ids, so the two logs never disagree. There is no dual write and no second writer.
+- **Each kind is a log of its own:** its own prefix or bucket, log key, checkpoints, retention, lock mode, readers and off-site copy. Every rule on this page holds for each kind. Witnesses cosign both, and usage entries are encrypted per company like audit entries.
+- **Quota reads the usage log,** and only quota writes balance effects into it. The usage log has no search index. The finance export is a table derived from it, in the style of FinOps FOCUS.
+
+The standards are on the [register](/standards/#transparency-and-audit). The class of each action is listed in [ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/#how-sluis-actions-map-to-ocsf-classes).
 
 ## The witness is optional
 
@@ -159,7 +187,7 @@ The lock mode comes from the blob backend: `compliance` on AWS S3, `removable` o
 
 There is one audit log per environment boundary, and each company is a reader tenant of it with its **own audit tenant key** ([ADR 0009](/decisions/0009-one-installation-per-boundary/)).
 
-- **Each entry is an envelope in clear plus the record, encrypted with HPKE to the company's key.** The envelope holds the record id, its times, the boundary, the company, the action class, the outcome and the actor kind; the record itself is encrypted with a data key per (company, batch), sealed to the company's public key, so the writer cannot read back what it wrote. A machine-plane record is encrypted to the boundary's own audit key.
+- **Each entry is an envelope in clear plus the record, encrypted with HPKE to the company's key.** The envelope holds the record id, its times, the company, the action class, the outcome and the actor kind, with OCSF field names, and the boundary is the log's; the record itself is encrypted with a data key per (company, batch), sealed to the company's public key, so the writer cannot read back what it wrote. A machine-plane record is encrypted to the boundary's own audit key. A usage entry has the same form and the same company key.
 - **The tree hashes the whole entry, ciphertext included.** A company that leaves has its slice exported and its key crypto-shredded; its records stay in the log, still verifiable, and nobody can read them again.
 - **The operator's own view of a company's records is the envelope:** the class, the outcome and rotating pseudonyms.
 - **The erasure of one person is met by the pseudonym.** Records carry no names or e-mail addresses, and an external actor is a keyed pseudonym; the mapping from a pseudonym to the person lives outside the log, and erasure deletes it. There are no per-subject keys in 2.0.
@@ -177,16 +205,16 @@ Quota's API is decided in [ADR 0023](/decisions/0023-quotas-api-is-idempotent-an
 - **Every call that changes something is idempotent** by a canonical `request_id` field, which `entry` also fills from an `Idempotency-Key` header. An id is scoped to the calling client and the method and remembered for 24 hours, and rebuilt from the log after a restore.
 - **`Admit` reserves an amount with a time to live** (declared per rule, 5 minutes by default), `Confirm` settles the actual amount, `Cancel` releases it, and an expired reservation is released and counted as expired.
 - **`TopUp` takes positive amounts only,** from declared clients; corrections and refunds are an `Adjust` call with a reason, and a refund names the event it refunds and cannot exceed it.
-- **Amounts are signed 64-bit integers** in a declared unit. A balance belongs to a declared **account** in a boundary and company. Only quota's own records carry an effect on a balance; application records carry meters only.
+- **Amounts are signed 64-bit integers** in a declared unit. A balance belongs to a declared **account** in a boundary and company. Balance effects live in the usage log, and only quota writes them; an application's usage events carry meters only. Quota rolls its balances forward from the usage log, and derives its meters and the FOCUS-style finance export from it.
 - **A limit is a rate** (a token bucket per second or minute) **or a cap per calendar day or month in UTC.** Enforcement is strict only in 2.0, and an enforcing rule must declare what happens when its balance runs out and when quota is unreachable: there is no default.
 
 ## The search index lags the chain
 
 The `reader` serves queries from a **search index**, which is a search view of the batches. The index is a convenience. It follows the signed checkpoints of each log and lags them by a few seconds, and it can always be rebuilt from the log ([ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)). The default index of each tested installation is `sqlite` on local, `rqlite` on the boards (so that the reader can run on any node; the board spike confirms it, with `sqlite` as the fallback), `postgres` on Aurora on lambda, and `postgres` in the `cnpg` mode on Kubernetes. `postgres` also takes any connection string (`external`), and with `none (scan)` there is no index and queries scan the log store. Serverless functions reach Postgres through RDS Proxy with IAM authentication, one database role per actor kind. See [The postgres index driver](/concepts/drivers/#the-postgres-index-driver).
 
-**What the index holds.** Fixed columns for the core fields (time, log, boundary, company, action, outcome, actor, subject pseudonym, target, request id, trace id), whose source fields are mapped from the record format; a typed attribute table for what the catalogue marks filterable or facetable; the record once; and one full-text table over what the catalogue marks searchable. Full text is word search without stemming, the same on every driver. There is one index per boundary with a company column: the indexer is a declared reader of each company's key, the reader filters every query by the caller's grant, and a shred purges that company's rows. A rebuild builds a new generation beside the serving one and switches to it atomically.
+**What the index holds.** Fixed columns for the core fields (time, log, boundary, company, action, outcome, actor, subject pseudonym, target, request id, trace id), mapped from OCSF paths such as `metadata.event_code`, `status_id` and `actor.user.uid`; a typed attribute table for what the catalogue marks filterable or facetable; the record once; and one full-text table over what the catalogue marks searchable. Full text is word search without stemming, the same on every driver. There is one index per boundary with a company column: the indexer is a declared reader of each company's key, the reader filters every query by the caller's grant, and a shred purges that company's rows. A rebuild builds a new generation beside the serving one and switches to it atomically.
 
-**What the reader offers.** Search with a closed filter grammar and free text, facets, a get that returns a record with its inclusion proof against a cosigned checkpoint, exports as JSON Lines behind a short-lived signed URL, and a tail as a repeated search; all unary Connect calls. Every call is authorised by a grant from `policy`, which becomes a mandatory filter of the query, and every read is itself audited. A small install can run `sluis audit search` from the CLI, which builds a local `sqlite` index from the chain. The index is a rebuildable cache; the chain in the bucket is the record.
+**What the reader offers.** Search with a closed filter grammar and free text, facets, a get that returns a record with its inclusion proof against a cosigned checkpoint, exports as NDJSON of enriched OCSF events behind a short-lived signed URL, and a tail as a repeated search; all unary Connect calls. Every call is authorised by a grant from `policy`, which becomes a mandatory filter of the query, and every read is itself audited. A small install can run `sluis audit search` from the CLI, which builds a local `sqlite` index from the chain. The index is a rebuildable cache; the chain in the bucket is the record.
 
 **Verification never trusts the index, or the state store.** To check the trail, a verifier reads the batches from the log store, the signed heads and any witness co-signatures, and recomputes the chain itself. If the index or the state store has been tampered with, verification still passes or fails by what the log store and the signatures say. The state store may sit on the write path, because the transport and a reconciler that compares the log store's listing with the batch sequence recover from its loss, and because verification does not depend on it.
 

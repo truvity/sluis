@@ -87,7 +87,8 @@ A YubiKey or another card on a node has one PIN and cannot refuse a caller by it
 - **One `key-holder` process, one Unix socket per caller.** Each socket sits in a directory that only that caller can open: systemd `.socket` units with `SocketUser=` and `FileDescriptorName=` on a host, and only that one socket mounted into a container.
 - **A peer-uid check as a second factor.** `key-holder` reads the caller's uid from the connection and checks it against the socket it arrived on and an access list of caller actor × key purpose × operation, generated from the manifests.
 - **Content-aware signing per purpose.** The `ca` purpose signs only a parseable TBSCertificate within its constraints; the `ssh-ca` purposes sign only an OpenSSH certificate body; the token purposes sign only a JWS signing input. A caller that has a socket still cannot get arbitrary bytes signed.
-- **Hardened.** `key-holder` is written in Rust, has no network, runs under seccomp, keeps the PIN in mlocked memory (unlocked by a peer or by `sluis node unlock`), rate-limits signatures and audits each one. The access list lets only the audit `writer` use the log key, which is what replaces a separate notary.
+- **The only process that touches the card.** `key-holder` is written in Go with `piv-go`, which opens the card exclusively, so no other program on the node can use the card or reset it while `key-holder` runs ([ADR 0060](/decisions/0060-the-language-follows-the-executable/), after spike S4).
+- **Hardened.** `key-holder` has no network, runs under seccomp, keeps the PIN in mlocked memory (unlocked by a peer or by `sluis node unlock`), rate-limits signatures and audits each one. The access list lets only the audit `writer` use the log key, which is what replaces a separate notary.
 
 More cards per node are an option for later. The OpenPGP cards of the roots are used directly by the ceremony tool, with no mediator ([Keys](/concepts/keys/#openpgp-release-signing)).
 

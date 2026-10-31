@@ -68,7 +68,7 @@ Each kind of proof is a **verifier driver** in `exchange`. A verifier holds publ
 | `aws-iid` | The EC2 instance identity document. Accepted **once per instance**. It is the primary path on EC2 | First release |
 | `k8s-sa-token` | A projected ServiceAccount token from a cluster sluis trusts | First release |
 | `github-oidc` | A GitHub Actions OIDC token | First release |
-| `yubikey-attestation` | A PIV attestation, chained to Yubico's roots and checked against the registry | First release |
+| `yubikey-attestation` | A PIV attestation, chained through Yubico's published intermediates to Yubico's PIV attestation root, **Yubico Attestation Root 1**, which sluis ships as the trust anchor, and checked against the registry | First release |
 | `enrol-token` | An enrolment token, single-use or reusable (see below) | First release |
 | Manual approval | A person approved the request | First release |
 | `tailscale-whois` | The Tailscale node behind the connection | Next |

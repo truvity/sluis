@@ -14,7 +14,7 @@ sidebar:
 |---|---|
 | R1 | One executable is written in one language |
 | R2 | Rust at the unauthenticated edge, when no Go-only protocol library is needed |
-| R3 | Rust for the trusted base |
+| R3 | Rust for the trusted base, with one named exception: `key-holder` is Go |
 | R4 | Go where the deciding library is Go-only, or best in Go |
 | R5 | A driver follows its backend's best SDK: AWS, GCP and Azure are Rust |
 | R6 | Go by default |
@@ -27,11 +27,11 @@ sidebar:
 |---|---|
 | `entry` (slim) | Rust |
 | `sluis-node` | Rust |
-| `key-holder` (through PKCS#11: `cryptoki` with Yubico's `ykcs11`) | Rust |
 | `sluis-host` | Rust |
 | The AWS driver and the other cloud drivers | Rust |
 | `policy` and its Cedar engine (the `cedar-policy` crate) | Rust |
 | The ceremony's OpenPGP-card helper (`openpgp-card` and rPGP), run by `sluis ceremony` | Rust, as a helper inside the `sluis` package |
+| `key-holder`, with `piv-go` for YubiKey PIV | Go (an exception to R3, after spike S4); PKCS#11 only for the later YubiHSM 2 and Nitrokey drivers |
 | `cloud-cloudflare` | Go, sharing the library of the `cloudflare@<company>` integration (an exception to R5) |
 | `session`, `exchange`, `console`, `quota`, `signer`, `ca`, `ssh-ca` | Go |
 | The audit actors (`writer`, `witness`, `indexer`, `reader`) | Go |
@@ -40,7 +40,7 @@ sidebar:
 | The cert-manager issuer | Go |
 | Console | TypeScript |
 
-Every Rust choice is **gated by its spike**, and the languages are fixed from the spikes before the first code of step 1 ([Roadmap](/roadmap/#spikes-before-code)): Connect for Rust over Unix sockets and a slim `entry` built in both languages decide `entry`; PKCS#11 through `cryptoki` decides `key-holder`; the OpenPGP-card ceremony decides the ceremony's card helper. The FIPS spike with `aws-lc-rs` is done; with no FIPS build in v2.0 it no longer gates the AWS drivers, which stay Rust, and its result is kept for a later FIPS variant. When a Rust choice fails its spike, its fallback is chosen then from the written-down candidates ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)).
+Every Rust choice is **gated by its spike**, and the languages are fixed from the spikes before the first code of step 1 ([Roadmap](/roadmap/#spikes-before-code)): Connect for Rust over Unix sockets and a slim `entry` built in both languages decide `entry`; the OpenPGP-card ceremony decides the ceremony's card helper. Spike S4 is done for YubiKey PIV (2026-10-31): `piv-go` holds the card exclusively, which is what one `key-holder` per node needs, while `ykcs11` reset the card when a second client appeared and cached the PIN in its own library, so `key-holder` is Go. The FIPS spike with `aws-lc-rs` is done; with no FIPS build in v2.0 it no longer gates the AWS drivers, which stay Rust, and its result is kept for a later FIPS variant. When a Rust choice fails its spike, its fallback is chosen then from the written-down candidates ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)).
 
 There is no Rust JOSE driver; tokens are standard JWS/JWT, so any language verifies them against the published key set.
 

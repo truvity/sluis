@@ -633,7 +633,7 @@ index_notes:
     status: agreed
 
 compare:
-  - { topic: "Record, catalogue, profiles", v1: "one record format, a catalogue per application, profile copies per purpose", v2: kept }
+  - { topic: "Record, catalogue, profiles", v1: "one record format (a Protobuf core with JSON Schema slots), a catalogue per application, profile copies per purpose", v2: "a plain OCSF event per record, a catalogue per application, and a parallel usage log in CloudEvents for quota and billing (ADR 0021)" }
   - { topic: "How a record is accepted", v1: "emit library with block or async delivery to a receiver, JetStream or SQS", v2: "transport port (direct, or queue: spool, SQS, NATS JetStream); the request returns on transport durability" }
   - { topic: "Who runs it", v1: "pods or Lambda functions, a chart or a Pulumi library; a CronJob for the notary", v2: "actors started by the platform; drivers as services, no exec" }
   - { topic: "Coordination between parts", v1: "none: the bucket layout is the contract and each part lists the bucket", v2: "the ordered audit_batches sequence in replicated state" }
