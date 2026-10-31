@@ -787,7 +787,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@expressive-code/core@npm:^0.44.3":
+"@expressive-code/core@npm:0.44.3, @expressive-code/core@npm:^0.44.3":
   version: 0.44.3
   resolution: "@expressive-code/core@npm:0.44.3"
   dependencies:
