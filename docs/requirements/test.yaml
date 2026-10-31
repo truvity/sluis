@@ -120,3 +120,16 @@ requirements:
     gap: stakeholder-only
     verification:
       - {kind: integration-test, ref: "production-build symbol test"}
+  - id: REQ-TEST-009
+    area: TEST
+    statement: "The port conformance suite MUST test create-if-absent under concurrent writers for every blob driver."
+    rationale: "A fence that holds for one writer can still let two concurrent writers both succeed, as a blob store without conditional writes does."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-103, section: "blob port", depth: Full}
+    features: ["#851"]
+    verification:
+      - {kind: conformance-suite, ref: "port conformance suite, concurrent create-if-absent per blob driver"}

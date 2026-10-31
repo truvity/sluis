@@ -19,7 +19,7 @@ An actor sees one contract per port, whatever sits behind it. `signer` calls "si
 | `keys` | `sign`, `public-key`, `wrap`, `unwrap` | `wrap` and `unwrap` (or an `ecdh` operation) let a data key be protected without the key ever leaving the device or the service. A driver also declares which signing algorithms it supports: see [Keys](/concepts/keys/#algorithms) |
 | `state` | `get`, `put`, `cas` | `cas`: compare-and-set, needed wherever a record may be changed by more than one caller |
 | `lease` | `acquire`, `renew` | Built on the state store's compare-and-set; every acquire returns a fencing token |
-| `blob` | `put-once`, `get`, `list`, plus a lock mode | lock mode: `none`, `removable` or `compliance`. `put-once` is create-if-absent (`If-None-Match: *`) |
+| `blob` | `put-once`, `get`, `list`, plus a lock mode | lock mode: `none`, `removable` or `compliance`. `put-once` is an atomic create-if-absent, which every blob driver must give: see [Create-if-absent](#create-if-absent) |
 | `transport` | `put` / `receive` / `ack`, or `stream` | |
 | `index` | `write`, `query` | |
 | `witness` | `cosign` | |
@@ -125,7 +125,7 @@ Every port is protected in **three layers**, and all three are generated from on
 | lease | all | On the state store, independent of the Raft leader | |
 | blob | fs | A directory per uid, mode 0700 | |
 | blob | s3-compatible | IAM prefix conditions on AWS; R2 temporary credentials scoped to a prefix, from `cloud-cloudflare` | A bucket per boundary; Object Lock on S3 |
-| blob | s3-compatible on Garage | A key per bucket, per (boundary, actor), with an expiry, from `cloud-garage` | A bucket per actor; a Garage cluster per boundary; lock mode `none` |
+| blob | s3-compatible on Garage (later) | A key per bucket, per (boundary, actor), with an expiry, from `cloud-garage` | A bucket per actor; a Garage cluster per boundary; lock mode `none` |
 | transport | direct-unix | The peer uid at the receiver | |
 | transport | direct-mtls | The SPIFFE ID in the client certificate | |
 | transport | spool | A directory per producer uid | |
@@ -142,7 +142,7 @@ Every port is protected in **three layers**, and all three are generated from on
 | cloud | platform role | The platform's identity | |
 | cloud | gcp / azure | The cloud's federation | |
 | cloud | cloudflare | R2 temporary credentials, scoped to a bucket and a prefix | |
-| cloud | garage | A scoped admin token that creates a key per (boundary, actor) with an expiry | A Garage cluster per boundary |
+| cloud | garage (later) | A scoped admin token that creates a key per (boundary, actor) with an expiry | A Garage cluster per boundary |
 
 ### Postgres drivers
 
@@ -171,7 +171,7 @@ Every driver declares what it needs from the installation. The columns are: whet
 | rqlite | state, lease, index | ✓ | ✓ | 1, 3 or 5 (3+ to survive a failure) | – (one cluster per boundary and owning actor) |
 | dynamodb | state, lease | – | – | any | AWS |
 | local lock | lease | ✓ | – | exactly 1 | – |
-| fs | blob | – | ✓ | exactly 1 | – (no lock: tamper evidence only with witnesses) |
+| fs | blob | – | ✓ | exactly 1 | – (no lock: tamper evidence only with witnesses; a local POSIX filesystem, for create-if-absent) |
 | s3-compatible | blob | – | – | any | An S3 API: AWS S3 (Object Lock, compliance mode) or Cloudflare R2 (lock removable by an account admin). Credentials come from the `cloud` port |
 | direct-unix | transport | ✓ receiver | – | same host | – |
 | direct-mtls | transport | ✓ receiver | – | any | – |
@@ -280,7 +280,21 @@ Long-lived R2 tokens can be scoped to a bucket only; a prefix scope exists only 
 
 ### Garage
 
-[Garage](https://garagehq.deuxfleurs.fr/) is a **supported backend of the same `s3-compatible` driver** (decided 2026-10-30), and the primary blob store of the [boards](/runtimes/installations/#boards), which run it themselves. Per its documentation (read 2026-10-30) Garage has no Object Lock, versioning, bucket policies or ACLs; its permissions are per key and per bucket, with no prefixes; and its admin API v2 has scoped admin tokens. So:
+[Garage](https://garagehq.deuxfleurs.fr/) is a **later backend of the same `s3-compatible` driver**, blocked on two features upstream (decided 2026-10-31). In the first release the [boards](/runtimes/installations/#boards) keep their blobs on **R2**, with credentials from the `cloudflare` cloud driver, as above.
+
+The spike on a board ([issue #982](https://github.com/truvity/sluis/issues/982), measured on Garage v2.5.0 on 2026-10-31) found:
+
+| Question | Result |
+|---|---|
+| Conditional writes | **None.** `PutObject` with `If-None-Match: *` or `If-Match` is accepted and overwrites the object; so do the conditional forms of `CopyObject` and `CompleteMultipartUpload`. Upstream [issue 1052](https://git.deuxfleurs.fr/Deuxfleurs/garage/issues/1052), open |
+| Key scope | Per key and per bucket (`read`, `write`, `owner`), **no prefixes**; `write` includes delete. Upstream [issue 1212](https://git.deuxfleurs.fr/Deuxfleurs/garage/issues/1212), open |
+| Key expiry | Native: a key with an `expiration` is refused once it expires, but stays listed until it is deleted, so a sweeper is needed |
+| Admin API | Scoped admin tokens work. Every authenticated call takes about 170 ms on the board, because of the token check |
+| Memory | About 73 MiB at peak with the LMDB engine, 58 MiB with SQLite; the Fjall engine grew without bound |
+| Board kernel | LMDB needs `lmdb_map_size` set on a kernel with 39-bit virtual addresses |
+| Small reads | About 45 ms for 4 to 16 KiB objects on a reused connection, because the S3 listener does not set `TCP_NODELAY` |
+
+When both upstream features ship, Garage's design is:
 
 - the **`garage` cloud driver**, `cloud-garage@<boundary>`, holds a scoped admin token and creates a **key per (boundary, actor) with an expiry**;
 - each actor has **a bucket of its own**, because a key's rights are per bucket, and each boundary has its own Garage cluster;
@@ -288,7 +302,17 @@ Long-lived R2 tokens can be scoped to a bucket only; a prefix scope exists only 
 - on the boards the audit log has an **off-site copy on R2**, copied by an hourly job of the audit installation ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/));
 - `cloud-garage` is written in Rust ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)).
 
-A spike comes first: conditional writes (`If-None-Match: *`), Garage's memory on the boards, and key expiry. If conditional writes are missing, the writer relies on its per-node log plus a lease ([ADR 0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/)).
+## Create-if-absent
+
+**The blob store is the write-once fence** of the audit log ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/), decided 2026-10-31). sluis supports only blob backends with an atomic create-if-absent, and every blob driver must refuse to overwrite an existing object on a `put-once`:
+
+| Driver | How |
+|---|---|
+| `s3-compatible` on AWS S3 and Cloudflare R2 | `PutObject` with `If-None-Match: *`: 412 Precondition Failed if the key exists, and at most one of several concurrent writers succeeds (checked in both providers' documentation on 2026-10-31) |
+| `fs` | A temporary file, fsynced, then `link()` or `renameat2(RENAME_NOREPLACE)` to the target name (both fail if it exists), then an fsync of the directory. Local POSIX filesystems only, not a network filesystem without exclusive-create guarantees |
+| `s3-compatible` on Garage | Excluded until Garage's conditional writes land: v2.5.0 overwrites ([above](#garage)) |
+
+The [port conformance suite](https://github.com/truvity/sluis/issues/851) tests it under concurrent writers for every blob driver.
 
 ## Capability flags
 
@@ -299,11 +323,11 @@ Two ports carry flags that an actor can require, so that "any driver for this po
 | Driver | Lock mode | What it means |
 |---|---|---|
 | `fs` | `none` | Nothing stops a local administrator from changing a file. The audit trail is tamper-evident only if witnesses co-sign its heads. |
-| `s3-compatible` on Garage | `none` | Garage has no object lock and no versioning. The audit trail is tamper-evident through the witnesses. |
+| `s3-compatible` on Garage (later) | `none` | Garage has no object lock and no versioning. The audit trail is tamper-evident through the witnesses. |
 | `s3-compatible` on Cloudflare R2 | `removable` | An object lock exists, but an account administrator can remove it. |
 | `s3-compatible` on AWS S3 | `compliance` | Object Lock in compliance mode: not even the account's root can shorten the retention. |
 
-An actor that stores a record which must not be changed, such as the audit log store, states what lock mode it needs. For the audit log the rule is ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)): **in a production boundary the log store needs `compliance`, or a weaker lock mode plus a witness** (`peer` or `external`); `sluis config check` refuses anything else there, and warns in development and staging. So the boards (Garage, `none`, with peer witnesses) pass, and a single-node production installation on `fs` needs an `external` witness. See [Audit](/concepts/audit/#lock-modes-retention-and-legal-holds).
+An actor that stores a record which must not be changed, such as the audit log store, states what lock mode it needs. For the audit log the rule is ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)): **in a production boundary the log store needs `compliance`, or a weaker lock mode plus a witness** (`peer` or `external`); `sluis config check` refuses anything else there, and warns in development and staging. So the boards (R2, `removable`, with peer witnesses) pass, and a single-node production installation on `fs` needs an `external` witness. See [Audit](/concepts/audit/#lock-modes-retention-and-legal-holds).
 
 **State `cas`.** The `state` port has compare-and-set. An actor that changes a record that more than one caller can reach requires it. Quota state is `state` with compare-and-set. Quota meters by default and enforces per policy rule ([OD-33](/open-decisions/#od-33), decided); enforcement needs `state` with compare-and-set on the mint path. The contract has no unconditional put: see [Data](/concepts/data/).
 
@@ -356,7 +380,7 @@ The same actors run on every runtime. The drivers behind their ports are what ch
 | keys | software, or the host's YubiKey | yubikey-piv per node, through `key-holder` | aws-kms, per-actor | aws-kms ([OD-20](/open-decisions/#od-20)) |
 | state | embedded | rqlite, one cluster per owning actor | dynamodb | dynamodb |
 | lease | local lock | rqlite, on the state store | dynamodb, on the state store | dynamodb, on the state store |
-| blob | fs | s3-compatible on Garage, with keys from the `garage` cloud driver; an off-site R2 copy of the audit log | s3-compatible on S3 | s3-compatible on S3 |
+| blob | fs | s3-compatible on R2, with credentials from the `cloudflare` cloud driver (Garage later) | s3-compatible on S3 | s3-compatible on S3 |
 | transport | spool | spool | sqs | sqs ([OD-22](/open-decisions/#od-22)) |
 | index | sqlite | rqlite | postgres on Aurora, through RDS Proxy | postgres on cnpg |
 | witness | none | peer, each node witnessing the others | none | none |

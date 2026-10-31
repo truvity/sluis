@@ -35,7 +35,7 @@ A driver choice that used to be a per-shape decision now reads as "this installa
 | Installation | keys | state, lease | transport | blob | index | witness |
 |---|---|---|---|---|---|---|
 | local | yubikey-piv through the host's `pcscd` | embedded, local lock | spool | fs | sqlite | none |
-| boards | yubikey-piv, one per node | rqlite, one cluster per owning actor | spool | s3-compatible on Garage, with an hourly off-site copy of the audit log on R2 | rqlite | peer |
+| boards | yubikey-piv, one per node | rqlite, one cluster per owning actor | spool | s3-compatible on R2 (Garage later) | rqlite | peer |
 | lambda | aws-kms | dynamodb | sqs | s3-compatible on S3 | postgres on Aurora | none |
 | kubernetes | aws-kms | dynamodb | sqs | s3-compatible on S3 | postgres on cnpg | none |
 
@@ -118,8 +118,7 @@ Three single-board computers (arm64, 2 GB RAM, eMMC), each with its own YubiKey,
 ```mermaid
 flowchart TB
   edge["Cloudflare edge"]
-  garage["Blob store<br/>(Garage, on the nodes)"]
-  r2["R2<br/>(off-site audit copy)"]
+  r2["Blob store<br/>(R2)"]
   subgraph n1["Node 1"]
     cfd1["cloudflared"] -- "Unix socket" --> c1["entry + actors"]
     c1 --> kh1["key-holder"] --> yk1["YubiKey 1"]
@@ -144,17 +143,16 @@ flowchart TB
   r1 <-- "Raft, mTLS" --> r2n
   r2n <-- "Raft, mTLS" --> r3
   r1 <-- "Raft, mTLS" --> r3
-  w1 -.-> garage
-  w2 -.-> garage
-  w3 -.-> garage
-  garage -. "copy" .-> r2
+  w1 -.-> r2
+  w2 -.-> r2
+  w3 -.-> r2
 ```
 
-- **Drivers:** yubikey-piv with one YubiKey per node, through `key-holder`, and the slot plan on [bare-metal](/runtimes/bare-metal/#keys); rqlite for state and lease, one cluster per (boundary, owning actor); the spool for transport on each node; the `s3-compatible` blob driver on **Garage**, which runs on the boards, with a key per (boundary, actor) and a bucket per actor from the `cloud-garage` credential driver, and an **off-site copy of the audit log on R2**; and the index on rqlite ([ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)). Garage comes after a spike: conditional writes (`If-None-Match: *`), its memory on the boards and key expiry ([ADR 0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/)). The rqlite index is a replicated SQLite, so the reader can run on any node. Its full-text search (FTS5) was tested on a three-node cluster on 2026-10-30; the board spike measures native arm64 hardware and the fsync cost on eMMC, and if it fails the boards fall back to `sqlite` on the indexer's node.
+- **Drivers:** yubikey-piv with one YubiKey per node, through `key-holder`, and the slot plan on [bare-metal](/runtimes/bare-metal/#keys); rqlite for state and lease, one cluster per (boundary, owning actor); the spool for transport on each node; the `s3-compatible` blob driver on **R2**, with credentials from the `cloudflare` cloud driver; and the index on rqlite ([ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)). Garage, a blob store on the boards themselves, is a later backend: its spike ([issue #982](https://github.com/truvity/sluis/issues/982), 2026-10-31) found no conditional writes and no prefix-scoped keys, both open upstream ([ADR 0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/)). The rqlite index is a replicated SQLite, so the reader can run on any node. Its full-text search (FTS5) was tested on a three-node cluster on 2026-10-30; the board spike measures native arm64 hardware and the fsync cost on eMMC, and if it fails the boards fall back to `sqlite` on the indexer's node.
 - **Keys:** a node's key is its own. No key is shared between nodes, so losing a board loses one key, not the install's. Sealing uses ECDH plus HKDF with the node's `9d` key.
-- **Audit:** the pieces run on the same nodes and share driver instances. **There is one log per node** ([the agreed rule](/concepts/audit/): exactly one writer per log, not one per installation). Each node has its own writer, spool and log key, and the other two nodes are its peer witnesses, the agreed 2-of-3 co-signing. Readers merge the logs by time. A writer asks its node's `key-holder` to sign checkpoints, and there is no notary. Batches are created with `If-None-Match: *`, so with one log per node no writer lease is needed. If the Garage spike finds no conditional writes, each writer relies on its per-node log plus a lease on the state store. An **hourly job** of the audit installation, not the writer, copies new log objects to R2, so up to an hour of log has no off-site copy ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)). Production needs a declared retention, and the peer witnesses satisfy the lock-mode rule.
+- **Audit:** the pieces run on the same nodes and share driver instances. **There is one log per node** ([the agreed rule](/concepts/audit/): exactly one writer per log, not one per installation). Each node has its own writer, spool and log key, and the other two nodes are its peer witnesses, the agreed 2-of-3 co-signing. Readers merge the logs by time. A writer asks its node's `key-holder` to sign checkpoints, and there is no notary. Batches are created with `If-None-Match: *`, so with one log per node no writer lease is needed. The log is on R2, so it is off site from the start; the hourly off-site copy of [ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/) comes with Garage, later. (inferred) Production needs a declared retention, and the peer witnesses satisfy the lock-mode rule.
 - **Identity and edge:** each node runs its own `cloudflared`, which forwards to `entry`'s Unix socket, and the boundary's issuer is the issuer for workload tokens, with one key per node's YubiKey in its key set ([ADR 0012](/decisions/0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials/)). The public hostname is `sluis.example.com`. The audit pieces have a front of their own, a second `entry` with its own tunnel route on `sluis-audit.example.com` ([ADR 0062](/decisions/0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own/)).
-- **Limits and residual risk:** Raft tolerates the loss of one node of three. A node's YubiKey and PIN guard its key; physical access to a board with its key and PIN allows signing as that node, which peer witnessing limits for the audit logs but not for tokens; with one issuer per boundary such a token can name any actor of the boundary. Garage has no lock (lock mode `none`), and R2's lock can be removed by a Cloudflare account administrator, so the logs get their tamper evidence from the witnesses, not from the bucket. Mixed distributions widen what has to be tested.
+- **Limits and residual risk:** Raft tolerates the loss of one node of three. A node's YubiKey and PIN guard its key; physical access to a board with its key and PIN allows signing as that node, which peer witnessing limits for the audit logs but not for tokens; with one issuer per boundary such a token can name any actor of the boundary. R2's lock can be removed by a Cloudflare account administrator (lock mode `removable`), so the logs get their tamper evidence from the witnesses, not from the bucket. Every batch is written to R2 over the internet, so an outage of the link or of R2 delays the logs. (inferred) Mixed distributions widen what has to be tested.
 
 ## lambda
 
@@ -193,7 +191,7 @@ A node pod and an audit pod, a container per actor, on Amazon EKS with AWS KMS. 
 
 These are possible installations: allowed by the rules, not tested. They are listed because earlier versions of the design named them.
 
-- **One board.** The boards installation reduced to one node, with the embedded state, `sqlite` for the index and the blob on Garage, as on the boards. The [single-board tutorial](/tutorials/single-node-install/) walks through it.
+- **One board.** The boards installation reduced to one node, with the embedded state, `sqlite` for the index and the blob on R2, as on the boards. The [single-board tutorial](/tutorials/single-node-install/) walks through it.
 - **One EC2 instance** with KMS keys, DynamoDB state, the spool and S3.
 - **Three EC2 instances** in an Auto Scaling group, with KMS keys (a key per node for the log), rqlite state, the spool and S3 ([#886](https://github.com/truvity/sluis/issues/886)).
 
