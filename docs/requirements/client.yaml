@@ -211,13 +211,13 @@ requirements:
     rationale: "Some external systems speak only this grant."
     level: MAY
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-01, section: "4.4", depth: Full}
       - {id: ST-08, section: "2", depth: Full}
     features: ["design"]
-    gap: stakeholder-only
+    superseded_by: [REQ-CLIENT-023]
     verification:
       - {kind: integration-test, ref: "client credentials matrix"}
   - id: REQ-CLIENT-010
@@ -255,12 +255,11 @@ requirements:
     rationale: "Dropping a scope hides a failure."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-01, section: "3.3", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [787]
     verification:
       - {kind: integration-test, ref: "policy declaration test"}
   - id: REQ-CLIENT-022
@@ -270,12 +269,11 @@ requirements:
     rationale: "Dropping a scope hides a failure."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-01, section: "3.3", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [775]
     verification:
       - {kind: integration-test, ref: "negative test"}
   - id: REQ-CLIENT-012
@@ -316,11 +314,23 @@ requirements:
     rationale: "Some external systems can use only client certificates."
     level: MAY
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-19, section: "2-3", depth: Full}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [912]
     verification:
       - {kind: conformance-suite, ref: "FAPI2-SP (MTLS variant)"}
+  - id: REQ-CLIENT-023
+    area: CLIENT
+    statement: "sluis MUST NOT offer the client credentials grant."
+    rationale: "A machine proves what it is with a workload proof and holds no client secret (ADR 0012)."
+    level: MUST
+    source: design-decision
+    status: out-of-scope
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "4.4", depth: Full}
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "token endpoint unsupported_grant_type test"}

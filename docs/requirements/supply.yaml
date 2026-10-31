@@ -126,13 +126,12 @@ requirements:
     rationale: "Review is a control."
     level: MUST
     source: security-review
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["design"]
-    gap: proposed-design
     manual_reason: "The rule is a repository setting; the evidence is the setting itself."
+    issues: [1052]
     verification:
       - {kind: manual, ref: "repository settings"}
   - id: REQ-SUPPLY-010

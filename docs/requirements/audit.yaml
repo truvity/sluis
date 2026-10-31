@@ -299,15 +299,14 @@ requirements:
     rationale: "Interoperable witnesses strengthen the log."
     level: MAY
     source: design-decision
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-71, section: "1", depth: Full}
       - {id: ST-72, section: "1", depth: Full}
       - {id: ST-73, section: "1", depth: Full}
       - {id: ST-74, section: "1", depth: Full}
-    features: ["design"]
-    gap: proposed-design
+    issues: [955]
     verification:
       - {kind: test-vectors, ref: "spec vectors"}
       - {kind: integration-test, ref: "witness protocol test"}
@@ -318,12 +317,11 @@ requirements:
     rationale: "An external anchor bounds the time of a seal."
     level: MAY
     source: design-decision
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-79, section: "3161", depth: Full}
-    features: ["design"]
-    gap: proposed-design
+    issues: [1027]
     verification:
       - {kind: integration-test, ref: "time-stamp anchor test"}
   - id: REQ-AUDIT-012

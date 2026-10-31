@@ -132,12 +132,11 @@ requirements:
     rationale: "Fail closed with bounded impact."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [1051]
     verification:
       - {kind: integration-test, ref: "dependency-down matrix"}
   - id: REQ-OPS-013
@@ -147,12 +146,11 @@ requirements:
     rationale: "Fail closed with bounded impact."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [1051]
     verification:
       - {kind: integration-test, ref: "no-weaker-path test"}
   - id: REQ-OPS-014
@@ -162,12 +160,11 @@ requirements:
     rationale: "Fail closed with bounded impact."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [1051]
     verification:
       - {kind: integration-test, ref: "issued-token validity test"}
   - id: REQ-OPS-007

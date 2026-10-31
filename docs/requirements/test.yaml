@@ -40,13 +40,12 @@ requirements:
     rationale: "Certification of the high-assurance profile."
     level: MAY
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-37, section: "1", depth: Full}
       - {id: ST-38, section: "1", depth: Full}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [929]
     verification:
       - {kind: conformance-suite, ref: "FAPI2-SP"}
       - {kind: conformance-suite, ref: "FAPI2-MS"}

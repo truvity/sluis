@@ -214,13 +214,12 @@ requirements:
     rationale: "Static revocation fits short-lived certificates."
     level: MAY
     source: design-decision
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-62, section: "5", depth: Full}
       - {id: ST-64, section: "1", depth: Full}
-    features: ["design"]
-    gap: proposed-design
+    issues: [913]
     verification:
       - {kind: integration-test, ref: "CRL parse and nextUpdate tests"}
   - id: REQ-PKI-018
@@ -244,12 +243,11 @@ requirements:
     rationale: "A responder adds an always-on dependency to relying parties."
     level: MUST
     source: design-decision
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-63, section: "1", depth: Full}
-    features: ["design"]
-    gap: proposed-design
+    issues: [913]
     verification:
       - {kind: manual, ref: "decision record"}
       - {kind: integration-test, ref: "404 test for a status endpoint"}
@@ -259,12 +257,11 @@ requirements:
     rationale: "PQ transition planning."
     level: MAY
     source: standard
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-67, section: "9881", depth: Full}
-    features: ["design"]
-    gap: proposed-design
+    issues: [1029]
     verification:
       - {kind: test-vectors, ref: "NIST ACVP"}
   - id: REQ-PKI-019
@@ -370,12 +367,11 @@ requirements:
     rationale: "The ceremony automates every step that is not a human act and leaves PIN, touch and custody manual."
     level: MUST
     source: design-decision
-    status: open
+    status: planned
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: NC-10, section: "PIV", depth: Full}
-    features: ["design"]
-    gap: proposed-design
     manual_reason: "The feature is planned; a dry run with a throwaway root is the first available evidence."
+    issues: [914]
     verification:
       - {kind: manual, ref: "ceremony dry-run with a throwaway root"}

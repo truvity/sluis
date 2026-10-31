@@ -316,14 +316,13 @@ requirements:
     rationale: "NIST plans deprecation of classical signatures after 2030."
     level: SHOULD
     source: design-decision
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-57, section: "9964", depth: Full}
       - {id: ST-91, section: "204", depth: Full}
       - {id: ST-93, section: "1", depth: Partial}
-    features: ["design"]
-    gap: proposed-design
+    issues: [1029]
     verification:
       - {kind: test-vectors, ref: "NIST ACVP vectors"}
   - id: REQ-KEYS-021
@@ -361,11 +360,10 @@ requirements:
     rationale: "PS256 on a hardware token takes about two seconds per signature."
     level: SHOULD
     source: design-decision
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-51, section: "3", depth: Partial}
-    features: ["design"]
-    gap: proposed-design
+    issues: [788]
     verification:
       - {kind: integration-test, ref: "config-check warning test"}

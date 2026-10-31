@@ -8,12 +8,11 @@ requirements:
     rationale: "Accessibility is a legal and ethical baseline."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: NC-04, section: "WCAG 2.1 AA", depth: Full}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [796]
     verification:
       - {kind: integration-test, ref: "automated accessibility checks"}
       - {kind: manual, ref: "manual audit"}
@@ -23,13 +22,12 @@ requirements:
     rationale: "Not everyone has a phone."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-59, section: "1", depth: Partial}
       - {id: NC-04, section: "WCAG 2.1 AA", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
     manual_reason: "Availability of a non-smartphone path is established by a walkthrough by people."
+    issues: [885]
     verification:
       - {kind: manual, ref: "path walkthrough"}
