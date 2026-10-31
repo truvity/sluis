@@ -23,7 +23,7 @@ Nothing names a real organisation account, hostname, cluster, ticket, secret pat
 
 Internal reasoning that needs real names stays internal; only the final, generic text is public ([GOVERNANCE.md](https://github.com/truvity/sluis/blob/main/GOVERNANCE.md), "From internal reasoning to a public ADR").
 
-CI scans for content that must not be public, such as account-id-shaped numbers, private key blocks and token prefixes. Maintainers run additional checks before merging. A pass is not permission: the rule above is.
+CI scans every tracked text file for content that must not be public, such as account-id-shaped numbers, private key blocks and token prefixes (`just check-public`). Maintainers run additional checks before merging. A pass is not permission: the rule above is.
 
 ## Secrets
 
@@ -36,4 +36,4 @@ A suspected vulnerability goes through [SECURITY.md](https://github.com/truvity/
 
 ## Hardware tokens
 
-Tests that use a hardware token, a smart card or a security key use dedicated test devices only, never a device someone uses for real work. Select the test device by its serial number, never by "the first one found", and reset it to its factory state when the test is done. A serial number is not written into the repository.
+A test device's serial number is not written into the repository. How tests use hardware tokens is in [Hardware tokens](/contributing/tools/#hardware-tokens).

@@ -30,11 +30,11 @@ When several agents work on one change, each has one role, and the roles stay se
 
 | Role | May change | Does |
 |---|---|---|
-| implementer | source code | builds the change |
+| implementer | source code, including the site's code in `site/` | builds the change |
 | security | nothing: read-only | reviews for faults and reports findings; never edits |
-| qa | tests, test data, the test plan | writes and runs the tests that prove the change |
+| qa | tests and test data | writes and runs the tests that prove the change |
 | docs | docs, `README`, `CONTRIBUTING.md`, `AGENTS.md`, `CLAUDE.md`, the agent files in `.claude/` | keeps the pages and the agent wiring in step with the change |
-| devops | CI workflows, the `Justfile`, `devbox.json`, release configuration | keeps the checks and the release path working |
+| devops | CI workflows in `.github/workflows/`, the repository checks in `tools/checks/`, the `Justfile`, `devbox.json`, release configuration | keeps the checks and the release path working |
 
 The review agent of [GOVERNANCE.md](https://github.com/truvity/sluis/blob/main/GOVERNANCE.md) is a different agent from the one that wrote the change. For Claude Code the roles are defined in `.claude/agents/`, and the common tasks have skills in `.claude/skills/` that point back to these pages.
 
@@ -46,3 +46,5 @@ An agent ends its work with a report:
 2. **Numbers.** Measurements, counts, check results, with the commands that produced them.
 3. **Changes.** Every change it made to any machine, account, branch or device, and whether it was undone.
 4. **Open questions.** Each as options with pros and cons, and a recommendation.
+
+A reviewer, such as the security role, reports each finding with the file and line, what could go wrong, how likely it is, and a test that would show it.

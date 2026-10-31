@@ -14,4 +14,4 @@ Checklist, each step as the pages describe it:
 - [ ] The index in `docs/decisions/README.md` has the row.
 - [ ] Requirements and target-state pages that follow are added or named.
 - [ ] The pull request holds no more records than the page allows.
-- [ ] `devbox run -- just site-check` passes; then follow `docs/contributing/workflow.md`.
+- [ ] `devbox run -- just check-decisions`, then `devbox run -- just check`, pass; then follow `docs/contributing/workflow.md`.

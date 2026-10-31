@@ -11,4 +11,4 @@ Checklist:
 - [ ] Agreed, proposed and open points are marked the way the page describes.
 - [ ] Diagrams keep to the size limits on the page.
 - [ ] Links to other pages use site paths, and the linked pages exist.
-- [ ] `devbox run -- just site-check` passes; then follow `docs/contributing/workflow.md`.
+- [ ] `devbox run -- just check` passes; then follow `docs/contributing/workflow.md`.

@@ -31,10 +31,10 @@ Every record keeps the options it did not take: each one with its pros, its cons
 
 ## Rewriting a record
 
-Before the first v2 release a record may be rewritten in place; after it, a changed mind gets a new record. The rules, and the one dated line a rewritten record carries under its proposal link, are in the "Design phase" section of `docs/decisions/README.md`.
+Before the first v2 release the maintainer may have a record rewritten in place; after it, a changed mind gets a new record. The rules, and the one dated line a rewritten record carries under its proposal link, are in the "Design phase" section of `docs/decisions/README.md`.
 
 v1 records stay on `master`. Refer to one as "v1 ADR NNNN" with a link to `master`; never copy or renumber it.
 
 ## What CI checks
 
-CI checks the file name, the required sections, the status value and the index rows. Passing it is necessary, not sufficient: the maintainer reviews the reasoning.
+CI checks the file name, the required sections, the status value and the index rows; run `just check-decisions`, then `just check`, before you push. Passing it is necessary, not sufficient: the maintainer reviews the reasoning.

@@ -30,7 +30,10 @@ v2 lives on `main`, an orphan branch that shares no history with v1. v1 lives on
 - Open a draft pull request early if you want feedback. Mark it ready when the checks are green.
 - Rebase onto the current `main` before you ask for the merge. A green pull request on a stale base can still break `main`.
 - After someone has reviewed the branch, do not rewrite the commits they read. Add commits instead, and let the rebase merge tidy them; rebase only to catch up with `main`.
-- Merge is by rebase. The maintainer merges.
+
+## Merging
+
+Merge is by rebase. The maintainer merges. An agent working for the maintainer may merge its own pull request when the checks are green and review is done; it never merges another author's pull request. The rule is in the review rules of [GOVERNANCE.md](https://github.com/truvity/sluis/blob/main/GOVERNANCE.md).
 
 ## Commits
 
@@ -46,7 +49,7 @@ Start a breaking bullet with **Breaking:** and say what to do first. Pure refact
 
 ## Checks are the gate
 
-Green CI is the merge gate: a pull request with a red or a skipped required check is not merged. Run the same checks locally first ([Tools, checks and verification](/contributing/tools/)). CI checks the site build and its links, the requirements catalogue, the structure of the decision records, and content that must not be public. Maintainers run additional checks before merging.
+Green CI is the merge gate: a pull request with a red or a skipped required check is not merged. Run the same checks locally first, with `devbox run -- just check` ([Tools, checks and verification](/contributing/tools/)). CI checks the site build and its links, the requirements catalogue, the structure of the decision records, file names, the agent wiring, and content that must not be public. Maintainers run additional checks before merging.
 
 ## Review
 

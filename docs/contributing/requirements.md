@@ -22,4 +22,4 @@ Every record carries the fields the README defines, among them `source` (where t
 
 ## Checks
 
-`just site-lint` checks the catalogue: the schema, one keyword per statement, unique ids, a verification for every MUST, known standards and open decisions, and content that must not be public. Run it, then `just site-check`, before you push.
+`just check-requirements` checks the catalogue: the schema, one keyword per statement, unique ids, a verification for every MUST, known standards and open decisions, and content that must not be public. `just site-lint` runs it too. Run it, then `just check`, before you push.

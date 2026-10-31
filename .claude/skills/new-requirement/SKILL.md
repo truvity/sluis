@@ -10,5 +10,5 @@ Checklist, each step as the pages describe it:
 - [ ] The area and the id are chosen as the README says; no id is reused or renumbered.
 - [ ] Every field uses a value the README or `index.yaml` declares.
 - [ ] The decision record that creates the obligation cites the id.
-- [ ] `devbox run -- just site-lint`, then `devbox run -- just site-check`, pass.
+- [ ] `devbox run -- just check-requirements`, then `devbox run -- just check`, pass.
 - [ ] Then follow `docs/contributing/workflow.md`.

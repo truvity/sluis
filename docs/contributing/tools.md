@@ -14,17 +14,28 @@ Every tool the repository uses is pinned in `devbox.json`, at an exact version, 
 - Prefer a pinned release binary over a container for a tool.
 - Do not use testcontainers.
 
+## Standards first
+
+Follow specifications and standards. Where a standard exists for a protocol, a format or an algorithm, do not invent one; a deliberate deviation from a standard needs a [decision record](/contributing/decisions/). Pin the version of the standard you follow, as you pin the version of a tool.
+
 ## Run the recipe, not the tool
 
 The `Justfile` holds the recipes, and CI runs the same recipes. Run the recipe, not the bare tool underneath it: the recipe carries the flags, the order and the extra checks that CI applies.
 
 | Recipe | What it checks |
 |---|---|
+| `just check` | Everything a pull request must pass: `check-rules` and `site-check` |
+| `just check-rules` | The repository rules, below, after a self-test of the checks |
+| `just check-decisions` | The decision records: file names, the template's sections, the status, the index rows |
+| `just check-requirements` | The requirements catalogue: schema, ids, statement and traceability rules |
+| `just check-public` | Content that must not be public, in every tracked text file |
+| `just check-yaml-ext` | YAML files use `.yaml` |
+| `just check-agent-links` | Every path that `AGENTS.md`, `CLAUDE.md` and the skills point to exists |
+| `just site-check` | The site: `site-lint`, `site-build`, `site-render` and `site-links` |
 | `just site-lint` | Page descriptions and statuses, open-decision ids, the requirements catalogue |
 | `just site-build` | A strict site build: no warning and no broken internal link |
 | `just site-links` | Every link in the built site, internal and external |
 | `just site-render` | Every diagram is drawn, in light and dark mode |
-| `just site-check` | All of the above: what a pull request must pass |
 
 Read the recipe, and the workflow in `.github/workflows/` that calls it, to know what CI really runs. Build and test recipes for the code arrive with the code, and this table grows with them.
 
@@ -33,9 +44,13 @@ Read the recipe, and the workflow in `.github/workflows/` that calls it, to know
 An AI agent's shell may reset its working directory between calls, so a `cd` in one call is gone in the next. Use absolute paths:
 
 - `git -C /abs/path/to/worktree status`, `go -C /abs/path ...`, `cargo --manifest-path /abs/path/Cargo.toml ...`;
-- or `cd /abs/path && devbox run -- just site-check` as one command.
+- or `cd /abs/path && devbox run -- just check` as one command.
 
 Never run `go mod init`, `go get` or `cargo init` outside the repository: in the wrong directory they create or change a module that is not this one.
+
+## Hardware tokens
+
+Tests that use a hardware token, a smart card or a security key use dedicated test devices only, never a device someone uses for real work. Select the test device by its serial number, never by "the first one found", and reset it to its factory state when the test is done. A serial number is not written into the repository.
 
 ## When a result counts
 

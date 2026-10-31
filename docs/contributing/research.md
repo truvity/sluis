@@ -10,7 +10,7 @@ A spike answers one question by trying it. Research answers one question by read
 
 ## Standards first
 
-Follow specifications and standards. Where a standard exists, do not invent a format; where you deviate from one on purpose, that needs a [decision record](/contributing/decisions/). Pin the version of the standard you follow, as you pin the version of a tool.
+A spike that compares formats or protocols starts from the standards that exist, and pins their versions ([Standards first](/contributing/tools/#standards-first)).
 
 ## The shape of a result
 
@@ -31,4 +31,4 @@ Measure before you conclude, and read what each tool printed, not only its exit 
 
 ## Keep it public
 
-A result posted in the repository or on an issue follows [Public content and secrets](/contributing/public-content/): example names for hosts and accounts, no secrets, no device serials.
+A result posted in the repository or on an issue follows [Public content and secrets](/contributing/public-content/): example names for hosts and accounts, no secrets, no device serials. A result that needs private names to make sense stays internal, and only a generic version is posted publicly, as [GOVERNANCE.md](https://github.com/truvity/sluis/blob/main/GOVERNANCE.md) says in "From internal reasoning to a public ADR".
