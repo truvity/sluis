@@ -52,6 +52,44 @@ With three nodes the installation survives the loss of one.
 - **Identity:** the boundary's issuer is the issuer of workload tokens by default, and its key set holds one key per node card. Per-node issuers, `https://<issuer>/nodes/<node>/`, are optional, for a fleet whose nodes run different actors: there a cloud role trusts only the issuers of the nodes that run it ([ADR 0012](/decisions/0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials/)).
 - Raft tolerates the loss of one node of three. Losing two stops writes, and sign-in stops with them, because state is needed for sessions and grants. Three nodes usually share a site, a network and a power feed, so this is not a multi-site design.
 
+## State writes on a board
+
+This is an estimate from the actor design, made on 2026-10-31. It asks whether the budget of about 400 commits/s per board ([spike S5](/decisions/0060-the-language-follows-the-executable/)) is enough. The verdict is yes, with wide headroom. Every count below is an assumption unless a doc is named, and the ones that no doc supports are marked.
+
+**Method.** Each board is a voter in every cluster, so every commit of every cluster is applied on every board: the load on one board is the sum over all clusters. Only commits count; linearizable reads do not go through the log. The ceiling is the S5 figure of about 430 commits/s measured, budgeted at 400. It was measured with the load generator on the same cores and without a replication round trip, so the table also shows a derated ceiling of 200 commits/s, an assumption that halves it.
+
+**Load.** The measured load of the previous line is about 25,000 tokens in 7 days, a peak of 0.8 tokens/s, 95% of them token exchange ([Keys](/concepts/keys/#direct-signing)). The docs give no sign-in rate, so three levels stand in for it:
+
+| Level | Tokens/s at peak | Why this level |
+|---|---|---|
+| Measured peak | 0.8 | The previous line (measured) |
+| Ten times | 8 | An assumed growth |
+| Signing ceiling | 20 | Three cards at about 6.8 P-384 signatures/s each, one signature per token (assumed); the cards limit tokens before the CPU does |
+
+Of the tokens, 95% are exchanges and 5% are sign-in tokens (assumed: the docs do not split the 5%). The commits each action costs come from the flows of the [features list](/features/) and the origin model of [ADR 0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/). The docs do not count them, and ADRs 0024 (sessions) and 0025 (claims) are not written yet, so the counts for `session` and `exchange` are a reading of the flows.
+
+| Cluster (owning actor) | Commits per action (assumed unless noted) | At 0.8 tokens/s | At 8 | At 20 |
+|---|---|---|---|---|
+| `exchange` | 1 per token exchange: a replay or dedupe marker (the docs list dedupe records as ephemeral and do not say that every exchange writes one) | 0.76 | 7.6 | 19.0 |
+| `session` | 6 per sign-in: pending state, code, redemption, session, refresh token and a passkey counter; a refresh is 1 | 0.24 | 2.4 | 6.0 |
+| `quota`, if a rule enforces | 2 per minted token: `Admit` and `Confirm`, each one atomic batch with the reservation, the balance, the bucket and the remembered request id ([ADR 0023](/decisions/0023-quotas-api-is-idempotent-and-its-data-follows-the-origin-model/)); 0 where no rule enforces | 1.6 | 16.0 | 40.0 |
+| Audit `writer`, 3 logs | 1 atomic batch per sealed batch, sealed at 256 records or 5 s ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)), so 0.2/s per log while a log gets fewer than about 51 records/s (documented) | 0.6 | 0.6 | 0.6 |
+| `witness`, 3 | 1 per peer head it co-signs: 2 per batch of its own log (assumed) | 1.2 | 1.2 | 1.2 |
+| `indexer` (index cluster) | 1 per sealed batch, with the cursor; each commit carries up to 256 records of full-text work, heavier than the S5 writes (S5 did not measure that) | 0.6 | 0.6 | 0.6 |
+| Leases | 4 leases (the indexer, 2 reconcilers, the leader) renewed every 5 s; the docs give no lease time (assumed) | 0.8 | 0.8 | 0.8 |
+| `ca` and `ssh-ca` | 1 per certificate in the issuance ledger. No doc gives a certificate rate, so this is a reserve, not an estimate | 1.0 | 1.0 | 1.0 |
+| Reconcilers and `console` | One commit per directory pass and per operator write. No doc gives their size or cadence, so this is a reserve | 0.2 | 0.2 | 0.2 |
+| **Total with `quota` enforcing** | | **7.0** | **30.4** | **69.4** |
+| **Total without enforcement** | | **5.4** | **14.4** | **29.4** |
+
+| Headroom against | At 0.8 tokens/s | At 8 | At 20 |
+|---|---|---|---|
+| 400 commits/s, with enforcement | 57 times | 13 times | 5.8 times |
+| 400 commits/s, without enforcement | 74 times | 28 times | 13.6 times |
+| 200 commits/s (derated), with enforcement | 29 times | 6.6 times | 2.9 times |
+
+**Reading.** The design needs about 7 commits/s per board at the measured peak, and about 69 at the signing ceiling, which is 17% of the budget. The signing cards limit the installation before the state writes do. Enforced `quota` is the largest writer, 23% of the total at the measured peak and 53% to 58% at the higher levels, so the load test that ADR 0004 requires before enforcement is on matters most. What the docs do not give, and the estimate therefore reserves: the certificate rate of `ca` and `ssh-ca`, the size and cadence of directory passes, the lease time, the audit records per token, the cost of a full-text commit, and a replicated cluster's cost on a slower follower. Re-measure when the actors exist.
+
 ## Virtual machines (EC2)
 
 An EC2 installation is bare-metal on virtual machines. The units are the same as on a board. An EC2 installation is a possible installation, allowed by the rules but not tested; the tested bare-metal installations are local and boards.

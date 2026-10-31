@@ -228,12 +228,19 @@ Creating the roots, signing an intermediate and rotating a root are done in a **
 
 The OpenPGP part of `sluis ceremony` is decided ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)): a Rust helper on `openpgp-card` and rPGP, run by the CLI from `/usr/libexec/sluis/`. Spike S8 ran it end to end on two cards on 2026-10-31. The ceremony is not built on `gpg`: neither `gpg` 2.2.27 nor 2.4.7 can bind an existing P-384 key as a signing subkey, and `gpg`'s card key generation adds encryption and authentication subkeys. The release certificate holds the primary, its user ID and the signing subkeys, and no encryption subkey.
 
-What S8 leaves open, for the maintainer to decide:
+Decided on 2026-10-31 ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)):
 
+- **The helper's contract with `sluis ceremony` is arguments and files.** The helper prompts for the PIN itself on the terminal, and the PIN never travels in the environment or in arguments.
+- **A ceremony requires an OpenPGP attestation of each generated primary,** checked against Yubico's OpenPGP attestation CA, as the PIV path is. Decided; the implementation is pending, and the test with the two cards runs later, once the card is wired.
+
+Reopened, pending a redesign of the ceremony and root-card model (no answer is recorded):
+
+- **The ceremony tooling.**
 - **Where the back-signature comes from** when S<sub>i</sub> lives in a node's PIV slot. `key-holder` would have to sign a primary-key binding, and that purpose is not on its list.
 - **How the binding splits when card B is held by a second person elsewhere.** One process cannot hold both cards, so the back-signatures, the binding by each card and the merge become separate steps.
-- **The helper's contract with `sluis ceremony`:** arguments and files, or JSON on its standard streams, and how the PIN reaches the helper.
-- **Attestation:** whether a ceremony requires a YubiKey OpenPGP attestation of each generated primary.
+
+Still open:
+
 - **A missed touch** comes back from the card after about 15 s as a generic security status, not as a touch timeout; whether the helper reports it as one.
 
 ## TPM 2.0
