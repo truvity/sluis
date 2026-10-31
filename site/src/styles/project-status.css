@@ -1,0 +1,57 @@
+/* The project status page (src/pages/status.astro). Only Starlight's colour, type and
+   font variables are used, so light and dark both work. */
+.ps-legend { font-size: var(--sl-text-sm); color: var(--sl-color-gray-2); }
+.ps-asof { display: block; font-size: var(--sl-text-xs); font-weight: 400; color: var(--sl-color-gray-3); white-space: nowrap; }
+.ps-note, .ps-none { font-size: var(--sl-text-sm); color: var(--sl-color-gray-3); }
+.ps-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+/* milestone cards */
+.ps-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: .75rem; margin-block: 1rem; }
+/* Starlight's content column spaces every sibling; the grid does its own spacing. */
+.ps .ps-cards > * { margin: 0; }
+.ps-card { border: 1px solid var(--sl-color-gray-5); border-radius: .5rem; padding: .75rem 1rem; background: var(--sl-color-bg-nav); }
+.ps-card.ps-current { border-color: var(--sl-color-accent); }
+.ps .ps-card p { margin: 0; }
+.ps-card-k { font-family: var(--sl-font-mono); font-size: var(--sl-text-xs); color: var(--sl-color-gray-3); }
+.ps-card-n { font-weight: 600; }
+.ps-bars { margin: .5rem 0 0; display: grid; gap: .3rem; }
+.ps-bars > div { display: grid; grid-template-columns: 1fr auto; gap: 0 .5rem; align-items: center; font-size: var(--sl-text-xs); }
+.ps .ps-bars dt { color: var(--sl-color-gray-2); font-weight: 400; margin: 0; }
+.ps .ps-bars dd { margin: 0; display: contents; }
+.ps-meter { grid-column: 1 / -1; width: 100%; height: .4rem; }
+.ps-v { grid-row: 1; grid-column: 2; font-family: var(--sl-font-mono); font-variant-numeric: tabular-nums; color: var(--sl-color-white); }
+
+/* the ledger */
+.ps-wrap { overflow-x: auto; max-width: 100%; border: 1px solid var(--sl-color-gray-5); border-radius: .5rem; margin-block: 1rem; }
+.ps-wrap:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 2px; }
+.ps .ps-table { display: table; border-collapse: collapse; width: 100%; min-width: 64rem; margin: 0; font-size: var(--sl-text-sm); }
+.ps-table caption { text-align: left; padding: .5rem .6rem; font-size: var(--sl-text-xs); color: var(--sl-color-gray-3); caption-side: top; }
+.ps .ps-table th, .ps .ps-table td { padding: .35rem .5rem; border: 0; border-bottom: 1px solid var(--sl-color-gray-5); text-align: right; white-space: nowrap; vertical-align: top; }
+.ps .ps-table th:first-child { text-align: left; }
+.ps-table thead th { font-size: var(--sl-text-xs); font-weight: 500; color: var(--sl-color-gray-2); background: var(--sl-color-bg-nav); }
+.ps-table thead tr.ps-groups th { font-size: var(--sl-text-sm); font-weight: 600; color: var(--sl-color-white); text-align: center; border-bottom-width: 2px; }
+.ps .ps-table .ps-first { border-left: 1px solid var(--sl-color-gray-5); }
+.ps-table thead tr.ps-groups th + th { border-left: 1px solid var(--sl-color-gray-5); }
+.ps-num { font-family: var(--sl-font-mono); font-variant-numeric: tabular-nums; }
+.ps-zero { color: var(--sl-color-gray-4); }
+.ps-group-row > * { background: var(--sl-color-gray-6); font-weight: 600; }
+.ps-group-row th { color: var(--sl-color-white); }
+.ps-current .ps-group-row > * { background: var(--sl-color-accent-low); }
+.ps-area-row th { padding-left: 1.75rem !important; font-family: var(--sl-font-mono); font-size: var(--sl-text-xs); font-weight: 400; }
+.ps-scope { font-family: var(--sl-font-system); color: var(--sl-color-orange-high); font-size: var(--sl-text-xs); }
+.ps-table [id] { scroll-margin-top: calc(var(--sl-nav-height, 3.5rem) + 1rem); }
+
+/* open work per milestone */
+.ps-detail { border: 1px solid var(--sl-color-gray-5); border-radius: .5rem; padding: .5rem 1rem; margin-block: .5rem; }
+.ps-detail.ps-current { border-color: var(--sl-color-accent); }
+.ps-detail summary { cursor: pointer; }
+.ps-detail summary .ps-asof { display: inline; margin-left: .5rem; white-space: normal; }
+.ps .ps-chips-k { margin: .75rem 0 .25rem; font-size: var(--sl-text-sm); font-weight: 600; }
+.ps .ps-chips { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: .3rem; }
+.ps .ps-chips li { margin: 0; }
+.ps-chip { display: inline-block; padding: .05rem .6rem; border: 1px solid var(--sl-color-gray-5); border-radius: 1em; font-size: var(--sl-text-xs);
+  line-height: 1.6; color: var(--sl-color-gray-1); background: var(--sl-color-bg-nav); text-decoration: none; }
+a.ps-chip:hover { border-color: var(--sl-color-accent); color: var(--sl-color-white); }
+.ps-chip.ps-blocked { border-color: var(--sl-color-red); }
+.ps-no { font-family: var(--sl-font-mono); color: var(--sl-color-accent-high); }
+.ps-state { color: var(--sl-color-gray-3); }

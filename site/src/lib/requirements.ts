@@ -97,3 +97,25 @@ export function exportJson() {
     requirements: c.reqs.map((r) => ({ ...r, scopeOpen: c.areaByCode.get(r.area)!.scopeOpen, url: `https://sluis.id${reqPath(r)}` })),
   };
 }
+
+// The coverage figure of docs/standards/conformance.md: the share of requirements that are not
+// withdrawn, and of their MUSTs, whose verification includes an external suite or a vector set.
+// site/scripts/check-requirements.mjs computes the same figure for the page's generated block,
+// and site/scripts/check-repo-json.mjs checks that /data/repo.json and the page agree.
+export function coverage() {
+  const external = (r: Req) => hasKind(r, 'conformance-suite', 'test-vectors');
+  const live = catalogue().reqs.filter((r) => r.status !== 'withdrawn');
+  const musts = live.filter((r) => r.level === 'MUST');
+  const share = (a: number, b: number) => (b === 0 ? 0 : Number(((100 * a) / b).toFixed(1)));
+  const all = { requirements: live.length, externallyChecked: live.filter(external).length };
+  const must = { requirements: musts.length, externallyChecked: musts.filter(external).length };
+  return {
+    all: { ...all, share: share(all.externallyChecked, all.requirements) },
+    must: { ...must, share: share(must.externallyChecked, must.requirements) },
+  };
+}
+
+// A record the status page counts: not withdrawn and not a refusal kept as out of scope.
+export const counted = (r: Req) => r.status !== 'withdrawn' && r.status !== 'out-of-scope';
+// A record that something other than a person can verify: a suite, vectors or an integration test.
+export const autoVerifiable = (r: Req) => r.verification.some((v) => v.kind !== 'manual');

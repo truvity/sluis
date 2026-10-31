@@ -18,6 +18,16 @@
 //     <dialog> with an <svg> in it, which Escape closes;
 //   - on the explorer pages, the explorer script ran (the root gets `ex-js`).
 //
+// The status page and the decisions index are in the sweep too (no exception, no
+// console error), and their HTML is checked first, without the browser:
+//   - /status/ has one group per option of the project's `Product milestone` field, in
+//     the field's order, then "Not in a milestone", each with its open-work section.
+//     The options are read here as well, with GH_TOKEN or GITHUB_TOKEN; when this check
+//     cannot read them, the page must say that the project data was not available (and
+//     hold only "Not in a milestone"), or hold data-options + 1 groups.
+//   - /decisions/ lists every record in docs/decisions and not the template, each with
+//     the status its own **Status:** line gives.
+//
 // Needs Chrome or Chromium (CHROME, or google-chrome / chromium on PATH) and
 // Node 22+ (global fetch and WebSocket). No npm dependency.
 //
@@ -48,6 +58,74 @@ const REQUIRED = ['/concepts/', '/concepts/identity/', '/architecture/context/',
   '/runtimes/kubernetes/', '/integrations/connecting/'];
 // The fewest pages with a diagram the sweep may find (18 when this was written).
 const MIN_DIAGRAM_PAGES = 12;
+// Generated pages with no diagram that must still render cleanly.
+const GENERATED = ['/status/', '/decisions/'];
+const NO_MILESTONE = 'Not in a milestone';
+
+// The options of the board's milestone field, or null when no token here can read them.
+async function milestoneOptions() {
+  const query = 'query{organization(login:"truvity"){projectV2(number:9){field(name:"Product milestone"){... on ProjectV2SingleSelectField{options{name}}}}}}';
+  for (const token of [process.env.GH_TOKEN, process.env.GITHUB_TOKEN].filter(Boolean)) {
+    try {
+      const res = await fetch('https://api.github.com/graphql', {
+        method: 'POST', body: JSON.stringify({ query }), signal: AbortSignal.timeout(30000),
+        headers: { authorization: `bearer ${token}`, 'content-type': 'application/json', 'user-agent': 'sluis-check-render' },
+      });
+      const opts = (await res.json())?.data?.organization?.projectV2?.field?.options;
+      if (opts?.length) return opts.map((o) => o.name);
+    } catch { /* the next token, or none */ }
+  }
+  return null;
+}
+
+const unescape = (s) => s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+async function checkStatusHtml(dist) {
+  const problems = [];
+  const f = join(dist, 'status', 'index.html');
+  if (!existsSync(f)) return ['no status/index.html'];
+  const html = readFileSync(f, 'utf8');
+  const attrs = /data-project="(available|unavailable)" data-options="(\d+)"/.exec(html);
+  if (!attrs) return ['/status/ has no data-project and data-options'];
+  const [, state, n] = attrs;
+  const groups = [...html.matchAll(/<tbody\b[^>]*\bdata-group="([^"]*)"/g)].map((m) => unescape(m[1]));
+  const details = [...html.matchAll(/<details\b[^>]*\bdata-group="([^"]*)"/g)].map((m) => unescape(m[1]));
+  if (JSON.stringify(groups) !== JSON.stringify(details)) problems.push(`/status/: the table groups (${groups.join(' | ')}) and the open-work sections (${details.join(' | ')}) differ`);
+  const options = await milestoneOptions();
+  if (options) {
+    const want = [...options, NO_MILESTONE];
+    if (state !== 'available') problems.push('/status/: this check can read the project board, but the page was built without it');
+    if (JSON.stringify(groups) !== JSON.stringify(want)) problems.push(`/status/: groups ${groups.join(' | ')}; the field's options give ${want.join(' | ')}`);
+  } else if (state === 'unavailable') {
+    if (JSON.stringify(groups) !== JSON.stringify([NO_MILESTONE])) problems.push(`/status/: built without the board, expected only "${NO_MILESTONE}", found ${groups.join(' | ')}`);
+    if (!html.includes('Project data not available at build time')) problems.push('/status/: built without the board, but it does not say so');
+  } else if (groups.length !== Number(n) + 1 || groups.at(-1) !== NO_MILESTONE || Number(n) === 0) {
+    problems.push(`/status/: data-options ${n}, but the groups are ${groups.join(' | ')}`);
+  }
+  console.log(`check-render: /status/ groups (${state}${options ? ', options read here' : ', options not readable here'}): ${groups.join(' | ')}`);
+  return problems;
+}
+
+function checkDecisionsHtml(dist) {
+  const problems = [];
+  const f = join(dist, 'decisions', 'index.html');
+  if (!existsSync(f)) return ['no decisions/index.html'];
+  const html = readFileSync(f, 'utf8');
+  const dir = join(root, 'docs', 'decisions');
+  const want = readdirSync(dir).filter((n) => /^\d{4}-.+\.md$/.test(n) && n !== '0000-template.md').sort()
+    .map((n) => ({ id: n.replace(/\.md$/, ''), status: /^\*\*Status:\*\*\s*(.+?)\s*$/m.exec(readFileSync(join(dir, n), 'utf8'))?.[1] }));
+  if (!want.length) return ['no decision records in docs/decisions'];
+  const rows = [...html.matchAll(/<tr\b[^>]*\bdata-record="([^"]+)"[^>]*>[\s\S]*?\bdata-status="([^"]*)"/g)].map((m) => ({ id: m[1], status: unescape(m[2]) }));
+  if (html.includes('0000-template')) problems.push('/decisions/ lists the template');
+  if (rows.length !== want.length) problems.push(`/decisions/ lists ${rows.length} records, docs/decisions has ${want.length}`);
+  for (const w of want) {
+    const r = rows.find((x) => x.id === w.id);
+    if (!r) problems.push(`/decisions/ does not list ${w.id}`);
+    else if (r.status !== w.status) problems.push(`/decisions/ shows ${w.id} as "${r.status}", the record says "${w.status}"`);
+  }
+  console.log(`check-render: /decisions/ lists ${rows.length} records with their status`);
+  return problems;
+}
 
 // Every built page whose HTML holds a pre.mermaid, with how many.
 function discover(dist) {
@@ -290,7 +368,12 @@ try {
       (missing.length ? `; missing required: ${missing.join(', ')}` : ''));
     process.exit(1);
   }
-  const PAGES = [...diagramPages, ...EXPLORERS.map((path) => ({ path, explorer: true }))];
+  const htmlProblems = [...(await checkStatusHtml(dist)), ...checkDecisionsHtml(dist)];
+  if (htmlProblems.length) {
+    for (const p of htmlProblems) console.error(`check-render: FAIL ${p}`);
+    failed += htmlProblems.length;
+  }
+  const PAGES = [...diagramPages, ...EXPLORERS.map((path) => ({ path, explorer: true })), ...GENERATED.map((path) => ({ path, mermaid: 0 }))];
   const tStart = Date.now();
   chrome = await launch(findChrome());
   const target = await (await fetch(`http://127.0.0.1:${chrome.port}/json/new?about:blank`, { method: 'PUT' })).json();
@@ -310,7 +393,7 @@ try {
     }
   }
   cdp.close();
-  console.log(`check-render: ${PAGES.length} pages (${diagramPages.length} with diagrams, ${EXPLORERS.length} explorers) x ${SCHEMES.length} schemes in ${((Date.now() - tStart) / 1000).toFixed(1)} s`);
+  console.log(`check-render: ${PAGES.length} pages (${diagramPages.length} with diagrams, ${EXPLORERS.length} explorers, ${GENERATED.length} generated) x ${SCHEMES.length} schemes in ${((Date.now() - tStart) / 1000).toFixed(1)} s`);
 } finally {
   chrome?.child.kill('SIGKILL');
   server.close();

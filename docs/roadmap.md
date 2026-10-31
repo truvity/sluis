@@ -4,6 +4,8 @@ description: Where sluis is going. The roadmap is two public GitHub Project boar
 status: shipped
 ---
 
+The [project status](/status/) page shows where v2 stands, milestone by milestone: requirements, decision records and issues, grouped by the board's `Product milestone` field and rebuilt with the site.
+
 The roadmap lives in two public GitHub Projects under the `truvity` organization:
 
 - **sluis v2**: [github.com/orgs/truvity/projects/9](https://github.com/orgs/truvity/projects/9). The line built on `main`.
