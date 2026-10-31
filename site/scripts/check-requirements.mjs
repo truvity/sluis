@@ -9,8 +9,10 @@
 //   L6  a statement has exactly one RFC 2119 keyword, `level` equals its class, one sentence
 //   L7  a rationale is one sentence
 //   L8  no two statements are equal after normalising case and punctuation
-//   L10 public safety: no ticket key, e-mail address, URL outside .example, account-id-shaped number,
-//       or term of the private deny-list (PUBLIC_CONTENT_DENYLIST, see below)
+//   L10 public safety: no ticket key, e-mail address, URL outside .example, or term of the private
+//       deny-list (PUBLIC_CONTENT_DENYLIST, see below). Account-id-shaped numbers and tokens are
+//       left to tools/checks/public-content.mjs (`just check-public`), which scans every tracked
+//       file, these included, with one set of placeholders
 //   L11 every MUST has a verification
 //   L12 a MUST verified by manual review only has manual_reason; manual_reason is forbidden elsewhere
 //   L13 every cited standard is a row of standards.yaml; a Full citation has a section (warning)
@@ -48,7 +50,6 @@ const NOT_TICKET = new Set([
 ]);
 const DENY = [
   [/[\w.+-]+@[\w-]+(\.[\w-]+)+/, 'e-mail address'],
-  [/\b\d{12}\b/, 'account-id-shaped number'],
 ];
 // The private deny-list: the environment variable PUBLIC_CONTENT_DENYLIST (a repository secret)
 // holds one term per line; empty lines and lines starting with # are ignored. A term matches

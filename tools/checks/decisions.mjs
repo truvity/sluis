@@ -16,9 +16,11 @@
 //   - each header field appears once, before the first section, in the template's order;
 //     the status is an allowed value and the date a real YYYY-MM-DD day;
 //   - each section appears exactly once, in the template's order, and is not empty;
-//   - "Roads not taken" has at least one `###` option, and each option has every label, as a bullet
-//     or inline; a short qualifier before the colon is accepted ("Why not (inferred):", "Why not first:");
-//   - the template's instructions comment is gone;
+//   - "Roads not taken" has at least one `###` option, and each option has a bullet for every label
+//     (`- Pros: ...`, `- **Pros:** ...` or `- **Pros**: ...`) with text after the colon or on an
+//     indented next line. Before the colon a label may carry a qualifier in parentheses
+//     ("Why not (inferred):") or one from QUALIFIERS ("Why not first:");
+//   - no line of the template's instructions comment (<!-- ... -->) is left;
 //   - the README index has exactly one row for it, linking the file, with the same status.
 // And the index has no row without a file.
 //
@@ -61,7 +63,9 @@ function sections(text) {
 }
 
 const FIELD = /^\*\*([A-Z][A-Za-z ]*):\*\*\s*(.*?)\s*$/;
-const LABEL = /^\s*-\s+(?:\*\*)?([A-Z][A-Za-z ]*?):(?:\*\*)?(?:\s|$)/;
+const LABEL = /^\s*-\s+(?:\*\*)?([A-Z][A-Za-z ]*?)(?:\*\*)?:(?:\*\*)?(?:\s|$)/;
+// Words a label may carry before its colon, besides a parenthesised note.
+const QUALIFIERS = ['first'];
 
 // ---- the format, from the template
 if (!existsSync(join(dir, TEMPLATE))) {
@@ -80,7 +84,8 @@ for (const l of tplRoads?.body ?? []) {
   const m = LABEL.exec(l.line);
   if (m) LABELS.push(m[1]);
 }
-const tplComment = /<!--\s*\n?\s*(.+)/.exec(template)?.[1]?.trim();
+// The lines of the template's instructions comment; a record keeps none of them.
+const tplComment = (/<!--([\s\S]*?)-->/.exec(template)?.[1] ?? '').split('\n').map((l) => l.trim()).filter((l) => l.length >= 12);
 if (!FIELDS.includes('Status') || !FIELDS.includes('Date')) E(`${TEMPLATE}: no **Status:** and **Date:** fields found`);
 if (!SECTIONS.length) E(`${TEMPLATE}: no ## sections found`);
 if (!SECTIONS.includes(ROADS)) E(`${TEMPLATE}: no "## ${ROADS}" section`);
@@ -175,14 +180,20 @@ for (const rec of records.values()) {
       else if (options.length) options[options.length - 1].text += `${l.line}\n`;
     }
     if (!options.length) E(`${where}:${roads.n}: "## ${ROADS}" has no "### <option>"; every other option weighed is listed`);
+    const qual = `(?:\\s+\\([^()\\n]{1,40}\\)|${QUALIFIERS.map((q) => `\\s+${esc(q)}`).join('|')})?`;
     for (const o of options) {
+      const body = o.text.split('\n');
       for (const label of LABELS) {
-        if (!new RegExp(`(?:^|[\\s*])${esc(label)}(?: [^:\\n]{1,20})?:`, 'm').test(o.text)) E(`${where}:${o.n}: option "${o.title}" has no "${label}:"`);
+        const rx = new RegExp(`^\\s*-\\s+(?:\\*\\*)?${esc(label)}${qual}(?:\\*\\*)?:(?:\\*\\*)?(.*)$`);
+        const at = body.findIndex((l) => rx.test(l));
+        if (at < 0) { E(`${where}:${o.n}: option "${o.title}" has no "- ${label}:" bullet`); continue; }
+        const value = rx.exec(body[at])[1].trim();
+        if (!value && !/^\s+\S/.test(body[at + 1] ?? '')) E(`${where}:${o.n}: option "${o.title}" has an empty "${label}:"`);
       }
     }
   }
 
-  if (tplComment && text.includes(tplComment)) E(`${where}: still has the template's instructions comment`);
+  if (tplComment.some((l) => text.includes(l))) E(`${where}: still has a line of the template's instructions comment`);
 }
 
 // ---- the index

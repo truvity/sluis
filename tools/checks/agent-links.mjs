@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Agent wiring: every path that the agent instruction files point to exists.
 //
-// The files: AGENTS.md and CLAUDE.md at the root and anywhere git tracks them, and
-// .claude/skills/<name>/SKILL.md. A pointer is
+// The files: AGENTS.md and CLAUDE.md at the root and anywhere git tracks them,
+// .claude/skills/<name>/SKILL.md and .claude/agents/<name>.md. A pointer is
 //   - a Markdown link or reference definition with a relative target ([text](docs/x.md#part)),
 //     resolved from the file's directory, or from the root when it starts with /;
 //   - an inline code span that is a path whose first part is an entry of the repository root
@@ -30,8 +30,14 @@ if (existsSync(skills)) {
     if (d.isDirectory() && existsSync(join(skills, d.name, 'SKILL.md'))) sources.add(`.claude/skills/${d.name}/SKILL.md`);
   }
 }
+const agents = join(root, '.claude', 'agents');
+if (existsSync(agents)) {
+  for (const d of readdirSync(agents, { withFileTypes: true })) {
+    if (d.isFile() && d.name.endsWith('.md')) sources.add(`.claude/agents/${d.name}`);
+  }
+}
 if (!sources.size) {
-  console.log('check-agent-links: no AGENTS.md, CLAUDE.md or .claude/skills/*/SKILL.md yet, skipped');
+  console.log('check-agent-links: no AGENTS.md, CLAUDE.md, .claude/skills/*/SKILL.md or .claude/agents/*.md yet, skipped');
   process.exit(0);
 }
 

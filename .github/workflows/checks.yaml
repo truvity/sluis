@@ -72,21 +72,33 @@ jobs:
       - uses: truvity/ci-actions/setup-devbox@eae9926515d96296eeed99aa358d2957a89647e8 # v3.3.1
       - run: devbox run -- actionlint
 
-  # The repository rules (tools/checks/, `just check-rules`). PUBLIC_CONTENT_DENYLIST is a
-  # repository secret: the private names that must never appear here. A pull request from a
-  # fork gets no secrets, and the check then skips that part and says so.
+  # The repository rules (tools/checks/, `just check-rules`), and the same public-content scan
+  # over the commit messages and the pull request's title and body (`just check-messages`).
+  # PUBLIC_CONTENT_DENYLIST is a repository secret: the private names that must never appear
+  # here. A pull request from a fork gets no secrets, and the checks then skip that part and say
+  # so. Once the repository variable DENYLIST_REQUIRED is `true`, an empty list fails on this
+  # repository's own branches and in the merge queue.
   rules:
     name: rules (decisions, requirements, public content, file names, agent links)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      PUBLIC_CONTENT_DENYLIST: ${{ secrets.PUBLIC_CONTENT_DENYLIST }}
+      REQUIRE_DENYLIST: ${{ vars.DENYLIST_REQUIRED == 'true' && (github.event_name == 'merge_group' || github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The commit range origin/main..HEAD needs the history.
+          fetch-depth: 0
           persist-credentials: false
       - uses: truvity/ci-actions/setup-devbox@eae9926515d96296eeed99aa358d2957a89647e8 # v3.3.1
       - run: devbox run -- just check-rules
+      - name: Commit messages and the pull request text
         env:
-          PUBLIC_CONTENT_DENYLIST: ${{ secrets.PUBLIC_CONTENT_DENYLIST }}
+          BASE: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || format('origin/{0}', github.base_ref) }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: devbox run -- just check-messages
 
   # One name to require. A job that was skipped or cancelled is not a pass.
   checks:
