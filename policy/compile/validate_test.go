@@ -50,6 +50,103 @@ func TestValidateGitHubJobs(t *testing.T) {
 	}
 }
 
+func TestValidateGitHubPullRequestJobs(t *testing.T) {
+	good := compile.GitHubJob{
+		Repository: "acme/shop",
+		Ref:        "refs/pull/*/merge",
+		Events:     []string{"pull_request"},
+		Workflows: []compile.GitHubJobWorkflow{{
+			Caller: ".github/workflows/ci.yaml", Reusable: "acme/ci/.github/workflows/check.yaml",
+		}},
+	}
+
+	if errs := compile.ValidateGitHubJobs("jobs", map[string]compile.GitHubJob{"acme:shop:pr": good}); len(errs) != 0 {
+		t.Fatalf("a valid pull-request job was refused: %v", errs)
+	}
+
+	if !compile.GitHubJobIsPullRequest(good) {
+		t.Errorf("GitHubJobIsPullRequest(%s) = false", good.Ref)
+	}
+
+	if compile.GitHubJobIsPullRequest(compile.GitHubJob{Ref: "refs/heads/main"}) {
+		t.Errorf("GitHubJobIsPullRequest(refs/heads/main) = true")
+	}
+
+	cases := map[string]func(j *compile.GitHubJob){
+		"cannot run on refs/pull/*/merge":   func(j *compile.GitHubJob) { j.Events = []string{"pull_request", "push"} },
+		"is not the pull-request ref":       func(j *compile.GitHubJob) { j.Ref = "refs/pull/1/merge" },
+		"is not the pull-request ref, refs": func(j *compile.GitHubJob) { j.Ref = "refs/pull/*/head" },
+		"names ref refs/pull/*/merge":       func(j *compile.GitHubJob) { j.Ref = "refs/heads/main" },
+		"a proposed change":                 func(j *compile.GitHubJob) { j.Ref = "refs/heads/main"; j.Events = []string{"pull_request_review"} },
+	}
+
+	for want, mutate := range cases {
+		job := good
+		job.Events = append([]string(nil), good.Events...)
+		mutate(&job)
+
+		errs := compile.ValidateGitHubJobs("jobs", map[string]compile.GitHubJob{"acme:shop:pr": job})
+		if len(errs) != 1 || !strings.Contains(errs[0].Error(), want) {
+			t.Errorf("%s %v: errs = %v, want one saying %q", job.Ref, job.Events, errs, want)
+		}
+	}
+
+	matchers := compile.GitHubJobMatchers(good)
+	if len(matchers) != 1 {
+		t.Fatalf("matchers = %+v, want one", matchers)
+	}
+
+	want := compile.GitHubMatcher{
+		Repository:     "acme/shop",
+		Ref:            "refs/pull/*/merge",
+		EventName:      "pull_request",
+		WorkflowRef:    "acme/shop/.github/workflows/ci.yaml@refs/pull/*/merge",
+		JobWorkflowRef: "acme/ci/.github/workflows/check.yaml@*",
+	}
+	if matchers[0] != want {
+		t.Errorf("matcher = %+v, want %+v (no ref_type)", matchers[0], want)
+	}
+
+	branch := compile.GitHubJobMatchers(compile.GitHubJob{
+		Repository: "acme/shop", Ref: "refs/heads/main", Events: []string{"push"},
+		Workflows: []compile.GitHubJobWorkflow{{Caller: ".github/workflows/ci.yaml"}},
+	})
+	if len(branch) != 1 || branch[0].RefType != compile.GitHubRefBranch {
+		t.Errorf("branch matchers = %+v, want ref_type branch", branch)
+	}
+}
+
+func TestValidateGitHubPullRequestGrants(t *testing.T) {
+	jobs := map[string]compile.GitHubJob{
+		"acme:shop:pr": {Repository: "acme/shop", Ref: "refs/pull/*/merge", Events: []string{"pull_request"}},
+		"acme:shop:ci": {Repository: "acme/shop", Ref: "refs/heads/main", Events: []string{"push"}},
+	}
+
+	read := map[string]string{"contents": "read", "metadata": "read"}
+
+	ok := map[string][]compile.GitHubAppGrant{
+		"modules": {
+			{Group: "acme:shop:pr", Repositories: []string{"lib", "sdk"}, Permissions: read},
+			// A branch job is not this rule's business.
+			{Group: "acme:shop:ci", Repositories: []string{"*"}, Permissions: map[string]string{"contents": "write"}},
+		},
+	}
+	if errs := compile.ValidateGitHubPullRequestGrants("grants", jobs, ok); len(errs) != 0 {
+		t.Fatalf("a read-only grant of named repositories was refused: %v", errs)
+	}
+
+	for want, grant := range map[string]compile.GitHubAppGrant{
+		"contents: write is more than read": {Group: "acme:shop:pr", Repositories: []string{"lib"}, Permissions: map[string]string{"contents": "write"}},
+		`repository "*" is a pattern`:       {Group: "acme:shop:pr", Repositories: []string{"*"}, Permissions: read},
+		`repository "lib-*" is a pattern`:   {Group: "acme:shop:pr", Repositories: []string{"lib-*"}, Permissions: read},
+	} {
+		errs := compile.ValidateGitHubPullRequestGrants("grants", jobs, map[string][]compile.GitHubAppGrant{"modules": {grant}})
+		if len(errs) != 1 || !strings.Contains(errs[0].Error(), want) || !strings.HasPrefix(errs[0].Error(), "grants[modules][0] (acme:shop:pr): ") {
+			t.Errorf("errs = %v, want one saying %q", errs, want)
+		}
+	}
+}
+
 func TestGitHubAppsAndCatalog(t *testing.T) {
 	apps := []compile.GitHubApp{{
 		ID: "deployer", Org: "acme", Description: "deploys", Installation: "selected",
