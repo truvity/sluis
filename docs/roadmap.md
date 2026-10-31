@@ -1,6 +1,6 @@
 ---
 title: Roadmap
-description: Where sluis is going. The roadmap is two public GitHub Project boards, one for v2 and one for v1; this page links to both and lists the v2 technical backlog.
+description: Where sluis is going. The four product milestones of v2 in priority order, the two public GitHub Project boards for v2 and v1, the delivery order and the v2 technical backlog.
 status: shipped
 ---
 
@@ -10,6 +10,23 @@ The roadmap lives in two public GitHub Projects under the `truvity` organization
 
 - **sluis v2**: [github.com/orgs/truvity/projects/9](https://github.com/orgs/truvity/projects/9). The line built on `main`.
 - **sluis v1**: [github.com/orgs/truvity/projects/10](https://github.com/orgs/truvity/projects/10). The agreed v1 roadmap (v1.80 to v1.85) and fixes, on `master`.
+
+## Product milestones
+
+v2 is delivered in four product milestones, in this priority order. They are the options of the `Product milestone` field on the v2 board (checked 2026-10-31), and the [project status](https://sluis.id/status/) page groups requirements, decision records and issues under them. Within milestone 2, the boards, lambda and kubernetes installations are built in parallel after local ([delivery order](#delivery-order)).
+
+1. **First working version.** The minimal local installation: Docker Compose on a workstation, one container per actor, built from the published images, with the minimal drivers (embedded SQLite state, a SQLite index, a files blob, a local lock, a spool or direct transport) and software keys in CI or the host's YubiKey on a workstation ([ADR 0038](/decisions/0038-the-local-installation-is-docker-compose-with-one-container-per-actor/)). It is where the basic functionality is developed and tested, and what the integration tests run on.
+   - **Done when** the example install file for local starts under Docker Compose from the published images, and the integration tests run against it in CI.
+   - Live numbers: [project status](https://sluis.id/status/).
+2. **v1 parity.** The boards, lambda and kubernetes installations, and everything v1 does. Parity means that the workloads that use v1 today can be wired to the new sluis, possibly in a different way or with a different configuration, not that behaviour is identical ([ADR 0039](/decisions/0039-delivery-goes-local-first-then-boards-lambda-and-kubernetes-in-parallel/)).
+   - **Done when** every row of the [features page](/features/) is `Done` or `Changed` (with its decision), and the boards, lambda and kubernetes installations are built and tested ([installations](/runtimes/installations/)).
+   - Live numbers: [project status](https://sluis.id/status/).
+3. **CIAM upstream.** A customer-identity product signs in a product's customers through sluis. sluis stays a broker and does not become the customer-identity product: the CIAM product is one more OpenID Connect upstream ([OIDC upstream](/integrations/oidc-upstream/)).
+   - **Done when** the generic OIDC upstream ([#916](https://github.com/truvity/sluis/issues/916)) does claim mapping per upstream, `acr` and `amr` passthrough, step-up (RFC 9470), end-user subjects, back-channel logout and rate limits per connection.
+   - Live numbers: [project status](https://sluis.id/status/).
+4. **Quota.** `quota` as a front for installations: applications ask it to admit work before it runs, confirm or cancel the usage after, and push top-ups. It runs beside an installation or on its own ([ADR 0004](/decisions/0004-audit-is-four-pieces-joined-by-a-transport-port/), [ADR 0023](/decisions/0023-quotas-api-is-idempotent-and-its-data-follows-the-origin-model/)).
+   - **Done when** quota meters by default and enforces per policy rule for chosen subjects or audiences, a request counts once however often it is retried, and under strict enforcement the admitted total never exceeds the limit under concurrent requests (REQ-QUOTA-001 and REQ-QUOTA-002; work item [#915](https://github.com/truvity/sluis/issues/915)).
+   - Live numbers: [project status](https://sluis.id/status/).
 
 ## Goal views of the v2 board
 
