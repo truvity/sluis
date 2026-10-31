@@ -62,7 +62,7 @@ shapes:
         status: agreed
       - text: "The blob is Cloudflare R2 in the first release, through the one s3-compatible driver with credentials from the cloudflare cloud driver. R2's lock can be removed by an account administrator (lock mode removable), so the peer witnesses are what protects against a rewritten history. Garage, a store on the boards themselves, is a later backend: its spike (2026-10-31) found no conditional writes and no prefix-scoped keys, both open upstream."
         status: agreed
-      - text: "The index is rqlite, a replicated SQLite, so the reader can run on any node (ADR 0022). Its full-text support (FTS5) was verified on a three-node cluster on 2026-10-30; the board spike measures arm64 board hardware and the cost of writes on eMMC, and if it fails the boards fall back to sqlite on the indexer's node."
+      - text: "The index is rqlite, a replicated SQLite, so the reader can run on any node (ADR 0022). Its full-text support (FTS5) was verified on a three-node cluster on 2026-10-30; the board spike (S5, 2026-10-31) measured rqlite on a board at about 9 MiB per cluster and about 400 commits/s per board, limited by the CPU rather than the eMMC, but not the full-text index itself; if that fails on the boards, they fall back to sqlite on the indexer's node."
         status: agreed
       - text: "The boards run the vendor's Ubuntu 22.04 for now, as a declared exception. systemd 249 has no LoadCredentialEncrypted=, so units use plain LoadCredential=, and sluis doctor warns about kernel 5.10. Building Ubuntu 26.04 and Rocky 10.2 images is a backlog task."
         status: agreed

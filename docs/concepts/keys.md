@@ -220,9 +220,21 @@ The same rule holds for releases, with one difference: the two roots share one s
 
 Tested on 2026-10-29 with `gpg` 2.4.8, `gpgv`, `sqv` 1.5.0, apt 2.6 and 3.0, and rpm 6.0 (rpm-sequoia), using keyrings A, B and A+B. See [Release signing](/distribution/release-signing/#why-two-primaries-and-one-shared-subkey) for the results and the reasons.
 
+Tested on two cards on 2026-10-31 (spike S8, [ADR 0060](/decisions/0060-the-language-follows-the-executable/)): an ECDSA P-384 primary generated on each of two YubiKey 5 test cards (firmware 5.8.0, OpenPGP applet 3.4), one P-384 signing subkey bound under both, and signatures by the subkey and by each primary. `gpg` and `gpgv` 2.2.27, 2.2.40 and 2.4.7, `sqv` 1.1.0 and 1.3.0, apt 2.4, 2.6 and 3.0, and rpm 6.0.2 with rpm-sequoia 1.10.2 accepted every signature with certificate A, B or both. The subkey in that run was a software stand-in for a node's PIV-held S<sub>i</sub>.
+
 ### The ceremony
 
-Creating the roots, signing an intermediate and rotating a root are done in a **ceremony**: a scripted, reviewable procedure with a printed template and a hash that two people can compare, and a verification that is repeated on another machine. The `sluis pki` and `sluis ceremony` commands are a feature to plan. Their shape is not decided.
+Creating the roots, signing an intermediate and rotating a root are done in a **ceremony**: a scripted, reviewable procedure with a printed template and a hash that two people can compare, and a verification that is repeated on another machine. The `sluis pki` and `sluis ceremony` commands are a feature to plan. Their shape is not decided, apart from the card helper below. These are inputs to ADR 0032, which settles the ceremonies.
+
+The OpenPGP part of `sluis ceremony` is decided ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)): a Rust helper on `openpgp-card` and rPGP, run by the CLI from `/usr/libexec/sluis/`. Spike S8 ran it end to end on two cards on 2026-10-31. The ceremony is not built on `gpg`: neither `gpg` 2.2.27 nor 2.4.7 can bind an existing P-384 key as a signing subkey, and `gpg`'s card key generation adds encryption and authentication subkeys. The release certificate holds the primary, its user ID and the signing subkeys, and no encryption subkey.
+
+What S8 leaves open, for the maintainer to decide:
+
+- **Where the back-signature comes from** when S<sub>i</sub> lives in a node's PIV slot. `key-holder` would have to sign a primary-key binding, and that purpose is not on its list.
+- **How the binding splits when card B is held by a second person elsewhere.** One process cannot hold both cards, so the back-signatures, the binding by each card and the merge become separate steps.
+- **The helper's contract with `sluis ceremony`:** arguments and files, or JSON on its standard streams, and how the PIN reaches the helper.
+- **Attestation:** whether a ceremony requires a YubiKey OpenPGP attestation of each generated primary.
+- **A missed touch** comes back from the card after about 15 s as a generic security status, not as a touch timeout; whether the helper reports it as one.
 
 ## TPM 2.0
 

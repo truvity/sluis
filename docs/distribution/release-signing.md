@@ -122,6 +122,8 @@ Both primaries certify the same signing subkeys: each node holds **one subkey, b
 
 The choice was tested on 2026-10-29, with software keys, on these verifiers: `gpg` 2.4.8, `gpgv` 2.4.8, `sqv` 1.5.0, apt 2.6 (which verifies with `gpgv`), apt 3.0 (which verifies with `sqv`) and rpm 6.0 (which verifies with rpm-sequoia). Each was given certificate A, certificate B, and A and B together, in both import orders. All accepted the one signature every time, with no warning and no merge of the two certificates.
 
+It was tested again on 2026-10-31 with hardware (spike S8, [ADR 0060](/decisions/0060-the-language-follows-the-executable/)): each primary generated as ECDSA P-384 on its own YubiKey 5 test card (firmware 5.8.0), and one P-384 signing subkey bound under both. `gpg` and `gpgv` 2.2.27, 2.2.40 and 2.4.7, `sqv` 1.1.0 and 1.3.0, apt 2.4.14, 2.6.1 and 3.0.3, and rpm 6.0.2 with rpm-sequoia 1.10.2 accepted the subkey's signature and each primary's direct signature with certificate A, B or both, and rejected a changed file and a certificate that did not match. apt, through `gpgv` or `sqv`, and rpm-sequoia therefore accept ECDSA P-384 release signatures.
+
 What the shared subkey costs, and what to do about it:
 
 - **No threshold.** One signature counts once, not once per primary. A rule such as "both A and B must have endorsed this release" cannot be expressed with a shared subkey.
@@ -133,7 +135,8 @@ Packaging notes, from the same tests:
 
 - **`gpgv` needs a binary keyring.** It cannot read an armored file. apt takes either a binary `.gpg` or an armored `.asc` in `Signed-By`.
 - **rpm imports armored keys only.**
-- **apt's `Release.gpg` must be armored**, whatever the key structure.
+- **apt's `Release.gpg` must be armored**, whatever the key structure. A binary detached signature fails with `NODATA` (apt 2.4, checked again on 2026-10-31).
+- **No encryption subkey in the release certificate.** `gpg`'s card key generation adds an ECDH subkey with an AES-192 key wrap, and rpm-sequoia prints a policy warning about it on every install, although the signature verifies. The ceremony's helper writes only the primary, its user ID and the signing subkeys (spike S8, 2026-10-31).
 
 To check a release, a verifier needs the signature file and the certificate of either primary:
 
