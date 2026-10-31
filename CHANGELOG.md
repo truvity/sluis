@@ -1,8 +1,16 @@
 ## Unreleased
 
+## v1.80.0
+
+A minor release: a CI job identity may run on pull requests, read only (`refs/pull/*/merge`). Upgrade notes: an installation that declares job identities calls `ValidateGitHubPullRequestGrants` beside `ValidateGitHubJobs` and `ValidateGitHubAppGrants`.
+
 ### Added
 
 - **A CI job identity may run on pull requests, read only.** `policy/compile` admits a job pinned to `ref: refs/pull/*/merge` with `events: [pull_request]`: its matchers pin the repository, the merge ref, the event and the workflow files, without `ref_type`. A pull request runs the files it proposes, so the new `ValidateGitHubPullRequestGrants` refuses a grant to such a job of any permission above `read`, or of a repository pattern (`*`, `lib-*`): the job reads a short list of named repositories, such as the private modules a build downloads. `pull_request` on a branch or tag ref, and the other `pull_request_*` events, stay refused; `pull_request_target` is unchanged. `GitHubJobIsPullRequest` says whether a job is one. **Upgrade:** an installation that declares job identities calls `ValidateGitHubPullRequestGrants` beside `ValidateGitHubJobs` and `ValidateGitHubAppGrants`.
+
+### Fixed
+
+- **`hack/test-release-gate.sh` no longer commits into the real repository when run from a pre-push hook.** The hook's `GIT_DIR` overrode `git -C`, so the test's commits landed in the repository being pushed. The script now unsets git's repository variables.
 
 ## v1.79.4
 
