@@ -278,7 +278,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-62, section: "4.1.2.2", depth: Partial}
-    features: ["design"]
     issues: [835]
     verification:
       - {kind: integration-test, ref: "restore-without-ledger test"}
@@ -454,7 +453,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-95, section: "age", depth: Partial}
-    features: ["design"]
     issues: [914, 835]
     gap: proposed-design
     verification:
@@ -482,7 +480,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["design"]
     issues: [834, 864]
     verification:
       - {kind: integration-test, ref: "generated backup list test"}

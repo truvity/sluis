@@ -12,7 +12,6 @@ requirements:
     runtimes: ["bare-metal", "serverless", "kubernetes"]
     standards:
       - {id: ST-62, section: "5280", depth: Full}
-    features: ["design"]
     issues: [913]
     verification:
       - {kind: integration-test, ref: "lifetime-ceiling test"}
@@ -27,7 +26,6 @@ requirements:
     standards:
       - {id: ST-62, section: "4.1.2.2", depth: Full}
       - {id: ST-106, section: "test plan", depth: Full}
-    features: ["design"]
     issues: [913]
     verification:
       - {kind: test-vectors, ref: "x509-limbo"}
@@ -43,7 +41,6 @@ requirements:
     standards:
       - {id: ST-62, section: "4", depth: Full}
       - {id: ST-106, section: "test plan", depth: Full}
-    features: ["design"]
     issues: [913]
     verification:
       - {kind: test-vectors, ref: "x509-limbo"}
@@ -59,7 +56,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-62, section: "4", depth: Full}
-    features: ["design"]
     issues: [913]
     verification:
       - {kind: integration-test, ref: "CN-less request test"}
@@ -74,7 +70,6 @@ requirements:
     standards:
       - {id: ST-62, section: "5280", depth: Full}
       - {id: NC-10, section: "PIV", depth: Full}
-    features: ["design"]
     issues: [914]
     verification:
       - {kind: manual, ref: "ceremony record"}
@@ -91,7 +86,6 @@ requirements:
     standards:
       - {id: ST-62, section: "5280", depth: Full}
       - {id: NC-10, section: "PIV", depth: Full}
-    features: ["design"]
     issues: [914]
     manual_reason: "Independence of the roots is evidenced by the ceremony record and the token attestations."
     verification:
@@ -108,7 +102,6 @@ requirements:
     standards:
       - {id: ST-62, section: "5280", depth: Full}
       - {id: NC-10, section: "PIV", depth: Full}
-    features: ["design"]
     issues: [914]
     verification:
       - {kind: integration-test, ref: "attestation distinctness test"}
@@ -124,7 +117,6 @@ requirements:
     standards:
       - {id: ST-62, section: "5280", depth: Full}
       - {id: NC-10, section: "PIV", depth: Full}
-    features: ["design"]
     issues: [914]
     verification:
       - {kind: integration-test, ref: "either-root chain test"}
@@ -140,7 +132,6 @@ requirements:
     standards:
       - {id: ST-62, section: "5280", depth: Full}
       - {id: NC-10, section: "PIV", depth: Full}
-    features: ["design"]
     issues: [914, 968]
     verification:
       - {kind: integration-test, ref: "trust-bundle content test"}
@@ -154,7 +145,6 @@ requirements:
     runtimes: ["bare-metal"]
     standards:
       - {id: NC-10, section: "PIV", depth: Full}
-    features: ["design"]
     issues: [914]
     manual_reason: "The environment of a root ceremony is a human procedure that only a checklist can evidence."
     verification:
@@ -170,7 +160,6 @@ requirements:
     runtimes: ["bare-metal"]
     standards:
       - {id: NC-10, section: "PIV", depth: Full}
-    features: ["design"]
     issues: [914]
     verification:
       - {kind: manual, ref: "ceremony checklist"}
@@ -186,7 +175,6 @@ requirements:
     standards:
       - {id: ST-62, section: "4", depth: Partial}
       - {id: ST-78, section: "RFC 8785", depth: Partial}
-    features: ["design"]
     issues: [914]
     verification:
       - {kind: integration-test, ref: "dry-run ceremony with a throwaway root"}
@@ -202,7 +190,6 @@ requirements:
     standards:
       - {id: ST-62, section: "4", depth: Partial}
       - {id: ST-78, section: "RFC 8785", depth: Partial}
-    features: ["design"]
     issues: [914]
     verification:
       - {kind: integration-test, ref: "wrong-hash dry-run test"}
@@ -218,7 +205,6 @@ requirements:
     standards:
       - {id: ST-62, section: "4", depth: Partial}
       - {id: ST-78, section: "RFC 8785", depth: Partial}
-    features: ["design"]
     issues: [914]
     verification:
       - {kind: integration-test, ref: "record chain and secret scan test"}
@@ -292,7 +278,6 @@ requirements:
     standards:
       - {id: ST-62, section: "5280", depth: Full}
       - {id: NC-10, section: "PIV", depth: Partial}
-    features: ["design"]
     issues: [914, 913]
     verification:
       - {kind: integration-test, ref: "two-chain verification test"}
@@ -307,7 +292,6 @@ requirements:
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-62, section: "5280", depth: Full}
-    features: ["design"]
     issues: [914]
     verification:
       - {kind: integration-test, ref: "single-root chain verification test"}
@@ -321,7 +305,6 @@ requirements:
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-62, section: "5280", depth: Partial}
-    features: ["design"]
     issues: [968, 914]
     verification:
       - {kind: integration-test, ref: "trust-bundle removal test"}
@@ -336,7 +319,6 @@ requirements:
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: NC-10, section: "PIV", depth: Full}
-    features: ["design"]
     issues: [914]
     manual_reason: "A runbook step is exercised in a drill by people."
     verification:
@@ -351,7 +333,6 @@ requirements:
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-62, section: "5280", depth: Partial}
-    features: ["design"]
     issues: [914, 913]
     verification:
       - {kind: manual, ref: "runbook drill"}
@@ -366,7 +347,6 @@ requirements:
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-62, section: "5280", depth: Partial}
-    features: ["design"]
     issues: [914]
     verification:
       - {kind: integration-test, ref: "cross-signature chain test"}
@@ -380,7 +360,6 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-10, section: "PIV", depth: Partial}
-    features: ["design"]
     issues: [914]
     manual_reason: "A statement in the documentation is checked by reading it."
     verification:

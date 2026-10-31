@@ -401,7 +401,6 @@ requirements:
     standards:
       - {id: ST-16, section: "2", depth: Full}
       - {id: ST-37, section: "5", depth: Partial}
-    features: ["design"]
     issues: [912]
     verification:
       - {kind: conformance-suite, ref: "FAPI2-SP"}
@@ -418,7 +417,6 @@ requirements:
     standards:
       - {id: ST-16, section: "2", depth: Full}
       - {id: ST-37, section: "5", depth: Partial}
-    features: ["design"]
     issues: [912]
     verification:
       - {kind: integration-test, ref: "foreign-client test"}
@@ -434,7 +432,6 @@ requirements:
     standards:
       - {id: ST-16, section: "2", depth: Full}
       - {id: ST-37, section: "5", depth: Partial}
-    features: ["design"]
     issues: [912]
     verification:
       - {kind: integration-test, ref: "expiry test"}
@@ -450,7 +447,6 @@ requirements:
     standards:
       - {id: ST-16, section: "2", depth: Full}
       - {id: ST-37, section: "5", depth: Partial}
-    features: ["design"]
     issues: [912]
     verification:
       - {kind: conformance-suite, ref: "FAPI2-SP"}
@@ -783,7 +779,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-59, section: "1", depth: Partial}
-    features: ["design"]
     issues: [916, 1023]
     verification:
       - {kind: integration-test, ref: "password submission refusal test"}
@@ -798,7 +793,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-59, section: "1", depth: Partial}
-    features: ["design"]
     issues: [916, 1023]
     verification:
       - {kind: integration-test, ref: "storage scan"}
@@ -813,7 +807,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-59, section: "1", depth: Partial}
-    features: ["design"]
     issues: [916, 1023]
     verification:
       - {kind: integration-test, ref: "page scan"}

@@ -160,7 +160,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["design"]
     issues: [796]
     verification:
       - {kind: integration-test, ref: "rate-limit test"}
@@ -175,7 +174,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["design"]
     issues: [796]
     verification:
       - {kind: integration-test, ref: "no-global-lockout test"}
@@ -189,7 +187,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-49, section: "7515", depth: Partial}
-    features: ["design"]
     issues: [796, 958]
     verification:
       - {kind: integration-test, ref: "fuzz corpus in CI"}
@@ -203,7 +200,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-88, section: "1", depth: Partial}
-    features: ["design"]
+    issues: [1039]
     verification:
       - {kind: manual, ref: "dependency lint"}
       - {kind: integration-test, ref: "vulnerability scan"}
@@ -218,7 +215,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-88, section: "1", depth: Partial}
-    features: ["design"]
+    issues: [1039]
     manual_reason: "The rule constrains the source tree and its dependencies; a reviewer confirms the dependency lint."
     verification:
       - {kind: manual, ref: "dependency lint"}
@@ -232,7 +229,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["design"]
+    issues: [1040]
     manual_reason: "The rule governs the review process and is evidenced by review records."
     verification:
       - {kind: manual, ref: "review evidence"}
@@ -247,7 +244,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["design"]
+    issues: [1040]
     manual_reason: "The rule governs who writes tests and is evidenced by review records."
     verification:
       - {kind: manual, ref: "review evidence"}
@@ -261,7 +258,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["design"]
     issues: [958, 960]
     verification:
       - {kind: integration-test, ref: "404 on public listener"}
@@ -276,7 +272,6 @@ requirements:
     standards:
       - {id: ST-52, section: "7", depth: Full}
       - {id: ST-56, section: "3", depth: Full}
-    features: ["design"]
     issues: [962]
     verification:
       - {kind: integration-test, ref: "cross-installation negative test"}

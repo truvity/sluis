@@ -66,7 +66,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-98, section: "OTLP", depth: Partial}
-    features: ["design"]
     issues: [836]
     verification:
       - {kind: integration-test, ref: "allow-list test"}
@@ -81,7 +80,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-98, section: "OTLP", depth: Partial}
-    features: ["design"]
     issues: [836]
     verification:
       - {kind: integration-test, ref: "redaction test"}
@@ -135,7 +133,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-98, section: "OTLP", depth: Partial}
-    features: ["design"]
     issues: [836]
     verification:
       - {kind: integration-test, ref: "free-text redaction test"}
@@ -149,7 +146,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-98, section: "OTLP", depth: Partial}
-    features: ["design"]
     issues: [836, 864]
     verification:
       - {kind: integration-test, ref: "generated allowlist test"}
