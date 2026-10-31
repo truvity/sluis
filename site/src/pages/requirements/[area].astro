@@ -35,6 +35,7 @@ const next = c.areas[index + 1];
     {' '}{n((r) => r.status === 'partial')} partial, {n((r) => r.status === 'open')} open.
     Source: <a href={`${SOURCE}${area.file}`}><code>docs/requirements/{area.file}</code></a>.
     A clause cut from a longer record sits under it and says "Split from".
+    An accent-coloured <code>#N</code> chip links an issue that delivers the record.
   </p>
   <ReqTable reqs={area.reqs} detail />
   <nav class="rq-pager" aria-label="Areas">

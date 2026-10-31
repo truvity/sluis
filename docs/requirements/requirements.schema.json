@@ -63,6 +63,7 @@
           "items": { "type": "string", "pattern": "^(design|parity|#[0-9]{3})$" }
         },
         "decisions": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^OD-[0-9]+$" } },
+        "issues": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "integer", "minimum": 1 }, "description": "Numbers of the truvity/sluis issues that deliver the record. The Product milestone of these issues places the record on the status page." },
         "verification": { "type": "array", "items": { "$ref": "#/$defs/verificationRef" } },
         "gap": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "description": "Key into catalogue.gaps. Required for an open or partial record that names no decision." },
         "manual_reason": { "type": "string", "minLength": 12, "maxLength": 300, "description": "Required for a MUST whose verification is manual only." },

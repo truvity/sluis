@@ -50,6 +50,7 @@ An id is `REQ-<AREA>-<nnn>`, for example `REQ-AUTHN-002`.
 | `standards` | `{id, section, depth}`: an id from `standards.yaml`, the section, and `Full` or `Partial`. |
 | `features` | `#nnn` issue numbers, `parity` (no single issue) or `design` (specified, no issue yet). |
 | `decisions` | Open-decision ids `OD-nn`, rows of [open decisions](../open-decisions.md). |
+| `issues` | Optional: the numbers of the truvity/sluis issues that deliver the record, for example `[915]`. Unique positive integers, at least one when present. The issues' Product milestone places the record on the status page. |
 | `verification` | `{kind, ref}`; `kind` is `conformance-suite`, `test-vectors`, `integration-test` or `manual`. Every MUST needs at least one. |
 | `gap` | For an `open` or `partial` record that names no decision: a key of `gaps` in `index.yaml`. |
 | `manual_reason` | Required for a MUST verified by manual review only; forbidden otherwise. |
@@ -75,6 +76,6 @@ and the `planned` MUST records that no test names (a gap).
    and how it is verified. A MUST needs a verification.
 4. Set the status honestly. An `open` or `partial` record names the open decision it waits for, or a `gap` key.
 5. Keep it public. No names of people or companies, no tickets, no addresses, no mention of any private infrastructure; the lint scans for them.
-6. Run `just site-lint`, then `just site-check`. The pages and `requirements.json` are generated, never committed.
+6. Run `devbox run -- just check`. The pages and `requirements.json` are generated, never committed.
 
 To add an area, declare it in `index.yaml` (`areas`), create `<area>.yaml` with `schema: 1`, `area` and `requirements`, and keep the file name equal to the lower-case code.

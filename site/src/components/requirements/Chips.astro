@@ -1,9 +1,9 @@
 ---
 // The traceability of one record as small chips: standards (linked to the specification),
-// features (GitHub issues), decisions (/open-decisions/) and the gap key.
-import { catalogue, featureUrl, odPath, type Req } from '../../lib/requirements';
+// features (GitHub issues), the issues that deliver it, decisions (/open-decisions/) and the gap key.
+import { catalogue, featureUrl, issueUrl, odPath, type Req } from '../../lib/requirements';
 
-interface Props { req: Req; only?: 'standards' | 'features' | 'decisions' }
+interface Props { req: Req; only?: 'standards' | 'features' | 'issues' | 'decisions' }
 const { req, only } = Astro.props;
 const c = catalogue();
 const show = (k: string) => !only || only === k;
@@ -22,5 +22,6 @@ const show = (k: string) => !only || only === k;
   const title = f === 'parity' ? 'Part of v1 parity; no single issue.' : f === 'design' ? 'Specified; no issue yet.' : `Issue ${f}`;
   return url ? <a class="rq-chip rq-feature" href={url} title={title}>{f}</a> : <span class="rq-chip rq-feature" title={title}>{f}</span>;
 })}
+{show('issues') && (req.issues ?? []).map((n) => <a class="rq-chip rq-issue" href={issueUrl(n)} title={`Delivered by issue #${n}`}>#{n}</a>)}
 {show('decisions') && (req.decisions ?? []).map((d) => <a class="rq-chip rq-decision" href={odPath(d)} title="Open decision">{d}</a>)}
 {show('decisions') && req.gap && <span class="rq-chip rq-gap" title={c.gaps[req.gap]}>{req.gap}</span>}

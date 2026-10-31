@@ -26,6 +26,7 @@ a.rq-chip:hover { border-color: var(--sl-color-accent); color: var(--sl-color-wh
 .rq-status-out-of-scope, .rq-status-withdrawn { border-style: dashed; }
 .rq-scope-badge { border-color: var(--sl-color-orange); color: var(--sl-color-orange-high); background: var(--sl-color-orange-low); font-weight: 600; }
 .rq-depth-partial { border-style: dashed; }
+.rq-issue { border-color: var(--sl-color-accent); color: var(--sl-color-accent-high); }
 .rq-decision { border-color: var(--sl-color-red); color: var(--sl-color-red-high); }
 .rq-gap { border-color: var(--sl-color-orange); color: var(--sl-color-orange-high); }
 .rq-none, .rq-note, .rq-why { color: var(--sl-color-gray-3); font-size: var(--sl-text-xs); }

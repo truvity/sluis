@@ -20,6 +20,8 @@
 //   L15 an open or partial record names an open decision or a declared gap key; gap is allowed on no other status
 //   L16 a standard that no requirement cites (warning)
 //   L17 an out-of-scope record is a MUST NOT or a MAY and has a verification
+//   ISS a planned or partial record links the issues that deliver it (one warning with the count;
+//       the summary line gives the count per area). The schema checks the numbers themselves.
 //   OD  every decision id is a row of docs/open-decisions.md
 //   COV the coverage figures on docs/standards/conformance.md equal the catalogue: the share of
 //       requirements (not withdrawn), and of MUSTs, whose verification includes an external suite
@@ -69,6 +71,7 @@ const errors = [];
 const warnings = [];
 const E = (m) => errors.push(m);
 const W = (m) => warnings.push(m);
+const unlinkedByArea = new Map(); // ISS: area -> planned or partial records without issues
 
 const load = (name) => parse(readFileSync(join(dir, name), 'utf8'));
 const schema = JSON.parse(readFileSync(join(dir, 'requirements.schema.json'), 'utf8'));
@@ -91,6 +94,9 @@ function validate(node, value, path, out) {
   if (node.type) {
     const ok = node.type === 'integer' ? Number.isInteger(value) : node.type === type;
     if (!ok) return out.push(`${path}: expected ${node.type}, got ${type}`);
+  }
+  if (type === 'number') {
+    if (node.minimum !== undefined && value < node.minimum) out.push(`${path}: less than ${node.minimum}`);
   }
   if (type === 'string') {
     if (node.minLength !== undefined && value.length < node.minLength) out.push(`${path}: shorter than ${node.minLength} characters`);
@@ -258,6 +264,11 @@ for (const s of standardsDoc.standards) {
   if (!cited.has(s.id) && s.register) W(`L16 standard ${s.id} (${s.name}) is a register row that no requirement cites`);
 }
 
+// ISS: one warning for the whole catalogue, not one per record, while the links are filled in.
+const unlinked = reqs.filter((r) => (r.status === 'planned' || r.status === 'partial') && !r.issues?.length);
+for (const r of unlinked) unlinkedByArea.set(r.area, (unlinkedByArea.get(r.area) ?? 0) + 1);
+if (unlinked.length) W(`ISS ${unlinked.length} planned or partial requirements link no delivering issue (issues)`);
+
 // COV
 const coverage = computeCoverage(reqs);
 checkCoverage(coverage);
@@ -302,17 +313,18 @@ function checkCoverage(c) {
 }
 
 function finish(n) {
+  const perArea = unlinkedByArea.size === 0 ? '' : `; without issues: ${[...unlinkedByArea].map(([a, k]) => `${a} ${k}`).join(', ')}`;
   for (const m of warnings) console.warn(`warning: ${m}`);
   for (const m of errors) console.error(`error: ${m}`);
   const rel = relative(root, dir);
   if (errors.length || (strict && warnings.length)) {
-    console.error(`check-requirements: ${errors.length} errors, ${warnings.length} warnings in ${rel}`);
+    console.error(`check-requirements: ${errors.length} errors, ${warnings.length} warnings in ${rel}${perArea}`);
     process.exit(1);
   }
   if (n === 0) {
     console.error('check-requirements: no requirement was checked; an empty sweep proves nothing');
     process.exit(1);
   }
-  console.log(`check-requirements: ${n} requirements in ${files.size - 1} areas, ${warnings.length} warnings, no errors`);
+  console.log(`check-requirements: ${n} requirements in ${files.size - 1} areas, ${warnings.length} warnings, no errors${perArea}`);
   process.exit(0);
 }
