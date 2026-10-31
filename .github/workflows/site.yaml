@@ -68,8 +68,30 @@ jobs:
           lfs: true
           persist-credentials: false
       - uses: truvity/ci-actions/setup-devbox@eae9926515d96296eeed99aa358d2957a89647e8 # v3.3.1
+      # The status page reads the org project, which the GITHUB_TOKEN cannot. The
+      # read-only sluis-status App mints a short-lived token for the build only.
+      - name: Token to read the project
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.SLUIS_STATUS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.SLUIS_STATUS_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: read
+          permission-organization-projects: read
       - name: Build the site (strict)
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: devbox run -- just site-build
+      # The build falls back to a page without project data when the token cannot
+      # read the project; a published build must not.
+      - name: The status page has the project data
+        run: |
+          if grep -q "Project data not available" site/dist/status/index.html; then
+            echo "::error::the build could not read the project; see the Build step's log"
+            exit 1
+          fi
       - name: Render the pages in headless Chrome
         run: devbox run -- just site-render
       - name: Build v1 into /v1/
