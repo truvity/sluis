@@ -57,6 +57,19 @@ How the site is hosted is decided in [ADR 0063](/decisions/0063-the-site-is-stat
 - The adapter and Wrangler are pinned at releases at least two weeks old (`@astrojs/cloudflare` 14.4.0, `wrangler` 4.151.0). The adapter's Vite plugin is pinned to 1.64.0 in `resolutions` so that it brings that Wrangler and no newer one, and `.yarnrc.yml` adds the `prismjs` package that the adapter imports without declaring, and five packages that Starlight asks Vite to pre-bundle through the wrong owner (without them a cold build warns, and the strict build fails). Drop them when an upgrade makes them unnecessary.
 - `site/public/_headers` holds the Content-Security-Policy and the other security headers. Inline scripts are listed by hash, and `site/scripts/check-csp.mjs` (run by `check-built.sh`) fails when a page runs one that is not listed, or a listed one is gone, and prints the hashes to paste. Two exceptions are written in the file: `style-src` keeps `'unsafe-inline'` for the style attributes of Starlight and Mermaid, and `/v1/*` has its own policy with inline scripts, because MkDocs Material emits a different one on almost every page.
 - `site/scripts/cf-build.sh` is the Workers Builds build command. It fetches Git LFS objects and the newest stable v1 tag, builds the site for the Worker, builds `/v1/` with `build-v1.sh`, and runs `check-built.sh`, so the output equals what `site.yaml` publishes.
+- The operator connects Workers Builds to this repository, on the `sluis-site` Worker. A maintainer who checks the deploy looks for these settings, which the build relies on (verified against `wrangler.jsonc`, `cf-build.sh` and `src/cloudflare-kv-id.mjs`, 2026-10-31):
+
+  | Setting | Value |
+  |---|---|
+  | Repository | This repository, connected to Workers Builds |
+  | Production branch | `main`. Builds for non-production branches are off, so there is no build per pull request |
+  | Root directory | `site` |
+  | Build command | `scripts/cf-build.sh`, not `yarn build`: it fetches the Git LFS files, builds the v1 documentation under `/v1/` and writes `build.json` with the commit |
+  | Deploy command | `npx wrangler deploy` |
+  | Build variable | `SLUIS_STATUS_KV_ID`, the id of the KV namespace for the `STATUS` binding. It lives only in the operator's Cloudflare account and is never committed |
+  | Build watch paths | None, because a change under `docs/` must build too |
+
+  A build starts on a push to `main`. Connecting the repository or changing a setting does not build the commit that is already there; the next push does. `workers_dev` and `preview_urls` stay `false` in `site/wrangler.jsonc`.
 - Security headers and redirects are files in the repository, and the Worker, its KV namespace and the custom domain are declared in the operator's own infrastructure code, outside it. The repository's CI holds no Cloudflare credential, and neither does `just site-workers`.
 
 ## Commands from an agent shell
