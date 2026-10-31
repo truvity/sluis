@@ -182,12 +182,11 @@ requirements:
     rationale: "Home-realm routing for the wrong domain is an account-takeover path."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "3", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [927]
     verification:
       - {kind: integration-test, ref: "domain verification test"}
   - id: REQ-FED-007
@@ -265,12 +264,11 @@ requirements:
     rationale: "Social sign-in carries no assurance sluis has verified."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [916]
     verification:
       - {kind: integration-test, ref: "first-factor-only test"}
   - id: REQ-FED-020
@@ -280,11 +278,10 @@ requirements:
     rationale: "Social sign-in carries no assurance sluis has verified."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [916]
     verification:
       - {kind: integration-test, ref: "further-factor test"}

@@ -8,12 +8,12 @@ requirements:
     rationale: "Hosting accounts is a product decision."
     level: MAY
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "account hosting switch test"}
   - id: REQ-CIAM-010
@@ -23,12 +23,12 @@ requirements:
     rationale: "Hosting accounts is a product decision."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "schema closure test"}
   - id: REQ-CIAM-011
@@ -38,12 +38,12 @@ requirements:
     rationale: "Hosting accounts is a product decision."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "state machine tests"}
   - id: REQ-CIAM-002
@@ -52,12 +52,12 @@ requirements:
     rationale: "Consent for account creation belongs to the person."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "negative test"}
   - id: REQ-CIAM-003
@@ -112,13 +112,12 @@ requirements:
     rationale: "Fast revocation is the control."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-01, section: "6", depth: Full}
       - {id: ST-11, section: "2", depth: Full}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [794]
     verification:
       - {kind: integration-test, ref: "consent re-check test"}
   - id: REQ-CIAM-013
@@ -128,13 +127,12 @@ requirements:
     rationale: "Fast revocation is the control."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-01, section: "6", depth: Full}
       - {id: ST-11, section: "2", depth: Full}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [794]
     verification:
       - {kind: integration-test, ref: "consent revocation test"}
   - id: REQ-CIAM-006
@@ -158,12 +156,12 @@ requirements:
     rationale: "A recovery path must not be the weakest path."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-59, section: "1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "recovery code storage scan"}
   - id: REQ-CIAM-014
@@ -173,12 +171,12 @@ requirements:
     rationale: "A recovery path must not be the weakest path."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-59, section: "1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "recovery cool-down tests"}
   - id: REQ-CIAM-008
@@ -187,12 +185,11 @@ requirements:
     rationale: "Resets are account-takeover paths."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-59, section: "1", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1023]
     verification:
       - {kind: integration-test, ref: "route list negative test"}
   - id: REQ-CIAM-015
@@ -202,12 +199,11 @@ requirements:
     rationale: "Resets are account-takeover paths."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-59, section: "1", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1023]
     verification:
       - {kind: integration-test, ref: "route list negative test"}
   - id: REQ-CIAM-016
@@ -217,12 +213,11 @@ requirements:
     rationale: "Resets are account-takeover paths."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-59, section: "1", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1023]
     verification:
       - {kind: integration-test, ref: "administrative catalogue negative test"}
   - id: REQ-CIAM-009
@@ -239,3 +234,16 @@ requirements:
     manual_reason: "A statement of the product boundary is checked by reading the documentation."
     verification:
       - {kind: manual, ref: "documentation review"}
+  - id: REQ-CIAM-017
+    area: CIAM
+    statement: "sluis MUST NOT host end-user accounts or store end-user passwords, except for the operator break-glass recovery credentials decided in ADR 0027."
+    rationale: "A boundary for a regulated entity holds no store of that entity's end-user accounts (ADR 0009), and a customer-identity product plugs in as an upstream."
+    level: MUST
+    source: design-decision
+    status: out-of-scope
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "5", depth: Partial}
+    issues: [1023, 1000]
+    verification:
+      - {kind: integration-test, ref: "administrative catalogue and storage schema negative test: no account record and no end-user password store"}

@@ -34,12 +34,11 @@ requirements:
     rationale: "A stored password defeats short-lived credentials."
     level: MUST
     source: design-decision
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["design"]
-    gap: proposed-design
     manual_reason: "Absence of stored passwords is established by a review of every storage location, which no black-box test can cover."
+    issues: [926]
     verification:
       - {kind: manual, ref: "storage scan"}

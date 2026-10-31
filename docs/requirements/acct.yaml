@@ -8,12 +8,12 @@ requirements:
     rationale: "A registry of authentication facts keeps identity-verification results and product data out of the account store."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "schema scan for forbidden fields"}
   - id: REQ-ACCT-002
@@ -22,12 +22,12 @@ requirements:
     rationale: "A random identifier reveals nothing and cannot be guessed."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "identifier entropy and immutability test"}
   - id: REQ-ACCT-003
@@ -36,12 +36,12 @@ requirements:
     rationale: "Closed decoding stops attributes from creeping in."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "unknown-field decoder test"}
   - id: REQ-ACCT-004
@@ -50,12 +50,12 @@ requirements:
     rationale: "Two accounts for one mailbox would split a person's identity."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "uniqueness test"}
   - id: REQ-ACCT-005
@@ -64,12 +64,12 @@ requirements:
     rationale: "A race must not create duplicates."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "concurrent registration test"}
   - id: REQ-ACCT-006
@@ -78,12 +78,12 @@ requirements:
     rationale: "Case variants name the same mailbox in practice."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "case-variant registration test"}
   - id: REQ-ACCT-007
@@ -92,12 +92,12 @@ requirements:
     rationale: "The organisation, not the mailbox, vouches for a corporate identity."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "corporate e-mail display-only test"}
   - id: REQ-ACCT-008
@@ -106,12 +106,12 @@ requirements:
     rationale: "Two corporate accounts of different organisations may share an address."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "non-unique corporate e-mail test"}
   - id: REQ-ACCT-009
@@ -120,12 +120,12 @@ requirements:
     rationale: "Storage keys leak into logs and backups."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "storage key scan"}
   - id: REQ-ACCT-010
@@ -134,12 +134,12 @@ requirements:
     rationale: "Without transactions a crash must leave a repairable state."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "crash-between-steps recovery test"}
   - id: REQ-ACCT-011
@@ -190,12 +190,12 @@ requirements:
     rationale: "Resource servers gate products by class."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "class vocabulary test"}
   - id: REQ-ACCT-015
@@ -204,12 +204,12 @@ requirements:
     rationale: "The creating path is the evidence for the class."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "class by creating path test"}
   - id: REQ-ACCT-016
@@ -218,12 +218,12 @@ requirements:
     rationale: "A silent class change would move a person between product audiences."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "class change authorisation test"}
   - id: REQ-ACCT-017
@@ -232,12 +232,12 @@ requirements:
     rationale: "Minimal disclosure applies to the class claim too."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5.4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "class claim release test"}
   - id: REQ-ACCT-018
@@ -246,12 +246,12 @@ requirements:
     rationale: "An employer identity provider must never become a way into a personal account."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-59, section: "1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "corporate passkey enrolment refusal test"}
   - id: REQ-ACCT-019
@@ -260,12 +260,12 @@ requirements:
     rationale: "Recovery of a corporate account belongs to its organisation."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-59, section: "1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "corporate recovery code refusal test"}
   - id: REQ-ACCT-020
@@ -274,12 +274,12 @@ requirements:
     rationale: "A sign-in through another connection would be an account-linking attack."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "3", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "unlinked connection refusal test"}
   - id: REQ-ACCT-021
@@ -288,12 +288,12 @@ requirements:
     rationale: "A closed list of creation paths makes consent auditable."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "creation path inventory test"}
   - id: REQ-ACCT-022
@@ -302,12 +302,12 @@ requirements:
     rationale: "Consent to the terms and the first factor must come from the person."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "administrative catalogue scan"}
   - id: REQ-ACCT-023
@@ -316,12 +316,12 @@ requirements:
     rationale: "One boundary keeps the credential store from leaking into the hub."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "import-boundary test"}
   - id: REQ-ACCT-024
@@ -330,12 +330,12 @@ requirements:
     rationale: "The credential boundary must not be able to build a person-to-entity graph."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "request payload inspection test"}
   - id: REQ-ACCT-025
@@ -344,12 +344,12 @@ requirements:
     rationale: "Standing is needed on every request and must stay out of storage."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "standing response scan"}
   - id: REQ-ACCT-026
@@ -358,12 +358,12 @@ requirements:
     rationale: "The hub keeps personal data only in request memory."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "storage scan for personal data"}
   - id: REQ-ACCT-027
@@ -372,12 +372,12 @@ requirements:
     rationale: "A short cache keeps degraded operation possible."
     level: MAY
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "hold window outage test"}
   - id: REQ-ACCT-028
@@ -386,12 +386,12 @@ requirements:
     rationale: "A cached standing must not become a personal-data store."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "held record scan"}
   - id: REQ-ACCT-029
@@ -414,12 +414,12 @@ requirements:
     rationale: "Containment must be complete when the operator is told it is done."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-31, section: "2.4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "disable broadcast ordering test"}
   - id: REQ-ACCT-031
@@ -428,12 +428,12 @@ requirements:
     rationale: "Degraded operation keeps signed-in people working."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-01, section: "6", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "accounts-down refresh test"}
   - id: REQ-ACCT-032
@@ -442,12 +442,12 @@ requirements:
     rationale: "The profile cannot be read, so it must not be invented or cached."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5.4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "accounts-down ID token claim test"}
   - id: REQ-ACCT-033
@@ -456,12 +456,12 @@ requirements:
     rationale: "An unknown standing cannot be assumed live."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "accounts-down unknown-account test"}
   - id: REQ-ACCT-034
@@ -498,12 +498,12 @@ requirements:
     rationale: "A context must not sign in an account the hub has disabled."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "disabled context leg test"}
   - id: REQ-ACCT-037
@@ -540,12 +540,12 @@ requirements:
     rationale: "A context learns of a disable only through the logout broadcast."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-31, section: "2.4", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "context session end test"}
   - id: REQ-ACCT-040
@@ -554,12 +554,12 @@ requirements:
     rationale: "The bound makes disable measurable."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-31, section: "2.4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "context refresh timing test"}
   - id: REQ-ACCT-041
@@ -568,12 +568,12 @@ requirements:
     rationale: "One assertion format serves every factor source."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-49, section: "7515", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "assertion per ceremony test"}
   - id: REQ-ACCT-042
@@ -582,13 +582,13 @@ requirements:
     rationale: "The hub's trust stays rooted in a key that cannot be copied."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-49, section: "7515", depth: Full}
       - {id: ST-88, section: "1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "assertion key extraction negative test"}
   - id: REQ-ACCT-043
@@ -597,12 +597,12 @@ requirements:
     rationale: "A short lifetime limits replay."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-52, section: "4", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "assertion lifetime test"}
   - id: REQ-ACCT-044
@@ -611,12 +611,12 @@ requirements:
     rationale: "A closed outcome set makes the hub's mapping exhaustive."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-52, section: "4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "outcome vocabulary test"}
   - id: REQ-ACCT-045
@@ -625,13 +625,13 @@ requirements:
     rationale: "An unpinned key identifier would let a new key sign in."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-49, section: "7515", depth: Full}
       - {id: ST-56, section: "3", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "tampered and unpinned assertion tests"}
   - id: REQ-ACCT-046
@@ -640,13 +640,13 @@ requirements:
     rationale: "Each claim closes a different substitution attack."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-52, section: "7", depth: Full}
       - {id: ST-56, section: "3", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "claim mismatch and expiry tests"}
   - id: REQ-ACCT-047
@@ -655,12 +655,12 @@ requirements:
     rationale: "A replayed assertion must never sign a person in."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-52, section: "4", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "replayed jti test"}
   - id: REQ-ACCT-048
@@ -669,12 +669,12 @@ requirements:
     rationale: "The hub, not the accounts module, decides the level."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: NC-01, section: "8176", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "level-from-factors test"}
   - id: REQ-ACCT-049
@@ -683,12 +683,12 @@ requirements:
     rationale: "A bounded handle limits abandoned ceremonies."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-03, section: "4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "handle reuse and expiry test"}
   - id: REQ-ACCT-050
@@ -697,12 +697,12 @@ requirements:
     rationale: "A short single-use code limits interception."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-03, section: "4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "code reuse and expiry test"}
   - id: REQ-ACCT-051
@@ -711,12 +711,12 @@ requirements:
     rationale: "The state check ties the callback to the browser that started it."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "state mismatch test"}
   - id: REQ-ACCT-052
@@ -725,12 +725,12 @@ requirements:
     rationale: "The verifier plays the role of PKCE between the hub and the accounts module."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-03, section: "4.5", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "wrong-verifier redeem test"}
   - id: REQ-ACCT-053
@@ -739,12 +739,12 @@ requirements:
     rationale: "The relying party needs the standard error."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-01, section: "4.1.2.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "cancelled outcome test"}
   - id: REQ-ACCT-054
@@ -753,12 +753,12 @@ requirements:
     rationale: "The relying party can then start a step-up."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2.6", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "unmet outcome test"}
   - id: REQ-ACCT-055
@@ -767,12 +767,12 @@ requirements:
     rationale: "A refusal must not reveal its reason to the relying party."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "refused outcome test"}
   - id: REQ-ACCT-056
@@ -781,12 +781,12 @@ requirements:
     rationale: "An abandoned ceremony must end cleanly."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-01, section: "4.1.2.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "expired ceremony test"}
   - id: REQ-ACCT-057
@@ -795,12 +795,12 @@ requirements:
     rationale: "A replay must not reach the relying party."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "consumed code and state mismatch test"}
   - id: REQ-ACCT-058
@@ -809,12 +809,12 @@ requirements:
     rationale: "The relying party can retry later."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-01, section: "4.1.2.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "accounts-down begin test"}
   - id: REQ-ACCT-059
@@ -823,12 +823,11 @@ requirements:
     rationale: "Names are personal data."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "5.4", depth: Full}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [788]
     verification:
       - {kind: integration-test, ref: "profile claim release test"}
   - id: REQ-ACCT-060
@@ -837,11 +836,11 @@ requirements:
     rationale: "A context installation never releases profile claims."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "5.4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "context load refusal test"}

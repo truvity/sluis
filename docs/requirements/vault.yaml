@@ -8,12 +8,12 @@ requirements:
     rationale: "One credential holder is one place to defend and audit."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-20, section: "7523", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "deny matrix"}
       - {kind: integration-test, ref: "import-boundary test"}
@@ -23,12 +23,12 @@ requirements:
     rationale: "The request parameters stay on the back channel."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-16, section: "2", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "recorded PAR body test"}
   - id: REQ-VAULT-003
@@ -37,12 +37,12 @@ requirements:
     rationale: "A shared secret with the vault would be a theft target."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-20, section: "7523 2.2", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "client authentication test"}
   - id: REQ-VAULT-004
@@ -51,13 +51,13 @@ requirements:
     rationale: "Standard protections apply to the vault leg too."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-03, section: "4.2", depth: Full}
       - {id: ST-14, section: "2.1", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "recorded PAR body test"}
   - id: REQ-VAULT-005
@@ -66,12 +66,12 @@ requirements:
     rationale: "A reused vault session would merge old factors into a new ceremony."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2.1", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "recorded PAR body test"}
   - id: REQ-VAULT-006
@@ -80,12 +80,12 @@ requirements:
     rationale: "The vault must stay blind to the relying party."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "recorded PAR body test"}
   - id: REQ-VAULT-007
@@ -94,12 +94,12 @@ requirements:
     rationale: "The issuer parameter defends against mix-up."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-10, section: "2", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "vault mix-up test"}
   - id: REQ-VAULT-008
@@ -108,13 +108,13 @@ requirements:
     rationale: "Reading unsigned vault claims would let a network attacker or the vendor forge sign-ins."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.3.7", depth: Full}
       - {id: ST-49, section: "5", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "forged signature test"}
   - id: REQ-VAULT-009
@@ -123,13 +123,13 @@ requirements:
     rationale: "Each claim closes a different substitution attack."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.3.7", depth: Full}
       - {id: ST-52, section: "7", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "claim mismatch tests"}
   - id: REQ-VAULT-010
@@ -138,12 +138,12 @@ requirements:
     rationale: "The ceremony must be fresh."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.3.7", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "stale auth_time test"}
   - id: REQ-VAULT-011
@@ -152,13 +152,13 @@ requirements:
     rationale: "Each is a sign of a malformed or delegated token."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Partial}
       - {id: NC-01, section: "8176", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "malformed token tests"}
   - id: REQ-VAULT-012
@@ -167,12 +167,12 @@ requirements:
     rationale: "A token for another vault user must not sign this person in."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.3.7", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "binding mismatch test"}
   - id: REQ-VAULT-013
@@ -181,12 +181,12 @@ requirements:
     rationale: "Vault evidence cannot revive a disabled account."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.3.7", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "disabled account vault test"}
   - id: REQ-VAULT-014
@@ -195,12 +195,12 @@ requirements:
     rationale: "A replayed vault token must never sign a person in."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-52, section: "7", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "replayed vault token test"}
   - id: REQ-VAULT-015
@@ -209,12 +209,12 @@ requirements:
     rationale: "An extra claim is an unreviewed capability."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "extra claim test"}
   - id: REQ-VAULT-016
@@ -223,13 +223,13 @@ requirements:
     rationale: "A compromised vendor can forge at most the lowest level."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: NC-01, section: "8176", depth: Full}
       - {id: NC-16, section: "800-63B", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "evidence ceiling test"}
   - id: REQ-VAULT-017
@@ -238,12 +238,12 @@ requirements:
     rationale: "Evidence that does not match the approved set is not evidence."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: NC-01, section: "8176", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "amr rejection tests"}
   - id: REQ-VAULT-018
@@ -252,12 +252,12 @@ requirements:
     rationale: "Only sluis decides the assurance level."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "vault acr ignored test"}
   - id: REQ-VAULT-019
@@ -266,12 +266,12 @@ requirements:
     rationale: "A vault that starts sending acr has changed its configuration."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "drift alarm test"}
   - id: REQ-VAULT-020
@@ -280,13 +280,13 @@ requirements:
     rationale: "Vault evidence must not open a regulated context."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2.1", depth: Partial}
       - {id: ST-24, section: "3", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "vault evidence level request test"}
   - id: REQ-VAULT-021
@@ -295,12 +295,12 @@ requirements:
     rationale: "A reusable vault session would be a second single sign-on outside sluis."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-30, section: "2", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "zero vault sessions after sign-in test"}
   - id: REQ-VAULT-022
@@ -309,12 +309,12 @@ requirements:
     rationale: "A breach or compulsion of the vault reveals no relationship data."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: NC-06, section: "2104", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: test-vectors, ref: "own pseudonym vectors"}
   - id: REQ-VAULT-023
@@ -323,13 +323,13 @@ requirements:
     rationale: "The pseudonym must stay stable when the vault moves."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: NC-06, section: "2104", depth: Partial}
       - {id: ST-88, section: "1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "lineage stability test"}
   - id: REQ-VAULT-024
@@ -338,12 +338,12 @@ requirements:
     rationale: "Personal and relationship data must not reach the vendor."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "vault payload inspection test"}
   - id: REQ-VAULT-025
@@ -352,12 +352,12 @@ requirements:
     rationale: "The vault must stay blind."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "vault payload inspection test"}
   - id: REQ-VAULT-026
@@ -366,12 +366,12 @@ requirements:
     rationale: "The fallback factor is only for personal accounts."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-59, section: "1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "reconciliation finds no corporate vault user"}
   - id: REQ-VAULT-027
@@ -380,12 +380,12 @@ requirements:
     rationale: "The fallback is optional."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-59, section: "1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "opt-in test"}
   - id: REQ-VAULT-028
@@ -394,12 +394,12 @@ requirements:
     rationale: "A record without attributes leaks nothing."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "vault record inspection test"}
   - id: REQ-VAULT-029
@@ -408,12 +408,12 @@ requirements:
     rationale: "An unexplained vault change must be impossible to make."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "write without cause compile-time test"}
   - id: REQ-VAULT-030
@@ -422,12 +422,12 @@ requirements:
     rationale: "The journal is how unmatched changes are detected."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "journal ordering test"}
   - id: REQ-VAULT-031
@@ -436,12 +436,12 @@ requirements:
     rationale: "Risky changes need two people."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-49, section: "7", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "single-signature refusal test"}
   - id: REQ-VAULT-032
@@ -450,12 +450,12 @@ requirements:
     rationale: "A narrow port can be checked, fuzzed and re-implemented."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "port surface test"}
   - id: REQ-VAULT-033
@@ -464,12 +464,12 @@ requirements:
     rationale: "Seeding doors must not ship."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "production-build symbol test"}
   - id: REQ-VAULT-034
@@ -478,12 +478,12 @@ requirements:
     rationale: "A ticket is the only door for setting fallback factors."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "ticket reuse and expiry test"}
   - id: REQ-VAULT-035
@@ -492,12 +492,12 @@ requirements:
     rationale: "A redirect proves nothing about what was enrolled."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "inventory after enrolment test"}
   - id: REQ-VAULT-036
@@ -506,12 +506,12 @@ requirements:
     rationale: "A test-only strategy must not run in production."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "production load refusal test"}
   - id: REQ-VAULT-037
@@ -520,12 +520,12 @@ requirements:
     rationale: "The password never transits sluis."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-59, section: "1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "no sluis page contains a password field"}
   - id: REQ-VAULT-038
@@ -534,12 +534,12 @@ requirements:
     rationale: "A credential injected through the admin interface is invisible in events."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "injected credential test"}
   - id: REQ-VAULT-039
@@ -548,12 +548,12 @@ requirements:
     rationale: "Any other inventory is an injection until proven otherwise."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "inventory mismatch test"}
   - id: REQ-VAULT-040
@@ -562,12 +562,12 @@ requirements:
     rationale: "Without the inventory the evidence cannot be trusted."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "admin interface down test"}
   - id: REQ-VAULT-041
@@ -576,12 +576,12 @@ requirements:
     rationale: "Events are hints, not records."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "duplicate event test"}
   - id: REQ-VAULT-042
@@ -590,12 +590,12 @@ requirements:
     rationale: "Detection must not depend on the vendor's honesty."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "console change detection test"}
   - id: REQ-VAULT-043
@@ -604,12 +604,12 @@ requirements:
     rationale: "The cool-down limits the damage until the change is understood."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "unmatched change cool-down test"}
   - id: REQ-VAULT-044
@@ -618,12 +618,12 @@ requirements:
     rationale: "A human must look at it."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "unmatched change incident test"}
   - id: REQ-VAULT-045
@@ -632,12 +632,12 @@ requirements:
     rationale: "A gap means events were missed."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "event gap test"}
   - id: REQ-VAULT-046
@@ -646,12 +646,12 @@ requirements:
     rationale: "A sweep bounds the time to detect a change."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "sweep interval test"}
   - id: REQ-VAULT-047
@@ -660,12 +660,12 @@ requirements:
     rationale: "An orphaned vault user is an unreviewed sign-in path."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "orphan vault user test"}
   - id: REQ-VAULT-048
@@ -674,12 +674,12 @@ requirements:
     rationale: "The state then closes fallback sign-in until re-enrolment."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "missing vault user test"}
   - id: REQ-VAULT-049
@@ -688,12 +688,12 @@ requirements:
     rationale: "A restored copy must never bring back a revoked factor."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "restore-to-older-snapshot test"}
   - id: REQ-VAULT-050
@@ -702,13 +702,13 @@ requirements:
     rationale: "Every behaviour that matters for evidence is configuration."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-78, section: "8785", depth: Full}
       - {id: ST-49, section: "7515", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "signed digest test"}
   - id: REQ-VAULT-051
@@ -717,12 +717,12 @@ requirements:
     rationale: "Drift detection must not depend on one trigger."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-78, section: "8785", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "drift check trigger test"}
   - id: REQ-VAULT-052
@@ -731,12 +731,12 @@ requirements:
     rationale: "A drifted vault cannot be trusted for evidence."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-78, section: "8785", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "registration-enabled drift test"}
   - id: REQ-VAULT-053
@@ -745,12 +745,12 @@ requirements:
     rationale: "A vendor outage may remove only the fallback factor."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-59, section: "7", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "vault-stopped suite"}
   - id: REQ-VAULT-054
@@ -759,12 +759,12 @@ requirements:
     rationale: "The person needs a way forward."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-59, section: "7", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "neutral page test"}
   - id: REQ-VAULT-055
@@ -773,12 +773,12 @@ requirements:
     rationale: "The vendor must not learn which relying party a person uses."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "blindness test of PAR bodies and vault login events"}
   - id: REQ-VAULT-056
@@ -787,12 +787,12 @@ requirements:
     rationale: "A referrer would reveal the relying party."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: NC-05, section: "Referrer-Policy", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "browser request header test"}
   - id: REQ-VAULT-057
@@ -801,12 +801,12 @@ requirements:
     rationale: "The person must see who is asking."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: NC-04, section: "WCAG 2.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "page text test"}
   - id: REQ-VAULT-058
@@ -815,12 +815,12 @@ requirements:
     rationale: "The vendor must be replaceable."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "two-instance contract test"}
   - id: REQ-VAULT-059
@@ -829,12 +829,12 @@ requirements:
     rationale: "A move must be invisible to relying parties."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "subject stability after move test"}
   - id: REQ-VAULT-060
@@ -843,12 +843,12 @@ requirements:
     rationale: "They belong to sluis, not to the vendor."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-59, section: "5", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "non-moving data test"}
   - id: REQ-VAULT-061
@@ -857,12 +857,12 @@ requirements:
     rationale: "The fallback path must not reveal whether an account exists."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: NC-06, section: "2104", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: test-vectors, ref: "own decoy vectors"}
       - {kind: integration-test, ref: "decoy shape test"}
@@ -872,12 +872,12 @@ requirements:
     rationale: "A decoy can succeed only by a vault compromise."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: NC-06, section: "2104", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "decoy success test"}
   - id: REQ-VAULT-063
@@ -886,12 +886,12 @@ requirements:
     rationale: "A different shape would enumerate accounts."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "differential redirect test"}
   - id: REQ-VAULT-064
@@ -900,12 +900,12 @@ requirements:
     rationale: "A fallback sign-in on a passkey account may be an attack."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: NC-14, section: "SPF DKIM DMARC", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "notice delivery test"}
   - id: REQ-VAULT-065
@@ -914,12 +914,12 @@ requirements:
     rationale: "A network attacker must not be able to impersonate the vault."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "unpinned certificate test"}
   - id: REQ-VAULT-066
@@ -928,12 +928,12 @@ requirements:
     rationale: "A new signing key at the vendor may precede a forgery."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-50, section: "5", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "unpinned kid alarm test"}
   - id: REQ-VAULT-067
@@ -942,12 +942,12 @@ requirements:
     rationale: "Short lifetimes limit theft."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-52, section: "4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "token lifetime test"}
   - id: REQ-VAULT-068
@@ -956,12 +956,12 @@ requirements:
     rationale: "A bound token cannot be replayed by a thief."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-18, section: "7", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "token replay test"}
   - id: REQ-VAULT-069
@@ -970,12 +970,12 @@ requirements:
     rationale: "A slow vendor must not stall sluis."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "slow vault test"}
   - id: REQ-VAULT-070
@@ -1026,13 +1026,13 @@ requirements:
     rationale: "The provider's keys may have been exposed."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-50, section: "5", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
     manual_reason: "A runbook step is exercised in a drill by people."
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: manual, ref: "incident runbook review"}
   - id: REQ-VAULT-074
@@ -1041,12 +1041,12 @@ requirements:
     rationale: "Erasure must reach the vendor."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "post-deletion lookup test"}
   - id: REQ-VAULT-075
@@ -1055,12 +1055,12 @@ requirements:
     rationale: "The fallback path is rarely used, so silent breakage would otherwise be found by a person who needs it."
     level: SHOULD
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-98, section: "OTLP", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "probe interval test"}
   - id: REQ-VAULT-076
@@ -1069,11 +1069,11 @@ requirements:
     rationale: "Detection is the point of the probe."
     level: SHOULD
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-98, section: "OTLP", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "vault-stopped alert test"}

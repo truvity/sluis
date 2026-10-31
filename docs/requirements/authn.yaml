@@ -305,13 +305,12 @@ requirements:
     rationale: "Upstream claims are not evidence sluis has verified."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Partial}
       - {id: NC-01, section: "8176", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [916]
     verification:
       - {kind: integration-test, ref: "federated acr ceiling test"}
   - id: REQ-AUTHN-011
@@ -320,13 +319,12 @@ requirements:
     rationale: "A narrow claims surface avoids undefined disclosure behaviour."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "5.5", depth: Partial}
       - {id: ST-23, section: "2", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [885]
     verification:
       - {kind: integration-test, ref: "essential acr acceptance test"}
   - id: REQ-AUTHN-035
@@ -336,13 +334,12 @@ requirements:
     rationale: "A narrow claims surface avoids undefined disclosure behaviour."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "5.5", depth: Partial}
       - {id: ST-23, section: "2", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [796]
     verification:
       - {kind: integration-test, ref: "claims and authorization_details negative tests"}
   - id: REQ-AUTHN-012
@@ -457,13 +454,12 @@ requirements:
     rationale: "Message signing needs non-repudiable requests."
     level: MAY
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-17, section: "6", depth: Full}
       - {id: ST-38, section: "5", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [912]
     verification:
       - {kind: conformance-suite, ref: "FAPI2-MS"}
   - id: REQ-AUTHN-015

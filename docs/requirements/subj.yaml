@@ -8,12 +8,12 @@ requirements:
     rationale: "E-mail addresses change and are personal data."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "person key scan"}
   - id: REQ-SUBJ-002
@@ -22,12 +22,12 @@ requirements:
     rationale: "A global identifier is a correlation key across controllers."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "issued token scan"}
   - id: REQ-SUBJ-003
@@ -238,12 +238,12 @@ requirements:
     rationale: "Reverse resolution is a privileged, audited capability."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "deny matrix for reverse pointers"}
   - id: REQ-SUBJ-018
@@ -252,12 +252,12 @@ requirements:
     rationale: "A resolution that cannot be audited must not happen."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "resolution audit test"}
   - id: REQ-SUBJ-019
@@ -266,12 +266,12 @@ requirements:
     rationale: "No single person may unmask a customer."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "single-signature refusal test"}
   - id: REQ-SUBJ-020
@@ -280,12 +280,12 @@ requirements:
     rationale: "The only person handle outside the hub is the reference."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "account reference test"}
   - id: REQ-SUBJ-021
@@ -294,12 +294,12 @@ requirements:
     rationale: "Support and requests need a stable handle that reveals nothing."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: NC-06, section: "2104", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: test-vectors, ref: "own account reference vectors"}
   - id: REQ-SUBJ-022
@@ -308,12 +308,12 @@ requirements:
     rationale: "Failed lookups are part of the trail."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "unknown subject audit test"}
   - id: REQ-SUBJ-023
@@ -322,12 +322,12 @@ requirements:
     rationale: "Only the administrative service may hold the mapping."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "deny matrix for reverse pointers"}
   - id: REQ-SUBJ-024
@@ -336,12 +336,12 @@ requirements:
     rationale: "A context needs a stable subject that reveals nothing about the hub."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: NC-02, section: "9562", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "context subject test"}
   - id: REQ-SUBJ-025
@@ -350,12 +350,12 @@ requirements:
     rationale: "The link then survives a change of the hub host."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "hub link key test"}
   - id: REQ-SUBJ-026
@@ -364,12 +364,12 @@ requirements:
     rationale: "A context must not be linkable to the hub by subject."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "context subject distinctness test"}
   - id: REQ-SUBJ-027
@@ -378,12 +378,12 @@ requirements:
     rationale: "Resource servers can detect a token minted for the wrong sector."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-52, section: "4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "sector marker claim test"}
   - id: REQ-SUBJ-028
@@ -392,40 +392,38 @@ requirements:
     rationale: "A sector may choose not to be marked."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-52, section: "4", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "null marker test"}
   - id: REQ-SUBJ-029
     area: SUBJ
-    statement: "The WebAuthn user handle MUST be 32 random bytes stored on the account."
+    statement: "The WebAuthn user handle MUST be 32 random bytes stored on the person record."
     rationale: "The handle lives on authenticators and leaves the device."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-59, section: "5", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [885]
     verification:
       - {kind: integration-test, ref: "user handle test"}
   - id: REQ-SUBJ-030
     area: SUBJ
-    statement: "The WebAuthn user handle MUST NOT be derived from the account identifier."
+    statement: "The WebAuthn user handle MUST NOT be derived from the person identifier."
     rationale: "A derived handle would leak the internal identifier."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-59, section: "5", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [885]
     verification:
       - {kind: integration-test, ref: "user handle independence test"}
   - id: REQ-SUBJ-031
@@ -490,12 +488,12 @@ requirements:
     rationale: "A successor keeps every relying-party subject."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "re-import subject reproduction test"}
   - id: REQ-SUBJ-036
@@ -504,11 +502,11 @@ requirements:
     rationale: "A successor must never hold a non-extractable key."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "package key scan"}

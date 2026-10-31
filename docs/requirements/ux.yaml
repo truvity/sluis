@@ -62,12 +62,11 @@ requirements:
     rationale: "Branding without free-form injection."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: NC-04, section: "WCAG 2.1", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [927]
     verification:
       - {kind: integration-test, ref: "theme declaration test"}
   - id: REQ-UX-008
@@ -77,12 +76,11 @@ requirements:
     rationale: "Branding without free-form injection."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: NC-04, section: "WCAG 2.1", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [927]
     verification:
       - {kind: integration-test, ref: "theme load test"}
   - id: REQ-UX-004
@@ -91,12 +89,11 @@ requirements:
     rationale: "Users must see who asks."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: NC-04, section: "WCAG 2.1", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [794]
     verification:
       - {kind: integration-test, ref: "page text test"}
   - id: REQ-UX-005
@@ -105,11 +102,10 @@ requirements:
     rationale: "Tests need stable selectors."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: NC-04, section: "WCAG 2.1", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [877]
     verification:
       - {kind: integration-test, ref: "hook contract test"}

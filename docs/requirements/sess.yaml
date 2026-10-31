@@ -280,13 +280,12 @@ requirements:
     rationale: "Broadcast keeps the hub from building a person-to-service graph."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-31, section: "2.4", depth: Full}
       - {id: ST-26, section: "CAEP", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [793]
     verification:
       - {kind: integration-test, ref: "global sign-out session test"}
   - id: REQ-SESS-022
@@ -296,13 +295,12 @@ requirements:
     rationale: "Broadcast keeps the hub from building a person-to-service graph."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-31, section: "2.4", depth: Full}
       - {id: ST-26, section: "CAEP", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [927]
     verification:
       - {kind: integration-test, ref: "broadcast test"}
   - id: REQ-SESS-012

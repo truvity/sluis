@@ -46,7 +46,7 @@ catalogue:
     VAULT: {title: "Fallback credential vault (open scope)", file: vault.yaml}
     REG: {title: "Registration, recovery and lifecycle (open scope)", file: reg.yaml}
   gaps:
-    account-hosting-scope: "Whether sluis hosts customer accounts at all is undecided, so every requirement of the account-hosting groups waits for that scope decision."
+    account-hosting-scope: "sluis does not host end-user accounts (REQ-CIAM-017); a record that still carries this gap waits for the pairwise-subject, subject-model or subject-lifecycle decision."
     stakeholder-only: "A stakeholder needs it but no v2 feature accepts it yet."
     register-gap: "The standards register or the feature plan is weaker than this requirement."
     proposed-design: "The design is proposed in research and not yet decided."
