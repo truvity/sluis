@@ -98,7 +98,7 @@ check-yaml-ext:
     tools/checks/yaml-ext.mjs
 
 # Every path that AGENTS.md, CLAUDE.md, .claude/skills/*/SKILL.md and .claude/agents/*.md
-# point to exists. Passes, saying so, while none of those files exists.
+# point to exists. Fails when AGENTS.md is missing or CLAUDE.md does not import it.
 check-agent-links:
     tools/checks/agent-links.mjs
 

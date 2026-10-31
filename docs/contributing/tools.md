@@ -30,7 +30,7 @@ The `Justfile` holds the recipes, and CI runs the same recipes. Run the recipe, 
 | `just check-requirements` | The requirements catalogue: schema, ids, statement and traceability rules |
 | `just check-public` | Content that must not be public, in every tracked text file |
 | `just check-yaml-ext` | YAML files use `.yaml` |
-| `just check-agent-links` | Every path that `AGENTS.md`, `CLAUDE.md` and the skills point to exists |
+| `just check-agent-links` | `AGENTS.md` exists, `CLAUDE.md` imports it, and every path that they and the skills point to exists |
 | `just site-check` | The site: `site-lint`, `site-build`, `site-render` and `site-links` |
 | `just site-lint` | Page descriptions and statuses, open-decision ids, the requirements catalogue |
 | `just site-build` | A strict site build: no warning and no broken internal link |
