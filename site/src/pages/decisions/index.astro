@@ -1,8 +1,10 @@
 ---
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
-import { decisionTitle, listDecisions } from '../../lib-decisions';
+import { decisionFacts, listDecisions } from '../../lib-decisions';
 
-const entries = await listDecisions();
+// The status and date come from each record's own header lines, so the index
+// always says what the record says. The template (0000) is not a record.
+const records = (await listDecisions()).map(decisionFacts);
 ---
 
 <StarlightPage
@@ -17,22 +19,46 @@ const entries = await listDecisions();
   <p>
     Significant choices are recorded as architecture decision records (ADRs) in
     <a href="https://github.com/truvity/sluis/tree/main/docs/decisions"><code>docs/decisions/</code></a>
-    in the repository. This index is built from that directory on every build.
+    in the repository. This index is built from that directory on every build; each status is the one the record states.
+    The same facts are in <a href="/data/repo.json"><code>/data/repo.json</code></a>, and the{' '}
+    <a href="/status/">project status</a> page places each record under the milestone of its proposal issue.
   </p>
   {
-    entries.length === 0 ? (
+    records.length === 0 ? (
       <p>
         <em>No decision records have been published yet.</em>
       </p>
     ) : (
-      <ul>
-        {entries.map((entry) => (
-          <li>
-            <a href={`/decisions/${entry.id}/`}>{decisionTitle(entry)}</a>
-            {entry.data.status && <span> ({entry.data.status})</span>}
-          </li>
-        ))}
-      </ul>
+      <table class="decision-index">
+        <thead>
+          <tr>
+            <th scope="col">Record</th>
+            <th scope="col">Decision</th>
+            <th scope="col">Status</th>
+            <th scope="col">Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {records.map((r) => (
+            <tr data-record={r.id}>
+              <td>{r.number}</td>
+              <td>
+                <a href={`/decisions/${r.id}/`}>{r.title}</a>
+              </td>
+              <td class="decision-status" data-status={r.status}>{r.status}</td>
+              <td class="decision-date">{r.date ?? '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     )
   }
 </StarlightPage>
+
+<style>
+  .decision-index td:first-child,
+  .decision-status,
+  .decision-date {
+    white-space: nowrap;
+  }
+</style>

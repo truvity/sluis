@@ -45,6 +45,7 @@ The site is built from `docs/` and `site/` with Astro Starlight, and every page 
 
 - `just site-dev` serves it on `http://localhost:4321` with live reload; it runs `astro dev`.
 - `just site-build` makes the strict build into `site/dist`, the same build CI checks.
+- The [project status](/status/) page and `/data/repo.json` are built with the rest ([ADR 0063](/decisions/0063-the-site-is-static-on-cloudflare-workers-with-a-live-status-api/)). The page reads the v2 project board during the build, with the token in `GH_TOKEN` or `GITHUB_TOKEN`. Reading an organisation's project needs a token that may read it: locally, `GH_TOKEN=$(gh auth token) devbox run -- just check`. The `GITHUB_TOKEN` of GitHub Actions cannot read organisation projects, so a CI build says "project data not available at build time" on the page and in its log, and does not fail. `site/scripts/check-repo-json.mjs` checks `/data/repo.json` against its schema, `site/public/data/repo.schema.json`, and against the records it is built from.
 
 How the site is hosted is decided in [ADR 0063](/decisions/0063-the-site-is-static-on-cloudflare-workers-with-a-live-status-api/), and not built yet. Today `site.yaml` publishes it to GitHub Pages. The target:
 

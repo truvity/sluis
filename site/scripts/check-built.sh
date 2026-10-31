@@ -13,7 +13,8 @@ bad() { echo "check-built: $*" >&2; fail=1; }
 for f in index.html 404.html llms.txt llms-full.txt sitemap-index.xml robots.txt \
          overview/index.html architecture/index.html architecture/context/index.html \
          decisions/index.html roadmap/index.html contributing/index.html \
-         requirements/index.html requirements/matrix/index.html requirements/coverage/index.html requirements.json; do
+         requirements/index.html requirements/matrix/index.html requirements/coverage/index.html requirements.json \
+         status/index.html data/repo.json data/repo.schema.json; do
   [ -s "$dist/$f" ] || bad "missing or empty: $f"
 done
 
@@ -47,6 +48,15 @@ if [ -d "$dist/_astro" ]; then
   fi
 else
   bad "no $dist/_astro: the site has no bundled scripts"
+fi
+
+# /data/repo.json: valid against its schema and equal to the records it is built from.
+site/scripts/check-repo-json.mjs "$dist" || bad "/data/repo.json does not match its schema or its sources (above)"
+
+# The decisions index lists records, not the template, and shows each record's status.
+if [ -s "$dist/decisions/index.html" ]; then
+  if grep -q '0000-template' "$dist/decisions/index.html"; then bad "decisions/index.html lists the template"; fi
+  [ ! -e "$dist/decisions/0000-template" ] || bad "the template is built as a decision page: $dist/decisions/0000-template"
 fi
 
 # The landing page says what v2 is and where v1 went.

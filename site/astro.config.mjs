@@ -152,6 +152,8 @@ export default defineConfig({
         { label: 'Open decisions', slug: 'open-decisions' },
         { label: 'Decisions', link: '/decisions/' },
         { label: 'Roadmap', slug: 'roadmap' },
+        // Built from the project board and the repository (src/pages/status.astro).
+        { label: 'Project status', link: '/status/' },
         { label: 'Features: v1 and v2', slug: 'features' },
         // Generated from docs/requirements/*.yaml (src/pages/requirements/).
         {
@@ -178,9 +180,10 @@ export default defineConfig({
           // would always fail; the pages themselves are still built and checked.
           // The requirements pages are generated in src/pages from the catalogue
           // (custom pages the validator cannot see); lychee checks links to them.
+          // So are the status page and /data/repo.json.
           exclude: [
             '/v1/', '/v1/**', '/decisions/', '/decisions/**', '/architecture/explorer/', '/architecture/audit-explorer/',
-            '/requirements/', '/requirements/**',
+            '/requirements/', '/requirements/**', '/status/', '/data/**',
           ],
         }),
         starlightLlmsTxt({
