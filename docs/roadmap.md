@@ -34,7 +34,7 @@ The maintainer agreed this order for the tested [installations](/runtimes/instal
 
 1. **local first.** Docker Compose on a workstation, one container per actor, with the minimal drivers: embedded SQLite state, a SQLite index, a files blob, a local lock, and a spool or direct transport. Keys are software keys in CI and the host's YubiKey on a workstation. This step runs until v2 can replace v1, and it includes the enablers of the target architecture.
 2. **Then boards, lambda and kubernetes in parallel,** built and tested in parallel.
-   - **boards.** Three single-board computers behind a Cloudflare tunnel, a YubiKey in each node, state and index on rqlite ([ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)), audit records on Garage, an S3-compatible store on the boards, with an hourly off-site R2 copy of the audit log (after the Garage spike, [#982](https://github.com/truvity/sluis/issues/982); the copy is [#984](https://github.com/truvity/sluis/issues/984)), the audit pieces on the same nodes, and one log per node with the other nodes as peer witnesses.
+   - **boards.** Three single-board computers behind a Cloudflare tunnel, a YubiKey in each node, state and index on rqlite ([ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)), audit records on R2 in the first release (Garage, an S3-compatible store on the boards, is a later backend, blocked on conditional writes and prefix scoping upstream: [#982](https://github.com/truvity/sluis/issues/982)), the audit pieces on the same nodes, and one log per node with the other nodes as peer witnesses.
    - **lambda.** AWS Lambda.
    - **kubernetes.** The one tested Kubernetes installation.
 
@@ -53,12 +53,12 @@ The language of each executable is fixed from a set of **spikes**, run before th
 | [S3](https://github.com/truvity/sluis/issues/941) | A slim `entry` prototype in both languages: latency, memory, Lambda cold start and size, and a day of fuzzing |
 | [S4](https://github.com/truvity/sluis/issues/942) | `key-holder` through PKCS#11 (`cryptoki` with `ykcs11`) against `piv-go`: every algorithm and slot on [Keys](/concepts/keys/), concurrent callers, PIN handling. **Done** for YubiKey PIV (2026-10-31): `key-holder` is Go with `piv-go`, which holds the card exclusively. The release-subkey slot, YubiHSM 2, Nitrokey and the zeroisation review are still to run |
 | [S5](https://github.com/truvity/sluis/issues/943) | The memory budget on the boards: each actor and driver under load, in each language, against the 2 GB budget |
-| [S6](https://github.com/truvity/sluis/issues/944) | OpenTelemetry from Rust: one trace across a Go and Rust hop |
-| [S7](https://github.com/truvity/sluis/issues/945) | Configuration in Rust: the same conformance vectors as the Go structs |
+| [S6](https://github.com/truvity/sluis/issues/944) | OpenTelemetry from Rust: one trace across a Go and Rust hop. **Done** (2026-10-31): passed with conditions |
+| [S7](https://github.com/truvity/sluis/issues/945) | Configuration in Rust: the same conformance vectors as the Go structs. **Done** (2026-10-31): passed with conditions |
 | [S8](https://github.com/truvity/sluis/issues/946) | The ceremony with OpenPGP cards: two primaries and a shared subkey, verified with the tools tested on 2026-10-29. It decides the Rust card helper that `sluis ceremony` runs |
 | [S10](https://github.com/truvity/sluis/issues/947) | One release train: GoReleaser with a Cargo workspace, for two architectures, with SBOM, signing and provenance, and Lambda zips within their limits |
 
-One more spike comes before the boards' blob store, not before step 1: **Garage on the boards** ([#982](https://github.com/truvity/sluis/issues/982)) checks conditional writes (`If-None-Match: *`, the blob fence), Garage's memory on the boards and key expiry.
+One more spike was run for the boards' blob store, not before step 1: **Garage on the boards** ([#982](https://github.com/truvity/sluis/issues/982)). **Done** (2026-10-31): Garage v2.5.0 has no conditional writes and no prefix-scoped keys, both open upstream, so the boards use R2 for blobs in the first release and Garage moves to Later.
 
 ## Architecture decision records
 
@@ -122,7 +122,7 @@ Key custody, the port library and its generator, the slim `entry` and the other 
 
 ### Phase 2: drivers, hosts, conformance and distribution
 
-The board drivers and Garage, federation, host enrolment and SSH, the conformance pipeline and form post, and how a release is built, signed, published and installed.
+The board drivers, federation, host enrolment and SSH, the conformance pipeline and form post, and how a release is built, signed, published and installed.
 
 | Issue | Item |
 |---|---|
@@ -159,15 +159,14 @@ The board drivers and Garage, federation, host enrolment and SSH, the conformanc
 | [#971](https://github.com/truvity/sluis/issues/971) | Sluis-host: the root host service for SSH |
 | [#972](https://github.com/truvity/sluis/issues/972) | Cert-manager issuer backed by sluis |
 | [#979](https://github.com/truvity/sluis/issues/979) | Form post response mode with its conformance plan |
-| [#982](https://github.com/truvity/sluis/issues/982) | Spike: Garage on the boards (conditional writes, memory, key expiry) |
-| [#983](https://github.com/truvity/sluis/issues/983) | Garage backend and the cloud-garage credential driver |
-| [#984](https://github.com/truvity/sluis/issues/984) | Off-site copy of the audit log from Garage to R2 on the boards |
+| [#983](https://github.com/truvity/sluis/issues/983) | Garage backend and the cloud-garage credential driver (waits on [#982](https://github.com/truvity/sluis/issues/982)) |
+| [#984](https://github.com/truvity/sluis/issues/984) | Off-site copy of the audit log from Garage to R2 on the boards (waits on [#982](https://github.com/truvity/sluis/issues/982)) |
 | [#985](https://github.com/truvity/sluis/issues/985) | Audit installation front: slim entry router, reader API and its own console |
 | [#986](https://github.com/truvity/sluis/issues/986) | Per-driver deb/rpm packages and installation meta-packages |
 
 ### Later
 
-After the first release or after v2 parity: FAPI 2.0, CIBA, ACME, device login (postponed), a FIPS build variant, other clouds and other stores.
+After the first release or after v2 parity: FAPI 2.0, CIBA, ACME, device login (postponed), a FIPS build variant, Garage on the boards, other clouds and other stores.
 
 | Issue | Item |
 |---|---|
@@ -188,3 +187,4 @@ After the first release or after v2 parity: FAPI 2.0, CIBA, ACME, device login (
 | [#977](https://github.com/truvity/sluis/issues/977) | Live reload of declared configuration |
 | [#978](https://github.com/truvity/sluis/issues/978) | Ca: ACME (RFC 8555) for host TLS certificates, after the first release |
 | [#980](https://github.com/truvity/sluis/issues/980) | CIBA in poll mode with a passkey on the approving device (after v2 parity) |
+| [#982](https://github.com/truvity/sluis/issues/982) | Garage as the boards' blob store (blocked on conditional writes); spike done 2026-10-31 |

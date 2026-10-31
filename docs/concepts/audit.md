@@ -59,7 +59,7 @@ flowchart LR
 1. **Transport.** An actor hands the record to the **transport** and carries on. In **queue** mode it returns to its caller once the record is durable in the queue, and never waits for the writer, the log store or the index. If the writer is down for an hour, requests still succeed and records queue. In **direct** mode the emitter streams the record to the writer; when the writer is down, the emitter falls back to a local spool (see [The transport](#the-transport)).
 2. **Sealed batches.** The writer takes records from the transport, validates and de-duplicates them, and groups them into an ordered **batch**. A batch is sealed at **256 records or 5 seconds** after its first record, whichever comes first, and an empty batch is never sealed. Each batch ends with a **seal entry** that records its count, the writer instance and the observed clock offset, inside the tree, so the witnesses cosign it ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)).
 3. **The signed head and the hash chain.** The writer asks `key-holder` to sign the batch head with the log key. It never holds the key itself, and `key-holder`'s access list lets only the writer use the log key. The signature on a head that includes the previous signed head forms a **hash chain**: removing, reordering or altering a batch breaks every head after it. On AWS the same job is done by the key policy: it names the writer's role and no other.
-4. **Log store.** The batch is written to the blob store, with the lock mode that its blob driver gives. The log store is a `blob` whose lock mode matters: the `s3-compatible` driver locks in compliance mode on AWS S3 and in a mode that an account administrator can remove on Cloudflare R2; Garage, the boards' blob store, and `fs` have no lock at all, so tamper evidence there depends on witnesses. Every batch object is created with `If-None-Match: *`, so an object that exists is never written again. See [capability flags](/concepts/drivers/#capability-flags).
+4. **Log store.** The batch is written to the blob store, with the lock mode that its blob driver gives. The log store is a `blob` whose lock mode matters: the `s3-compatible` driver locks in compliance mode on AWS S3 and in a mode that an account administrator can remove on Cloudflare R2, which is also the boards' blob store; Garage (a later backend) and `fs` have no lock at all, so tamper evidence there depends on witnesses. Every batch object is created with `If-None-Match: *`, so an object that exists is never written again. See [capability flags](/concepts/drivers/#capability-flags).
 
 The **witness** co-signs batch heads it has seen, so that the writer alone cannot choose which history an auditor sees. It is optional (see [The witness is optional](#the-witness-is-optional)).
 
@@ -115,7 +115,7 @@ The installation defaults stay as they are ([OD-34](/open-decisions/#od-34)): th
 
 - **The co-located profile** for a small install shares the installation's driver instances, as combined pieces do ([OD-37](/open-decisions/#od-37)). The defence-in-depth layers stay per actor, unchanged: each audit actor still has its own scope, its own backend identity and, at L3 and above, its own store ([Defence in depth](/concepts/drivers/#defence-in-depth)).
 - **Every audit installation has its own front** ([OD-26](/open-decisions/#od-26), [ADR 0062](/decisions/0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own/)): a slim router `entry`, the API, which is the `reader`, and a console of its own. See [The audit front](#the-audit-front).
-- **On the boards the log lives on Garage, with an off-site copy on R2.** Garage has no lock (lock mode `none`), so the peer witnesses carry the log's tamper evidence ([Ports and drivers](/concepts/drivers/#garage)). An **hourly job** of the audit installation, a timer and not the writer, copies new log objects to R2, create-if-absent. The writer never touches R2, and an R2 outage delays the copy, never the log; the price is that up to an hour of log has no off-site copy ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/), [issue #984](https://github.com/truvity/sluis/issues/984)).
+- **On the boards the log lives on R2 in the first release.** R2's lock can be removed by an account administrator (lock mode `removable`), so the peer witnesses carry the log's tamper evidence. Garage, a blob store on the boards themselves, is a later backend, blocked upstream on conditional writes and prefix-scoped keys ([issue #982](https://github.com/truvity/sluis/issues/982), [Ports and drivers](/concepts/drivers/#garage)). With Garage comes an **hourly job** of the audit installation, a timer and not the writer, that copies new log objects to R2, create-if-absent, so that the writer never touches R2 and an R2 outage delays the copy, never the log ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/), [issue #984](https://github.com/truvity/sluis/issues/984)).
 
 ## The formats are the C2SP ones
 
@@ -135,15 +135,17 @@ The rows are in the [standards register](/standards/#transparency-and-audit). A 
 
 The record formats follow published standards too ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/), decided 2026-10-31).
 
-**An audit record is a plain OCSF 1.x event, with no sluis extension.** It uses OCSF's core classes, such as Authentication for a sign-in or a token grant, User Management for an issued credential or certificate, Entity Management for a console write, and API Activity for a quota call. The sluis action is `metadata.event_code`, the company `metadata.tenant_uid`, the record id `metadata.uid`, and the actor `actor.user.uid = <actor>@<boundary>`. Everything else sluis needs comes from where it already is:
+**An audit record is a plain OCSF 1.x event, with no sluis extension.** It uses OCSF's core classes, such as Authentication for a sign-in, a token grant or an issued certificate, Authorize Session for a grant of scopes, User Management for an issued credential, Entity Management for a console write, and API Activity for a quota call, a key use or an audit search or export. The first release pins OCSF 1.9.0. Where OCSF has no activity for an action, the record uses activity 99 (`Other`), and `metadata.event_code` names the action. The sluis action is `metadata.event_code`, the company `metadata.tenant_uid`, the record id `metadata.uid`, and the actor `actor.user.uid = <actor>@<boundary>`. Everything else sluis needs comes from where it already is:
 
 | What | Where |
 |---|---|
 | The boundary | The log: each log belongs to one boundary. An export writes it into `metadata.log_name` |
 | Data origin and sensitivity | The catalogue entry that `metadata.event_code` names |
 | The catalogue version | The schema entry written in the log |
-| The grant | OCSF's `policy` and `authorizations` objects |
-| Certificate details | OCSF's `certificate` object |
+| The grant | OCSF's `policy` and `authorizations` objects, with the grant id |
+| The OAuth scopes granted | The grant record's `privileges[]`; a token record carries only the grant id |
+| The sender binding (DPoP or mTLS) | `policy.data`, typed by the catalogue |
+| Certificate details | OCSF's `certificate` object, on Authentication |
 | A key that was used | Core resource objects, with the key's id |
 | The pseudonym key epoch | Encoded in the pseudonym |
 | The trace id | `metadata.correlation_uid` |
@@ -151,7 +153,11 @@ The record formats follow published standards too ([ADR 0021](/decisions/0021-th
 - **The same bytes end to end.** The emitter writes the record as RFC 8785 canonical JSON; the transport carries those bytes, the writer stores them unchanged, and the reader returns them as they are. Nothing re-encodes a record.
 - **The OCSF version is pinned per release** and named in every record (`metadata.version`); its compiled schema is stored in the log.
 - **The stored form is lean,** ids only. An export adds the enum captions, the `observables` and an integrity attestation that points back to the log entry, and is written as NDJSON.
-- **An extension comes only for a real gap.** A check of the mapping against the OCSF schema and its validator is running now (2026-10-31); a minimal extension is proposed only if it finds a concept with no valid core home.
+- **Profiles are declared** in `metadata.profiles`: `security_control` for a policy decision, `ai_operation` for the actor chain of a token exchange.
+- **Facts with no typed OCSF field** (such as the sender binding, a key's algorithm, a quota effect or a roll-forward value) go into OCSF's own `*.data` slots, typed per event code by the catalogue. A generic OCSF tool sees them as opaque JSON.
+- **No extension.** The check of 2026-10-31 wrote every catalogue action as plain OCSF 1.9.0, and the OCSF toolkit found no error. A minimal extension comes only if a SIEM later needs one of those facts typed.
+- **Validation in three places.** The writer enforces the catalogue's JSON Schema, generated from the compiled OCSF schema, and stays authoritative. Go and Rust emitters validate their own entries before they emit. The OCSF toolkit, still pre-1.0, runs in CI only, with the validators of all three languages on the same test vectors.
+- **sluis generates its own types** for Go, Rust and TypeScript from the compiled OCSF schema, for the classes the catalogue uses.
 
 **The usage log holds what was used,** as CloudEvents 1.0 events in structured JSON, canonical by RFC 8785, shaped like OpenMeter's usage events: the `type` selects a meter, the `subject` is the account, and `data` holds the account, the meter, the unit, an integer amount with its sign, the request id and the subject's pseudonym.
 
@@ -177,7 +183,7 @@ There is no separate notary to take this role (agreed, [OD-39](/open-decisions/#
 
 ## Lock modes, retention and legal holds
 
-The lock mode comes from the blob backend: `compliance` on AWS S3, `removable` on Cloudflare R2, `none` on Garage and on `fs` ([capability flags](/concepts/drivers/#capability-flags)). `sluis config check` reports it, and applies one rule ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)):
+The lock mode comes from the blob backend: `compliance` on AWS S3, `removable` on Cloudflare R2, `none` on Garage (later) and on `fs` ([capability flags](/concepts/drivers/#capability-flags)). `sluis config check` reports it, and applies one rule ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)):
 
 - **A production log needs a `compliance` lock, or a weaker lock mode plus a witness** (`peer` or `external`). The check refuses anything else in a production boundary, and warns in development and staging. The boards pass with their peer witnesses; a single-node production installation on `fs` needs an `external` witness.
 - **Each log declares its retention, and a production log must.** There is no built-in default. A compliance store applies it as per-object retention, which can only be extended; R2 applies it as the bucket lock rule; Garage and `fs` use a lifecycle rule or an expiry sweeper, whose credential may delete expired objects only and is the one delete right on the log. A trial in governance mode before compliance is recommended, not enforced.

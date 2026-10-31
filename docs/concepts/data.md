@@ -79,7 +79,7 @@ Actors reach their data through five ports. Each has a contract that does not ch
 |---|---|---|
 | `state` | Records, with revisions | Get, put with a precondition, compare-and-set, an atomic batch and expiry ([ADR 0017](/decisions/0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite/)). Delete, listing by prefix, a conditional adjust and a feed of changes are proposed further operations (ADR 0057) |
 | `index` | A search index derived from batches | Apply a batch, read and set a cursor, query, rebuild from the batches |
-| `blob` | Immutable objects, such as audit batches | Put once, get and list by key, with a lock mode of none, removable or compliance |
+| `blob` | Immutable objects, such as audit batches | Put once (an atomic create-if-absent that every driver must give, [Drivers](/concepts/drivers/#create-if-absent)), get and list by key, with a lock mode of none, removable or compliance |
 | `transport` | Messages that must survive a restart, such as audit records, or a stream of them to the writer | Put, receive, acknowledge, return with a delay; or a direct stream |
 | `lease` | Named, time-limited ownership | Acquire a named lease, renew, release |
 

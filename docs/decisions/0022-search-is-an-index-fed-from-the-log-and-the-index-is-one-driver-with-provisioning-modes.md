@@ -5,6 +5,7 @@
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909). Build and parity: [issue #839](https://github.com/truvity/sluis/issues/839).
 Rewritten in place on 2026-10-31 (the record format of [0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/) is decided: the core columns are mapped from OCSF paths, and the usage log needs no index).
+Rewritten in place on 2026-10-31 (the points that the previous rewrite marked as inferred are confirmed by the maintainer, and their markers are removed).
 
 ## Context
 
@@ -40,7 +41,7 @@ The threats this record answers are T-11, T-16 and T-26 of the [threat model](/s
 - **The index is derived.** It can always be rebuilt from the log alone (REQ-AUDIT-016), it is not backed up, and verification never trusts it ([0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
 - **The index keeps what the log keeps.** Rows of records past the log's retention go when the log's objects do. (inferred)
 - **The index port is:** apply a batch, read and set a cursor, query, rebuild from the batches ([Data](/concepts/data/#ports)).
-- **The usage log needs no search index.** Nobody searches it: quota follows it to derive meters and roll balances forward, and the finance export is derived from it ([0023](/decisions/0023-quotas-api-is-idempotent-and-its-data-follows-the-origin-model/)). The indexer neither follows nor holds a key for it. (that the indexer holds no usage key is inferred)
+- **The usage log needs no search index.** Nobody searches it: quota follows it to derive meters and roll balances forward, and the finance export is derived from it ([0023](/decisions/0023-quotas-api-is-idempotent-and-its-data-follows-the-origin-model/)). The indexer neither follows nor holds a key for it.
 
 ### What the index stores
 
@@ -132,7 +133,7 @@ The threats this record answers are T-11, T-16 and T-26 of the [threat model](/s
 - The rqlite driver lets the reader run on any board, at the cost of one more small rqlite cluster per boundary and of reads that may lag the leader by tens of milliseconds.
 - Search works out of the box on every tested installation. Every lambda installation pays for an Aurora database and an RDS Proxy, and its indexer and reader run in the VPC with endpoints for the other AWS APIs. `sluis config check` probes the database; in the `external` mode its security and availability are the operator's.
 - A tail by polling costs a call per interval.
-- The index columns follow OCSF paths, so an OCSF version upgrade that moves a field changes the mapping and needs a rebuild, not a new column. A record of each OCSF version is indexed by the mapping of its own version. (inferred)
+- The index columns follow OCSF paths, so an OCSF version upgrade that moves a field changes the mapping and needs a rebuild, not a new column. A record of each OCSF version is indexed by the mapping of its own version.
 
 ## Roads not taken
 

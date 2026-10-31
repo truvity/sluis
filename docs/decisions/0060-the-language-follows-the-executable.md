@@ -8,6 +8,7 @@ Rewritten in place on 2026-10-30 (the open points of [issue #910](https://github
 Rewritten in place on 2026-10-31 (`cloud-garage` is Rust, by rule R5).
 Rewritten in place on 2026-10-31 (no FIPS build in v2.0, after spike S2 ([issue #940](https://github.com/truvity/sluis/issues/940)): R8 is no longer FIPS parity, and the AWS drivers stay Rust).
 Rewritten in place on 2026-10-31 (spike S4 done ([issue #942](https://github.com/truvity/sluis/issues/942)): `key-holder` is Go with `piv-go`, a named exception to R3; PKCS#11 stays only for the later YubiHSM 2 and Nitrokey drivers; the YubiKey attestation verifier anchors on Yubico Attestation Root 1).
+Rewritten in place on 2026-10-31 (spikes S6 ([issue #944](https://github.com/truvity/sluis/issues/944)) and S7 ([issue #945](https://github.com/truvity/sluis/issues/945)) done, both passed with conditions; `cloud-garage` is a later driver, as ADR 0058 now says; the points that earlier rewrites marked as inferred are confirmed by the maintainer, and their markers are removed).
 
 ## Context
 
@@ -60,7 +61,7 @@ FIPS is [0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exce
 | `key-holder` | Go, with `piv-go` for YubiKey PIV. PKCS#11 only for the later YubiHSM 2 and Nitrokey drivers | R4 (`piv-go`): an exception to R3 | S4, done on 2026-10-31 |
 | `sluis-host` | Rust | R3 | S1 |
 | The ceremony's OpenPGP-card helper, run by `sluis ceremony` | Rust (`openpgp-card` with rPGP) | The deciding library is Rust-only, the converse of R4 | S8 |
-| `cloud-garage` | Rust; it shares no library with an integration, so R5 applies | R5 | None |
+| `cloud-garage` (a later driver) | Rust; it shares no library with an integration, so R5 applies | R5 | None |
 | `cloud-cloudflare` | Go, sharing the library of the integration `cloudflare@<company>` | R4: an exception to R5 | None |
 | `session`, `exchange`, `console`, `quota`, `signer`, `ca`, `ssh-ca` | Go | R4, R6 | None |
 | Audit actors: `writer`, `witness`, `indexer`, `reader` | Go | R4 | None |
@@ -70,8 +71,8 @@ FIPS is [0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exce
 
 - **The cloud and AWS-backed drivers are one group.** The inconsistency with OD-14 is resolved in its favour: every AWS-backed driver is Rust, so the build has one AWS SDK language. These drivers run as Lambda extensions and as sidecars, where start-up time adds to every cold start.
 - **`exchange` stays Go.** It is the most parser-heavy actor, but nearly every verifier it needs is best in Go. Its HPKE private key stays behind the `keys` port, and the cookie-sealing key of `session` does too.
-- **`key-holder` is Go with `piv-go`,** a named exception to R3. One `key-holder` owns each node's card, and `piv-go` enforces that by construction with its exclusive connection, while `ykcs11` resets the card when another client appears and keeps a copy of the PIN that `key-holder` cannot wipe. `key-holder` keeps the PIN in locked memory and zeroes its own copy; Go cannot promise that the runtime keeps no other, which the zeroisation review records (inferred). The Rust `yubikey` crate stays out (R7).
-- **PKCS#11 stays, for the planned YubiHSM 2 and Nitrokey drivers only** ([0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/), ADR 0052). Those are drivers of the `keys` port built later; which language they are written in is decided with them. (the last point is inferred)
+- **`key-holder` is Go with `piv-go`,** a named exception to R3. One `key-holder` owns each node's card, and `piv-go` enforces that by construction with its exclusive connection, while `ykcs11` resets the card when another client appears and keeps a copy of the PIN that `key-holder` cannot wipe. `key-holder` keeps the PIN in locked memory and zeroes its own copy; Go cannot promise that the runtime keeps no other, which the zeroisation review records. The Rust `yubikey` crate stays out (R7).
+- **PKCS#11 stays, for the planned YubiHSM 2 and Nitrokey drivers only** ([0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/), ADR 0052). Those are drivers of the `keys` port built later; which language they are written in is decided with them.
 - **Attestation verification is Go,** in the CLI at ceremony and node initialisation and in the `yubikey-attestation` verifier of `exchange` ([0012](/decisions/0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials/)). Its trust anchor is Yubico's PIV attestation root, **Yubico Attestation Root 1**, with its intermediates, supplied by sluis rather than taken from `piv-go`'s built-in roots.
 - **The ceremonies are `sluis ceremony …` subcommands of the one `sluis` CLI**, so OD-16 holds without exception. The part that drives the OpenPGP cards with `openpgp-card` and rPGP is a Rust helper executable under `/usr/libexec/sluis/`, which the CLI runs. The helper ships **inside the `sluis` package**; there is no separate ceremony package ([0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)).
 - **A ceremony runs in three steps:** prepare it online; run the same `sluis` with the same configuration on the offline live USB system, where the cards are; then complete and publish it online.
@@ -89,8 +90,8 @@ Each conditional verdict holds only once its spike passes. The languages are fix
 | S3 | A slim `entry` prototype in both languages, behind the tunnel client and behind the Lambda Web Adapter, with limits, timeouts and 24 hours of fuzzing; p99 latency, memory, cold start and binary size | `entry` |
 | S4 | `key-holder` through `cryptoki` and `ykcs11`, against `piv-go`: P-384 signing, ECDH, PS256, Ed25519 on firmware 5.7, PIN once, concurrent callers, the release-subkey slot; then YubiHSM 2 and Nitrokey; a zeroisation review of the PIN paths. Done on 2026-10-31 for YubiKey PIV: both paths work, and `piv-go` was chosen (above). The release-subkey slot, YubiHSM 2, Nitrokey and the zeroisation review are still to run | `key-holder`: decided, Go |
 | S5 | The boards' memory budget: memory under load for every actor and driver, in Go and for the Rust candidates | Fusion defaults, the AWS-backed drivers, the trusted base |
-| S6 | OpenTelemetry from Rust: one trace across a Go-to-Rust Connect hop | R9 |
-| S7 | Configuration in Rust: types from the JSON Schema accept and reject the same conformance vectors as the Go structs | R9 |
+| S6 | OpenTelemetry from Rust: one trace across a Go-to-Rust Connect hop. Done on 2026-10-31, passed with conditions | R9 |
+| S7 | Configuration in Rust: types from the JSON Schema accept and reject the same conformance vectors as the Go structs. Done on 2026-10-31, passed with conditions | R9 |
 | S8 | The ceremony with OpenPGP cards: two primaries generated on cards and one subkey bound under both, verified by the same tool matrix as the test of 2026-10-29, compared with a Go CLI driving scdaemon | The ceremony's card helper |
 | S10 | GoReleaser with a Cargo workspace: every Rust binary for two architectures, with SBOM, signing and provenance like the Go artefacts, and Lambda zips within the layer limits | Every Rust component |
 
@@ -114,7 +115,7 @@ A fallback is not chosen in advance. When a spike fails, the maintainer decides 
 - **The public edge and the trusted base, apart from `key-holder`, are memory-safe without a garbage collector**, and those processes can zeroise what they hold. The cost is two languages on the request path and at the trust boundaries, so reviewers must read both.
 - **Most of sluis stays Go**, where its deciding libraries are: the OpenID Connect provider, the CA, the transparency logs, the vendor SDKs and Kubernetes.
 - **One AWS SDK language.** The AWS-backed drivers and the cloud drivers share a toolchain and a release path, and a later FIPS variant has one SDK gap to solve, not two.
-- **The YubiKey driver keeps its cgo job.** `piv-go` reaches pcsc-lite through cgo on Linux, so the per-architecture native build of [0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/) stays for it. (inferred)
+- **The YubiKey driver keeps its cgo job.** `piv-go` reaches pcsc-lite through cgo on Linux, so the per-architecture native build of [0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/) stays for it.
 - **`key-holder` is the one trusted-base process in Go.** Its PIN sits in a garbage-collected process, and it uses a few megabytes more than the Rust holder did. In return the card has exactly one owner on every node, enforced by the library rather than by deployment rules, and a crash of another card client cannot reset it.
 - **No Rust FIPS build in v2.0.** The Rust components build like any other Rust code. A FIPS variant would bring back the heavier build and a certified pin that lags the current `aws-lc-rs`, and it needs its own build design when it is added (ADR 0010).
 - **The spikes are on the critical path** of the local installation. S1 to S3 are small, and the contracts are fixed first anyway.
