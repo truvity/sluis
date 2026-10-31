@@ -5,6 +5,7 @@
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 Rewritten in place on 2026-10-30 (the three open points of [issue #910](https://github.com/truvity/sluis/issues/910) decided: one boundary issuer for workload tokens, one actor ID form, and what the server keeps for a reusable token; the record is Accepted).
+Rewritten in place on 2026-10-31 (the trust anchor of the `yubikey-attestation` verifier is named: Yubico Attestation Root 1, found by spike S4).
 
 ## Context
 
@@ -41,7 +42,7 @@ Other records constrain the answer:
   | First release | `aws-iid` | The EC2 instance identity document. It is accepted **once per instance**, and it is the primary path on EC2. |
   | First release | `k8s-sa-token` | A projected Kubernetes ServiceAccount token. |
   | First release | `github-oidc` | A GitHub Actions OIDC token. |
-  | First release | `yubikey-attestation` | A YubiKey attestation, checked against the Yubico roots and a registry of known cards. |
+  | First release | `yubikey-attestation` | A YubiKey PIV attestation, chained to Yubico's PIV attestation root, **Yubico Attestation Root 1**, through Yubico's published intermediates, and checked against a registry of known cards. sluis ships that root as the verifier's trust anchor: `piv-go`'s built-in roots predate it and reject attestations from firmware 5.7 and newer (spike S4, 2026-10-31). |
   | First release | `enrol-token` | A single-use or reusable enrolment token (below). |
   | First release | manual approval | A person approves the request in the console. |
   | Next | `tailscale-whois` | The Tailscale node identity of the caller's address. |

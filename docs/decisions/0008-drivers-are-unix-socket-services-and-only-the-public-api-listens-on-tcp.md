@@ -6,6 +6,7 @@
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909). This record covers the bare-metal and serverless runtimes. Kubernetes edge and pod layout: ADR 0046.
 Rewritten in place on 2026-10-30 (alignment with 0007, 0058 and 0012).
 Rewritten in place on 2026-10-30 (the point that was not decided here, how a `per-actor` rqlite driver reaches its cluster, is decided: a narrow network rule per unit; tracked on [issue #910](https://github.com/truvity/sluis/issues/910)).
+Rewritten in place on 2026-10-31 (the example of a Rust driver no longer names `key-holder`, which is Go after spike S4).
 
 ## Context
 
@@ -62,7 +63,7 @@ The two rules above met here, and the maintainer decided on 2026-10-30. A `per-a
 - `key-holder` is the one point where the driver's own code is the boundary. Its socket layout, its peer-uid check, its content checks and its generated access list need deny tests. Every `per-actor` driver relies on the backend's check instead, and that check needs a test per driver with the other layers switched off ([0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/)).
 - A serverless function that has a loopback listener and a gateway adapter needs the adapter pinned and vendored into sluis's own layer, so the listener's only client is a component sluis ships.
 - ConnectRPC over Unix sockets costs a hop and a serialisation where a library call would be free. That cost is accepted for the isolation. It also means every driver needs the Protobuf contract of its port.
-- A second implementation language is possible for a driver (for example Rust for `key-holder` and the cloud drivers), because the contract is on the wire and not in a Go interface.
+- A second implementation language is possible for a driver (for example Rust for the cloud drivers), because the contract is on the wire and not in a Go interface.
 - A unit that runs a `per-actor` rqlite driver has a network stack, limited by a per-unit rule rather than by a namespace. A wrong address in the rule is caught by the per-cluster client certificate, and the deny tests check that the unit cannot reach any other address. (the deny test is inferred)
 - Testing a listener rule is mechanical: no actor or driver may bind a TCP address, except `entry` on serverless (on loopback) and the state clusters' ports. On bare metal `entry` binds none. The deny tests check it.
 - Kubernetes will be decided in ADR 0046. Docs for it stay marked proposed until that record is accepted.

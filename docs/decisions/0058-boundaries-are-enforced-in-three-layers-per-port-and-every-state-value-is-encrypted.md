@@ -7,6 +7,7 @@ Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/slu
 Rewritten in place on 2026-10-30 (threat IDs from the threat model added to the consequences).
 Rewritten in place on 2026-10-30 (a narrow network rule per unit for the `per-actor` rqlite driver, and Garage as a supported backend of the blob driver with a `cloud-garage` credential driver, primary on the boards with an off-site copy of the audit log on R2).
 Rewritten in place on 2026-10-31 (`cloud-garage` is Rust, as ADR 0060 now says, and the off-site copy of the audit log is an hourly job, as ADR 0021 decides).
+Rewritten in place on 2026-10-31 (`key-holder` is Go with `piv-go`, after spike S4, as ADR 0060 now says).
 
 ## Context
 
@@ -77,7 +78,7 @@ The node's YubiKey is the one backend left that cannot tell callers apart.
 - **One `key-holder` process serves one Unix socket per caller.** Each socket sits in a directory that only its caller can open, using systemd socket units with `SocketUser=` and `FileDescriptorName=`. In a container, only that caller's socket is mounted.
 - **`key-holder` also checks the peer uid** of every connection, as a second factor.
 - **Signing is content-aware for each purpose.** The `ca` purpose signs only a TBSCertificate that parses and stays within its constraints. The `ssh-ca` purpose signs only an OpenSSH certificate body. Token purposes sign only a JWS signing input. For this, a call carries the content to be signed and not only its digest. (inferred)
-- **`key-holder` is written in Rust** ([0060](/decisions/0060-the-language-follows-the-executable/)). It has no network, runs under seccomp and keeps the PIN in locked memory. The PIN arrives only from an unlocked peer or through `sluis node unlock` ([0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/)). Signatures are rate-limited, and each one is audited.
+- **`key-holder` is written in Go with `piv-go`, which holds the card exclusively, so no other process on the node can use or reset it** ([0060](/decisions/0060-the-language-follows-the-executable/)). It has no network, runs under seccomp and keeps the PIN in locked memory. The PIN arrives only from an unlocked peer or through `sluis node unlock` ([0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/)). Signatures are rate-limited, and each one is audited.
 - **More cards per node are optional later.**
 - **The OpenPGP card on a root is used directly by the ceremony tool.** There is no mediator for it, because no service shares it. (inferred)
 

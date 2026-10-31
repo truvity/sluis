@@ -4,6 +4,7 @@
 **Date:** 2026-10-31
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909). Build: [issue #915](https://github.com/truvity/sluis/issues/915).
+Rewritten in place on 2026-10-31 (balance effects, meters and request ids live in the usage log of [0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/), a parallel log in CloudEvents 1.0 JSON that the same writer writes; quota rolls forward from it, and the finance export is derived from it).
 
 ## Context
 
@@ -15,6 +16,8 @@ What 0004 did not decide is what an application calls and what quota keeps. Appl
 
 [0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/#quota-by-origin) already placed quota's data: limits, enforcement rules and the exhaustion and unavailability behaviour are declared, and an operator may lower a limit on the console, tighten-only; balances and top-ups are issued, durable, backed up and rolled forward; meters and hourly aggregates are derived from the log.
 
+[0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/) gives each writer two log kinds. The audit log holds OCSF events for security readers. The usage log holds CloudEvents usage events (an account, a meter, a unit, an integer amount with its sign, the request id and the subject's pseudonym) for quota and for billing, with its own key, retention and readers. The emitter sends one message with an audit part and an optional usage part, and the writer registers both logs' batches in one atomic state batch.
+
 The threats this record bears on are T-13 and T-25 of the [threat model](/security/threat-model/): a sender that floods its own queue is bounded by quotas and limits, and an operator's change of a limit or a balance is audited under the operator's name.
 
 ## Decision
@@ -25,7 +28,7 @@ The threats this record bears on are T-13 and T-25 of the [threat model](/securi
 - **The TypeScript deliverable is a Connect client library built on connect-es.** Other languages use their Connect clients.
 - **Every call that changes something carries a `request_id` field, and the field is canonical.** It is in the schema, so it survives every transport, including Unix sockets, Lambda invocations and in-memory calls.
 - **`entry` also accepts the `Idempotency-Key` header** of the IETF draft and copies it into the field. A request that carries both with different values is refused.
-- **A request id is scoped to the calling client and the method, and quota remembers it for 24 hours** as ephemeral state. After a restore, the remembered ids of the last 24 hours are rebuilt from the log, because every record carries its request id.
+- **A request id is scoped to the calling client and the method, and quota remembers it for 24 hours** as ephemeral state. After a restore, the remembered ids of the last 24 hours are rebuilt from the usage log, because every usage event of quota's calls carries its request id.
 - **Conflicts follow the draft.** A request id reused with a different payload is refused, and a duplicate that arrives while the first is still running is refused as a conflict (HTTP 409, Connect `aborted`). A refusal for an exhausted balance is `resource_exhausted` (HTTP 429) with `Retry-After`. (The Connect codes are inferred from the research of 2026-10-30.)
 
 ### Reservations
@@ -40,13 +43,19 @@ The threats this record bears on are T-13 and T-25 of the [threat model](/securi
 - **`TopUp` takes positive amounts only,** from declared clients whose policy allows `quota.topup` on that balance, identified by their workload identity. A top-up cannot drain a balance.
 - **A correction is an `Adjust` call,** with a reason and an amount of either sign. It is allowed to a declared client, or to an operator with step-up ([0048](/decisions/0048-passkeys-step-up-and-device-login/)).
 - **A refund is an `Adjust` that names the confirmed event it refunds.** It is bounded by that event's amount, and refunding the same event twice is refused.
-- **Top-ups, corrections and refunds are audited,** each with enough data to roll the balance forward (REQ-AUDIT-019, REQ-QUOTA-005).
+- **Top-ups, corrections and refunds are audited,** each as an audit record and a usage event of one message. The usage event carries enough data to roll the balance forward (REQ-AUDIT-019, REQ-QUOTA-005).
 
 ### Amounts, balances and effects
 
 - **Amounts are signed 64-bit integers in a unit declared per meter and per balance,** for example `requests` or `cents`. There are no decimals anywhere in quota.
 - **A balance belongs to a declared account in a boundary and a company.** Declared rules map subjects, clients or a whole company to an account. A balance's key is (boundary, company, account, meter), so record keys carry no personal data.
-- **Only quota's own records carry an effect on a balance:** `Admit`, `Confirm`, `Cancel`, `TopUp` and `Adjust` records carry a signed effect on a named balance. Application records carry meters only. An application that wants to change a balance calls quota; it does not just emit (REQ-QUOTA-004, REQ-QUOTA-010).
+- **Balance effects live in the usage log, and only quota writes them.** The messages of `Admit`, `Confirm`, `Cancel`, `TopUp` and `Adjust` carry a usage part with a signed effect on a named balance. An application's usage part carries meters only, and its audit record never carries a balance effect. An application that wants to change a balance calls quota; it does not just emit (REQ-QUOTA-004, REQ-QUOTA-010).
+- **A usage event is a CloudEvents 1.0 event, structured JSON in RFC 8785 form,** shaped like OpenMeter's usage events: its `type` selects the meter, its `subject` is the account, and its `data` holds the typed usage fields ([0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/#the-usage-event)).
+
+### The finance export
+
+- **The finance export is a table derived from the usage log, with rows in the style of FinOps FOCUS 1.4:** per charge period, account and meter, the consumed quantity and unit (`ChargePeriodStart`, `ChargePeriodEnd`, `BillingAccountId`, `SubAccountId`, `SkuMeter`, `ConsumedQuantity`, `ConsumedUnit`). sluis holds no prices, so cost columns are left to the billing system that reads the rows. (the columns are inferred)
+- **Like the meters, the export is derived:** it can be rebuilt from the usage log at any time, and it is never the record. Its contract and the actor that serves it are fixed with quota's contract ([issue #915](https://github.com/truvity/sluis/issues/915)). (inferred)
 
 ### Limits
 
@@ -61,12 +70,12 @@ The threats this record bears on are T-13 and T-25 of the [threat model](/securi
 |---|---|---|---|
 | Limits, enforcement rules, accounts, exhaustion and unavailability behaviour | declared | nobody at run time | in version control |
 | A limit lowered below the declared one | operator-set, tighten-only | `quota`, on a request routed by `console` | backed up; a restore never loosens it |
-| Balances, top-ups and adjustments | issued, durable | `quota` | backed up, then rolled forward from the admit, confirm, cancel, top-up and adjust records |
-| Reservations, rate buckets and remembered request ids | issued, ephemeral | `quota` | not backed up; request ids of the last 24 hours rebuilt from the log |
-| Meters and hourly aggregates | derived | `quota` | not backed up; rebuilt from the log after a restore |
+| Balances, top-ups and adjustments | issued, durable | `quota` | backed up, then rolled forward from the admit, confirm, cancel, top-up and adjust events of the usage log |
+| Reservations, rate buckets and remembered request ids | issued, ephemeral | `quota` | not backed up; request ids of the last 24 hours rebuilt from the usage log |
+| Meters, hourly aggregates and the finance export | derived | `quota` | not backed up; rebuilt from the usage log after a restore |
 
 - **Only `quota` writes balances,** one writer per record kind ([0017](/decisions/0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite/)). Every value is encrypted in the port library ([0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/)).
-- **Meters are derived from the log by `quota`,** which follows the log as the indexer does. (inferred from 0016, which names `quota` as the deriving actor)
+- **Meters are derived from the usage log by `quota`,** which follows the usage log by checkpoint as the indexer follows the audit log. The usage log has no search index. (that `quota` derives is inferred from 0016, which names `quota` as the deriving actor)
 - **An hourly aggregate lists the ids of its events,** so the sum of the aggregates equals the count of the facts (REQ-QUOTA-012).
 
 ### Enforcement
@@ -84,10 +93,11 @@ The threats this record bears on are T-13 and T-25 of the [threat model](/securi
 - Balances are money-like records with one writer, a backup and a roll-forward. A restore loses no top-up or adjustment that reached the log. Integers make the arithmetic exact on every store, but a unit finer than the integer must be chosen up front.
 - A client that never confirms gets its work without paying, within the reservation's time to live; the expired count makes that visible.
 - Top-ups cannot drain a balance, and corrections and refunds are rare, explained and visible. That is two calls to build and test, and a refund needs its original event within the retention.
-- An application changes a balance only through quota, so roll-forward reads one kind of record and balances change only under quota's compare-and-set.
+- An application changes a balance only through quota, so roll-forward reads quota's own events in the usage log and balances change only under quota's compare-and-set. Quota never reads the audit log, and billing never parses security records.
+- The usage log has its own retention, so balances can be rolled forward, and refunds checked against their original event, for as long as finance keeps usage, whatever the audit log's retention is.
 - The account is one more declared concept, and it fits per-customer billing and per-client caps alike.
 - Every enforcing rule carries two more declared lines, and every risk choice is reviewed.
-- Meters come from the log, so they cost nothing on the hot path but lag it by the seal interval and the deriving pass. Rates add state writes on the hot path.
+- Meters come from the usage log, so they cost nothing on the hot path but lag it by the seal interval and the deriving pass. Rates add state writes on the hot path.
 - Strict enforcement puts a compare-and-set on the mint path. On rqlite that is a consensus round trip per admitted request, which is why the load test gates it.
 - The TypeScript library is one more artifact on the release train ([0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)).
 
@@ -135,11 +145,17 @@ The threats this record bears on are T-13 and T-25 of the [threat model](/securi
 - Cons: Cancel would mean two things, and a late cancel would change settled meters. Without refunds, refunds and credits are indistinguishable in the records.
 - Why not: a refund is an `Adjust` bounded by the event it names.
 
+### Balance effects in the audit log, through an OCSF extension
+
+- Pros: one log, and one record per quota call.
+- Cons: billing data in a security schema, which needs an extension, and a retention that ties finance and security together; quota would decrypt and parse security records to roll forward.
+- Why not: the maintainer chose a parallel usage log written by the same writer ([0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)).
+
 ### Effects from any record, or computed from a price table
 
 - Pros: applications could change balances by emitting; a price table keeps records as they are.
 - Cons: balances would change from the log, behind the seal interval and outside quota's compare-and-set. Top-ups and refunds do not fit a price table.
-- Why not: only quota's own records carry effects.
+- Why not: only quota's own usage events carry effects.
 
 ### Balances per subject, or per client
 

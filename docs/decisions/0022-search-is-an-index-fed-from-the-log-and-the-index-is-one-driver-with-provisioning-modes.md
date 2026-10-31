@@ -4,6 +4,7 @@
 **Date:** 2026-10-31
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909). Build and parity: [issue #839](https://github.com/truvity/sluis/issues/839).
+Rewritten in place on 2026-10-31 (the record format of [0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/) is decided: the core columns are mapped from OCSF paths, and the usage log needs no index).
 
 ## Context
 
@@ -13,7 +14,7 @@ v1 built the same split. The indexer followed the bucket by listing it from a cu
 
 Since then:
 
-- **The log is a C2SP tiled log** ([0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)). Following it means following checkpoints and fetching new entry bundles, not listing objects. Each entry is a clear envelope plus the record encrypted to its company.
+- **The log is a C2SP tiled log** ([0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)). Following it means following checkpoints and fetching new entry bundles, not listing objects. Each entry is a clear envelope plus the record encrypted to its company. A record is a plain OCSF event in RFC 8785 JSON, and a writer also writes a usage log of CloudEvents usage events beside the audit log.
 - **One log per node.** On the boards the indexer follows three logs.
 - **Full-text search works on rqlite.** FTS5 was tested on 2026-10-30 on rqlite 10.6.6 (SQLite 3.53.4), on one node and on a three-node cluster, with the arm64 image under emulation. Followers answer reads locally only at the `none` consistency level, so a reader uses a small freshness bound, and `weak` to read its own write. Writes are best batched. The search table is an external-content FTS table. Native arm64 hardware and the fsync cost on eMMC are not measured yet.
 - **Companies are reader tenants with their own keys** ([0009](/decisions/0009-one-installation-per-boundary/)), so the index holds data of several companies.
@@ -33,17 +34,36 @@ The threats this record answers are T-11, T-16 and T-26 of the [threat model](/s
 
 ### The index follows the log
 
-- **The indexer follows each log of its boundary by checkpoint.** It keeps one cursor per log, reads the latest checkpoint, and fetches the entry bundles from its cursor up to the checkpoint's size. Notifications only wake it.
+- **The indexer follows each audit log of its boundary by checkpoint.** It keeps one cursor per log, reads the latest checkpoint, and fetches the entry bundles from its cursor up to the checkpoint's size. Notifications only wake it.
 - **It indexes only entries that a signed checkpoint covers,** and it checks each new checkpoint's signature and its consistency with the previous one before it moves the cursor. (inferred: tiles mean nothing without a checkpoint)
 - **Indexing is idempotent, keyed by the record's hash,** so a repeated pass or a rebuilt range changes nothing.
 - **The index is derived.** It can always be rebuilt from the log alone (REQ-AUDIT-016), it is not backed up, and verification never trusts it ([0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
 - **The index keeps what the log keeps.** Rows of records past the log's retention go when the log's objects do. (inferred)
 - **The index port is:** apply a batch, read and set a cursor, query, rebuild from the batches ([Data](/concepts/data/#ports)).
+- **The usage log needs no search index.** Nobody searches it: quota follows it to derive meters and roll balances forward, and the finance export is derived from it ([0023](/decisions/0023-quotas-api-is-idempotent-and-its-data-follows-the-origin-model/)). The indexer neither follows nor holds a key for it. (that the indexer holds no usage key is inferred)
 
 ### What the index stores
 
-- **Fixed columns for the core fields:** the time, the log, the boundary, the company, the action, the outcome, the actor, the subject's pseudonym, the target, the request id and the trace id. These are named here by what they mean. Their source fields are mapped from the record format of [0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/), which is still open (AL-4) and may name them differently; the mapping is fixed with that format, and the columns are not.
-- **A typed attribute table** for the properties that the catalogue marks filterable or facetable.
+- **Fixed columns for the core fields,** mapped from the OCSF record of [0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/):
+
+  | Column | Source |
+  |---|---|
+  | time | `time` |
+  | recorded at | the writer's stamp in the envelope |
+  | log | the log the entry came from |
+  | boundary | the log's boundary |
+  | company | `metadata.tenant_uid` |
+  | action | `metadata.event_code`, with `class_uid` and `activity_id` as columns of their own for OCSF-shaped queries |
+  | outcome | `status_id` and `status_code` |
+  | actor | `actor.user.uid` and `actor.user.type_id` |
+  | subject pseudonym | the subject path the catalogue entry declares, for example `user.uid` |
+  | target | the target path the catalogue entry declares, for example `entity.uid` or `resources[0].uid` |
+  | request id | the request-id path the catalogue entry declares, for example `api.request.uid` |
+  | trace id | `metadata.correlation_uid` |
+  | record id | `metadata.uid` |
+
+  The column set is the same on every driver. (the table is from the research of 2026-10-31, adjusted to OCSF with no extension)
+- **A typed attribute table** for the properties that the catalogue marks filterable or facetable, keyed by their OCSF path (a JSON Pointer).
 - **The record itself, once.** The full-text table is an external-content table over it.
 - **One full-text table over the fields that the catalogue marks searchable,** and no other field. A personal field is not searchable unless the catalogue says so.
 
@@ -92,7 +112,7 @@ The threats this record answers are T-11, T-16 and T-26 of the [threat model](/s
   - **Search,** with a closed filter grammar, keyset cursors whose next page never disappears, and the free-text `q` over the searchable fields;
   - **Facets;**
   - **Get,** which returns a record with its inclusion proof against a cosigned checkpoint, so a record can be proven to an outsider;
-  - **Export,** an asynchronous job that writes JSON Lines and ends in a short-lived signed URL;
+  - **Export,** an asynchronous job that writes NDJSON of enriched OCSF events ([0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/#export)) and ends in a short-lived signed URL;
   - **a tail,** which is a repeated Search with the cursor.
 
   Server streaming may come later, as an option on long-lived hosts.
@@ -112,7 +132,7 @@ The threats this record answers are T-11, T-16 and T-26 of the [threat model](/s
 - The rqlite driver lets the reader run on any board, at the cost of one more small rqlite cluster per boundary and of reads that may lag the leader by tens of milliseconds.
 - Search works out of the box on every tested installation. Every lambda installation pays for an Aurora database and an RDS Proxy, and its indexer and reader run in the VPC with endpoints for the other AWS APIs. `sluis config check` probes the database; in the `external` mode its security and availability are the operator's.
 - A tail by polling costs a call per interval.
-- If the record format chosen for AL-4 cannot carry one of the core fields, this record is rewritten.
+- The index columns follow OCSF paths, so an OCSF version upgrade that moves a field changes the mapping and needs a rebuild, not a new column. A record of each OCSF version is indexed by the mapping of its own version. (inferred)
 
 ## Roads not taken
 
