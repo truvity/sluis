@@ -15,7 +15,7 @@ requirements:
       - {id: ST-14, section: "2.1.2", depth: Full}
       - {id: ST-28, section: "3.1", depth: Partial}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#775"]
+    issues: [775]
     verification:
       - {kind: conformance-suite, ref: "OIDF Basic OP"}
   - id: REQ-AUTHN-025
@@ -31,7 +31,7 @@ requirements:
       - {id: ST-01, section: "3.1.1", depth: Partial}
       - {id: ST-14, section: "2.1.2", depth: Full}
       - {id: ST-28, section: "3.1", depth: Partial}
-    features: ["#775"]
+    issues: [775]
     verification:
       - {kind: integration-test, ref: "negative test for each refused response type"}
   - id: REQ-AUTHN-002
@@ -46,7 +46,7 @@ requirements:
       - {id: ST-03, section: "4.2-4.3", depth: Full}
       - {id: ST-14, section: "2.1.1", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#775"]
+    issues: [775]
     verification:
       - {kind: conformance-suite, ref: "OIDF Basic OP (PKCE variant)"}
   - id: REQ-AUTHN-026
@@ -61,7 +61,7 @@ requirements:
     standards:
       - {id: ST-03, section: "4.2-4.3", depth: Full}
       - {id: ST-14, section: "2.1.1", depth: Full}
-    features: ["#775"]
+    issues: [775]
     verification:
       - {kind: integration-test, ref: "negative tests for plain and missing challenge"}
   - id: REQ-AUTHN-003
@@ -75,7 +75,7 @@ requirements:
     standards:
       - {id: ST-14, section: "2.1", depth: Full}
       - {id: ST-04, section: "7.3", depth: Full}
-    features: ["#775"]
+    issues: [775]
     verification:
       - {kind: integration-test, ref: "redirect matrix (exact, prefix, case, userinfo, fragment, port)"}
   - id: REQ-AUTHN-004
@@ -89,7 +89,7 @@ requirements:
     standards:
       - {id: ST-14, section: "2.1", depth: Full}
       - {id: ST-04, section: "8.3", depth: Full}
-    features: ["#775", "#786"]
+    issues: [775, 786]
     verification:
       - {kind: integration-test, ref: "policy-load negative test"}
   - id: REQ-AUTHN-005
@@ -104,7 +104,7 @@ requirements:
       - {id: ST-10, section: "2", depth: Full}
       - {id: ST-29, section: "3", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#774", "#775"]
+    issues: [774, 775]
     verification:
       - {kind: conformance-suite, ref: "OIDF Config OP"}
       - {kind: integration-test, ref: "response check"}
@@ -120,7 +120,7 @@ requirements:
     standards:
       - {id: ST-01, section: "4.1.2", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#774", "#775"]
+    issues: [774, 775]
     verification:
       - {kind: conformance-suite, ref: "OIDF Basic OP"}
   - id: REQ-AUTHN-028
@@ -136,7 +136,7 @@ requirements:
       - {id: ST-10, section: "3", depth: Full}
       - {id: ST-29, section: "3", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#774", "#775"]
+    issues: [774, 775]
     verification:
       - {kind: conformance-suite, ref: "OIDF Config OP"}
   - id: REQ-AUTHN-006
@@ -151,7 +151,7 @@ requirements:
       - {id: ST-29, section: "4", depth: Full}
       - {id: ST-05, section: "3", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#774"]
+    issues: [774]
     verification:
       - {kind: conformance-suite, ref: "OIDF Config OP"}
       - {kind: test-vectors, ref: "own golden for authorization server metadata"}
@@ -168,7 +168,7 @@ requirements:
       - {id: ST-29, section: "4", depth: Full}
       - {id: ST-05, section: "3", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#774"]
+    issues: [774]
     verification:
       - {kind: conformance-suite, ref: "OIDF Config OP"}
       - {kind: integration-test, ref: "both-location fetch test"}
@@ -185,7 +185,7 @@ requirements:
       - {id: ST-29, section: "4", depth: Full}
       - {id: ST-05, section: "3", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#774"]
+    issues: [774]
     verification:
       - {kind: conformance-suite, ref: "OIDF Config OP"}
       - {kind: integration-test, ref: "byte-equality test"}
@@ -200,7 +200,7 @@ requirements:
     standards:
       - {id: ST-28, section: "3.1.2.1", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#775"]
+    issues: [775]
     verification:
       - {kind: conformance-suite, ref: "OIDF Basic OP"}
   - id: REQ-AUTHN-031
@@ -215,7 +215,7 @@ requirements:
     standards:
       - {id: ST-28, section: "3.1.2.1", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#775"]
+    issues: [775]
     verification:
       - {kind: conformance-suite, ref: "OIDF Basic OP"}
       - {kind: integration-test, ref: "no-render test for prompt=none"}
@@ -230,7 +230,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2.1", depth: Full}
-    features: ["#775"]
+    issues: [775]
     verification:
       - {kind: integration-test, ref: "prompt combination matrix"}
   - id: REQ-AUTHN-008
@@ -245,7 +245,7 @@ requirements:
       - {id: ST-28, section: "3.1.2.1", depth: Full}
       - {id: ST-28, section: "2", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#775", "#776"]
+    issues: [775, 776]
     verification:
       - {kind: conformance-suite, ref: "OIDF Basic OP"}
       - {kind: integration-test, ref: "max_age test"}
@@ -262,7 +262,7 @@ requirements:
       - {id: ST-28, section: "3.1.2.1", depth: Full}
       - {id: ST-28, section: "2", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#775", "#776"]
+    issues: [775, 776]
     verification:
       - {kind: conformance-suite, ref: "OIDF Basic OP"}
       - {kind: integration-test, ref: "federated auth_time test"}
@@ -278,7 +278,7 @@ requirements:
       - {id: ST-28, section: "3.1.2.1", depth: Partial}
       - {id: ST-24, section: "3", depth: Partial}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#885"]
+    issues: [885]
     gap: stakeholder-only
     verification:
       - {kind: integration-test, ref: "acr matrix (known, unknown, restricted, cool-down)"}
@@ -295,7 +295,7 @@ requirements:
     standards:
       - {id: ST-28, section: "3.1.2.1", depth: Partial}
       - {id: ST-24, section: "3", depth: Partial}
-    features: ["#885"]
+    issues: [885]
     gap: stakeholder-only
     verification:
       - {kind: integration-test, ref: "downgrade negative test"}
@@ -356,7 +356,7 @@ requirements:
     standards:
       - {id: ST-14, section: "2", depth: Partial}
       - {id: ST-01, section: "3.1", depth: Partial}
-    features: ["#796"]
+    issues: [796]
     verification:
       - {kind: integration-test, ref: "closed-list acceptance test"}
   - id: REQ-AUTHN-036
@@ -371,7 +371,7 @@ requirements:
     standards:
       - {id: ST-14, section: "2", depth: Partial}
       - {id: ST-01, section: "3.1", depth: Partial}
-    features: ["#796"]
+    issues: [796]
     verification:
       - {kind: integration-test, ref: "one negative test per refused input"}
       - {kind: integration-test, ref: "test that no refused row is accepted silently"}
@@ -387,7 +387,7 @@ requirements:
     standards:
       - {id: ST-14, section: "2", depth: Partial}
       - {id: ST-01, section: "3.1", depth: Partial}
-    features: ["#796"]
+    issues: [796]
     verification:
       - {kind: integration-test, ref: "repeated-parameter test"}
   - id: REQ-AUTHN-013
@@ -476,7 +476,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-14, section: "2.4", depth: Full}
-    features: ["#850"]
+    issues: [850]
     verification:
       - {kind: integration-test, ref: "unsupported_grant_type test"}
   - id: REQ-AUTHN-041
@@ -490,7 +490,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-20, section: "7523", depth: Partial}
-    features: ["#850"]
+    issues: [850]
     verification:
       - {kind: integration-test, ref: "unsupported_grant_type test"}
   - id: REQ-AUTHN-042
@@ -504,7 +504,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-32, section: "1", depth: Full}
-    features: ["#850"]
+    issues: [850]
     verification:
       - {kind: integration-test, ref: "404 test"}
   - id: REQ-AUTHN-043
@@ -518,7 +518,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-33, section: "1", depth: Full}
-    features: ["#850"]
+    issues: [850]
     verification:
       - {kind: integration-test, ref: "404 test"}
   - id: REQ-AUTHN-044
@@ -532,7 +532,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-35, section: "4", depth: Full}
-    features: ["#850"]
+    issues: [850]
     verification:
       - {kind: integration-test, ref: "404 test"}
   - id: REQ-AUTHN-045
@@ -546,7 +546,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-36, section: "1", depth: Full}
-    features: ["#850"]
+    issues: [850]
     superseded_by: [REQ-AUTHN-063, REQ-AUTHN-064, REQ-AUTHN-065]
     verification:
       - {kind: integration-test, ref: "404 test"}
@@ -561,7 +561,7 @@ requirements:
     standards:
       - {id: ST-34, section: "1", depth: Full}
       - {id: ST-28, section: "3.1.2.5", depth: Partial}
-    features: ["#775"]
+    issues: [775]
     superseded_by: [REQ-AUTHN-058]
     verification:
       - {kind: integration-test, ref: "query-only response test"}
@@ -577,7 +577,7 @@ requirements:
     standards:
       - {id: ST-34, section: "1", depth: Full}
       - {id: ST-28, section: "3.1.2.5", depth: Partial}
-    features: ["#775"]
+    issues: [775]
     superseded_by: [REQ-AUTHN-060]
     verification:
       - {kind: integration-test, ref: "response_mode negative test"}
@@ -592,7 +592,7 @@ requirements:
     standards:
       - {id: ST-06, section: "3", depth: Full}
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["#855"]
+    issues: [855]
     verification:
       - {kind: integration-test, ref: "device flow happy-path test"}
       - {kind: manual, ref: "review against the BCP"}
@@ -608,7 +608,7 @@ requirements:
     standards:
       - {id: ST-06, section: "3", depth: Full}
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["#855"]
+    issues: [855]
     verification:
       - {kind: integration-test, ref: "user-code entropy and alphabet test"}
   - id: REQ-AUTHN-048
@@ -623,7 +623,7 @@ requirements:
     standards:
       - {id: ST-06, section: "3", depth: Full}
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["#855"]
+    issues: [855]
     verification:
       - {kind: integration-test, ref: "slow_down test"}
   - id: REQ-AUTHN-049
@@ -638,7 +638,7 @@ requirements:
     standards:
       - {id: ST-06, section: "3", depth: Full}
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["#855"]
+    issues: [855]
     verification:
       - {kind: integration-test, ref: "expiry test"}
   - id: REQ-AUTHN-018
@@ -652,7 +652,7 @@ requirements:
     standards:
       - {id: ST-59, section: "7-8", depth: Full}
       - {id: ST-105, section: "test plan", depth: Full}
-    features: ["#885"]
+    issues: [885]
     gap: register-gap
     verification:
       - {kind: conformance-suite, ref: "FIDO-CT"}
@@ -669,7 +669,7 @@ requirements:
     standards:
       - {id: ST-59, section: "7-8", depth: Full}
       - {id: ST-105, section: "test plan", depth: Full}
-    features: ["#885"]
+    issues: [885]
     gap: register-gap
     verification:
       - {kind: conformance-suite, ref: "FIDO-CT"}
@@ -685,7 +685,7 @@ requirements:
     standards:
       - {id: ST-59, section: "7-8", depth: Full}
       - {id: ST-105, section: "test plan", depth: Full}
-    features: ["#885"]
+    issues: [885]
     gap: register-gap
     verification:
       - {kind: conformance-suite, ref: "FIDO-CT"}
@@ -702,7 +702,7 @@ requirements:
     standards:
       - {id: ST-59, section: "7-8", depth: Full}
       - {id: ST-105, section: "test plan", depth: Full}
-    features: ["#885"]
+    issues: [885]
     gap: register-gap
     verification:
       - {kind: conformance-suite, ref: "FIDO-CT"}
@@ -719,7 +719,7 @@ requirements:
     standards:
       - {id: ST-59, section: "7-8", depth: Full}
       - {id: ST-105, section: "test plan", depth: Full}
-    features: ["#885"]
+    issues: [885]
     gap: register-gap
     verification:
       - {kind: conformance-suite, ref: "FIDO-CT"}
@@ -734,7 +734,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-59, section: "5", depth: Partial}
-    features: ["#885"]
+    issues: [885]
     gap: register-gap
     verification:
       - {kind: integration-test, ref: "identical-response test for known and unknown identifiers"}
@@ -749,8 +749,8 @@ requirements:
     standards:
       - {id: ST-24, section: "3", depth: Full}
       - {id: NC-01, section: "8176", depth: Full}
-    features: ["#885"]
     decisions: ["OD-12"]
+    issues: [885]
     verification:
       - {kind: integration-test, ref: "step-up challenge test"}
   - id: REQ-AUTHN-053
@@ -765,8 +765,8 @@ requirements:
     standards:
       - {id: ST-24, section: "3", depth: Full}
       - {id: NC-01, section: "8176", depth: Full}
-    features: ["#885"]
     decisions: ["OD-12"]
+    issues: [885]
     verification:
       - {kind: integration-test, ref: "step-up round trip"}
   - id: REQ-AUTHN-022
@@ -822,7 +822,7 @@ requirements:
     standards:
       - {id: ST-60, section: "RFC 5054", depth: Full}
       - {id: ST-45, section: "TokenReview", depth: Partial}
-    features: ["#795"]
+    issues: [795]
     verification:
       - {kind: test-vectors, ref: "RFC 5054 appendix B"}
   - id: REQ-AUTHN-056
@@ -837,7 +837,7 @@ requirements:
     standards:
       - {id: ST-60, section: "RFC 5054", depth: Full}
       - {id: ST-45, section: "TokenReview", depth: Partial}
-    features: ["#795"]
+    issues: [795]
     verification:
       - {kind: integration-test, ref: "recovery door default-off test"}
   - id: REQ-AUTHN-024
@@ -850,7 +850,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["#796"]
+    issues: [796]
     verification:
       - {kind: integration-test, ref: "differential response test"}
   - id: REQ-AUTHN-057
@@ -864,7 +864,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["#796"]
+    issues: [796]
     verification:
       - {kind: integration-test, ref: "timing test"}
   - id: REQ-AUTHN-058
@@ -878,7 +878,7 @@ requirements:
     standards:
       - {id: ST-34, section: "2", depth: Full}
       - {id: ST-28, section: "3.1.2.5", depth: Partial}
-    features: ["#979"]
+    issues: [979]
     verification:
       - {kind: conformance-suite, ref: "Form Post OP plan"}
   - id: REQ-AUTHN-059
@@ -892,7 +892,7 @@ requirements:
     standards:
       - {id: ST-34, depth: Partial}
       - {id: NC-05, section: "CSP", depth: Partial}
-    features: ["#979", "#796"]
+    issues: [979, 796]
     verification:
       - {kind: integration-test, ref: "form post page CSP and nonce test"}
   - id: REQ-AUTHN-060
@@ -906,7 +906,7 @@ requirements:
     standards:
       - {id: ST-34, section: "2", depth: Full}
       - {id: ST-28, section: "3.1.2.5", depth: Partial}
-    features: ["#775", "#979"]
+    issues: [775, 979]
     verification:
       - {kind: integration-test, ref: "response_mode negative test"}
   - id: REQ-AUTHN-061
@@ -920,7 +920,7 @@ requirements:
     standards:
       - {id: ST-32, section: "3", depth: Full}
       - {id: ST-29, section: "3", depth: Partial}
-    features: ["#850"]
+    issues: [850]
     verification:
       - {kind: integration-test, ref: "discovery metadata test"}
   - id: REQ-AUTHN-062
@@ -934,7 +934,7 @@ requirements:
     standards:
       - {id: ST-32, section: "2", depth: Partial}
       - {id: ST-35, section: "4", depth: Partial}
-    features: ["#789"]
+    issues: [789]
     verification:
       - {kind: integration-test, ref: "config check refusal test"}
   - id: REQ-AUTHN-063
@@ -947,7 +947,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-36, section: "5", depth: Partial}
-    features: ["#980"]
+    issues: [980]
     verification:
       - {kind: conformance-suite, ref: "CIBA plan for poll mode"}
   - id: REQ-AUTHN-064
@@ -960,7 +960,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-36, section: "5", depth: Partial}
-    features: ["#980"]
+    issues: [980]
     verification:
       - {kind: integration-test, ref: "CIBA delivery-mode negative test"}
   - id: REQ-AUTHN-065
@@ -974,6 +974,6 @@ requirements:
     standards:
       - {id: ST-36, section: "7", depth: Partial}
       - {id: ST-59, depth: Partial}
-    features: ["#980", "#885"]
+    issues: [980, 885]
     verification:
       - {kind: integration-test, ref: "CIBA approval without a passkey assertion is refused"}

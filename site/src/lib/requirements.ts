@@ -10,7 +10,7 @@ export interface Verification { kind: 'conformance-suite' | 'test-vectors' | 'in
 export interface Req {
   id: string; area: string; split_from?: string; statement: string; rationale: string;
   level: 'MUST' | 'SHOULD' | 'MAY'; source: string; status: string; runtimes: 'all' | string[];
-  standards: StandardRef[]; features: string[]; decisions?: string[]; issues?: number[]; verification: Verification[];
+  standards: StandardRef[]; features: ('parity' | 'design')[]; decisions?: string[]; issues?: number[]; verification: Verification[];
   gap?: string; manual_reason?: string; superseded_by?: string[];
 }
 export interface Area { code: string; title: string; file: string; scopeOpen: boolean; reqs: Req[] }
@@ -50,7 +50,8 @@ export function catalogue(): Catalogue {
   if (cached) return cached;
   const { catalogue: c } = read('index.yaml');
   const areas: Area[] = Object.entries<{ title: string; file: string }>(c.areas).map(([code, a]) => {
-    const reqs: Req[] = read(a.file).requirements;
+    // features is optional in the YAML (issue numbers live in issues); the pages and requirements.json always see a list.
+    const reqs: Req[] = read(a.file).requirements.map((r: Req) => ({ ...r, features: r.features ?? [] }));
     return { code, title: a.title, file: a.file, scopeOpen: reqs.some((r) => r.gap === SCOPE_GAP), reqs };
   });
   const reqs = areas.flatMap((a) => a.reqs);
@@ -66,7 +67,6 @@ export function catalogue(): Catalogue {
 export const areaPath = (code: string) => `/requirements/${code.toLowerCase()}/`;
 export const reqPath = (r: Req) => `${areaPath(r.area)}#${r.id}`;
 export const odPath = (od: string) => `/open-decisions/#od-${od.replace(/^OD-/, '')}`;
-export const featureUrl = (f: string) => (/^#\d+$/.test(f) ? ISSUES + f.slice(1) : undefined);
 // The issues that deliver a record (`issues`), linked at build time; no live state is fetched.
 export const issueUrl = (n: number) => `${ISSUES}${n}`;
 export const runtimesOf = (r: Req) => (r.runtimes === 'all' ? 'all' : r.runtimes.join(' '));

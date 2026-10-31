@@ -13,7 +13,7 @@ requirements:
     standards:
       - {id: ST-104, section: "1", depth: Full}
       - {id: ST-41, section: "1", depth: Partial}
-    features: ["#850"]
+    issues: [850]
     verification:
       - {kind: conformance-suite, ref: "OIDF Config OP"}
       - {kind: conformance-suite, ref: "OIDF Basic OP"}
@@ -30,7 +30,7 @@ requirements:
     standards:
       - {id: ST-104, section: "1", depth: Full}
       - {id: ST-28, section: "3", depth: Full}
-    features: ["#850"]
+    issues: [850]
     gap: stakeholder-only
     verification:
       - {kind: conformance-suite, ref: "OIDF RP plans"}
@@ -60,7 +60,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-103, section: "1", depth: Full}
-    features: ["#851"]
+    issues: [851]
     verification:
       - {kind: conformance-suite, ref: "port suite"}
   - id: REQ-TEST-005
@@ -73,7 +73,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["#850"]
+    issues: [850]
     verification:
       - {kind: integration-test, ref: "negative test registry"}
   - id: REQ-TEST-008
@@ -87,7 +87,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["#850"]
+    issues: [850]
     manual_reason: "The rule governs how tests are changed and is evidenced by review of the change history."
     verification:
       - {kind: manual, ref: "test-change review"}
@@ -102,7 +102,7 @@ requirements:
     standards:
       - {id: ST-106, section: "1", depth: Full}
       - {id: ST-103, section: "1", depth: Full}
-    features: ["#861", "#869"]
+    issues: [861, 869]
     verification:
       - {kind: test-vectors, ref: "Wycheproof"}
       - {kind: test-vectors, ref: "kit vectors"}
@@ -130,6 +130,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-103, section: "blob port", depth: Full}
-    features: ["#851"]
+    issues: [851]
     verification:
       - {kind: conformance-suite, ref: "port conformance suite, concurrent create-if-absent per blob driver"}

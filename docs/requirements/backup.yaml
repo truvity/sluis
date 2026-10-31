@@ -12,7 +12,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-95, section: "age", depth: Full}
-    features: ["#834"]
+    issues: [834]
     verification:
       - {kind: test-vectors, ref: "age vectors"}
   - id: REQ-BACKUP-006
@@ -26,7 +26,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-95, section: "age", depth: Full}
-    features: ["#834"]
+    issues: [834]
     verification:
       - {kind: integration-test, ref: "stock-tool restore test"}
   - id: REQ-BACKUP-007
@@ -40,7 +40,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-95, section: "age", depth: Full}
-    features: ["#834"]
+    issues: [834]
     verification:
       - {kind: integration-test, ref: "recipient-count test"}
   - id: REQ-BACKUP-002
@@ -53,7 +53,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-95, section: "age", depth: Partial}
-    features: ["#834", "#835"]
+    issues: [834, 835]
     verification:
       - {kind: integration-test, ref: "archive content scan"}
   - id: REQ-BACKUP-008
@@ -67,7 +67,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-95, section: "age", depth: Partial}
-    features: ["#834", "#835"]
+    issues: [834, 835]
     verification:
       - {kind: integration-test, ref: "post-restore invalidation test"}
   - id: REQ-BACKUP-003
@@ -82,7 +82,7 @@ requirements:
       - {id: ST-95, section: "age", depth: Partial}
       - {id: ST-96, section: "2020-12", depth: Partial}
       - {id: ST-49, section: "7515", depth: Partial}
-    features: ["#835"]
+    issues: [835]
     verification:
       - {kind: integration-test, ref: "corrupted-object restore test"}
   - id: REQ-BACKUP-009
@@ -98,7 +98,7 @@ requirements:
       - {id: ST-95, section: "age", depth: Partial}
       - {id: ST-96, section: "2020-12", depth: Partial}
       - {id: ST-49, section: "7515", depth: Partial}
-    features: ["#835"]
+    issues: [835]
     verification:
       - {kind: integration-test, ref: "foreign-archive provenance test"}
   - id: REQ-BACKUP-010
@@ -114,7 +114,7 @@ requirements:
       - {id: ST-95, section: "age", depth: Partial}
       - {id: ST-96, section: "2020-12", depth: Partial}
       - {id: ST-49, section: "7515", depth: Partial}
-    features: ["#835"]
+    issues: [835]
     verification:
       - {kind: integration-test, ref: "incompatible-configuration restore test"}
   - id: REQ-BACKUP-011
@@ -130,7 +130,7 @@ requirements:
       - {id: ST-95, section: "age", depth: Partial}
       - {id: ST-96, section: "2020-12", depth: Partial}
       - {id: ST-49, section: "7515", depth: Partial}
-    features: ["#835"]
+    issues: [835]
     verification:
       - {kind: integration-test, ref: "key-unreachable restore test"}
   - id: REQ-BACKUP-012
@@ -146,7 +146,7 @@ requirements:
       - {id: ST-95, section: "age", depth: Partial}
       - {id: ST-96, section: "2020-12", depth: Partial}
       - {id: ST-49, section: "7515", depth: Partial}
-    features: ["#835"]
+    issues: [835]
     verification:
       - {kind: integration-test, ref: "read-back test"}
   - id: REQ-BACKUP-004
@@ -159,7 +159,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-74, section: "1", depth: Full}
-    features: ["#835"]
+    issues: [835]
     verification:
       - {kind: integration-test, ref: "witness-reset test"}
   - id: REQ-BACKUP-013
@@ -173,7 +173,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-74, section: "1", depth: Full}
-    features: ["#835"]
+    issues: [835]
     verification:
       - {kind: integration-test, ref: "witness re-bootstrap test"}
   - id: REQ-BACKUP-005
@@ -186,7 +186,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-95, section: "age", depth: Partial}
-    features: ["#835"]
+    issues: [835]
     gap: register-gap
     verification:
       - {kind: integration-test, ref: "rehearsal test"}
@@ -200,7 +200,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-78, section: "8785", depth: Partial}
-    features: ["#835", "#841"]
+    issues: [835, 841]
     verification:
       - {kind: integration-test, ref: "roll-forward restore test"}
   - id: REQ-BACKUP-015
@@ -213,7 +213,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-78, section: "8785", depth: Partial}
-    features: ["#835", "#841"]
+    issues: [835, 841]
     verification:
       - {kind: integration-test, ref: "revocation, registration and grant roll-forward test"}
   - id: REQ-BACKUP-027
@@ -226,7 +226,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#835"]
+    issues: [835]
     verification:
       - {kind: integration-test, ref: "operator-set roll-forward test"}
   - id: REQ-BACKUP-028
@@ -239,7 +239,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#835"]
+    issues: [835]
     verification:
       - {kind: integration-test, ref: "quota balance roll-forward test"}
   - id: REQ-BACKUP-029
@@ -252,7 +252,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#835"]
+    issues: [835]
     verification:
       - {kind: integration-test, ref: "pin and approval roll-forward test"}
   - id: REQ-BACKUP-030
@@ -265,7 +265,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#835"]
+    issues: [835]
     verification:
       - {kind: integration-test, ref: "issuance ledger roll-forward test"}
   - id: REQ-BACKUP-016
@@ -292,7 +292,7 @@ requirements:
     standards:
       - {id: ST-95, section: "age", depth: Partial}
       - {id: ST-89, section: "6", depth: Partial}
-    features: ["#834"]
+    issues: [834]
     verification:
       - {kind: integration-test, ref: "wrap and unwrap round trip test"}
   - id: REQ-BACKUP-018
@@ -305,7 +305,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-89, section: "6", depth: Partial}
-    features: ["#834"]
+    issues: [834]
     verification:
       - {kind: integration-test, ref: "encryption-context test"}
   - id: REQ-BACKUP-019
@@ -318,7 +318,7 @@ requirements:
     runtimes: ["bare-metal"]
     standards:
       - {id: NC-10, section: "PIV", depth: Partial}
-    features: ["#834"]
+    issues: [834]
     verification:
       - {kind: integration-test, ref: "hardware-token wrap test"}
   - id: REQ-BACKUP-020
@@ -332,7 +332,7 @@ requirements:
     standards:
       - {id: ST-95, section: "age", depth: Full}
       - {id: NC-10, section: "PIV", depth: Partial}
-    features: ["#834"]
+    issues: [834]
     verification:
       - {kind: test-vectors, ref: "age vectors"}
       - {kind: integration-test, ref: "offline recipient restore test"}
@@ -346,7 +346,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-89, section: "6", depth: Partial}
-    features: ["#834"]
+    issues: [834]
     verification:
       - {kind: integration-test, ref: "key policy test"}
   - id: REQ-BACKUP-022
@@ -359,7 +359,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-95, section: "age", depth: Partial}
-    features: ["#834"]
+    issues: [834]
     verification:
       - {kind: manual, ref: "account layout review"}
   - id: REQ-BACKUP-023
@@ -372,7 +372,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["#835"]
+    issues: [835]
     gap: register-gap
     verification:
       - {kind: integration-test, ref: "lock-mode check"}
@@ -386,7 +386,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["#835"]
+    issues: [835]
     gap: register-gap
     verification:
       - {kind: manual, ref: "actor identity review"}
@@ -400,7 +400,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["#835"]
+    issues: [835]
     gap: register-gap
     verification:
       - {kind: integration-test, ref: "restore-with-services-down test"}
@@ -414,7 +414,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-77, section: "2.1", depth: Partial}
-    features: ["#835"]
+    issues: [835]
     gap: register-gap
     verification:
       - {kind: manual, ref: "backup scope review"}
@@ -427,7 +427,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#835"]
+    issues: [835]
     verification:
       - {kind: integration-test, ref: "tighten-only restore merge test"}
   - id: REQ-BACKUP-032
@@ -440,7 +440,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-95, section: "age", depth: Partial}
-    features: ["#834"]
+    issues: [834]
     verification:
       - {kind: integration-test, ref: "archive scan for unsealed secrets"}
   - id: REQ-BACKUP-033
@@ -467,7 +467,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-95, section: "age", depth: Partial}
-    features: ["#835"]
+    issues: [835]
     verification:
       - {kind: integration-test, ref: "restore preview secret list test"}
   - id: REQ-BACKUP-035

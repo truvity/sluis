@@ -18,7 +18,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-103, depth: Partial}
-    features: ["#877", "#851"]
+    issues: [877, 851]
     verification:
       - {kind: integration-test, ref: "harness self-test: each layer switch is observed off in the driver, the backend policy and the store layout before a vector runs"}
   - id: REQ-ISO-002
@@ -31,7 +31,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-103, depth: Partial}
-    features: ["#877"]
+    issues: [877]
     verification:
       - {kind: integration-test, ref: "harness self-test: a deliberately broken vector (wrong prefix spelling) is reported void, not passed"}
 
@@ -46,7 +46,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-103, depth: Partial}
-    features: ["#851", "#863"]
+    issues: [851, 863]
     verification:
       - {kind: test-vectors, ref: "T-11 layer 1, layers 2 and 3 off: actor X passes boundary env-b in a request field; the call is scoped to X's own prefix and env-b is never reached"}
       - {kind: test-vectors, ref: "T-12 layer 1, layers 2 and 3 off: actor X asks the blob port for an object under actor Y's prefix; refused by the library"}
@@ -62,7 +62,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-103, depth: Partial}
-    features: ["#800", "#851"]
+    issues: [800, 851]
     verification:
       - {kind: test-vectors, ref: "T-8 layer 2, layers 1 and 3 off: ca@env-a requests env-b's CA key; refused by the key-holder ACL or the KMS key policy"}
       - {kind: test-vectors, ref: "T-8 layer 2, layers 1 and 3 off: ca@env-a requests its own boundary's token-signing key; refused (wrong purpose)"}
@@ -88,7 +88,7 @@ requirements:
     runtimes: [bare-metal, kubernetes]
     standards:
       - {id: ST-62, section: "4.1", depth: Partial}
-    features: ["#913", "#914"]
+    issues: [913, 914]
     verification:
       - {kind: test-vectors, ref: "T-9: the ca purpose is asked to sign a JWS signing input; refused (content-aware)"}
       - {kind: test-vectors, ref: "T-9: the ca purpose is asked to sign a TBSCertificate with basicConstraints CA true outside its constraints; refused"}
@@ -103,7 +103,7 @@ requirements:
     runtimes: [bare-metal, kubernetes]
     standards:
       - {id: ST-65, depth: Partial}
-    features: ["#913", "#914"]
+    issues: [913, 914]
     verification:
       - {kind: test-vectors, ref: "T-9: the ssh-ca purpose is asked to sign a TBSCertificate; refused (content-aware)"}
   - id: REQ-ISO-008
@@ -116,7 +116,7 @@ requirements:
     runtimes: [bare-metal, kubernetes]
     standards:
       - {id: ST-49, section: "5.1", depth: Partial}
-    features: ["#869", "#914"]
+    issues: [869, 914]
     verification:
       - {kind: test-vectors, ref: "T-9: a token purpose is asked to sign a TBSCertificate or an OpenSSH certificate body; refused (content-aware)"}
   - id: REQ-ISO-009
@@ -128,7 +128,7 @@ requirements:
     status: planned
     runtimes: [bare-metal, kubernetes]
     standards: []
-    features: ["#866", "#914"]
+    issues: [866, 914]
     verification:
       - {kind: test-vectors, ref: "T-24 layer 2, peer-uid check off: a process under another uid opens ca@env-a's key-holder socket; refused by the directory permissions"}
   - id: REQ-ISO-010
@@ -140,7 +140,7 @@ requirements:
     status: planned
     runtimes: [bare-metal, kubernetes]
     standards: []
-    features: ["#914"]
+    issues: [914]
     verification:
       - {kind: test-vectors, ref: "T-24 layer 2, directory permissions off (socket left world-writable): uid B connects to uid A's socket; refused by the peer-uid check"}
   - id: REQ-ISO-011
@@ -152,7 +152,7 @@ requirements:
     status: planned
     runtimes: [bare-metal, kubernetes]
     standards: []
-    features: ["#914", "#837"]
+    issues: [914, 837]
     verification:
       - {kind: integration-test, ref: "T-10: sign N times through two callers; the audit log holds N records with caller and purpose, and a signature without a record fails the test"}
   - id: REQ-ISO-012
@@ -164,7 +164,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#863"]
+    issues: [863]
     verification:
       - {kind: test-vectors, ref: "T-10 config check corpus: an install file that routes aws-kms, DynamoDB or PostgreSQL through a shared mediator; refused"}
 
@@ -179,7 +179,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-103, depth: Partial}
-    features: ["#851"]
+    issues: [851]
     verification:
       - {kind: test-vectors, ref: "T-11 layer 2, layers 1 and 3 off: actor X writes prefix Y; refused by the rqlite user, DynamoDB LeadingKeys, PostgreSQL RLS or file owner"}
       - {kind: test-vectors, ref: "T-11 layer 2, layers 1 and 3 off: actor X reads prefix Y of a kind it is not a declared reader of; refused"}
@@ -233,7 +233,7 @@ requirements:
     standards:
       - {id: ST-88, depth: Partial}
       - {id: ST-106, depth: Partial}
-    features: ["#851", "#800"]
+    issues: [851, 800]
     verification:
       - {kind: test-vectors, ref: "T-14, layers 2 and 3 off: actor X reads Y's record by a raw driver call; ciphertext only, and unwrapping Y's data key is refused"}
       - {kind: test-vectors, ref: "Wycheproof AES-GCM vectors"}
@@ -246,7 +246,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#851"]
+    issues: [851]
     verification:
       - {kind: test-vectors, ref: "T-14: a store admin moves a ciphertext to another key of the same kind; decryption fails"}
       - {kind: test-vectors, ref: "T-14: a ciphertext copied from env-a to the same key name in env-b; decryption fails"}
@@ -259,7 +259,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#800"]
+    issues: [800]
     verification:
       - {kind: test-vectors, ref: "T-11 layer 2: an actor that is not a declared reader asks to unwrap the data key; refused by the key-holder ACL or the KMS encryption-context condition"}
   - id: REQ-ISO-020
@@ -271,7 +271,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#863"]
+    issues: [863]
     verification:
       - {kind: test-vectors, ref: "T-14 manifest lint corpus: a record-key template that uses a field of sensitivity personal or secret; refused"}
 
@@ -286,7 +286,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-103, depth: Partial}
-    features: ["#851"]
+    issues: [851]
     verification:
       - {kind: test-vectors, ref: "T-12 layer 2, layers 1 and 3 off: actor X puts an object under Y's prefix; refused by an IAM prefix condition, a prefix-scoped temporary credential or the directory owner"}
   - id: REQ-ISO-022
@@ -298,7 +298,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#851", "#837"]
+    issues: [851, 837]
     verification:
       - {kind: test-vectors, ref: "T-12: a second write of an existing audit batch name; refused with a precondition failure"}
   - id: REQ-ISO-023
@@ -325,7 +325,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-103, depth: Partial}
-    features: ["#851"]
+    issues: [851]
     verification:
       - {kind: test-vectors, ref: "T-13 layer 2, layers 1 and 3 off: role X sends to a queue whose policy names only role Y; refused by the queue policy"}
       - {kind: test-vectors, ref: "T-13 layer 2: a Unix-socket or spool sender with a foreign peer uid; refused at the receiver"}
@@ -369,7 +369,7 @@ requirements:
     standards:
       - {id: ST-18, section: "7.1", depth: Partial}
       - {id: ST-19, section: "3", depth: Partial}
-    features: ["#912"]
+    issues: [912]
     verification:
       - {kind: test-vectors, ref: "T-1: a copied DPoP-bound refresh token at the token endpoint with no proof, or a proof by another key; refused"}
       - {kind: test-vectors, ref: "T-1: a copied certificate-bound access token over a TLS connection with another client certificate; refused"}
@@ -397,7 +397,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-08, section: "2", depth: Partial}
-    features: ["#791"]
+    issues: [791]
     verification:
       - {kind: test-vectors, ref: "T-2: an authorization request with resource set to a URL; the issued aud is the mapped client ID, and an unmapped resource is refused with invalid_target"}
   - id: REQ-ISO-030
@@ -438,7 +438,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-12, depth: Partial}
-    features: ["#892"]
+    issues: [892]
     verification:
       - {kind: test-vectors, ref: "T-5: the front forwards a request it marked allowed and env-b's policy denies it; refused at env-b"}
   - id: REQ-ISO-033
@@ -452,7 +452,7 @@ requirements:
     standards:
       - {id: ST-59, section: "7.2", depth: Partial}
       - {id: ST-24, section: "3", depth: Partial}
-    features: ["#885"]
+    issues: [885]
     verification:
       - {kind: test-vectors, ref: "T-5: an assertion over a challenge issued by the front is replayed at the production boundary; refused"}
       - {kind: test-vectors, ref: "T-5: the front forwards a request with no assertion; answered with insufficient_user_authentication"}
@@ -466,7 +466,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-59, section: "7.2", depth: Partial}
-    features: ["#885"]
+    issues: [885]
     verification:
       - {kind: test-vectors, ref: "T-6: an assertion whose client data names origin other.example.com under the same relying-party ID; refused"}
       - {kind: test-vectors, ref: "T-6: an assertion from sluis.devel.example.com presented to a verifier whose allow-list lacks it; refused"}
@@ -480,7 +480,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-24, section: "3", depth: Full}
-    features: ["#885", "#916"]
+    issues: [885, 916]
     verification:
       - {kind: test-vectors, ref: "T-7: a valid session cookie whose passkey use is older than the production rule; answered with insufficient_user_authentication and acr_values"}
   - id: REQ-ISO-036
@@ -493,7 +493,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-12, depth: Partial}
-    features: ["#892", "#852"]
+    issues: [892, 852]
     verification:
       - {kind: test-vectors, ref: "T-16: a company C subject asks for a grant in company D's scope with no partner grant; refused by the ceiling guard"}
       - {kind: test-vectors, ref: "T-16 positive control: the same request with a partner grant; allowed"}
@@ -507,7 +507,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-12, depth: Partial}
-    features: ["#892", "#852"]
+    issues: [892, 852]
     verification:
       - {kind: test-vectors, ref: "T-17: a policy bundle for env-a that contains an env-b-scoped policy; the build fails"}
   - id: REQ-ISO-038
@@ -519,7 +519,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#892"]
+    issues: [892]
     verification:
       - {kind: test-vectors, ref: "T-18 layer 2: a grant signed by policy@env-a is presented to signer@env-b; refused"}
   - id: REQ-ISO-039
@@ -533,7 +533,7 @@ requirements:
     standards:
       - {id: ST-109, section: "2", depth: Partial}
       - {id: ST-107, section: "2", depth: Partial}
-    features: ["#913", "#870"]
+    issues: [913, 870]
     verification:
       - {kind: test-vectors, ref: "T-20: workload A requests an X.509-SVID for workload B's SPIFFE ID; refused"}
       - {kind: test-vectors, ref: "T-20: host A renews with a CSR naming host B; refused"}
@@ -576,7 +576,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#866", "#796"]
+    issues: [866, 796]
     verification:
       - {kind: test-vectors, ref: "T-4: entry opens a TCP or UDP socket; refused by the sandbox (Unix sockets only)"}
       - {kind: test-vectors, ref: "T-4: entry connects to a socket that is not one of its children's; refused"}
@@ -589,7 +589,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#863"]
+    issues: [863]
     verification:
       - {kind: test-vectors, ref: "T-4 manifest corpus: an entry manifest that declares a keys, secrets or state port; the generator refuses it"}
 
@@ -695,7 +695,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#863"]
+    issues: [863]
     verification:
       - {kind: test-vectors, ref: "T-15 layer 2, layers 1 and 3 off: google-signin@company-a reads company-b's client secret; refused"}
   - id: REQ-ISO-052
@@ -707,7 +707,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#863"]
+    issues: [863]
     verification:
       - {kind: test-vectors, ref: "T-15 manifest corpus: an integration manifest that declares a signing purpose; the generator refuses it"}
 
@@ -734,7 +734,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#864"]
+    issues: [864]
     verification:
       - {kind: test-vectors, ref: "T-25 config check corpus: an install file with such a driver shared by two boundaries at level L2; refused"}
   - id: REQ-ISO-055
@@ -746,7 +746,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#863"]
+    issues: [863]
     verification:
       - {kind: integration-test, ref: "T-25: widen one generated policy by hand in a test installation; the drift test fails and names it"}
 
@@ -761,7 +761,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-46, depth: Partial}
-    features: ["#870"]
+    issues: [870]
     verification:
       - {kind: test-vectors, ref: "T-24 layer 2: the node token of ca@devel is used to assume prod's ca role; refused by the trust policy"}
   - id: REQ-ISO-057
@@ -773,7 +773,7 @@ requirements:
     status: planned
     runtimes: [kubernetes]
     standards: []
-    features: ["#876"]
+    issues: [876]
     verification:
       - {kind: test-vectors, ref: "T-24 chart corpus: every rendered preset mounts at most one key-holder socket per container, its own"}
 
@@ -799,7 +799,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#837"]
+    issues: [837]
     verification:
       - {kind: integration-test, ref: "T-26: export, then destroy the tenant key; the reader fails to decrypt every record of that company and still reads the others"}
   - id: REQ-ISO-060

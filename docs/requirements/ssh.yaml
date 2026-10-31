@@ -96,6 +96,6 @@ requirements:
     standards:
       - {id: NC-07, section: "OpenPubkey", depth: Full}
       - {id: ST-28, section: "2", depth: Partial}
-    features: ["#825"]
+    issues: [825]
     verification:
       - {kind: integration-test, ref: "opkssh integration test"}

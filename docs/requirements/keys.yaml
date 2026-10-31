@@ -14,7 +14,7 @@ requirements:
       - {id: ST-89, section: "6", depth: Full}
       - {id: ST-88, section: "1", depth: Full}
       - {id: ST-103, section: "test plan", depth: Full}
-    features: ["#800"]
+    issues: [800]
     verification:
       - {kind: test-vectors, ref: "port suite"}
   - id: REQ-KEYS-013
@@ -29,7 +29,7 @@ requirements:
     standards:
       - {id: ST-89, section: "6", depth: Full}
       - {id: ST-88, section: "1", depth: Full}
-    features: ["#800"]
+    issues: [800]
     manual_reason: "The rule constrains the source tree; a reviewer confirms that the import lint covers every package."
     verification:
       - {kind: manual, ref: "import lint"}
@@ -44,8 +44,8 @@ requirements:
     standards:
       - {id: ST-88, section: "1", depth: Full}
       - {id: ST-89, section: "6", depth: Full}
-    features: ["#800"]
     decisions: ["OD-3"]
+    issues: [800]
     verification:
       - {kind: manual, ref: "driver attestation review"}
       - {kind: integration-test, ref: "export negative test"}
@@ -121,8 +121,8 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-51, section: "3.3", depth: Partial}
-    features: ["#788"]
     decisions: ["OD-15"]
+    issues: [788]
     verification:
       - {kind: integration-test, ref: "per-audience key separation test"}
   - id: REQ-KEYS-006
@@ -136,7 +136,7 @@ requirements:
     standards:
       - {id: ST-50, section: "5", depth: Full}
       - {id: ST-53, section: "3", depth: Full}
-    features: ["#774"]
+    issues: [774]
     verification:
       - {kind: test-vectors, ref: "RFC 7517 appendix"}
   - id: REQ-KEYS-016
@@ -151,7 +151,7 @@ requirements:
     standards:
       - {id: ST-50, section: "5", depth: Full}
       - {id: ST-53, section: "3", depth: Full}
-    features: ["#774"]
+    issues: [774]
     verification:
       - {kind: integration-test, ref: "rotation overlap test"}
   - id: REQ-KEYS-007
@@ -164,7 +164,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-50, section: "5", depth: Full}
-    features: ["#800"]
+    issues: [800]
     verification:
       - {kind: integration-test, ref: "rotation test"}
   - id: REQ-KEYS-008
@@ -177,7 +177,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-88, section: "1", depth: Partial}
-    features: ["#867"]
+    issues: [867]
     verification:
       - {kind: integration-test, ref: "config-check negative test"}
   - id: REQ-KEYS-009
@@ -221,7 +221,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-88, section: "1", depth: Full}
-    features: ["#868"]
+    issues: [868]
     superseded_by: ["REQ-KEYS-024", "REQ-KEYS-025"]
     verification:
       - {kind: integration-test, ref: "FIPS build smoke test"}
@@ -266,7 +266,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-88, section: "1", depth: Partial}
-    features: ["#868"]
+    issues: [868]
     verification:
       - {kind: manual, ref: "release matrix review"}
   - id: REQ-KEYS-011
@@ -338,7 +338,7 @@ requirements:
       - {id: ST-89, section: "6", depth: Partial}
       - {id: NC-10, section: "PIV", depth: Partial}
       - {id: ST-103, section: "test plan", depth: Full}
-    features: ["#800", "#834"]
+    issues: [800, 834]
     verification:
       - {kind: test-vectors, ref: "port suite keys (wrap and unwrap round trip)"}
   - id: REQ-KEYS-022
@@ -352,7 +352,7 @@ requirements:
     standards:
       - {id: NC-10, section: "PIV", depth: Partial}
       - {id: ST-55, section: "RFC 8037", depth: Partial}
-    features: ["#800"]
+    issues: [800]
     verification:
       - {kind: integration-test, ref: "old-firmware refusal test"}
   - id: REQ-KEYS-023

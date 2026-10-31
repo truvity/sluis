@@ -16,7 +16,7 @@
 //   L11 every MUST has a verification
 //   L12 a MUST verified by manual review only has manual_reason; manual_reason is forbidden elsewhere
 //   L13 every cited standard is a row of standards.yaml; a Full citation has a section (warning)
-//   L14 a planned record has a feature entry (an issue number, parity or design)
+//   L14 a planned record links an issue (issues) or a feature entry (parity or design)
 //   L15 an open or partial record names an open decision or a declared gap key; gap is allowed on no other status
 //   L16 a standard that no requirement cites (warning)
 //   L17 an out-of-scope record is a MUST NOT or a MAY and has a verification
@@ -234,7 +234,7 @@ for (const r of reqs) {
     if (!register.has(s.id)) E(`L13 ${i}: standard ${s.id} is not a row of standards.yaml`);
     if (s.depth === 'Full' && !s.section) W(`L13 ${i}: standard ${s.id} has depth Full but no section`);
   }
-  if (r.status === 'planned' && r.features.length === 0) E(`L14 ${i}: a planned record needs a feature number, parity or design`);
+  if (r.status === 'planned' && !r.issues?.length && !r.features?.length) E(`L14 ${i}: a planned record needs issues, or features parity or design`);
   for (const d of r.decisions ?? []) if (!decisionIds.has(d)) E(`OD ${i}: ${d} is not a row of docs/open-decisions.md`);
   if ((r.status === 'open' || r.status === 'partial') && !(r.decisions?.length) && !r.gap) E(`L15 ${i}: an ${r.status} record needs a decision id or a gap key`);
   if (r.gap) {

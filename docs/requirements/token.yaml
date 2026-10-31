@@ -14,7 +14,7 @@ requirements:
       - {id: ST-13, section: "2.1", depth: Full}
       - {id: ST-52, section: "4", depth: Full}
       - {id: ST-49, section: "4", depth: Full}
-    features: ["#776"]
+    issues: [776]
     verification:
       - {kind: test-vectors, ref: "own at+jwt claim vectors"}
   - id: REQ-TOKEN-017
@@ -30,7 +30,7 @@ requirements:
       - {id: ST-13, section: "2.1", depth: Full}
       - {id: ST-52, section: "4", depth: Full}
       - {id: ST-49, section: "4", depth: Full}
-    features: ["#776"]
+    issues: [776]
     verification:
       - {kind: test-vectors, ref: "JOSE vectors"}
   - id: REQ-TOKEN-018
@@ -46,7 +46,7 @@ requirements:
       - {id: ST-13, section: "2.1", depth: Full}
       - {id: ST-52, section: "4", depth: Full}
       - {id: ST-49, section: "4", depth: Full}
-    features: ["#776"]
+    issues: [776]
     verification:
       - {kind: test-vectors, ref: "own at+jwt claim vectors"}
   - id: REQ-TOKEN-002
@@ -63,8 +63,8 @@ requirements:
       - {id: ST-53, section: "3", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
       - {id: ST-106, section: "test plan", depth: Full}
-    features: ["#774", "#788", "#800"]
     decisions: ["OD-15"]
+    issues: [774, 788, 800]
     verification:
       - {kind: test-vectors, ref: "Wycheproof ECDSA"}
       - {kind: conformance-suite, ref: "OIDF Config OP"}
@@ -82,8 +82,8 @@ requirements:
       - {id: ST-50, section: "5", depth: Full}
       - {id: ST-53, section: "3", depth: Full}
       - {id: ST-106, section: "test plan", depth: Full}
-    features: ["#774", "#788", "#800"]
     decisions: ["OD-15"]
+    issues: [774, 788, 800]
     verification:
       - {kind: test-vectors, ref: "Wycheproof ECDSA"}
   - id: REQ-TOKEN-020
@@ -100,8 +100,8 @@ requirements:
       - {id: ST-50, section: "5", depth: Full}
       - {id: ST-53, section: "3", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#774", "#788", "#800"]
     decisions: ["OD-15"]
+    issues: [774, 788, 800]
     verification:
       - {kind: test-vectors, ref: "RFC 7517 appendix"}
       - {kind: conformance-suite, ref: "OIDF Config OP"}
@@ -116,7 +116,7 @@ requirements:
     standards:
       - {id: ST-52, section: "4.1.3", depth: Full}
       - {id: ST-56, section: "3.3", depth: Full}
-    features: ["#776", "#791"]
+    issues: [776, 791]
     verification:
       - {kind: integration-test, ref: "property test over all grants"}
   - id: REQ-TOKEN-004
@@ -130,7 +130,7 @@ requirements:
     standards:
       - {id: ST-28, section: "2", depth: Full}
       - {id: ST-08, section: "2", depth: Full}
-    features: ["#776", "#791"]
+    issues: [776, 791]
     verification:
       - {kind: integration-test, ref: "negative test"}
   - id: REQ-TOKEN-005
@@ -143,7 +143,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-08, section: "2", depth: Full}
-    features: ["#791"]
+    issues: [791]
     verification:
       - {kind: integration-test, ref: "resource matrix across code and refresh grants"}
   - id: REQ-TOKEN-021
@@ -157,7 +157,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-08, section: "2", depth: Full}
-    features: ["#791"]
+    issues: [791]
     verification:
       - {kind: integration-test, ref: "invalid_target negative test"}
   - id: REQ-TOKEN-006
@@ -171,7 +171,7 @@ requirements:
     standards:
       - {id: ST-28, section: "5.4", depth: Full}
       - {id: ST-56, section: "3.2", depth: Partial}
-    features: ["#776"]
+    issues: [776]
     verification:
       - {kind: integration-test, ref: "claim-release matrix"}
   - id: REQ-TOKEN-022
@@ -186,7 +186,7 @@ requirements:
     standards:
       - {id: ST-28, section: "5.4", depth: Full}
       - {id: ST-56, section: "3.2", depth: Partial}
-    features: ["#776"]
+    issues: [776]
     verification:
       - {kind: integration-test, ref: "cross-resource token scan"}
   - id: REQ-TOKEN-007
@@ -200,7 +200,7 @@ requirements:
     standards:
       - {id: ST-13, section: "2.2", depth: Partial}
       - {id: ST-52, section: "4", depth: Full}
-    features: ["#776"]
+    issues: [776]
     gap: stakeholder-only
     verification:
       - {kind: integration-test, ref: "configured-variant test"}
@@ -216,7 +216,7 @@ requirements:
     standards:
       - {id: ST-13, section: "2.2", depth: Partial}
       - {id: ST-52, section: "4", depth: Full}
-    features: ["#776"]
+    issues: [776]
     gap: stakeholder-only
     verification:
       - {kind: integration-test, ref: "default-profile conformance test"}
@@ -232,7 +232,7 @@ requirements:
       - {id: ST-28, section: "5.3", depth: Full}
       - {id: ST-02, section: "3", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#778", "#793"]
+    issues: [778, 793]
     verification:
       - {kind: conformance-suite, ref: "OIDF Basic OP userinfo modules"}
   - id: REQ-TOKEN-024
@@ -247,7 +247,7 @@ requirements:
     standards:
       - {id: ST-28, section: "5.3", depth: Full}
       - {id: ST-02, section: "3", depth: Full}
-    features: ["#778", "#793"]
+    issues: [778, 793]
     verification:
       - {kind: integration-test, ref: "post-logout test"}
   - id: REQ-TOKEN-009
@@ -260,7 +260,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-11, section: "2", depth: Full}
-    features: ["#778"]
+    issues: [778]
     verification:
       - {kind: integration-test, ref: "revocation request test"}
   - id: REQ-TOKEN-025
@@ -274,7 +274,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-11, section: "2", depth: Full}
-    features: ["#778"]
+    issues: [778]
     verification:
       - {kind: integration-test, ref: "grant-scope revocation test"}
   - id: REQ-TOKEN-026
@@ -288,7 +288,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-11, section: "2", depth: Full}
-    features: ["#778"]
+    issues: [778]
     verification:
       - {kind: integration-test, ref: "uniform-answer test"}
   - id: REQ-TOKEN-010
@@ -302,7 +302,7 @@ requirements:
     standards:
       - {id: ST-01, section: "5.1", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#776"]
+    issues: [776]
     verification:
       - {kind: conformance-suite, ref: "OIDF Basic OP"}
   - id: REQ-TOKEN-027
@@ -316,7 +316,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-01, section: "5.1", depth: Full}
-    features: ["#776"]
+    issues: [776]
     verification:
       - {kind: integration-test, ref: "header test"}
   - id: REQ-TOKEN-028
@@ -331,7 +331,7 @@ requirements:
     standards:
       - {id: ST-01, section: "5.1", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#776"]
+    issues: [776]
     verification:
       - {kind: conformance-suite, ref: "OIDF Basic OP"}
       - {kind: integration-test, ref: "error status test"}
@@ -393,7 +393,7 @@ requirements:
       - {id: ST-28, section: "2", depth: Full}
       - {id: ST-52, section: "4", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#776"]
+    issues: [776]
     verification:
       - {kind: conformance-suite, ref: "OIDF Basic OP"}
   - id: REQ-TOKEN-030
@@ -409,7 +409,7 @@ requirements:
       - {id: ST-28, section: "2", depth: Full}
       - {id: ST-52, section: "4", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#776"]
+    issues: [776]
     verification:
       - {kind: conformance-suite, ref: "OIDF Basic OP"}
   - id: REQ-TOKEN-031
@@ -425,7 +425,7 @@ requirements:
       - {id: ST-28, section: "2", depth: Full}
       - {id: ST-52, section: "4", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#776"]
+    issues: [776]
     verification:
       - {kind: conformance-suite, ref: "OIDF Basic OP"}
   - id: REQ-TOKEN-014

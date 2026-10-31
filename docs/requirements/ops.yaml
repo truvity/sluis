@@ -12,8 +12,8 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Full}
-    features: ["#864", "#867"]
     decisions: ["OD-32"]
+    issues: [864, 867]
     verification:
       - {kind: integration-test, ref: "driver-requirement tests"}
   - id: REQ-OPS-009
@@ -27,8 +27,8 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Full}
-    features: ["#864", "#867"]
     decisions: ["OD-32"]
+    issues: [864, 867]
     verification:
       - {kind: integration-test, ref: "compatibility matrix tests"}
   - id: REQ-OPS-002
@@ -41,7 +41,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Full}
-    features: ["#864", "#865"]
+    issues: [864, 865]
     verification:
       - {kind: test-vectors, ref: "JSON-Schema-Test-Suite"}
   - id: REQ-OPS-010
@@ -55,7 +55,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Full}
-    features: ["#864", "#865"]
+    issues: [864, 865]
     verification:
       - {kind: integration-test, ref: "unknown-key test"}
   - id: REQ-OPS-003
@@ -69,7 +69,7 @@ requirements:
     standards:
       - {id: ST-81, section: "8446", depth: Partial}
       - {id: ST-103, section: "test plan", depth: Full}
-    features: ["#847"]
+    issues: [847]
     verification:
       - {kind: test-vectors, ref: "port suite lease"}
   - id: REQ-OPS-004
@@ -82,7 +82,7 @@ requirements:
     runtimes: ["bare-metal"]
     standards:
       - {id: ST-81, section: "8446", depth: Full}
-    features: ["#887"]
+    issues: [887]
     verification:
       - {kind: integration-test, ref: "join test"}
   - id: REQ-OPS-011
@@ -96,7 +96,7 @@ requirements:
     runtimes: ["bare-metal"]
     standards:
       - {id: ST-81, section: "8446", depth: Full}
-    features: ["#887"]
+    issues: [887]
     verification:
       - {kind: integration-test, ref: "node replacement test"}
   - id: REQ-OPS-012
@@ -110,7 +110,7 @@ requirements:
     runtimes: ["bare-metal"]
     standards:
       - {id: ST-81, section: "8446", depth: Full}
-    features: ["#887"]
+    issues: [887]
     verification:
       - {kind: integration-test, ref: "scale-in test"}
   - id: REQ-OPS-005
@@ -123,7 +123,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["#804"]
+    issues: [804]
     verification:
       - {kind: integration-test, ref: "migration round trip"}
   - id: REQ-OPS-006
@@ -194,7 +194,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["#877"]
+    issues: [877]
     verification:
       - {kind: integration-test, ref: "production-profile refusal tests"}
   - id: REQ-OPS-015

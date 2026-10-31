@@ -12,7 +12,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-01, section: "2.3", depth: Full}
-    features: ["#789"]
+    issues: [789]
     verification:
       - {kind: integration-test, ref: "negative test"}
   - id: REQ-CLIENT-002
@@ -26,7 +26,7 @@ requirements:
     standards:
       - {id: ST-01, section: "2.3.1", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#789", "#790"]
+    issues: [789, 790]
     verification:
       - {kind: conformance-suite, ref: "OIDF Basic OP"}
       - {kind: integration-test, ref: "special-character secrets"}
@@ -41,7 +41,7 @@ requirements:
     standards:
       - {id: ST-01, section: "2.3", depth: Full}
       - {id: ST-90, section: "A", depth: Partial}
-    features: ["#790"]
+    issues: [790]
     manual_reason: "The quality of a random source is established by code review of the generator, not by a black-box test."
     verification:
       - {kind: manual, ref: "entropy review"}
@@ -57,7 +57,7 @@ requirements:
     standards:
       - {id: ST-01, section: "2.3", depth: Full}
       - {id: ST-90, section: "A", depth: Partial}
-    features: ["#790"]
+    issues: [790]
     verification:
       - {kind: integration-test, ref: "comparison timing test"}
   - id: REQ-CLIENT-016
@@ -72,7 +72,7 @@ requirements:
     standards:
       - {id: ST-01, section: "2.3", depth: Full}
       - {id: ST-90, section: "A", depth: Partial}
-    features: ["#790"]
+    issues: [790]
     verification:
       - {kind: integration-test, ref: "overlap window test"}
   - id: REQ-CLIENT-004
@@ -146,7 +146,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-01, section: "2.1", depth: Full}
-    features: ["#789"]
+    issues: [789]
     verification:
       - {kind: integration-test, ref: "type-set test"}
   - id: REQ-CLIENT-020
@@ -160,7 +160,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-01, section: "2.1", depth: Full}
-    features: ["#789"]
+    issues: [789]
     verification:
       - {kind: integration-test, ref: "profile contradiction tests"}
   - id: REQ-CLIENT-006
@@ -173,7 +173,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-01, section: "5.2", depth: Full}
-    features: ["#789"]
+    issues: [789]
     verification:
       - {kind: integration-test, ref: "revocation test"}
   - id: REQ-CLIENT-007
@@ -187,7 +187,7 @@ requirements:
     standards:
       - {id: ST-22, section: "4", depth: Full}
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["#792"]
+    issues: [792]
     verification:
       - {kind: integration-test, ref: "fetch-policy tests"}
       - {kind: manual, ref: "track draft revision"}
@@ -201,7 +201,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-21, section: "3", depth: Full}
-    features: ["#822"]
+    issues: [822]
     verification:
       - {kind: integration-test, ref: "404 test"}
       - {kind: manual, ref: "verify pinned MCP revision does not require it"}
@@ -289,7 +289,7 @@ requirements:
     standards:
       - {id: ST-09, section: "3", depth: Full}
       - {id: ST-05, section: "3", depth: Full}
-    features: ["#822", "#823"]
+    issues: [822, 823]
     verification:
       - {kind: test-vectors, ref: "own metadata goldens"}
       - {kind: integration-test, ref: "resource proxy discovery test"}
@@ -306,7 +306,7 @@ requirements:
       - {id: ST-09, section: "3", depth: Full}
       - {id: ST-22, section: "4", depth: Full}
       - {id: ST-08, section: "2", depth: Full}
-    features: ["#822"]
+    issues: [822]
     verification:
       - {kind: integration-test, ref: "MCP client end-to-end test"}
       - {kind: manual, ref: "pin the revision in a decision record"}

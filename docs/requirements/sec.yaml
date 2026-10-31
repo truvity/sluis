@@ -14,7 +14,7 @@ requirements:
       - {id: ST-56, section: "3", depth: Full}
       - {id: ST-52, section: "7", depth: Full}
       - {id: ST-49, section: "5", depth: Full}
-    features: ["#830", "#869"]
+    issues: [830, 869]
     gap: register-gap
     verification:
       - {kind: test-vectors, ref: "JWT BCP negative vectors"}
@@ -31,7 +31,7 @@ requirements:
       - {id: ST-56, section: "3", depth: Full}
       - {id: ST-52, section: "7", depth: Full}
       - {id: ST-49, section: "5", depth: Full}
-    features: ["#830", "#869"]
+    issues: [830, 869]
     gap: register-gap
     verification:
       - {kind: test-vectors, ref: "JWT BCP negative vectors"}
@@ -48,7 +48,7 @@ requirements:
       - {id: ST-56, section: "3", depth: Full}
       - {id: ST-52, section: "7", depth: Full}
       - {id: ST-49, section: "5", depth: Full}
-    features: ["#830", "#869"]
+    issues: [830, 869]
     gap: register-gap
     verification:
       - {kind: test-vectors, ref: "JWT BCP negative vectors"}
@@ -63,7 +63,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-14, section: "2-4", depth: Full}
-    features: ["#775", "#777", "#782"]
+    issues: [775, 777, 782]
     gap: register-gap
     manual_reason: "A checklist review is the requirement; the tests it maps to are listed in the next requirement."
     verification:
@@ -79,7 +79,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-14, section: "2-4", depth: Full}
-    features: ["#775", "#777", "#782"]
+    issues: [775, 777, 782]
     gap: register-gap
     verification:
       - {kind: integration-test, ref: "one test per recommendation"}
@@ -93,7 +93,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-05, section: "Fetch Metadata", depth: Full}
-    features: ["#796"]
+    issues: [796]
     verification:
       - {kind: integration-test, ref: "origin matrix"}
   - id: REQ-SEC-015
@@ -107,7 +107,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-05, section: "Fetch Metadata", depth: Full}
-    features: ["#796"]
+    issues: [796]
     verification:
       - {kind: integration-test, ref: "Sec-Fetch-Site matrix"}
   - id: REQ-SEC-016
@@ -121,7 +121,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-05, section: "Fetch Metadata", depth: Full}
-    features: ["#796"]
+    issues: [796]
     verification:
       - {kind: integration-test, ref: "CSRF token test"}
   - id: REQ-SEC-004
@@ -134,7 +134,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-05, section: "CSP/HSTS", depth: Full}
-    features: ["#796"]
+    issues: [796]
     verification:
       - {kind: integration-test, ref: "header test per page kind"}
   - id: REQ-SEC-005
@@ -147,7 +147,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["#774"]
+    issues: [774]
     verification:
       - {kind: integration-test, ref: "grant-visibility test"}
   - id: REQ-SEC-006

@@ -13,7 +13,7 @@ requirements:
     standards:
       - {id: ST-01, section: "6", depth: Full}
       - {id: ST-14, section: "4.14", depth: Full}
-    features: ["#777"]
+    issues: [777]
     verification:
       - {kind: integration-test, ref: "single-use test"}
   - id: REQ-SESS-013
@@ -28,7 +28,7 @@ requirements:
     standards:
       - {id: ST-01, section: "6", depth: Full}
       - {id: ST-14, section: "4.14", depth: Full}
-    features: ["#777"]
+    issues: [777]
     verification:
       - {kind: test-vectors, ref: "concurrent-replay vectors"}
       - {kind: integration-test, ref: "grace-window tests"}
@@ -44,7 +44,7 @@ requirements:
     standards:
       - {id: ST-01, section: "6", depth: Full}
       - {id: ST-14, section: "4.14", depth: Full}
-    features: ["#777"]
+    issues: [777]
     verification:
       - {kind: integration-test, ref: "reuse-detection chain-end test"}
   - id: REQ-SESS-002
@@ -58,7 +58,7 @@ requirements:
     standards:
       - {id: ST-01, section: "6", depth: Full}
       - {id: ST-28, section: "3.1.2.1", depth: Partial}
-    features: ["#777", "#793"]
+    issues: [777, 793]
     verification:
       - {kind: integration-test, ref: "session-binding test"}
   - id: REQ-SESS-015
@@ -73,7 +73,7 @@ requirements:
     standards:
       - {id: ST-01, section: "6", depth: Full}
       - {id: ST-28, section: "3.1.2.1", depth: Partial}
-    features: ["#777", "#793"]
+    issues: [777, 793]
     verification:
       - {kind: integration-test, ref: "idle and absolute limit tests"}
   - id: REQ-SESS-003
@@ -86,7 +86,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-01, section: "6", depth: Full}
-    features: ["#777"]
+    issues: [777]
     verification:
       - {kind: integration-test, ref: "refresh re-check tests"}
   - id: REQ-SESS-016
@@ -100,7 +100,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-01, section: "6", depth: Full}
-    features: ["#777"]
+    issues: [777]
     verification:
       - {kind: integration-test, ref: "claim-preservation test"}
   - id: REQ-SESS-004
@@ -115,7 +115,7 @@ requirements:
       - {id: ST-28, section: "2", depth: Full}
       - {id: ST-31, section: "2.4", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#793"]
+    issues: [793]
     verification:
       - {kind: conformance-suite, ref: "OIDF BCL OP"}
       - {kind: integration-test, ref: "sid uniqueness test"}
@@ -131,7 +131,7 @@ requirements:
     standards:
       - {id: ST-28, section: "2", depth: Full}
       - {id: ST-31, section: "2.4", depth: Full}
-    features: ["#793"]
+    issues: [793]
     verification:
       - {kind: integration-test, ref: "sid presence test"}
   - id: REQ-SESS-005
@@ -144,7 +144,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["#793"]
+    issues: [793]
     verification:
       - {kind: integration-test, ref: "storage scan for personal data"}
   - id: REQ-SESS-018
@@ -158,7 +158,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["#793"]
+    issues: [793]
     verification:
       - {kind: integration-test, ref: "restart test"}
   - id: REQ-SESS-006
@@ -171,7 +171,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["#793"]
+    issues: [793]
     verification:
       - {kind: integration-test, ref: "session listing and revocation tests"}
   - id: REQ-SESS-007
@@ -184,7 +184,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-05, section: "6265bis", depth: Full}
-    features: ["#796"]
+    issues: [796]
     verification:
       - {kind: integration-test, ref: "cookie attribute test"}
   - id: REQ-SESS-019
@@ -198,7 +198,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-05, section: "6265bis", depth: Full}
-    features: ["#796"]
+    issues: [796]
     verification:
       - {kind: integration-test, ref: "cookie name test"}
   - id: REQ-SESS-008
@@ -212,7 +212,7 @@ requirements:
     standards:
       - {id: ST-30, section: "2", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#779"]
+    issues: [779]
     verification:
       - {kind: conformance-suite, ref: "OIDF RP-Initiated Logout OP"}
       - {kind: integration-test, ref: "expired-hint test"}
@@ -228,7 +228,7 @@ requirements:
     standards:
       - {id: ST-30, section: "2", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#779"]
+    issues: [779]
     verification:
       - {kind: conformance-suite, ref: "OIDF RP-Initiated Logout OP"}
       - {kind: integration-test, ref: "redirect-URI tests"}
@@ -244,7 +244,7 @@ requirements:
       - {id: ST-31, section: "2.4", depth: Full}
       - {id: ST-52, section: "4", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#780"]
+    issues: [780]
     verification:
       - {kind: conformance-suite, ref: "OIDF BCL OP"}
   - id: REQ-SESS-010
@@ -257,7 +257,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-31, section: "2.5", depth: Partial}
-    features: ["#780"]
+    issues: [780]
     verification:
       - {kind: integration-test, ref: "receiver-down retry test"}
   - id: REQ-SESS-021
@@ -271,7 +271,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-31, section: "2.5", depth: Partial}
-    features: ["#780"]
+    issues: [780]
     verification:
       - {kind: integration-test, ref: "dead-letter alarm test"}
   - id: REQ-SESS-011
@@ -316,7 +316,7 @@ requirements:
     standards:
       - {id: ST-25, section: "auth", depth: Partial}
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["#794"]
+    issues: [794]
     verification:
       - {kind: integration-test, ref: "consent matrix"}
   - id: REQ-SESS-023
@@ -331,6 +331,6 @@ requirements:
     standards:
       - {id: ST-25, section: "auth", depth: Partial}
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["#794"]
+    issues: [794]
     verification:
       - {kind: integration-test, ref: "consent-binding test"}

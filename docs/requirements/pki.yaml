@@ -235,7 +235,7 @@ requirements:
     standards:
       - {id: ST-62, section: "5", depth: Full}
       - {id: ST-64, section: "1", depth: Full}
-    features: ["#978"]
+    issues: [978]
     verification:
       - {kind: integration-test, ref: "ACME issuance test"}
   - id: REQ-PKI-008

@@ -68,7 +68,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "effect catalogue test"}
   - id: REQ-QUOTA-010
@@ -82,7 +82,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "signed effect test"}
   - id: REQ-QUOTA-005
@@ -138,7 +138,7 @@ requirements:
     standards:
       - {id: ST-97, section: "1", depth: Partial}
       - {id: ST-78, section: "8785", depth: Partial}
-    features: ["#839"]
+    issues: [839]
     verification:
       - {kind: integration-test, ref: "usage query test"}
   - id: REQ-QUOTA-012
@@ -153,7 +153,7 @@ requirements:
     standards:
       - {id: ST-97, section: "1", depth: Partial}
       - {id: ST-78, section: "8785", depth: Partial}
-    features: ["#839"]
+    issues: [839]
     verification:
       - {kind: integration-test, ref: "aggregate-sum test"}
   - id: REQ-QUOTA-008
@@ -192,7 +192,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "reservation test"}
   - id: REQ-QUOTA-015
@@ -204,7 +204,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "expired reservation test"}
   - id: REQ-QUOTA-016
@@ -216,7 +216,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "confirm bound test"}
   - id: REQ-QUOTA-017
@@ -229,7 +229,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-15, section: "Idempotency-Key", depth: Partial}
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "request id window test"}
   - id: REQ-QUOTA-018
@@ -242,7 +242,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-15, section: "Idempotency-Key", depth: Partial}
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "request id rebuild after restore test"}
     superseded_by: [REQ-QUOTA-030]
@@ -256,7 +256,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-15, section: "Idempotency-Key", depth: Full}
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "header mapping test"}
   - id: REQ-QUOTA-020
@@ -268,7 +268,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "amount representation test"}
   - id: REQ-QUOTA-021
@@ -281,7 +281,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-12, section: "1", depth: Partial}
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "top-up sign and grant test"}
   - id: REQ-QUOTA-022
@@ -293,7 +293,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "adjust grant test"}
   - id: REQ-QUOTA-023
@@ -305,7 +305,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "refund bound test"}
   - id: REQ-QUOTA-024
@@ -317,7 +317,7 @@ requirements:
     status: withdrawn
     runtimes: all
     standards: []
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "catalogue balance effect test"}
     superseded_by: [REQ-QUOTA-029]
@@ -330,7 +330,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "account key test"}
   - id: REQ-QUOTA-026
@@ -342,7 +342,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "config-check quota rule test"}
   - id: REQ-QUOTA-027
@@ -354,7 +354,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "strict-only configuration test"}
   - id: REQ-QUOTA-028
@@ -366,7 +366,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "limit kinds test"}
   - id: REQ-QUOTA-029
@@ -379,7 +379,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-100, section: "1.0.2", depth: Partial}
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "catalogue balance effect test"}
   - id: REQ-QUOTA-030
@@ -392,7 +392,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-15, section: "Idempotency-Key", depth: Partial}
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "request id rebuild from the usage log test"}
   - id: REQ-QUOTA-031
@@ -405,7 +405,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-100, section: "1.0.2", depth: Partial}
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "balance roll-forward from the usage log test"}
   - id: REQ-QUOTA-032
@@ -418,7 +418,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-100, section: "1.0.2", depth: Partial}
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "meter rebuild from the usage log test"}
   - id: REQ-QUOTA-033
@@ -431,6 +431,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-115, section: "1.4", depth: Partial}
-    features: ["#915"]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "finance export columns test"}

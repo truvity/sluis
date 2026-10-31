@@ -12,7 +12,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    features: ["#776"]
+    issues: [776]
     verification:
       - {kind: integration-test, ref: "budget regression tests"}
   - id: REQ-PERF-002
