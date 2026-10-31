@@ -112,7 +112,7 @@ The OpenPGP key is a **dedicated sluis release identity**, not anyone's personal
 
 Several signing keys are ordinary in OpenPGP practice. Checked on 2026-10-29:
 
-- **Debian** signs a stable release's `Release` file with two keys, the archive key of the time and a per-release key, and the keyring package ships every active key. See the [archive signing keys](https://ftp-master.debian.org/keys.html), and the [SecureApt history](https://wiki.debian.org/SecureApt), where a transition signed with both the old and the new key was meant to work for clients that knew either one. These are background precedents for several active keys, not a design that sluis copies.
+- **Debian** signs a stable release's `Release` file with two keys, the archive key of the time and a per-release key, and the keyring package ships every active key. See the [archive keyring package](https://packages.debian.org/sid/debian-archive-keyring), and the [SecureApt history](https://wiki.debian.org/SecureApt), where a transition signed with both the old and the new key was meant to work for clients that knew either one. These are background precedents for several active keys, not a design that sluis copies.
 - **Arch Linux** has five master keys, and a packager key is valid when at least three of them have signed it. See the [master keys](https://archlinux.org/master-keys/).
 - **Key transitions** keep the old and the new key valid together for a while, and the old key signs the new one. See the [Apache guide](https://infra.apache.org/key-transition.html) and the [Riseup template](https://help.riseup.net/en/security/message-security/openpgp/key-transition).
 
