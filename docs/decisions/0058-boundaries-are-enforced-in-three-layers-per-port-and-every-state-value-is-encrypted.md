@@ -9,6 +9,7 @@ Rewritten in place on 2026-10-30 (a narrow network rule per unit for the `per-ac
 Rewritten in place on 2026-10-31 (`cloud-garage` is Rust, as ADR 0060 now says, and the off-site copy of the audit log is an hourly job, as ADR 0021 decides).
 Rewritten in place on 2026-10-31 (`key-holder` is Go with `piv-go`, after spike S4, as ADR 0060 now says).
 Rewritten in place on 2026-10-31 (after the Garage spike, [issue #982](https://github.com/truvity/sluis/issues/982): the boards use R2 for blobs in the first release, and Garage is a later backend, blocked on conditional writes and prefix scoping upstream).
+Rewritten in place on 2026-10-31 (after spike S5, [issue #943](https://github.com/truvity/sluis/issues/943): rqlite's memory on a board, and the CPU rather than the eMMC as the first limit).
 
 ## Context
 
@@ -91,7 +92,7 @@ The node's YubiKey is the one backend left that cannot tell callers apart.
 - **Node-to-node and client traffic use mutual TLS**, with a certificate for each cluster. A node of one cluster then cannot join another.
 - **Clusters run from a systemd template**, `sluis-rqlite@<boundary>-<actor>`, with a port scheme for their HTTP and Raft ports.
 - **A `per-actor` rqlite driver reaches its cluster through a narrow network rule per unit**, not through `PrivateNetwork=yes`: `IPAddressDeny=any`, `IPAddressAllow=` for its own cluster only, and `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`, plus a client certificate for that cluster. It moves to a Unix socket if rqlite adds one ([0008](/decisions/0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp/)).
-- **The memory figures above come from a desktop.** The boards are measured in spike S5 ([0060](/decisions/0060-the-language-follows-the-executable/)).
+- **The memory figures above come from a desktop.** On a board, spike S5 measured about 9 MiB per cluster under write load, with the binary's pages (about 22 MiB) paid once per board (2026-10-31, [0060](/decisions/0060-the-language-follows-the-executable/)).
 
 ### Blob: one S3-compatible driver, with credentials from the `cloud` port
 
@@ -184,7 +185,7 @@ A dash means that the decision names no layer-2 check for that driver yet.
 - **A store-level reader learns little.** A backup, a database administrator or a process that bypasses the port sees ciphertext and record keys. A value moved between records does not decrypt, because the additional authenticated data names its place. The cost is an unwrap per data key and an AEAD per value, and the rule that record keys carry no personal data, which some kinds have to be designed for.
 - **AES-GCM with one data key per boundary and kind has a usage limit.** Kinds with a high write rate need their data key rotated before it is reached. (inferred)
 - **One writer per record kind is now enforced by the backend** on every state driver: an rqlite cluster that only the owner can write, a DynamoDB leading key per role, PostgreSQL grants, a file per actor. It no longer depends on a mediator's code.
-- **`state-owner` is gone, and so is its hop.** The cost is more rqlite clusters: one per boundary and owning actor, each with three nodes on a cluster, its own ports, certificates, users file, backups and upgrades. rqlite shipped three security fixes in October 2026, so each release means a rolling upgrade of every cluster. Fsync rate on the boards' storage, not memory, is the likely first limit (inferred), and S5 measures it.
+- **`state-owner` is gone, and so is its hop.** The cost is more rqlite clusters: one per boundary and owning actor, each with three nodes on a cluster, its own ports, certificates, users file, backups and upgrades. rqlite shipped three security fixes in October 2026, so each release means a rolling upgrade of every cluster. On the boards neither memory nor the eMMC is the first limit: spike S5 (2026-10-31) found the CPU saturated at about 430 commits/s in total while the eMMC was about half busy, so the budget is about 400 commits/s per board, summed over its clusters.
 - **rqlite's users file is static.** A change of users needs a restart, which is acceptable because owners and readers come from the manifest and change only with a release. (inferred)
 - **`key-holder` is the one mediator left**, and its socket layout, peer-uid check and content checks are the code to review hardest. On KMS there is no content-aware signing, so the key policy per actor is layer 2 there. (inferred)
 - **Content-aware signing changes the `keys` contract for `key-holder`.** A sign call carries the content to be signed. (inferred)

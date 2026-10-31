@@ -111,7 +111,7 @@ shapes:
     blob: "Cloudflare R2 in the first release, through the s3-compatible driver with credentials from the cloudflare cloud driver; Garage on the boards, with an hourly off-site R2 copy, is a later backend"
     lock: "lock mode removable (an R2 account administrator can remove the lock); the peer witnesses protect the history, which is what lets a production log run here"
     cluster: "three nodes; each node has its own writer, spool and log; the audit pieces run on the same nodes and share driver instances"
-    index_placement: "rqlite, a replicated SQLite (ADR 0022), so the reader can run on any node; its full-text search was tested on a three-node cluster, and the board spike measures native arm64 and eMMC, with sqlite on the indexer's node as the fallback. Where Search runs is derived from the port and driver rules"
+    index_placement: "rqlite, a replicated SQLite (ADR 0022), so the reader can run on any node; its full-text search was tested on a three-node cluster, and the board spike (S5, 2026-10-31) measured rqlite on native arm64 and eMMC, about 9 MiB per cluster and about 400 commits/s per board, with sqlite on the indexer's node as the fallback. Where Search runs is derived from the port and driver rules"
   lambda:
     log_key: "one KMS key, used only by the writer function's IAM role through its key policy. One log; the function's role is the isolation"
     witness: "none by default (optional); an external witness is possible. There is no peer"
@@ -623,7 +623,7 @@ lag:
 
 index_notes:
   - title: One search index per node, or one replicated index
-    text: A sqlite index (SQLite with FTS5) is one file fed by the ordered audit_batches sequence in replicated state. On boards the index is a replicated rqlite index (ADR 0022), so the reader can run on any node; its full-text support was verified on a three-node cluster, and the board spike confirms it on the hardware. A node that was down catches up in order from its cursor, and a new node replays from zero. Purges and erasures are entries in the same sequence. Where Search runs is derived from the port and driver rules.
+    text: A sqlite index (SQLite with FTS5) is one file fed by the ordered audit_batches sequence in replicated state. On boards the index is a replicated rqlite index (ADR 0022), so the reader can run on any node; its full-text support was verified on a three-node cluster, and the board spike measured rqlite's memory and write rate on the hardware on 2026-10-31. A node that was down catches up in order from its cursor, and a new node replays from zero. Purges and erasures are entries in the same sequence. Where Search runs is derived from the port and driver rules.
     status: agreed
   - title: Rebuilding
     text: The search index can be thrown away. A node rebuilds by replaying audit_batches from zero and fetching each batch object.

@@ -9,6 +9,7 @@ Rewritten in place on 2026-10-31 (`cloud-garage` is Rust, by rule R5).
 Rewritten in place on 2026-10-31 (no FIPS build in v2.0, after spike S2 ([issue #940](https://github.com/truvity/sluis/issues/940)): R8 is no longer FIPS parity, and the AWS drivers stay Rust).
 Rewritten in place on 2026-10-31 (spike S4 done ([issue #942](https://github.com/truvity/sluis/issues/942)): `key-holder` is Go with `piv-go`, a named exception to R3; PKCS#11 stays only for the later YubiHSM 2 and Nitrokey drivers; the YubiKey attestation verifier anchors on Yubico Attestation Root 1).
 Rewritten in place on 2026-10-31 (spikes S6 ([issue #944](https://github.com/truvity/sluis/issues/944)) and S7 ([issue #945](https://github.com/truvity/sluis/issues/945)) done, both passed with conditions; `cloud-garage` is a later driver, as ADR 0058 now says; the points that earlier rewrites marked as inferred are confirmed by the maintainer, and their markers are removed).
+Rewritten in place on 2026-10-31 (spikes S5 ([issue #943](https://github.com/truvity/sluis/issues/943)) and S8 ([issue #946](https://github.com/truvity/sluis/issues/946)) done: the boards' memory fits with Go or with Rust actors, and the CPU, not the eMMC, limits rqlite's writes first; the ceremony's card helper is the Rust OpenPGP-card helper, because `gpg` cannot bind an existing P-384 key as the shared signing subkey; the points both spikes leave open are listed for the maintainer, undecided).
 
 ## Context
 
@@ -28,6 +29,16 @@ The trigger was the slim `entry` (ADR 0007): the one actor that faces the intern
   - **libykpiv caches the PIN in its own heap,** to re-verify after a reset, outside the reach of Rust's `zeroize`.
   - **`piv-go` connects exclusively** and holds one transaction for the handle's lifetime, so nothing else can reach the card while it runs. It queues callers fairly and reaches its first signature 0.17 s after start, against 1.8 to 2.0 s for `ykcs11`. Its resident memory under load was 9.1 to 9.8 MB, against 5.7 to 6.5 MB for the Rust holder.
   - **`piv-go`'s own `piv.Verify` rejects attestations from firmware 5.7 and newer,** because its built-in roots predate Yubico Attestation Root 1, so a verifier must supply that root and its intermediates. The full chain verified against Yubico's published PKI.
+- **Spike S5 measured memory and writes on one tier-0 board (2026-10-31; arm64, 4 cores, 2 GB RAM with 1978 MiB usable, eMMC; rqlite 10.6.6).** Swap was off, so every figure is resident memory.
+  - **The memory fits in either language.** A tier-0 board with 10 rqlite nodes (one per cluster), 30 actors, two entries, the card path, `cloudflared` and the services that share the board needs about **985 MiB with Go actors** and about **680 MiB with Rust actors**. Both are under a ceiling of 1380 MiB: a quarter of the RAM is kept for page cache, and 100 MiB for slab and bursts. About 335 MiB of the Go total is estimated, not measured: OpenBao, `cloudflared` with a live tunnel, a status page, alerting and DNS.
+  - **rqlite costs about 9 MiB per cluster on a board** (proportional set size under write load, with small databases), not the 16 to 26 MB per node measured on a desktop. The binary's pages, about 22 MiB, are paid once per board. The cost grows with the database, which these runs kept small.
+  - **The CPU, not the eMMC, is the first limit.** N rqlite clusters writing as fast as they can top out at about 430 commits/s in total, with the four cores 96% busy and the eMMC about half busy. The eMMC alone does 1,500 synchronous writes per second with one writer. The budget is **about 400 commits/s per board, summed over all its clusters**, and more with batching (635/s with more writers per cluster). The load generator shared the board's cores, so the CPU figure is an over-count.
+  - **`GOMEMLIMIT` is a ceiling, not a way to shrink a process.** At 12 MiB the Go actor and entry stand-ins saved about 4 MiB each and lost 61 to 81% of their throughput to garbage collection. The proposal is a limit at 2 to 3 times each process's steady private memory, with the default `GOGC`.
+  - **Per actor, Go costs about 10 MiB more than Rust,** about 300 MiB at 30 actors: the largest single difference in the budget.
+- **Spike S8 ran the release-key ceremony on two OpenPGP cards (2026-10-31; two YubiKey 5 test cards, firmware 5.8.0, OpenPGP applet 3.4, on an arm64 board).**
+  - **The Rust helper did every step:** an ECDSA P-384 primary generated on each card, one P-384 signing subkey bound under both primaries with its back-signatures, and signatures by the subkey and by each primary. It uses `openpgp-card` 0.7.0, `openpgp-card-rpgp` 0.8.1 and rPGP 0.20.0 over PC/SC. It refuses the wrong card by serial and fingerprint, never retries a PIN, and reports a missing touch as an error. A primary took 1.2 s, a binding 0.3 s and a card signature 0.27 s.
+  - **`gpg` cannot bind the shared subkey.** `gpg` 2.2.27 and 2.4.7 both bind an existing P-384 key as an ECDH encryption subkey, and `--quick-add-key` refuses a keygrip. A Go CLI got there only by building the binding packets itself (ProtonMail go-crypto) and using `gpg-agent` as a card signer. Driving `gpg` also sent two wrong PINs to a card, because `gpg` 2.2 does not say which PIN it asks for, and its card key generation adds encryption and authentication subkeys.
+  - **Every verifier accepted every signature,** with certificate A, B or both: `gpg` and `gpgv` 2.2.27, 2.2.40 and 2.4.7, `sqv` 1.1.0 and 1.3.0, apt 2.4.14, 2.6.1 and 3.0.3, and rpm 6.0.2 with rpm-sequoia 1.10.2. apt's `gpgv` and `sqv` paths and rpm-sequoia therefore accept ECDSA P-384 release signatures. apt needs an ASCII-armoured `Release.gpg`; a binary one fails with `NODATA`.
 - **The Rust side has known gaps.** Connect for Rust (`connectrpc` 0.9.1, 2026-09-21) is official but before 1.0, with one named maintainer. OpenTelemetry traces in Rust are Beta. The FIPS build of aws-lc-rs needs CMake, Go and a C toolchain, and the current aws-lc-rs binds a module that is still in process at the CMVP, so a certified build pins an older one. Spike S2 confirmed both, and found that the AWS SDK for Rust signs SigV4 requests and S3 checksums with RustCrypto, outside the module. GoReleaser's Rust builder warns that workspaces might not work.
 
 One inconsistency had to be resolved. OD-14 says Rust for the AWS drivers, while the source-layout table put the AWS-backed drivers of the other ports (`aws-kms`, `dynamodb`, `sqs`, the object-store blob driver) in Go.
@@ -60,7 +71,7 @@ FIPS is [0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exce
 | `sluis-node` | Rust. It verifies OpenPGP signatures, with Sigstore provenance as a second signal | R3 | S1 |
 | `key-holder` | Go, with `piv-go` for YubiKey PIV. PKCS#11 only for the later YubiHSM 2 and Nitrokey drivers | R4 (`piv-go`): an exception to R3 | S4, done on 2026-10-31 |
 | `sluis-host` | Rust | R3 | S1 |
-| The ceremony's OpenPGP-card helper, run by `sluis ceremony` | Rust (`openpgp-card` with rPGP) | The deciding library is Rust-only, the converse of R4 | S8 |
+| The ceremony's OpenPGP-card helper, run by `sluis ceremony` | Rust (`openpgp-card` with rPGP) | The deciding library is Rust-only, the converse of R4 | S8, done on 2026-10-31 |
 | `cloud-garage` (a later driver) | Rust; it shares no library with an integration, so R5 applies | R5 | None |
 | `cloud-cloudflare` | Go, sharing the library of the integration `cloudflare@<company>` | R4: an exception to R5 | None |
 | `session`, `exchange`, `console`, `quota`, `signer`, `ca`, `ssh-ca` | Go | R4, R6 | None |
@@ -75,6 +86,7 @@ FIPS is [0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exce
 - **PKCS#11 stays, for the planned YubiHSM 2 and Nitrokey drivers only** ([0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/), ADR 0052). Those are drivers of the `keys` port built later; which language they are written in is decided with them.
 - **Attestation verification is Go,** in the CLI at ceremony and node initialisation and in the `yubikey-attestation` verifier of `exchange` ([0012](/decisions/0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials/)). Its trust anchor is Yubico's PIV attestation root, **Yubico Attestation Root 1**, with its intermediates, supplied by sluis rather than taken from `piv-go`'s built-in roots.
 - **The ceremonies are `sluis ceremony …` subcommands of the one `sluis` CLI**, so OD-16 holds without exception. The part that drives the OpenPGP cards with `openpgp-card` and rPGP is a Rust helper executable under `/usr/libexec/sluis/`, which the CLI runs. The helper ships **inside the `sluis` package**; there is no separate ceremony package ([0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)).
+- **The ceremony is not built on `gpg`.** Spike S8 ran the helper end to end on two cards, and found that `gpg` cannot bind the shared signing subkey (above). The helper writes only the primary, its user ID and the signing subkeys, so the release certificate has no encryption subkey; the one that `gpg`'s card key generation adds makes rpm-sequoia print a policy warning on every install.
 - **A ceremony runs in three steps:** prepare it online; run the same `sluis` with the same configuration on the offline live USB system, where the cards are; then complete and publish it online.
 - **`cloud-cloudflare` is Go.** It shares the Cloudflare library with the integration `cloudflare@<company>`, and Cloudflare's best SDK is Go. This is an exception to R5, which would put a `cloud` port driver in Rust: one vendor library in one language weighs more here than one language for every `cloud` driver.
 - **`sluis-node` verifies OpenPGP signatures** on signed configuration and binaries, by the release key certified under both roots. Sigstore provenance is checked as a second signal, not as the trust. OpenPGP is what the Rust stack handles well, and it is the format the roots already sign with ([Release signing](/distribution/release-signing/)). (the last reason is inferred)
@@ -89,13 +101,26 @@ Each conditional verdict holds only once its spike passes. The languages are fix
 | S2 | FIPS with aws-lc-rs: the `fips` feature for amd64 and arm64 under GoReleaser; the pin that maps to a certified module; the run-time self-test indicator; the AWS SDK over rustls in FIPS mode against FIPS endpoints. Done on 2026-10-30, passed with conditions; with no FIPS build in v2.0 it gates nothing, and its result is kept for a later FIPS variant | Nothing in v2.0 |
 | S3 | A slim `entry` prototype in both languages, behind the tunnel client and behind the Lambda Web Adapter, with limits, timeouts and 24 hours of fuzzing; p99 latency, memory, cold start and binary size | `entry` |
 | S4 | `key-holder` through `cryptoki` and `ykcs11`, against `piv-go`: P-384 signing, ECDH, PS256, Ed25519 on firmware 5.7, PIN once, concurrent callers, the release-subkey slot; then YubiHSM 2 and Nitrokey; a zeroisation review of the PIN paths. Done on 2026-10-31 for YubiKey PIV: both paths work, and `piv-go` was chosen (above). The release-subkey slot, YubiHSM 2, Nitrokey and the zeroisation review are still to run | `key-holder`: decided, Go |
-| S5 | The boards' memory budget: memory under load for every actor and driver, in Go and for the Rust candidates | Fusion defaults, the AWS-backed drivers, the trusted base |
+| S5 | The boards' memory budget: memory under load for every actor and driver, in Go and for the Rust candidates. Done on 2026-10-31: the memory fits with Go or with Rust actors (about 985 or 680 MiB of a 1380 MiB ceiling), rqlite costs about 9 MiB per cluster, and the CPU limits writes first, at about 400 commits/s per board. Its open points are below | Fusion defaults, the AWS-backed drivers, the trusted base |
 | S6 | OpenTelemetry from Rust: one trace across a Go-to-Rust Connect hop. Done on 2026-10-31, passed with conditions | R9 |
 | S7 | Configuration in Rust: types from the JSON Schema accept and reject the same conformance vectors as the Go structs. Done on 2026-10-31, passed with conditions | R9 |
-| S8 | The ceremony with OpenPGP cards: two primaries generated on cards and one subkey bound under both, verified by the same tool matrix as the test of 2026-10-29, compared with a Go CLI driving scdaemon | The ceremony's card helper |
+| S8 | The ceremony with OpenPGP cards: two primaries generated on cards and one subkey bound under both, verified by the same tool matrix as the test of 2026-10-29, compared with a Go CLI driving scdaemon. Done on 2026-10-31: the Rust helper did every step, `gpg` cannot bind the shared subkey, and every verifier accepted ECDSA P-384. Its open points are below | The ceremony's card helper: decided, Rust |
 | S10 | GoReleaser with a Cargo workspace: every Rust binary for two architectures, with SBOM, signing and provenance like the Go artefacts, and Lambda zips within the layer limits | Every Rust component |
 
 There is no spike for `exchange` in Rust, because it stays Go.
+
+### What S5 and S8 leave open
+
+These points are open. The maintainer decides each one; this record chooses none of them.
+
+- **The board's temperature (S5).** The system-on-chip reached 83.3 °C under load, from 60 °C at idle. An earlier run on the same board ended in a reboot under rqlite write load, and its cause is unknown because the logs were lost.
+- **The estimated rows of the board budget (S5).** OpenBao and `cloudflared` with a live tunnel are the largest; `cloudflared` was measured only without an edge connection, at 29 MiB.
+- **The write rate the design needs (S5).** Whether about 400 commits/s per board is enough depends on the state and audit writes per cluster, which are not yet estimated. The latency figures come from one board, without a replication round trip or a slower follower's fsync.
+- **Where the back-signature comes from when the subkey is on a node (S8).** S<sub>i</sub> lives in a node's PIV slot behind `key-holder`, so the back-signature over each primary must come from `key-holder`, and that purpose is not on its list. The run used a software stand-in for S<sub>i</sub>.
+- **The split for a card B held by a second person elsewhere (S8).** One process cannot hold both cards, so the back-signatures, the binding by each card and the merge of the certificates become separate steps.
+- **The helper's contract with `sluis ceremony` (S8):** arguments and files, or JSON on its standard streams, and how the PIN reaches the helper.
+- **Attestation of the primaries (S8):** whether a ceremony requires a YubiKey OpenPGP attestation of each generated primary, which `openpgp-card` supports and the run did not use.
+- **The touch timeout (S8).** A missed touch comes back from the card after about 15 s as a generic security status, not as a touch timeout; whether the helper reports it as one.
 
 ### Fallbacks are candidates, decided when a spike fails
 
@@ -107,7 +132,7 @@ A fallback is not chosen in advance. When a spike fails, the maintainer decides 
 | `key-holder` | Rust through PKCS#11 (`cryptoki` with `ykcs11`), carrying the S4 constraints: one owner of the card, restart on a removed device, serialised ECDH |
 | AWS-backed drivers | Go |
 | `sluis-node`, `sluis-host` | Go, for the trusted base |
-| The ceremony's card helper | A Go CLI driving gpg and scdaemon |
+| The ceremony's card helper | A Go CLI driving gpg and scdaemon. S8 found that `gpg` alone cannot bind the shared subkey, so this candidate needs the binding packets built in Go, with `gpg-agent` only as the card signer |
 | Connect for Rust (S1) | The gRPC protocol through tonic, or a hand-written unary codec |
 
 ## Consequences
@@ -172,7 +197,7 @@ A fallback is not chosen in advance. When a spike fails, the maintainer decides 
 ### The ceremony as a Go CLI driving gpg and scdaemon, or with in-house OpenPGP-card commands
 
 - Pros: one `sluis` binary with no helper.
-- Cons: driving gpg depends on the system's gpg and makes the transcript harder to reproduce. In-house card commands would be new security-critical code with no reference implementation.
+- Cons: driving gpg depends on the system's gpg and makes the transcript harder to reproduce. In-house card commands would be new security-critical code with no reference implementation. Spike S8 (2026-10-31) found that `gpg` 2.2.27 and 2.4.7 cannot bind an existing P-384 key as a signing subkey, that `gpg` 2.2 does not say which PIN it prompts for (two wrong PINs reached a test card), that `gpg` 2.2 silently ignores the touch-policy command, and that its card key generation adds encryption and authentication subkeys.
 - Why not: the maintained card stack is Rust. A helper inside the `sluis` package keeps the one CLI and uses that stack.
 
 ### A separate `sluis-ceremony` executable and package
