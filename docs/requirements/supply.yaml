@@ -13,7 +13,7 @@ requirements:
     standards:
       - {id: ST-83, section: "9580", depth: Full}
       - {id: ST-84, section: "sigstore", depth: Full}
-    features: ["#848", "#874"]
+    issues: [848, 874]
     verification:
       - {kind: integration-test, ref: "signature check"}
   - id: REQ-SUPPLY-007
@@ -28,7 +28,7 @@ requirements:
     standards:
       - {id: ST-83, section: "9580", depth: Full}
       - {id: ST-84, section: "sigstore", depth: Full}
-    features: ["#848", "#874"]
+    issues: [848, 874]
     verification:
       - {kind: integration-test, ref: "verify-from-docs test"}
   - id: REQ-SUPPLY-002
@@ -42,7 +42,7 @@ requirements:
     standards:
       - {id: ST-85, section: "1", depth: Full}
       - {id: ST-86, section: "1", depth: Partial}
-    features: ["#848"]
+    issues: [848]
     verification:
       - {kind: integration-test, ref: "slsa-verifier"}
   - id: REQ-SUPPLY-008
@@ -57,7 +57,7 @@ requirements:
     standards:
       - {id: ST-85, section: "1", depth: Full}
       - {id: ST-86, section: "1", depth: Partial}
-    features: ["#848"]
+    issues: [848]
     manual_reason: "A statement in the release notes is checked by reading it."
     verification:
       - {kind: manual, ref: "release notes check"}
@@ -71,7 +71,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-87, section: "1", depth: Full}
-    features: ["#848"]
+    issues: [848]
     gap: register-gap
     verification:
       - {kind: integration-test, ref: "SBOM validator"}
@@ -86,7 +86,7 @@ requirements:
     standards:
       - {id: ST-83, section: "9580", depth: Full}
       - {id: NC-10, section: "OpenPGP card", depth: Full}
-    features: ["#888"]
+    issues: [888]
     verification:
       - {kind: manual, ref: "ceremony guide"}
       - {kind: integration-test, ref: "dry-run"}
@@ -102,7 +102,7 @@ requirements:
     standards:
       - {id: ST-83, section: "9580", depth: Full}
       - {id: NC-10, section: "OpenPGP card", depth: Full}
-    features: ["#888"]
+    issues: [888]
     verification:
       - {kind: integration-test, ref: "subkey expiry test"}
   - id: REQ-SUPPLY-005
@@ -116,7 +116,7 @@ requirements:
     standards:
       - {id: ST-68, section: "7929", depth: Full}
       - {id: ST-83, section: "9580", depth: Full}
-    features: ["#889"]
+    issues: [889]
     gap: register-gap
     verification:
       - {kind: manual, ref: "channel consistency check"}
@@ -146,7 +146,7 @@ requirements:
     standards:
       - {id: ST-83, section: "9580", depth: Full}
       - {id: NC-10, section: "OpenPGP card", depth: Full}
-    features: ["#888"]
+    issues: [888]
     verification:
       - {kind: manual, ref: "ceremony guide"}
       - {kind: integration-test, ref: "dry-run"}
@@ -160,7 +160,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-10, section: "OpenPGP card", depth: Full}
-    features: ["#888"]
+    issues: [888]
     manual_reason: "Non-copying of a key is evidenced by the ceremony record and the token attestations."
     verification:
       - {kind: manual, ref: "ceremony record"}
@@ -174,7 +174,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-83, section: "9580", depth: Full}
-    features: ["#888"]
+    issues: [888]
     verification:
       - {kind: integration-test, ref: "revocation-under-both-primaries check"}
   - id: REQ-SUPPLY-013
@@ -188,6 +188,6 @@ requirements:
     standards:
       - {id: ST-83, section: "9580", depth: Full}
       - {id: ST-68, section: "7929", depth: Partial}
-    features: ["#888", "#889"]
+    issues: [888, 889]
     verification:
       - {kind: integration-test, ref: "verify-with-either-key test"}

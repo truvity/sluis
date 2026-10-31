@@ -13,7 +13,7 @@ requirements:
     standards:
       - {id: ST-07, section: "2", depth: Full}
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["#782", "#785"]
+    issues: [782, 785]
     verification:
       - {kind: test-vectors, ref: "own exchange vectors"}
       - {kind: integration-test, ref: "default-deny test"}
@@ -27,7 +27,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-07, section: "2.1", depth: Partial}
-    features: ["#782"]
+    issues: [782]
     verification:
       - {kind: integration-test, ref: "actor_token negative test"}
   - id: REQ-EXCH-008
@@ -41,7 +41,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-07, section: "2.1", depth: Partial}
-    features: ["#782"]
+    issues: [782]
     verification:
       - {kind: integration-test, ref: "requested_token_type negative test"}
   - id: REQ-EXCH-003
@@ -55,7 +55,7 @@ requirements:
     standards:
       - {id: ST-07, section: "2.2.2", depth: Full}
       - {id: ST-08, section: "2", depth: Partial}
-    features: ["#782", "#785"]
+    issues: [782, 785]
     verification:
       - {kind: integration-test, ref: "uniform-refusal test"}
   - id: REQ-EXCH-009
@@ -70,7 +70,7 @@ requirements:
     standards:
       - {id: ST-07, section: "2.2.2", depth: Full}
       - {id: ST-08, section: "2", depth: Partial}
-    features: ["#782", "#785"]
+    issues: [782, 785]
     verification:
       - {kind: integration-test, ref: "refusal audit-record test"}
   - id: REQ-EXCH-004
@@ -83,7 +83,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-07, section: "2.2", depth: Full}
-    features: ["#782", "#785"]
+    issues: [782, 785]
     verification:
       - {kind: integration-test, ref: "narrowing property test"}
   - id: REQ-EXCH-010
@@ -97,7 +97,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-07, section: "2.2", depth: Full}
-    features: ["#782", "#785"]
+    issues: [782, 785]
     verification:
       - {kind: integration-test, ref: "no-refresh-token test"}
   - id: REQ-EXCH-005
@@ -111,7 +111,7 @@ requirements:
     standards:
       - {id: ST-07, section: "2", depth: Full}
       - {id: ST-30, section: "1", depth: Partial}
-    features: ["#782", "#793"]
+    issues: [782, 793]
     verification:
       - {kind: integration-test, ref: "post-logout exchange test"}
   - id: REQ-EXCH-006
@@ -124,7 +124,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-07, section: "2", depth: Full}
-    features: ["#782"]
+    issues: [782]
     verification:
       - {kind: integration-test, ref: "cross-installation negative test"}
   - id: REQ-EXCH-007
@@ -138,7 +138,7 @@ requirements:
     standards:
       - {id: ST-07, section: "2.1", depth: Full}
       - {id: ST-01, section: "2.3", depth: Full}
-    features: ["#785"]
+    issues: [785]
     verification:
       - {kind: integration-test, ref: "public client exchange negative test"}
   - id: REQ-EXCH-011
@@ -153,6 +153,6 @@ requirements:
     standards:
       - {id: ST-07, section: "2.1", depth: Full}
       - {id: ST-01, section: "2.3", depth: Full}
-    features: ["#785"]
+    issues: [785]
     verification:
       - {kind: integration-test, ref: "unauthenticated exchange negative test"}

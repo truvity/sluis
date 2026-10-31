@@ -12,7 +12,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-98, section: "OTLP", depth: Full}
-    features: ["#836"]
+    issues: [836]
     verification:
       - {kind: integration-test, ref: "collector test"}
   - id: REQ-OBS-006
@@ -26,7 +26,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-98, section: "OTLP", depth: Full}
-    features: ["#836"]
+    issues: [836]
     verification:
       - {kind: integration-test, ref: "exporter-down test"}
   - id: REQ-OBS-002
@@ -39,7 +39,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-99, section: "1", depth: Full}
-    features: ["#836", "#841"]
+    issues: [836, 841]
     verification:
       - {kind: test-vectors, ref: "W3C Trace Context test suite"}
   - id: REQ-OBS-007
@@ -53,7 +53,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-99, section: "1", depth: Full}
-    features: ["#836", "#841"]
+    issues: [836, 841]
     verification:
       - {kind: integration-test, ref: "log correlation test"}
   - id: REQ-OBS-003
@@ -93,7 +93,7 @@ requirements:
     runtimes: ["serverless"]
     standards:
       - {id: ST-98, section: "OTLP", depth: Partial}
-    features: ["#836", "#842"]
+    issues: [836, 842]
     verification:
       - {kind: integration-test, ref: "freeze test"}
   - id: REQ-OBS-005
@@ -106,7 +106,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-98, section: "OTLP", depth: Partial}
-    features: ["#836"]
+    issues: [836]
     verification:
       - {kind: integration-test, ref: "probe tests"}
   - id: REQ-OBS-009
@@ -120,7 +120,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-98, section: "OTLP", depth: Partial}
-    features: ["#836"]
+    issues: [836]
     verification:
       - {kind: integration-test, ref: "readiness-gating test"}
   - id: REQ-OBS-010

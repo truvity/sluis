@@ -12,8 +12,8 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["#842", "#843"]
     decisions: ["OD-32"]
+    issues: [842, 843]
     verification:
       - {kind: integration-test, ref: "test installations per runtime"}
   - id: REQ-DEPLOY-008
@@ -27,8 +27,8 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["#842", "#843"]
     decisions: ["OD-32"]
+    issues: [842, 843]
     verification:
       - {kind: integration-test, ref: "runtime capability validation test"}
   - id: REQ-DEPLOY-002
@@ -41,7 +41,7 @@ requirements:
     runtimes: ["bare-metal"]
     standards:
       - {id: NC-09, section: "OCI", depth: Full}
-    features: ["#875", "#876"]
+    issues: [875, 876]
     verification:
       - {kind: integration-test, ref: "package install tests"}
   - id: REQ-DEPLOY-009
@@ -55,7 +55,7 @@ requirements:
     runtimes: ["serverless"]
     standards:
       - {id: NC-09, section: "OCI", depth: Full}
-    features: ["#875", "#876"]
+    issues: [875, 876]
     verification:
       - {kind: integration-test, ref: "package install tests"}
   - id: REQ-DEPLOY-010
@@ -69,7 +69,7 @@ requirements:
     runtimes: ["kubernetes"]
     standards:
       - {id: NC-09, section: "OCI", depth: Full}
-    features: ["#875", "#876"]
+    issues: [875, 876]
     verification:
       - {kind: integration-test, ref: "package install tests"}
   - id: REQ-DEPLOY-003
@@ -82,7 +82,7 @@ requirements:
     runtimes: ["bare-metal"]
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    features: ["#862"]
+    issues: [862]
     verification:
       - {kind: integration-test, ref: "socket test"}
   - id: REQ-DEPLOY-011
@@ -96,7 +96,7 @@ requirements:
     runtimes: ["bare-metal"]
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    features: ["#862"]
+    issues: [862]
     verification:
       - {kind: integration-test, ref: "bind test"}
   - id: REQ-DEPLOY-004
@@ -109,8 +109,8 @@ requirements:
     runtimes: ["bare-metal"]
     standards:
       - {id: ST-81, section: "8446", depth: Full}
-    features: ["#847", "#887"]
     decisions: ["OD-4"]
+    issues: [847, 887]
     verification:
       - {kind: integration-test, ref: "network scan"}
       - {kind: integration-test, ref: "mTLS test"}
@@ -124,7 +124,7 @@ requirements:
     runtimes: ["bare-metal"]
     standards:
       - {id: ST-88, section: "1", depth: Partial}
-    features: ["#866"]
+    issues: [866]
     verification:
       - {kind: integration-test, ref: "systemd-analyze baseline check"}
   - id: REQ-DEPLOY-012
@@ -138,7 +138,7 @@ requirements:
     runtimes: ["bare-metal"]
     standards:
       - {id: ST-88, section: "1", depth: Partial}
-    features: ["#866"]
+    issues: [866]
     verification:
       - {kind: integration-test, ref: "process-owner test"}
   - id: REQ-DEPLOY-006
@@ -152,7 +152,7 @@ requirements:
     standards:
       - {id: NC-09, section: "OCI", depth: Full}
       - {id: ST-84, section: "cosign", depth: Partial}
-    features: ["#876"]
+    issues: [876]
     verification:
       - {kind: integration-test, ref: "digest-pin lint"}
   - id: REQ-DEPLOY-007
@@ -165,7 +165,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-104, section: "1", depth: Full}
-    features: ["#877"]
+    issues: [877]
     verification:
       - {kind: integration-test, ref: "test matrix"}
   - id: REQ-DEPLOY-013
@@ -179,7 +179,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-104, section: "1", depth: Full}
-    features: ["#877"]
+    issues: [877]
     manual_reason: "A statement in the documentation is checked by reading it."
     verification:
       - {kind: manual, ref: "documentation review"}

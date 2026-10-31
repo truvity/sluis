@@ -15,7 +15,7 @@ requirements:
       - {id: ST-56, section: "3", depth: Full}
       - {id: ST-49, section: "5", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["#807"]
+    issues: [807]
     verification:
       - {kind: conformance-suite, ref: "OIDF RP plans"}
       - {kind: integration-test, ref: "bad-signature and unknown-kid cases"}
@@ -32,7 +32,7 @@ requirements:
       - {id: ST-28, section: "3.1.3.7", depth: Full}
       - {id: ST-56, section: "3", depth: Full}
       - {id: ST-49, section: "5", depth: Full}
-    features: ["#807"]
+    issues: [807]
     verification:
       - {kind: integration-test, ref: "alg=none and HMAC negative cases"}
   - id: REQ-FED-012
@@ -48,7 +48,7 @@ requirements:
       - {id: ST-28, section: "3.1.3.7", depth: Full}
       - {id: ST-56, section: "3", depth: Full}
       - {id: ST-49, section: "5", depth: Full}
-    features: ["#807"]
+    issues: [807]
     verification:
       - {kind: integration-test, ref: "wrong-aud and wrong-nonce cases"}
   - id: REQ-FED-013
@@ -64,7 +64,7 @@ requirements:
       - {id: ST-28, section: "3.1.3.7", depth: Full}
       - {id: ST-56, section: "3", depth: Full}
       - {id: ST-49, section: "5", depth: Full}
-    features: ["#807"]
+    issues: [807]
     verification:
       - {kind: integration-test, ref: "unsigned-token negative case"}
   - id: REQ-FED-002
@@ -215,7 +215,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
-    features: ["#792"]
+    issues: [792]
     verification:
       - {kind: integration-test, ref: "SSRF tests (metadata address, loopback, private)"}
   - id: REQ-FED-009

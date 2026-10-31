@@ -12,7 +12,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Full}
-    features: ["#786", "#846"]
+    issues: [786, 846]
     verification:
       - {kind: test-vectors, ref: "JSON-Schema-Test-Suite"}
   - id: REQ-POLICY-005
@@ -26,7 +26,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Full}
-    features: ["#786", "#846"]
+    issues: [786, 846]
     verification:
       - {kind: integration-test, ref: "load-refusal tests"}
   - id: REQ-POLICY-002
@@ -39,7 +39,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["#786", "#787"]
+    issues: [786, 787]
     verification:
       - {kind: integration-test, ref: "policy tests (allow, deny)"}
   - id: REQ-POLICY-006
@@ -53,7 +53,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["#786", "#787"]
+    issues: [786, 787]
     verification:
       - {kind: integration-test, ref: "policy tests (wildcard)"}
       - {kind: test-vectors, ref: "policy corpus"}
@@ -67,8 +67,8 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-12, section: "Cedar", depth: Full}
-    features: ["#892", "#852"]
     decisions: ["OD-10"]
+    issues: [892, 852]
     verification:
       - {kind: test-vectors, ref: "policy-language corpus"}
   - id: REQ-POLICY-007
@@ -82,8 +82,8 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-12, section: "Cedar", depth: Full}
-    features: ["#892", "#852"]
     decisions: ["OD-10"]
+    issues: [892, 852]
     verification:
       - {kind: integration-test, ref: "fail-closed test"}
   - id: REQ-POLICY-004

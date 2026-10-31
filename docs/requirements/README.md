@@ -16,7 +16,7 @@ generates its pages from them and test tools read the same data.
 - [sluis.id/requirements/](https://sluis.id/requirements/): counts, the areas, and one table of all records with a filter by area,
   level, status, source and runtime. The account-hosting areas (CIAM, ACCT, SUBJ, VAULT, REG) carry a "scope open" badge and can be hidden.
 - `/requirements/<area>/`: one page per area, with standards, features, decisions and verification for each record.
-- `/requirements/matrix/`: requirement to standard, feature and verification, and back.
+- `/requirements/matrix/`: requirement to standard, issue or feature, and verification, and back.
 - `/requirements/coverage/`: statistics, MUST records without a conformance suite or test vectors, open records by decision,
   and register rows that no requirement cites.
 - `/requirements.json`: every record flattened. Test tools in any language read this file and nothing else.
@@ -48,7 +48,7 @@ An id is `REQ-<AREA>-<nnn>`, for example `REQ-AUTHN-002`.
 | `status` | `planned` (an agreed feature or design covers it), `partial` (the plan is weaker), `open` (needs a decision or has no plan), `out-of-scope` (a boundary kept as a refusal), `withdrawn`. |
 | `runtimes` | `all`, or a list of `bare-metal`, `serverless`, `kubernetes`. |
 | `standards` | `{id, section, depth}`: an id from `standards.yaml`, the section, and `Full` or `Partial`. |
-| `features` | `#nnn` issue numbers, `parity` (no single issue) or `design` (specified, no issue yet). |
+| `features` | Optional: `parity` (part of v1 parity, no single issue) or `design` (specified, no issue yet). Issue numbers go in `issues`, never here. |
 | `decisions` | Open-decision ids `OD-nn`, rows of [open decisions](../open-decisions.md). |
 | `issues` | Optional: the numbers of the truvity/sluis issues that deliver the record, for example `[915]`. Unique positive integers, at least one when present. The issues' Product milestone places the record on the status page. |
 | `verification` | `{kind, ref}`; `kind` is `conformance-suite`, `test-vectors`, `integration-test` or `manual`. Every MUST needs at least one. |
@@ -72,8 +72,8 @@ and the `planned` MUST records that no test names (a gap).
 
 1. Pick the area and the next free number in it. Never reuse an id, not even of a withdrawn record.
 2. Write one clause: one keyword, one behaviour, one sentence. If you want to write "and" between two behaviours, write two records.
-3. Fill the traceability: the standards it implements (`section` when `depth` is `Full`), the features that deliver it (`design` when none yet),
-   and how it is verified. A MUST needs a verification.
+3. Fill the traceability: the standards it implements (`section` when `depth` is `Full`), the issues that deliver it (`issues`; `features: [design]`
+   when there is none yet), and how it is verified. A MUST needs a verification.
 4. Set the status honestly. An `open` or `partial` record names the open decision it waits for, or a `gap` key.
 5. Keep it public. No names of people or companies, no tickets, no addresses, no mention of any private infrastructure; the lint scans for them.
 6. Run `devbox run -- just check`. The pages and `requirements.json` are generated, never committed.

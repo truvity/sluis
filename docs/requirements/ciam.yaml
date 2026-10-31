@@ -86,7 +86,7 @@ requirements:
     standards:
       - {id: ST-28, section: "3.1.2.4", depth: Partial}
       - {id: ST-25, section: "auth", depth: Partial}
-    features: ["#794"]
+    issues: [794]
     gap: account-hosting-scope
     verification:
       - {kind: integration-test, ref: "consent flow tests"}
@@ -102,7 +102,7 @@ requirements:
     standards:
       - {id: ST-28, section: "3.1.2.4", depth: Partial}
       - {id: ST-25, section: "auth", depth: Partial}
-    features: ["#794"]
+    issues: [794]
     gap: account-hosting-scope
     verification:
       - {kind: integration-test, ref: "consent record location test"}
@@ -148,7 +148,7 @@ requirements:
     standards:
       - {id: ST-26, section: "1", depth: Full}
       - {id: NC-03, section: "8417", depth: Full}
-    features: ["#927"]
+    issues: [927]
     gap: account-hosting-scope
     verification:
       - {kind: conformance-suite, ref: "SSF plans"}

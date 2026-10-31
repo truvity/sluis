@@ -14,7 +14,7 @@ requirements:
       - {id: ST-44, section: "1", depth: Full}
       - {id: ST-56, section: "3", depth: Full}
       - {id: ST-52, section: "7", depth: Full}
-    features: ["#783"]
+    issues: [783]
     verification:
       - {kind: test-vectors, ref: "provider token fixtures"}
   - id: REQ-WORKLOAD-002
@@ -27,7 +27,7 @@ requirements:
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-45, section: "1", depth: Full}
-    features: ["#784"]
+    issues: [784]
     verification:
       - {kind: test-vectors, ref: "per-cluster fixtures"}
   - id: REQ-WORKLOAD-003
@@ -41,7 +41,7 @@ requirements:
     standards:
       - {id: ST-46, section: "1", depth: Full}
       - {id: ST-47, section: "1", depth: Partial}
-    features: ["#784"]
+    issues: [784]
     verification:
       - {kind: test-vectors, ref: "per-account fixtures"}
   - id: REQ-WORKLOAD-004
@@ -56,6 +56,6 @@ requirements:
       - {id: ST-29, section: "3", depth: Full}
       - {id: ST-50, section: "5", depth: Full}
       - {id: ST-46, section: "1", depth: Full}
-    features: ["#870"]
+    issues: [870]
     verification:
       - {kind: integration-test, ref: "cloud STS acceptance test"}

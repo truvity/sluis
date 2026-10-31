@@ -13,7 +13,7 @@ requirements:
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
       - {id: ST-103, section: "test plan", depth: Full}
-    features: ["#798"]
+    issues: [798]
     verification:
       - {kind: test-vectors, ref: "port suite export"}
   - id: REQ-EXPORT-003
@@ -27,7 +27,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["#798"]
+    issues: [798]
     verification:
       - {kind: integration-test, ref: "export authorisation test"}
   - id: REQ-EXPORT-004
@@ -41,7 +41,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["#798"]
+    issues: [798]
     verification:
       - {kind: integration-test, ref: "export audit test"}
   - id: REQ-EXPORT-002
@@ -84,6 +84,6 @@ requirements:
     standards:
       - {id: ST-95, section: "age", depth: Full}
       - {id: NC-10, section: "PIV", depth: Partial}
-    features: ["#798"]
+    issues: [798]
     verification:
       - {kind: manual, ref: "documentation review"}

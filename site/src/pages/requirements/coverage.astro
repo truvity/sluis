@@ -12,7 +12,7 @@ const row = (label: string, rs: Req[]) => ({ label, n: rs.length, core: rs.filte
 const noSuite = musts.filter((r) => live(r) && !hasKind(r, 'conformance-suite', 'test-vectors'));
 const manualOnly = musts.filter((r) => r.verification.length > 0 && r.verification.every((v) => v.kind === 'manual'));
 const noStandard = c.reqs.filter((r) => live(r) && r.standards.length === 0);
-const designOnly = c.reqs.filter((r) => live(r) && r.features.length > 0 && r.features.every((f) => f === 'design'));
+const designOnly = c.reqs.filter((r) => live(r) && !r.issues?.length && r.features.length > 0 && r.features.every((f) => f === 'design'));
 const waiting = c.reqs.filter((r) => r.status === 'open' || r.status === 'partial');
 const byGap = new Map<string, Req[]>();
 for (const r of waiting) {
@@ -124,7 +124,7 @@ const noSuiteByArea = c.areas.map((a) => [a, noSuite.filter((r) => r.area === a.
   </details>
 
   <h2 id="design-only">Requirements traced to design only</h2>
-  <p>{designOnly.length} requirements are specified but have no feature issue yet. Each is a candidate for one.</p>
+  <p>{designOnly.length} requirements are specified but link no issue that delivers them (<code>issues</code>). Each is a candidate for one.</p>
   <details class="rq-details">
     <summary>Show the {designOnly.length} ids</summary>
     <p class="rq-chips">{designOnly.map((r) => <a class="rq-chip" href={reqPath(r)}>{r.id}</a>)}</p>
