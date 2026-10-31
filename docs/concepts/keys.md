@@ -6,7 +6,7 @@ sidebar:
   order: 4
 ---
 
-sluis holds five kinds of authority key (token signing, the X.509 CA, the SSH CA, the audit log key and the mint grant), plus the keys that seal data at rest. Each [environment](/runtimes/boundaries/) has its own set: no key is shared between development, staging and production. This page says what backs each key in each installation, how it signs, and which algorithms it uses. The access rules, which actor may use which key, are enforced by `key-holder` or by the cloud's key policy, not by this page: see [Ports and drivers](/concepts/drivers/#defence-in-depth). The threats to the keys (another boundary's or purpose's key, a key made to sign the wrong content, a compromised `key-holder`) are T-8 to T-10 on the [threat model](/security/threat-model/#keys-and-signing).
+sluis holds five kinds of authority key (token signing, the X.509 CA, the SSH CA, the log keys of the audit and usage logs, and the mint grant), plus the keys that seal data at rest. Each [environment](/runtimes/boundaries/) has its own set: no key is shared between development, staging and production. This page says what backs each key in each installation, how it signs, and which algorithms it uses. The access rules, which actor may use which key, are enforced by `key-holder` or by the cloud's key policy, not by this page: see [Ports and drivers](/concepts/drivers/#defence-in-depth). The threats to the keys (another boundary's or purpose's key, a key made to sign the wrong content, a compromised `key-holder`) are T-8 to T-10 on the [threat model](/security/threat-model/#keys-and-signing).
 
 ## Key modes
 
@@ -51,7 +51,7 @@ Tokens are signed directly with the non-extractable key in every installation. A
 The volume makes this affordable. On a production install, a measurement showed about 25,000 tokens in 7 days, with a peak of 0.8 per second. 95 % of them were token exchange. At that volume:
 
 - **KMS** costs about $2.62 a month for signing every token.
-- **A YubiKey** signs P-384 in about 120 ms, which is about 8 signatures per second. The measured peak is a tenth of that. A software P-384 key would sign about 200 per second per core, which is why the local installation can use one.
+- **A YubiKey** signs P-384 in about 120 ms on firmware 5.4.3, which is about 8 signatures per second, and in about 146 ms (6.8 per second) on firmware 5.8.0 (measured 2026-10-31). The measured peak is a tenth of that. A software P-384 key would sign about 200 per second per core, which is why the local installation can use one.
 
 ## Algorithms
 
@@ -132,18 +132,18 @@ A YubiKey in PIV mode has 24 slots and **no symmetric keys**. The slot plan for 
 | `9e` | Avoided |
 
 :::note[Proposed]
-The slots for the two SSH CA keys (`82` and `83`) and for the release subkey (`84`) are a proposal. They are the first three free retired slots, which moves the retired sealing keys to `85` to `95`. The release subkey is held in a PIV slot and reached through `key-holder` over PKCS#11. The OpenPGP application is used only on the root cards, for the primaries.
+The slots for the two SSH CA keys (`82` and `83`) and for the release subkey (`84`) are a proposal. They are the first three free retired slots, which moves the retired sealing keys to `85` to `95`. The release subkey is held in a PIV slot and reached through `key-holder`, like every other node key. The OpenPGP application is used only on the root cards, for the primaries.
 
 The slots are a map with one reservation per purpose, and ranges kept for rotation and future use. Defaults ship in code and an installation may override them in configuration. `sluis config check`, `sluis ceremony` and node initialisation refuse a collision or a purpose with no slot. The exact numbers are settled in ADR 0032.
 :::
 
 There is one YubiKey per node. EUCLEAK, a side-channel flaw in the older firmware, is fixed from firmware 5.7. The cards of the root pair (below) are separate from the node cards, and never sit in a node.
 
-Every actor reaches a node card only through **`key-holder`**: one socket per caller, a peer-uid check on each call, and signing that understands the content of each purpose, so the `ca` purpose signs only a certificate within its constraints and the `ssh-ca` purposes only an OpenSSH certificate body. See [The mediating driver](/concepts/drivers/#the-mediating-driver).
+Every actor reaches a node card only through **`key-holder`**, the one process that opens the card, exclusively, through `piv-go` ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)): one socket per caller, a peer-uid check on each call, and signing that understands the content of each purpose, so the `ca` purpose signs only a certificate within its constraints and the `ssh-ca` purposes only an OpenSSH certificate body. See [The mediating driver](/concepts/drivers/#the-mediating-driver).
 
 ### Touch and PIN policy
 
-The policies are fixed when a key is generated, and they are visible in its attestation, so a verifier can check them.
+The policies are fixed when a key is generated, and they are visible in its attestation, so a verifier can check them. A PIV attestation chains through Yubico's published intermediates to **Yubico Attestation Root 1**, which sluis ships as the trust anchor of every attestation check (verified on firmware 5.8.0 on 2026-10-31).
 
 | Card | Touch | PIN |
 |---|---|---|
@@ -211,7 +211,7 @@ If a root card is lost, the procedure is:
 The same rule holds for releases, with one difference: the two roots share one signature.
 
 - **Two primaries, one on each root card.** Each primary is generated on its card. Neither is a copy of the other.
-- **Each node holds one signing subkey S<sub>i</sub>, bound under both primaries, in a PIV slot (`84`, proposed) that `key-holder` reaches over PKCS#11.** The OpenPGP application is used only on the root cards, for the primaries. The subkey carries a binding signature and a back-signature under each primary. Every release gets **one signature**, and it verifies with certificate A, certificate B or both.
+- **Each node holds one signing subkey S<sub>i</sub>, bound under both primaries, in a PIV slot (`84`, proposed) that `key-holder` reaches.** The OpenPGP application is used only on the root cards, for the primaries. The subkey carries a binding signature and a back-signature under each primary. Every release gets **one signature**, and it verifies with certificate A, certificate B or both.
 - **Creating or rotating S<sub>i</sub> needs both root cards**, because each primary signs the binding and S<sub>i</sub> signs a back-signature to each.
 - **A subkey is revoked under both primaries.** `gpg` and `gpgv` ignore a revocation made under only one.
 - **Expiry.** The primaries expire in 2 years and are extended at each yearly drill. The subkeys last 2 years and are staggered, so they do not all expire together.
