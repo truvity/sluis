@@ -13,7 +13,7 @@ It describes the project as it is today: one maintainer, a young v2 line, and a 
 - At cutover `master` is renamed `v1` and `main` becomes the default branch. Before the rename, workflow triggers, dependency-bot settings and rulesets learn the new name.
 - v2 versions are `v2.x`. Until cutover they are pre-releases named `v2.0.0-alpha.N`. The Go module path ends in `/v2`.
 - **A published version is never reused, moved or deleted.** Module proxies cache every version they have seen, so reuse breaks checksums. A mistake is fixed by the next version.
-- Published history is not rewritten.
+- Published history is not rewritten. One exception: before the first v2 version ships, while the design and the decision records are being completed, the maintainer may rewrite or remove history, decision records and documentation to take out content that leaked, or to simplify the repository and reduce the context a reader needs. Released versions and their tags are never rewritten.
 - Compatibility follows semantic versioning. A breaking change ships in a major release, or in a minor release that says so in the CHANGELOG, announces it and carries an upgrade note. Stored data stays readable by the next release. Protocol contracts are checked for breaking changes.
 
 ## Roles
