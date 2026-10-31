@@ -29,7 +29,7 @@ Every record has these parts, in this order:
 
 ## Rules
 
-- **Never edit history.** A changed mind gets a new record that supersedes the old one. The old record's status line changes to point at the new one. Its body stays.
+- **Never edit history** (after the first v2 release; the design phase below waives it until then). A changed mind gets a new record that supersedes the old one. The old record's status line changes to point at the new one. Its body stays.
 - **Typos and links** may be fixed in place.
 - **One decision per record.** Keep it short. A page of reasoning is better than ten.
 - **Public means generic.** A record names no private deployment, account, hostname, ticket or person other than the maintainer. Use neutral examples.
