@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # The Workers Builds build command: everything site.yaml builds for GitHub Pages
 # (the site, the v1 documentation under /v1/, Git LFS images and fonts, the build
-# checks), as the Worker's assets in site/dist/client. `npx wrangler deploy` then
+# checks), as the Worker's assets in site/dist/client. `yarn wrangler deploy` then
 # deploys that, from the redirect the build leaves in site/.wrangler/.
 #
 # Workers Builds settings (ADR 0063): root directory `site`, build command
-# `scripts/cf-build.sh`, deploy command `npx wrangler deploy`, build variable
+# `scripts/cf-build.sh`, deploy command `yarn wrangler deploy`, build variable
 # SLUIS_STATUS_KV_ID, no build watch paths (a change under docs/ must build too).
 # It runs on a laptop the same way, without the variable and without deploying:
 #
