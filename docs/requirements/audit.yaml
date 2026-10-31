@@ -273,7 +273,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-74, section: "1", depth: Partial}
-    features: ["design"]
     decisions: ["OD-36"]
     issues: [838]
     verification:
@@ -289,7 +288,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-74, section: "1", depth: Partial}
-    features: ["design"]
     decisions: ["OD-36"]
     issues: [838]
     manual_reason: "A statement in the documentation is checked by reading it."
@@ -426,7 +424,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    features: ["design"]
     issues: [841, 802]
     verification:
       - {kind: integration-test, ref: "blocked-write test"}
@@ -565,7 +562,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-74, section: "1", depth: Partial}
-    features: ["design"]
     decisions: ["OD-36"]
     issues: [838, 955]
     verification:
@@ -580,7 +576,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-49, section: "7515", depth: Partial}
-    features: ["design"]
     decisions: ["OD-39"]
     issues: [838]
     verification:
@@ -595,7 +590,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-88, section: "1", depth: Partial}
-    features: ["design"]
     decisions: ["OD-39"]
     issues: [838, 951]
     verification:
@@ -610,7 +604,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-49, section: "7515", depth: Partial}
-    features: ["design"]
     decisions: ["OD-39"]
     issues: [838]
     verification:
@@ -625,7 +618,6 @@ requirements:
     runtimes: ["serverless"]
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    features: ["design"]
     decisions: ["OD-35"]
     issues: [802]
     verification:
@@ -640,7 +632,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    features: ["design"]
     decisions: ["OD-34"]
     issues: [802]
     verification:
@@ -668,7 +659,6 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["design"]
     issues: [841]
     verification:
       - {kind: integration-test, ref: "free-text bound test"}
@@ -893,7 +883,6 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["design"]
     issues: [837]
     verification:
       - {kind: integration-test, ref: "hold record test"}
@@ -906,7 +895,6 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["design"]
     issues: [973, 837]
     manual_reason: "The check is a step of the promotion runbook, which an operator runs."
     verification:

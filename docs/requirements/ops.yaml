@@ -207,7 +207,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["design"]
     issues: [864, 960]
     verification:
       - {kind: integration-test, ref: "authority origin refusal test"}
@@ -220,7 +219,6 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["design"]
     issues: [960]
     verification:
       - {kind: integration-test, ref: "declared lock test"}
@@ -233,7 +231,6 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["design"]
     issues: [960]
     verification:
       - {kind: integration-test, ref: "double definition hold test"}
@@ -246,7 +243,6 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["design"]
     issues: [960]
     verification:
       - {kind: integration-test, ref: "operator-set audit record test"}
@@ -260,7 +256,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-103, section: "test plan", depth: Partial}
-    features: ["design"]
     issues: [960]
     verification:
       - {kind: integration-test, ref: "operator-set writer refusal test"}
@@ -273,7 +268,6 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["design"]
     issues: [864]
     verification:
       - {kind: integration-test, ref: "learned key refusal test"}
@@ -287,7 +281,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["design"]
     issues: [977]
     verification:
       - {kind: integration-test, ref: "failed reload test"}
@@ -300,7 +293,6 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["design"]
     issues: [960]
     verification:
       - {kind: integration-test, ref: "tighten-only switch test"}
@@ -313,7 +305,6 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["design"]
     issues: [864]
     verification:
       - {kind: integration-test, ref: "explain origin test"}
@@ -326,7 +317,6 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    features: ["design"]
     issues: [997]
     verification:
       - {kind: integration-test, ref: "notify-then-pull test"}

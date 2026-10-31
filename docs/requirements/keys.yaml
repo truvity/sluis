@@ -62,7 +62,6 @@ requirements:
       - {id: ST-55, section: "RFC 8037", depth: Partial}
       - {id: ST-37, section: "5.4", depth: Full}
       - {id: ST-106, section: "test plan", depth: Full}
-    features: ["design"]
     issues: [912, 800]
     verification:
       - {kind: test-vectors, ref: "Wycheproof ECDSA, RSA PSS and EdDSA"}
@@ -78,7 +77,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-51, section: "3", depth: Partial}
-    features: ["design"]
     issues: [912, 800]
     verification:
       - {kind: integration-test, ref: "default-algorithm test"}
@@ -93,7 +91,6 @@ requirements:
     standards:
       - {id: ST-51, section: "3", depth: Partial}
       - {id: ST-88, section: "1", depth: Partial}
-    features: ["design"]
     issues: [800]
     gap: register-gap
     verification:
@@ -110,7 +107,6 @@ requirements:
     standards:
       - {id: ST-51, section: "3", depth: Partial}
       - {id: ST-88, section: "1", depth: Partial}
-    features: ["design"]
     issues: [800, 864]
     gap: register-gap
     verification:
@@ -195,7 +191,6 @@ requirements:
     standards:
       - {id: ST-62, section: "5280", depth: Partial}
       - {id: ST-65, section: "1", depth: Partial}
-    features: ["design"]
     issues: [800]
     manual_reason: "The rule constrains key configuration; a reviewer checks the key-purpose table for each release."
     verification:
@@ -212,7 +207,6 @@ requirements:
     standards:
       - {id: ST-62, section: "5280", depth: Partial}
       - {id: ST-65, section: "1", depth: Partial}
-    features: ["design"]
     issues: [800]
     manual_reason: "The rule constrains key configuration; a reviewer checks the key-purpose table for each release."
     verification:
@@ -243,7 +237,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-88, section: "1", depth: Full}
-    features: ["design"]
     issues: [868]
     manual_reason: "A claim in the documentation and the release notes is checked by reading them."
     verification:
@@ -259,7 +252,6 @@ requirements:
     standards:
       - {id: ST-88, section: "1", depth: Partial}
       - {id: ST-89, section: "6", depth: Partial}
-    features: ["design"]
     issues: [868]
     verification:
       - {kind: integration-test, ref: "algorithm allow-list test over the signing, sealing and derivation code paths"}
@@ -287,7 +279,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-88, section: "1", depth: Partial}
-    features: ["design"]
     issues: [800, 836]
     verification:
       - {kind: integration-test, ref: "alert-rule test (key-ring)"}
@@ -302,7 +293,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-88, section: "1", depth: Partial}
-    features: ["design"]
     issues: [836, 951]
     verification:
       - {kind: integration-test, ref: "alert-rule test (actor)"}
@@ -317,7 +307,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-88, section: "1", depth: Partial}
-    features: ["design"]
     issues: [836]
     verification:
       - {kind: integration-test, ref: "alert-rule test (upstream key set)"}

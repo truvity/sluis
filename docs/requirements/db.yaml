@@ -12,7 +12,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-62, section: "5280", depth: Partial}
-    features: ["design"]
     issues: [926]
     verification:
       - {kind: integration-test, ref: "psql certificate login test"}
@@ -26,7 +25,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-46, section: "1", depth: Partial}
-    features: ["design"]
     issues: [829]
     verification:
       - {kind: integration-test, ref: "IAM-token login test"}
