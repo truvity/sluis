@@ -10,7 +10,7 @@ export interface Verification { kind: 'conformance-suite' | 'test-vectors' | 'in
 export interface Req {
   id: string; area: string; split_from?: string; statement: string; rationale: string;
   level: 'MUST' | 'SHOULD' | 'MAY'; source: string; status: string; runtimes: 'all' | string[];
-  standards: StandardRef[]; features: string[]; decisions?: string[]; verification: Verification[];
+  standards: StandardRef[]; features: string[]; decisions?: string[]; issues?: number[]; verification: Verification[];
   gap?: string; manual_reason?: string; superseded_by?: string[];
 }
 export interface Area { code: string; title: string; file: string; scopeOpen: boolean; reqs: Req[] }
@@ -67,6 +67,8 @@ export const areaPath = (code: string) => `/requirements/${code.toLowerCase()}/`
 export const reqPath = (r: Req) => `${areaPath(r.area)}#${r.id}`;
 export const odPath = (od: string) => `/open-decisions/#od-${od.replace(/^OD-/, '')}`;
 export const featureUrl = (f: string) => (/^#\d+$/.test(f) ? ISSUES + f.slice(1) : undefined);
+// The issues that deliver a record (`issues`), linked at build time; no live state is fetched.
+export const issueUrl = (n: number) => `${ISSUES}${n}`;
 export const runtimesOf = (r: Req) => (r.runtimes === 'all' ? 'all' : r.runtimes.join(' '));
 
 export function count<T>(items: T[], key: (t: T) => string | string[]): Map<string, number> {
