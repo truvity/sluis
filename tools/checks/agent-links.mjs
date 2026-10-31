@@ -10,8 +10,10 @@
 //   - an @-import (@AGENTS.md, @docs/x.md) of the same shape.
 // URLs, anchors, globs and placeholders (<...>, NNNN, {...}, $...) are not pointers.
 //
-// Until the files exist this check prints one line and passes. Once one exists, finding no
-// pointer at all is a failure: an empty sweep proves nothing.
+// AGENTS.md at the root must exist, and CLAUDE.md must import it with an @AGENTS.md line, so
+// that Claude Code reads the same instructions as every other agent. A missing file is a
+// failure, not a skipped check. An AGENTS.md that points to no page is a failure too: an empty
+// sweep proves nothing.
 //
 // usage: tools/checks/agent-links.mjs [repo-root]
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -36,9 +38,10 @@ if (existsSync(agents)) {
     if (d.isFile() && d.name.endsWith('.md')) sources.add(`.claude/agents/${d.name}`);
   }
 }
-if (!sources.size) {
-  console.log('check-agent-links: no AGENTS.md, CLAUDE.md, .claude/skills/*/SKILL.md or .claude/agents/*.md yet, skipped');
-  process.exit(0);
+if (!existsSync(join(root, 'AGENTS.md'))) r.error('AGENTS.md is missing at the repository root');
+if (!existsSync(join(root, 'CLAUDE.md'))) r.error('CLAUDE.md is missing at the repository root; it must import AGENTS.md');
+else if (!/^@AGENTS\.md\s*$/m.test(readFileSync(join(root, 'CLAUDE.md'), 'utf8'))) {
+  r.error('CLAUDE.md does not import AGENTS.md: it needs a line "@AGENTS.md"');
 }
 
 const rootEntries = new Set(readdirSync(root).filter((n) => n !== '.git'));
@@ -46,8 +49,10 @@ const PLACEHOLDER = /[<>{}$*?]|NNNN/;
 const isPathLike = (t) => /^[\w./@-]+$/.test(t) && !PLACEHOLDER.test(t) && rootEntries.has(t.replace(/^\.\//, '').split('/')[0]);
 
 let pointers = 0;
+let agentsPointers = 0;
 for (const src of [...sources].sort()) {
   const base = dirname(src);
+  const before = pointers;
   let fence = false;
   readFileSync(join(root, src), 'utf8').split('\n').forEach((line, i) => {
     if (/^\s*(```|~~~)/.test(line)) { fence = !fence; return; }
@@ -79,6 +84,10 @@ for (const src of [...sources].sort()) {
       if (isPathLike(m[1])) check(m[1], base);
     }
   });
+  if (src === 'AGENTS.md') agentsPointers = pointers - before;
+}
+if (existsSync(join(root, 'AGENTS.md')) && !agentsPointers) {
+  r.error('AGENTS.md points to no page: an empty sweep proves nothing');
 }
 
 r.finish(pointers, `pointers in ${sources.size} agent files`);
