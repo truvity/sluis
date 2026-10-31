@@ -2,7 +2,12 @@
 
 ## v1.80.0
 
-A minor release: a CI job identity may run on pull requests, read only (`refs/pull/*/merge`). Upgrade notes: an installation that declares job identities calls `ValidateGitHubPullRequestGrants` beside `ValidateGitHubJobs` and `ValidateGitHubAppGrants`.
+A minor release: a CI job identity may run on pull requests, read only (`refs/pull/*/merge`); and go-jose v4 and chi v5 move to patched versions (three go-jose and one chi advisory). Upgrade notes: an installation that declares job identities calls `ValidateGitHubPullRequestGrants` beside `ValidateGitHubJobs` and `ValidateGitHubAppGrants`.
+
+### Security
+
+- **go-jose v4 4.1.4 -> 4.1.6 in `audit/deploy/pulumi` and `third_party/zitadel-oidc`** ([GHSA-mgcc-cww5-fp2q](https://github.com/advisories/GHSA-mgcc-cww5-fp2q) high, [GHSA-4w3g-jfj2-cw2q](https://github.com/advisories/GHSA-4w3g-jfj2-cw2q) and [GHSA-vvm8-gf78-28g4](https://github.com/advisories/GHSA-vvm8-gf78-28g4) medium; fixed in 4.1.6 and 4.1.5).
+- **chi v5 5.3.2 -> 5.4.0 in the root module, `deploy/pulumi` and `third_party/zitadel-oidc`** ([GHSA-j6qf-3m9c-vwj3](https://github.com/advisories/GHSA-j6qf-3m9c-vwj3), medium).
 
 ### Added
 
