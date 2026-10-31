@@ -1,6 +1,6 @@
 ---
 title: Roadmap
-description: Where sluis is going: the four v2 product milestones in priority order, the public v2 and v1 boards, the delivery order and the v2 technical backlog.
+description: Where sluis is going. The four v2 product milestones in priority order, the two public boards, the delivery order and the v2 technical backlog.
 status: shipped
 ---
 
