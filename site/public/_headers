@@ -1,0 +1,38 @@
+# Response headers for sluis.id, read by Cloudflare Workers static assets
+# (https://developers.cloudflare.com/workers/static-assets/headers/). GitHub Pages
+# ignores this file. Edit it, then run `site/scripts/check-csp.mjs`.
+#
+# Content-Security-Policy, v2 pages (the /* rule):
+# - script-src names each inline script by its sha256, with no 'unsafe-inline'.
+#   Starlight, Pagefind and the explorers each emit a few (theme setup, the
+#   search dialog, page components). site/scripts/check-csp.mjs, run by
+#   site/scripts/check-built.sh and so by CI, fails when a page runs an inline
+#   script that is not listed here, or a listed one is no longer used, and prints
+#   the tokens to paste. 'wasm-unsafe-eval' is for Pagefind's WebAssembly search.
+# - style-src keeps 'unsafe-inline' (an EXCEPTION). Starlight and Expressive Code set
+#   CSS custom properties in style="" attributes on well over a thousand elements,
+#   and Mermaid writes <style> into the SVGs it draws. Attributes cannot be listed by
+#   hash. Style injection cannot run script, and script-src above is strict.
+# - img-src data: is for inline SVG backgrounds and the Mermaid output.
+# - no external origin is allowed anywhere: the site loads nothing from outside.
+# - frame-ancestors 'none' is what stops framing; X-Frame-Options repeats it for old browsers.
+#
+# /v1/* (the MkDocs documentation of v1, built by site/scripts/build-v1.sh) has its
+# own policy: MkDocs Material emits a different inline script on almost every page
+# (the page's relative base path is in it), so hashes do not scale. It is frozen,
+# static, and served from the same origin without cookies, so it keeps
+# 'unsafe-inline' scripts (an EXCEPTION) and is otherwise as strict as the rest.
+# "! Content-Security-Policy" removes the header set by the /* rule for these paths.
+# The other headers of the /* rule still apply to /v1/.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-1dJ55NhaCHD9LW4ryFH6TxWtoUknv8Sd8TzrCuZJvAE=' 'sha256-5BXDrW6ElRS34YIUCpQti3hE3FUKrIz//ikbm7D/9Q4=' 'sha256-7eCV4jtsr4t4knb3c4FCRPeu7GGZeOUGE3XvWix0XOQ=' 'sha256-GkZBRnvSuhtx/cvzvukVkX2JJZW+DdPlVr7BX8Tefqo=' 'sha256-Pc+F/R056ajjRzuV0sRSROTu4ff8KOI9iY126Ulmz38=' 'sha256-VWo5Wp4aqSj6nSgMpeAp9cKieaoIfwFUAunAVugI5gA=' 'sha256-VgrgcKBvIM3XpiLJ6fEv1Vy6YHBwlKLkYtFdfBMouTo=' 'sha256-f/zAUE74ucc3JYp4r4QQvkJofoQdkOIhHYK+jeZ6eko=' 'sha256-hP48sUywTAXyg22qvpdOC/cYIA8MfPdKEbPC/mvGk4M=' 'sha256-nVO98WGdJA5yup1/MAdukGqUlS6Psuf7JJFF5ikWqbQ=' 'sha256-ucPfdYc9FPIvbmnn9ECv3eLKYLt8/heMPFQ+hNTn6jY=' 'sha256-vGRRWwWSIVGVGDQTLXvfUqIoIy0xJFJxoIt9HHBytuc=' 'sha256-w8N9+kMZPNl7Yb7/VCOvJV/BWqUL3yFvgZ8US/+i5Cc=' 'sha256-wX2yOADeV+NMngflD5uYi3vl50SHC4sfM1EmylVjlX4='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), publickey-credentials-get=(), usb=(), interest-cohort=()
+  Cross-Origin-Opener-Policy: same-origin
+  Strict-Transport-Security: max-age=31536000
+
+/v1/*
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://api.github.com; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'

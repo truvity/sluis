@@ -16,7 +16,7 @@ const fields = [
 ] as const;
 ---
 
-<form class="rq-filter" data-rq-filter aria-label="Filter the requirements" onsubmit="return false">
+<form class="rq-filter" data-rq-filter aria-label="Filter the requirements">
   {fields.map(([key, label, values]) => (
     <label>
       <span>{label}</span>
@@ -73,6 +73,9 @@ const fields = [
     const start = new URLSearchParams(location.search);
     for (const k of [...keys, 'q']) if (start.has(k)) field(k).value = start.get(k)!;
     (field('hide-open') as HTMLInputElement).checked = start.get('hide-open') === '1';
+    // The filter applies as you type; Enter must not submit the form. (An inline
+    // onsubmit attribute would be blocked by the Content-Security-Policy.)
+    form.addEventListener('submit', (e) => e.preventDefault());
     form.addEventListener('input', apply);
     apply();
   }

@@ -3,6 +3,8 @@ import starlight from '@astrojs/starlight';
 import mermaid from 'astro-mermaid';
 import starlightLinksValidator from 'starlight-links-validator';
 import starlightLlmsTxt from 'starlight-llms-txt';
+import cloudflare from '@astrojs/cloudflare';
+import cloudflareKvId from './src/cloudflare-kv-id.mjs';
 import { satteri } from '@astrojs/markdown-satteri';
 import { statusPlugin } from './src/remark-status.mjs';
 
@@ -50,6 +52,31 @@ const naturalSize = Object.fromEntries(
     'block', 'radar'].map((t) => [t, { useMaxWidth: false }]),
 );
 
+// Where the build is going. 'pages' is GitHub Pages (site.yaml): the plain static
+// build into dist/, with the renamed pages redirected by meta-refresh pages.
+// 'workers' is Cloudflare Workers static assets (ADR 0063; Workers Builds sets
+// WORKERS_CI): the @astrojs/cloudflare adapter writes the site to dist/client with
+// its Worker configuration, and the redirects below become a `_redirects` file
+// instead of pages. Both targets build the same pages. The switch goes when GitHub
+// Pages is turned off (the cutover issue); until then the Pages build must not move.
+const workers = (process.env.SLUIS_TARGET ?? (process.env.WORKERS_CI ? 'workers' : 'pages')) === 'workers';
+const workersOptions = {
+  // Every docs page is prerendered, so Pagefind search keeps working; the adapter
+  // is only the way to a Worker. No `cacheCloudflare()`: it turns on Workers Cache,
+  // which bills static asset requests (ADR 0063).
+  //
+  // prerenderEnvironment 'node': the default, workerd, resolves the browser build of
+  // the Markdown processor (Sätteri), which cannot be bundled. Pages are rendered by
+  // Node at build time either way; only /api/* and one server island will run in
+  // workerd, and `astro dev` runs those there.
+  // imageService 'compile': images are optimised at build time, so the build holds no
+  // Images binding that the Worker would need an account feature for.
+  adapter: cloudflare({ prerenderEnvironment: 'node', imageService: 'compile' }),
+  // The adapter would otherwise add a KV namespace for sessions and have wrangler
+  // create it on deploy. The site has no sessions.
+  session: false,
+};
+
 // https://sluis.id. The custom domain and its DNS are managed outside this
 // repository; the site is served from the root, with the v1 documentation
 // copied in under /v1/ (site/scripts/build-v1.sh).
@@ -78,6 +105,7 @@ export default defineConfig({
     '/concepts/roles/': '/concepts/actors/',
     '/decisions/0003-environments-are-runtime-kinds/': '/decisions/0003-runtimes-are-runtime-kinds/',
   },
+  ...(workers ? workersOptions : {}),
   prefetch,
   vite: {
     plugins: [fillPrefetchPlaceholders()],
@@ -90,6 +118,7 @@ export default defineConfig({
   // plugins (asides, heading links) to the same processor.
   markdown: { processor: satteri({ mdastPlugins: [statusPlugin] }) },
   integrations: [
+    ...(workers ? [cloudflareKvId()] : []),
     // Must come before Starlight so the ```mermaid fences are claimed first.
     mermaid({
       theme: 'neutral',

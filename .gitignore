@@ -56,3 +56,6 @@ Thumbs.db
 # Scratch
 /tmp/
 *.log
+
+# Cloudflare: the deploy redirect and local state written by the site build
+/site/.wrangler/

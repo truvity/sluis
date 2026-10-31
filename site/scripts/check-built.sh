@@ -22,6 +22,23 @@ done
 [ -s "$dist/pagefind/pagefind.js" ] || bad "no Pagefind entry point in $dist/pagefind"
 [ -n "$(ls "$dist"/pagefind/index 2>/dev/null)" ] || bad "no Pagefind index shards in $dist/pagefind/index"
 
+# Git LFS: a pointer file in the output means the checkout did not fetch its LFS
+# objects (images and fonts would be broken on the site).
+lfs=$(grep -rlI --null -m1 '^version https://git-lfs.github.com/spec/v1' "$dist" 2>/dev/null | tr '\0' '\n' | head -3 || true)
+[ -z "$lfs" ] || bad "Git LFS pointer files in the output (the checkout has no LFS objects): $(echo "$lfs" | tr '\n' ' ')"
+
+# Response headers (CSP and the rest): the Workers target serves them from _headers.
+[ -s "$dist/_headers" ] || bad "no _headers: site/public/_headers did not reach the output"
+site/scripts/check-csp.mjs "$dist" || bad "the Content-Security-Policy does not match the pages (above)"
+
+# On the Workers target: the redirects of astro.config.mjs are a _redirects file, and
+# the Worker configuration is there; and neither workers.dev nor preview URLs may be on.
+if [ -f "$dist/wrangler.json" ]; then
+  grep -q '^/shapes/ ' "$dist/_redirects" 2>/dev/null || bad "the Workers build has no _redirects with the renamed pages"
+  grep -q '"workers_dev":false' "$dist/wrangler.json" || bad "wrangler.json does not set workers_dev false"
+  grep -q '"preview_urls":false' "$dist/wrangler.json" || bad "wrangler.json does not set preview_urls false"
+fi
+
 # Mermaid: the diagram must be a <pre class="mermaid"> that the browser script
 # draws, never a code listing that merely looks like one.
 ctx="$dist/architecture/context/index.html"

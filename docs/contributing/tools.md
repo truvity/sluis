@@ -24,7 +24,7 @@ The `Justfile` holds the recipes, and CI runs the same recipes. Run the recipe, 
 
 | Recipe | What it checks |
 |---|---|
-| `just check` | Everything a pull request must pass: `check-rules` and `site-check` |
+| `just check` | Everything a pull request must pass: `check-rules`, `site-check` and `site-workers` |
 | `just check-rules` | The repository rules, below, after a self-test of the checks |
 | `just check-decisions` | The decision records: file names, the template's sections, the status, the index rows |
 | `just check-requirements` | The requirements catalogue: schema, ids, statement and traceability rules |
@@ -36,6 +36,7 @@ The `Justfile` holds the recipes, and CI runs the same recipes. Run the recipe, 
 | `just site-build` | A strict site build: no warning and no broken internal link |
 | `just site-links` | Every link in the built site, internal and external |
 | `just site-render` | Every diagram is drawn, in light and dark mode |
+| `just site-workers` | The Cloudflare Workers build with a fake KV id: the strict build for the Worker, `/v1/`, the headers and redirects checks, and `wrangler deploy --dry-run`. Part of `just check`; the `workers` job of `checks.yaml` runs it |
 
 Read the recipe, and the workflow in `.github/workflows/` that calls it, to know what CI really runs. Build and test recipes for the code arrive with the code, and this table grows with them.
 
@@ -47,12 +48,16 @@ The site is built from `docs/` and `site/` with Astro Starlight, and every page 
 - `just site-build` makes the strict build into `site/dist`, the same build CI checks.
 - The [project status](/status/) page and `/data/repo.json` are built with the rest ([ADR 0063](/decisions/0063-the-site-is-static-on-cloudflare-workers-with-a-live-status-api/)). The page reads the v2 project board during the build, with the token in `GH_TOKEN` or `GITHUB_TOKEN`. Reading an organisation's project needs a token that may read it: locally, `GH_TOKEN=$(gh auth token) devbox run -- just check`. The `GITHUB_TOKEN` of GitHub Actions cannot read organisation projects, so a CI build says "project data not available at build time" on the page and in its log, and does not fail. `site/scripts/check-repo-json.mjs` checks `/data/repo.json` against its schema, `site/public/data/repo.schema.json`, and against the records it is built from.
 
-How the site is hosted is decided in [ADR 0063](/decisions/0063-the-site-is-static-on-cloudflare-workers-with-a-live-status-api/), and not built yet. Today `site.yaml` publishes it to GitHub Pages. The target:
+How the site is hosted is decided in [ADR 0063](/decisions/0063-the-site-is-static-on-cloudflare-workers-with-a-live-status-api/). Today `site.yaml` publishes it to GitHub Pages, and the build for Cloudflare Workers is ready but not yet deployed (the live status API and the cutover are separate issues). The build has two targets, chosen by `SLUIS_TARGET` (`pages`, the default, or `workers`; Workers Builds sets `WORKERS_CI`, which selects `workers`). They build the same pages.
 
-- The static output is served as assets on Cloudflare Workers, through the `@astrojs/cloudflare` adapter. With the adapter, `astro dev` runs the site in `workerd`, Cloudflare's runtime, so the `/api/*` routes and the status page's server island run locally as they do in production.
-- Cloudflare's build service, Workers Builds, builds and deploys from the repository. Each pull request gets a preview of the site. The repository's CI holds no Cloudflare credential.
-- Security headers are in a `_headers` file and redirects in a `_redirects` file, both in the repository.
-- The Worker, its KV namespace and the custom domain are declared in the operator's own infrastructure code, outside this repository. The repository holds no account id and no namespace id.
+- **Pages** writes `site/dist` and turns the renamed-page redirects of `astro.config.mjs` into meta-refresh pages. `just site-build` and `site.yaml` use it, and it does not change until GitHub Pages is turned off.
+- **Workers** goes through the `@astrojs/cloudflare` adapter and writes `site/dist/client`, the Worker's assets directory, with the Worker configuration, and turns the redirects into a `_redirects` file. Every docs page is prerendered, so Pagefind search keeps working. Only `/api/*` and one server island will run as Worker code, and nothing does yet. The experimental route cache `cacheCloudflare()` stays off, because it bills static asset requests.
+- `site/wrangler.jsonc` names the Worker `sluis-site`, a KV binding `STATUS` and the static assets. It holds no account id and no namespace id. The id of the KV namespace is the build variable `SLUIS_STATUS_KV_ID`: Wrangler does not read variables in its configuration, so `src/cloudflare-kv-id.mjs` writes the id into the configuration the build generates, and a Workers Builds build without it fails. A build elsewhere needs no id, because it deploys nothing.
+- `workers_dev` and `preview_urls` are off, for good. Wrangler turns both on by default, and each publishes a hostname that contains the operator's account subdomain. There is no preview per pull request for that reason ([ADR 0063](/decisions/0063-the-site-is-static-on-cloudflare-workers-with-a-live-status-api/)); a pull request is judged by `just site-workers` in CI, and you can serve the same build with `yarn wrangler dev` in `site/`.
+- The adapter and Wrangler are pinned at releases at least two weeks old (`@astrojs/cloudflare` 14.4.0, `wrangler` 4.151.0). The adapter's Vite plugin is pinned to 1.64.0 in `resolutions` so that it brings that Wrangler and no newer one, and `.yarnrc.yml` adds the `prismjs` package that the adapter imports without declaring. Drop both when an upgrade makes them unnecessary.
+- `site/public/_headers` holds the Content-Security-Policy and the other security headers. Inline scripts are listed by hash, and `site/scripts/check-csp.mjs` (run by `check-built.sh`) fails when a page runs one that is not listed, or a listed one is gone, and prints the hashes to paste. Two exceptions are written in the file: `style-src` keeps `'unsafe-inline'` for the style attributes of Starlight and Mermaid, and `/v1/*` has its own policy with inline scripts, because MkDocs Material emits a different one on almost every page.
+- `site/scripts/cf-build.sh` is the Workers Builds build command. It fetches Git LFS objects and the newest stable v1 tag, builds the site for the Worker, builds `/v1/` with `build-v1.sh`, and runs `check-built.sh`, so the output equals what `site.yaml` publishes.
+- Security headers and redirects are files in the repository, and the Worker, its KV namespace and the custom domain are declared in the operator's own infrastructure code, outside it. The repository's CI holds no Cloudflare credential, and neither does `just site-workers`.
 
 ## Commands from an agent shell
 

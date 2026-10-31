@@ -4,6 +4,7 @@
 **Date:** 2026-10-31
 
 Decided by the maintainer on 2026-10-31. Proposal: [issue #1010](https://github.com/truvity/sluis/issues/1010).
+Rewritten in place on 2026-10-31 (no preview per pull request: preview hostnames would publish the operator's account subdomain).
 
 ## Context
 
@@ -16,7 +17,7 @@ GitHub Pages cannot fix this, and it cannot do three other things the project no
 
 - **Headers.** Pages sets no custom headers. A `<meta>` CSP cannot carry `frame-ancestors` or `report-uri`, and Permissions-Policy has no meta form.
 - **Redirects.** Pages has no server-side redirects, only meta-refresh pages. The site already redirects renamed pages that way.
-- **Previews.** Pull request previews are not available: the `preview` input of `actions/deploy-pages` (v5.0.1, 2026-09-01) is "only in alpha currently and is not available to the public".
+- **Previews.** Pull request previews are not available: the `preview` input of `actions/deploy-pages` (v5.0.1, 2026-09-01) is "only in alpha currently and is not available to the public". Workers could give them, but at a cost to privacy; see "A preview per pull request" in the roads not taken.
 - **Live data.** A project status page should show the state of issues, CI, coverage and conformance as it is now. On Pages that means a rebuild per event, or browser calls to `api.github.com`, which allows 60 unauthenticated requests per hour per visitor IP and has no place for a token.
 
 Cloudflare's own documentation now says Workers "is Cloudflare's primary platform … Start new projects with Workers" (Pages docs, updated 2026-08-25). Astro's `@astrojs/cloudflare` adapter dropped Pages in v13 and targets Workers only. The facts below were read on 2026-10-31, against `astro` 7.4.4, `@astrojs/starlight` 0.42.8, `@astrojs/cloudflare` 14.4.3 (peer dependencies `astro ^7.4.0`, `wrangler ^4.125.0`) and `wrangler` 4.156.0:
@@ -50,7 +51,7 @@ The project board's `Product milestone` field is a single-select with four optio
 ### Deploy
 
 - **Cloudflare's own build service, Workers Builds, is connected to the repository and deploys the site.** The repository's CI holds no Cloudflare credential.
-- **Every pull request gets a preview** of the site.
+- **Workers Builds builds the production branch only.** Builds for other branches are off, and the Worker sets `workers_dev` and `preview_urls` to false. Pull requests are judged by the repository's GitHub CI, which runs the same build and a dry-run deploy with no Cloudflare credential, and by `wrangler dev` on a checkout. See "A preview per pull request" in the roads not taken.
 - **The Cloudflare resources are declared in the operator's own infrastructure code, outside this repository:** the Worker, a KV namespace and the custom domain. The repository holds no account id and no KV namespace id.
 
 ### Headers and redirects
@@ -76,15 +77,16 @@ The project board's `Product milestone` field is a single-select with four optio
 
 ### Cutover
 
-1. Deploy to a preview URL.
-2. On the preview, verify the pages, search, the headers, that static requests do not invoke the Worker, and the API.
+1. Deploy the Worker with no route on the domain. It has no public hostname: `workers_dev` and `preview_urls` are off.
+2. Verify the pages, search, the headers, that static requests do not invoke the Worker, and the API, on the same build with `wrangler dev`, and on a temporary hostname of the project's own zone that the operator attaches for the check and removes after.
 3. Switch the domain to the Worker.
 4. Keep GitHub Pages for one week as a DNS fallback.
 5. Turn GitHub Pages off.
 
 ## Consequences
 
-- The site ships real security headers, server-side redirects and a preview per pull request, still at no cost for static traffic.
+- The site ships real security headers and server-side redirects, still at no cost for static traffic. It has no preview per pull request: a change to the site is judged in GitHub CI and locally, and is seen live only after it merges.
+- The Worker has no `workers.dev` hostname and no preview hostname, so nothing public names the operator's account. Turning either on is a new decision.
 - Static traffic stays free only while no Worker runs first. Anything that sends every request through the Worker, such as a catch-all route or Workers Cache, puts the whole site under the Free plan's 100,000 requests a day, and over it Worker paths return 429 rather than fall back to the assets. The cutover checks this, and so must every later change to the routing.
 - The Free plan's 10 ms of CPU per request is enough for a JSON answer from KV. Verifying an OIDC token costs more, but runs only on the rare CI posts. Measure both before relying on the Free plan.
 - The Worker holds two secrets: the GitHub App's private key and the webhook secret. The App is read-only and its key is rotated, so a leaked key gives read access and nothing more.
@@ -111,11 +113,11 @@ The project board's `Product milestone` field is a single-select with four optio
 
 - Pros: the least migration; only the API is Cloudflare-specific; the static site stays where it is.
 - Cons: two deploy systems; no previews for the static site; headers patched on with Cloudflare Transform Rules (10 on the Free plan) instead of a file in the repository.
-- Why not: Workers with static assets does everything this does, with one deploy and previews, at the same cost.
+- Why not: Workers with static assets does everything this does, with one deploy, at the same cost.
 
 ### Cloudflare Pages
 
-- Pros: Cloudflare's older static platform, with `_headers`, `_redirects`, previews and file-based Functions.
+- Pros: Cloudflare's older static platform, with `_headers`, `_redirects` and file-based Functions.
 - Cons: Cloudflare tells new projects to start on Workers; the Astro adapter dropped Pages in v13; the archived `cloudflare/pages-action` has an RCE that may expose workflow secrets (CVE-2026-11325).
 - Why not: it is the platform both Cloudflare and Astro are moving away from.
 
@@ -189,7 +191,13 @@ The project board's `Product milestone` field is a single-select with four optio
 
 - Pros: the deploy is a step in the existing workflow, visible as a GitHub check; `cloudflare/wrangler-action` is the documented path.
 - Cons: a long-lived Cloudflare token stored as a repository secret, because Cloudflare accepts no OIDC federation for deploys; a fork's pull request receives no secret, so previews for forks need a second, privileged workflow.
-- Why not: Workers Builds deploys and previews with no Cloudflare credential in the repository.
+- Why not: Workers Builds deploys with no Cloudflare credential in the repository.
+
+### A preview per pull request
+
+- Pros: a reviewer sees the real site, with its real headers, before a change merges. Workers Builds can build other branches and `wrangler versions upload` publishes each as a version with its own URL.
+- Cons: a version URL or a preview URL is a `workers.dev` hostname of the form `<name>.<account-subdomain>.workers.dev`. The account's subdomain is one per account, and the pull requests of a public repository would carry it in a comment or a status. It names the operator's account to everyone. The only way to keep it out is to switch previews off.
+- Why not: preview hostnames would publish the operator's account subdomain. GitHub CI builds the same output and dry-runs the deploy, and `wrangler dev` serves it locally with its `_headers` and `_redirects`, which covers what a review needs. This can be revisited if Cloudflare offers previews on a custom hostname of the project's own zone.
 
 ### Resources created by wrangler on first deploy
 

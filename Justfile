@@ -71,6 +71,18 @@ site-v1 tag='':
 # Everything the Pages workflow publishes: the site and v1 under /v1/.
 site-all: site-check site-v1
 
+# The Cloudflare Workers build (ADR 0063), as Workers Builds makes it
+# (site/scripts/cf-build.sh), and a dry-run deploy that uploads nothing and needs no
+# Cloudflare credential: the strict build for the Worker into site/dist/client, v1
+# under /v1/ when v1-src holds a v1 tag (see site-v1), the build checks (headers,
+# redirects, Git LFS) and `wrangler deploy --dry-run` on the generated configuration.
+# The KV id is a fake one: the real id is a build variable of Workers Builds.
+site-workers: site-install
+    SLUIS_TARGET=workers SLUIS_STATUS_KV_ID=ffffffffffffffffffffffffffffffff site/scripts/strict-build.sh
+    if [ -d v1-src ]; then site/scripts/build-v1.sh v1-src site/dist/client; fi
+    site/scripts/check-built.sh site/dist/client
+    cd site && WRANGLER_SEND_METRICS=false yarn wrangler deploy --dry-run
+
 # Repository rules (tools/checks/). Each check fails when it finds nothing to check.
 
 # Decision records in docs/decisions/: NNNN-kebab-case.md names, the template's
@@ -110,4 +122,4 @@ check-selftest: site-install
 check-rules: check-selftest check-decisions check-requirements check-public check-yaml-ext check-agent-links
 
 # Everything a pull request must pass.
-check: check-rules site-check
+check: check-rules site-check site-workers
