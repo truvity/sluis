@@ -1,0 +1,52 @@
+---
+title: Target-state pages
+description: How a page of the sluis site marks what is built, decided and proposed, where a page lives, and how big its diagrams may be.
+status: shipped
+sidebar:
+  order: 6
+---
+
+The pages on this site describe the **target state** of sluis v2: what it is meant to be, until it is built. A page is not a promise that the thing exists, so it says how far it has got. How to write the prose itself is in [Writing style](/contributing/writing/).
+
+## Where a page lives
+
+Docs live next to the thing they describe: the format of the decision records is in `docs/decisions/`, the format of the requirements in `docs/requirements/`, and a page about a part of sluis sits in that part's section of the site. When the thing changes, its docs change in the same pull request.
+
+## Status
+
+Every page has a required `status` in its front matter, shown as a badge next to the title and checked in CI:
+
+| Status | Badge | Meaning |
+|---|---|---|
+| `target` | Target state | Describes the design; not built yet. |
+| `partial` | Partly built | Describes the design; part of it is built and part is not. |
+| `shipped` | Shipped | Describes what has been built and released. |
+
+The status also starts the page in `llms.txt`. Change it in the same pull request that builds the thing, and a page marked `shipped` describes what shipped. When a page and a [decision record](/decisions/) disagree, the record is the reasoning and the page is fixed.
+
+## Diagrams
+
+Mermaid diagrams (a ```` ```mermaid ```` fence) are drawn at their natural size. One wider than the page column scrolls inside its box, and the **Expand** button opens it fullscreen with pan and zoom. A diagram that needs the scrolling and the zoom to be read is too big; keep it to a size a reader takes in at a glance:
+
+- At most about 6 participants in a sequence diagram.
+- Short labels, on nodes and on messages: a few words, not a sentence. Put the detail in the text beside the diagram.
+- Split a big flow into steps: several small diagrams, each with a heading and a line of prose, read better than one large one.
+- Prefer `flowchart LR` for a wide flowchart, with a few nodes per column, over `TB` with a long row.
+
+## Asides
+
+How settled a point is shows in how it is written:
+
+- Plain prose is **agreed**.
+- `:::note[Proposed]` is the design as proposed, awaiting the maintainer.
+- `:::caution[Open decision OD-n: short title]` is undecided and lists the options. The id must be a row of the "Open" table on [Open decisions](/open-decisions/); `just site-lint` refuses an id that is not there, and refuses an id that has been decided. A decided point is written as plain prose.
+
+```md
+:::note[Proposed]
+Each node agent holds its own signing key.
+:::
+
+:::caution[Open decision OD-24: Edge on Kubernetes]
+Options: a `cloudflared` sidecar, or a key-less edge relay on the pod address.
+:::
+```

@@ -1,0 +1,48 @@
+---
+title: AI agents
+description: How AI agents contribute to sluis, who answers for their work, how a team of agents splits its roles, and what an agent reports back.
+status: shipped
+sidebar:
+  order: 9
+---
+
+AI agents may write issues, code, tests and docs for sluis. Their work is reviewed like any other, and they follow the same pages as people. `AGENTS.md` at the repository root is the short form of these pages for an agent, with the page to read before each kind of change; `CLAUDE.md` loads it for Claude Code.
+
+## A person answers for it
+
+- A person owns the contribution. That person has read it, understands it and answers for it.
+- Mention the assistance in the pull request.
+- An agent does not decide scope and does not touch governance files unless asked. It presents options with pros, cons and a recommendation, and the maintainer decides ([Decision records](/contributing/decisions/)).
+- Output that is plausible but unverified is not a contribution. Run it, test it, and say what you ran ([Tools, checks and verification](/contributing/tools/)).
+- Low-effort bulk pull requests may be closed without review.
+
+## Attribution
+
+A commit or a pull request that an agent wrote keeps the attribution lines the tool adds, such as a `Co-Authored-By` trailer. A DCO sign-off, where one is asked for, is the human contributor's legal statement: an agent never adds one on its own.
+
+## Safety tooling
+
+An agent does not work around a safety check, a permission prompt or a refused command. If one blocks the work, the agent stops and reports what blocked it and what it was trying to do.
+
+## Roles in a team
+
+When several agents work on one change, each has one role, and the roles stay separate. There is no single combined "reviewer".
+
+| Role | May change | Does |
+|---|---|---|
+| implementer | source code | builds the change |
+| security | nothing: read-only | reviews for faults and reports findings; never edits |
+| qa | tests, test data, the test plan | writes and runs the tests that prove the change |
+| docs | docs, `README`, `CONTRIBUTING.md`, `AGENTS.md`, `CLAUDE.md`, the agent files in `.claude/` | keeps the pages and the agent wiring in step with the change |
+| devops | CI workflows, the `Justfile`, `devbox.json`, release configuration | keeps the checks and the release path working |
+
+The review agent of [GOVERNANCE.md](https://github.com/truvity/sluis/blob/main/GOVERNANCE.md) is a different agent from the one that wrote the change. For Claude Code the roles are defined in `.claude/agents/`, and the common tasks have skills in `.claude/skills/` that point back to these pages.
+
+## What an agent reports
+
+An agent ends its work with a report:
+
+1. **Verdict.** What was done or found, first.
+2. **Numbers.** Measurements, counts, check results, with the commands that produced them.
+3. **Changes.** Every change it made to any machine, account, branch or device, and whether it was undone.
+4. **Open questions.** Each as options with pros and cons, and a recommendation.

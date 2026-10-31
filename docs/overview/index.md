@@ -63,4 +63,4 @@ Three ideas hold the design together:
 | [Standards and conformance](/standards/) | The RFCs, specifications and certifications sluis uses or plans to, and the plan to prove conformance with the OpenID Foundation test plans. | [Standards register](/standards/) |
 | [Open decisions](/open-decisions/) | The points of the design the maintainer has not decided, each with options and the current lean. | [Open decisions](/open-decisions/) |
 
-Every page says how settled it is. A badge beside the title shows whether it describes a design that is not built yet, something partly built or something shipped. Inside a page, plain prose is agreed, a **Proposed** note is a design awaiting the maintainer, and an **Open decision** note is undecided. The rules are in [Contributing](/contributing/).
+Every page says how settled it is. A badge beside the title shows whether it describes a design that is not built yet, something partly built or something shipped. Inside a page, plain prose is agreed, a **Proposed** note is a design awaiting the maintainer, and an **Open decision** note is undecided. The rules are in [Target-state pages](/contributing/pages/).

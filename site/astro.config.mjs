@@ -162,7 +162,10 @@ export default defineConfig({
             { label: 'Coverage', link: '/requirements/coverage/' },
           ],
         },
-        { label: 'Contributing', slug: 'contributing' },
+        {
+          label: 'Contributing',
+          items: [{ label: 'Overview', slug: 'contributing' }, { autogenerate: { directory: 'contributing' } }],
+        },
         { label: 'v1 documentation', link: '/v1/' },
       ],
       plugins: [
