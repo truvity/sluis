@@ -14,7 +14,7 @@ A contributor or an agent presents the options, each with its pros and cons, and
 
 ## From proposal to record
 
-1. **Proposal.** Open an issue with the *Decision proposal* form: the question, the context, the options with pros and cons, and the options you would not take.
+1. **Proposal.** Open an issue with the *Decision proposal* form: the question, the context, the options with pros and cons, and the options you would not take. The form labels it `type:decision`; give it a `Product milestone` on the project board, which places the planned record on the project status page ([ADR 0063](/decisions/0063-the-site-is-static-on-cloudflare-workers-with-a-live-status-api/)).
 2. **Record.** When the direction is clear, copy [the template](https://github.com/truvity/sluis/blob/main/docs/decisions/0000-template.md) to `docs/decisions/NNNN-short-title-in-kebab-case.md`, with the next free number. Link the proposal issue in the context.
 3. **Index.** Add the record to the index table in `docs/decisions/README.md`, with its status. Every record has a row, and every row has a record.
 4. **Requirements.** A decision that creates an obligation adds a requirement or cites an existing one ([Requirements](/contributing/requirements/)).
