@@ -26,7 +26,12 @@ jobs:
           lfs: true
           persist-credentials: false
       - uses: truvity/ci-actions/setup-devbox@eae9926515d96296eeed99aa358d2957a89647e8 # v3.3.1
+      # PUBLIC_CONTENT_DENYLIST is a repository secret: the private names that must never appear
+      # here. The requirements lint checks the catalogue against it; a pull request from a fork
+      # gets no secrets, and the lint then skips that part and says so.
       - run: devbox run -- just site-check
+        env:
+          PUBLIC_CONTENT_DENYLIST: ${{ secrets.PUBLIC_CONTENT_DENYLIST }}
 
   v1:
     name: v1 under /v1/

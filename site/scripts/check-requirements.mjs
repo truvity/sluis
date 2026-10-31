@@ -9,7 +9,8 @@
 //   L6  a statement has exactly one RFC 2119 keyword, `level` equals its class, one sentence
 //   L7  a rationale is one sentence
 //   L8  no two statements are equal after normalising case and punctuation
-//   L10 public safety: no ticket key, estate word, e-mail address, URL outside .example or account-id-shaped number
+//   L10 public safety: no ticket key, e-mail address, URL outside .example, account-id-shaped number,
+//       or term of the private deny-list (PUBLIC_CONTENT_DENYLIST, see below)
 //   L11 every MUST has a verification
 //   L12 a MUST verified by manual review only has manual_reason; manual_reason is forbidden elsewhere
 //   L13 every cited standard is a row of standards.yaml; a Full citation has a section (warning)
@@ -46,11 +47,20 @@ const NOT_TICKET = new Set([
   'CTR', 'SSH', 'DNS', 'UUID', 'COSE', 'JWT', 'JWS', 'JWE', 'JWK', 'OAUTH', 'OIDC', 'FIDO', 'FIDO2', 'UTC', 'RS256', 'ES256',
 ]);
 const DENY = [
-  [/\b(opwerm|nexus|hive|excavador)\b/i, 'estate word'],
-  [/truvity\.xyz/i, 'estate domain'],
   [/[\w.+-]+@[\w-]+(\.[\w-]+)+/, 'e-mail address'],
   [/\b\d{12}\b/, 'account-id-shaped number'],
 ];
+// The private deny-list: the environment variable PUBLIC_CONTENT_DENYLIST (a repository secret)
+// holds one term per line; empty lines and lines starting with # are ignored. A term matches
+// case-insensitively when no letter or digit touches it. A hit names the record, never the term
+// or the text. Without the variable this part is skipped, and the run says so.
+const denyTerms = (process.env.PUBLIC_CONTENT_DENYLIST ?? '')
+  .split(/\r?\n/).map((t) => t.trim()).filter((t) => t && !t.startsWith('#'));
+const PRIVATE = denyTerms.length
+  ? new RegExp(`(?<![\\p{L}\\p{N}])(?:${denyTerms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?![\\p{L}\\p{N}])`, 'iu')
+  : null;
+const denied = new Set(); // one error per record or file
+console.log(PRIVATE ? 'check-requirements: private deny-list loaded' : 'private deny-list not available, skipped');
 const TICKET = /(?<!REQ-)\b([A-Z][A-Z0-9]{1,9})-(\d{1,6})\b/g;
 const URLISH = /https?:\/\/(?![a-z0-9.-]*\.example\b)/i;
 
@@ -200,6 +210,7 @@ for (const r of reqs) {
   // The free text of a record; ids, enums and standard references are not prose.
   for (const text of [r.statement, r.rationale, r.manual_reason ?? '', ...r.verification.map((v) => v.ref)]) {
     for (const [rx, what] of DENY) if (rx.test(text)) E(`L10 ${i}: ${what} in ${JSON.stringify(text.slice(0, 60))}`);
+    if (PRIVATE?.test(text) && !denied.has(i)) { denied.add(i); E(`L10 ${i}: matches a deny-listed term`); }
     if (URLISH.test(text)) E(`L10 ${i}: a URL that is not under .example`);
     for (const m of text.matchAll(TICKET)) if (!NOT_TICKET.has(m[1])) E(`L10 ${i}: ticket-key shaped text ${m[0]}`);
   }
@@ -236,6 +247,7 @@ for (const r of reqs) {
 for (const [where, doc] of [['index.yaml', index], ['standards.yaml', standardsDoc]]) {
   for (const text of strings(where === 'index.yaml' ? doc : standardsDoc.standards.map((s) => [s.id, s.name, s.group]))) {
     for (const [rx, what] of DENY) if (rx.test(text)) E(`L10 ${where}: ${what} in ${JSON.stringify(text.slice(0, 60))}`);
+    if (PRIVATE?.test(text) && !denied.has(where)) { denied.add(where); E(`L10 ${where}: matches a deny-listed term`); }
     if (where === 'index.yaml' && URLISH.test(text)) E(`L10 ${where}: a URL that is not under .example`);
   }
 }
