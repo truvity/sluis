@@ -27,6 +27,6 @@ Everything in this repository is written for an engineer who has not followed th
 
 ## Files
 
-- Use the `.yaml` extension for YAML files, not `.yml`. The exception is a file name a tool requires, such as `.github/ISSUE_TEMPLATE/config.yml`.
+- Use the `.yaml` extension for YAML files, not `.yml`. The exceptions are the file names a tool requires: `.github/ISSUE_TEMPLATE/config.yml` and `.yarnrc.yml`. `just check-yaml-ext` checks it.
 - After an edit, reflow the paragraph you changed so it keeps the wrapping the file already uses.
 - Text files use LF line endings; `.gitattributes` enforces it.
