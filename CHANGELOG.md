@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added
+
+- **A CI job identity may run on pull requests, read only.** `policy/compile` admits a job pinned to `ref: refs/pull/*/merge` with `events: [pull_request]`: its matchers pin the repository, the merge ref, the event and the workflow files, without `ref_type`. A pull request runs the files it proposes, so the new `ValidateGitHubPullRequestGrants` refuses a grant to such a job of any permission above `read`, or of a repository pattern (`*`, `lib-*`): the job reads a short list of named repositories, such as the private modules a build downloads. `pull_request` on a branch or tag ref, and the other `pull_request_*` events, stay refused; `pull_request_target` is unchanged. `GitHubJobIsPullRequest` says whether a job is one. See [GitHub App tokens](docs/guides/sluis/connect/github-app-tokens.md#a-pull-request-run-read-only). **Upgrade:** an installation that declares job identities calls `ValidateGitHubPullRequestGrants` beside `ValidateGitHubJobs` and `ValidateGitHubAppGrants`.
+
 ## v1.79.4
 
 A patch release: the audit writer rereads its credential after a 401 as after a 403, so an S3-compatible store that answers 401 for a rotated key no longer fails a batch at each rotation; and pushing a v1 release tag now rebuilds the documentation site. Correction to v1.79.3: its notes give about 0.5 to 1 s for an on-demand Cloudflare mint; measured, a warm mint takes about 1.3 to 1.4 s, of which Cloudflare's GetToken and CreateToken take about 1 s. Upgrade notes: none.

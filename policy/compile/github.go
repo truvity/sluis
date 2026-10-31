@@ -49,8 +49,10 @@ type (
 		// Repository is the repository the run belongs to, `<owner>/<name>`:
 		// for a reusable workflow, the CALLER's.
 		Repository string `yaml:"repository"`
-		// Ref is what the run is on: one branch, `refs/heads/<name>`, or one
-		// tag pattern, `refs/tags/<prefix>*`, for a job a tag starts.
+		// Ref is what the run is on: one branch, `refs/heads/<name>`; one
+		// tag pattern, `refs/tags/<prefix>*`, for a job a tag starts; or
+		// `refs/pull/*/merge`, for a read-only job a pull request starts
+		// ([ValidateGitHubPullRequestGrants]).
 		Ref string `yaml:"ref"`
 		// Events are what may start the run, one matcher each: GitHub's
 		// `event_name`, and a pattern cannot say "one of".
@@ -203,6 +205,17 @@ const (
 	GitHubRefTag    = "tag"
 )
 
+// GitHubRefPullRequest is the third kind of ref a job may be pinned to: a
+// pull request's merge ref. It is not a value of GitHub's `ref_type` claim,
+// and no matcher pins `ref_type` for it; the ref pattern itself says it.
+const GitHubRefPullRequest = "pull_request"
+
+// gitHubPullRequestRef is the one pull-request ref a job may name: the merge
+// ref of any pull request of the repository. `*` stands for the number and
+// does not cross a `/`, so `refs/pull/*/merge` cannot match `refs/pull/1/head`
+// or anything outside `refs/pull/`.
+const gitHubPullRequestRef = "refs/pull/*/merge"
+
 // GitHubRefType says which kind of ref this is, and whether it is one a job
 // may be pinned to.
 //
@@ -212,6 +225,12 @@ const (
 // it is releasing and nobody can declare that in advance. A tag is weaker
 // than a branch -- whoever may push a tag chooses the commit, and so the
 // file -- which is why it suits only jobs whose reach is a release.
+//
+// A PULL-REQUEST ref is exactly `refs/pull/*/merge`: every pull request of
+// the repository, running the files the pull request proposes. It is the
+// weakest of the three -- whoever may push a branch to the repository
+// chooses the file -- which is why such a job may only read
+// ([ValidateGitHubPullRequestGrants]).
 func GitHubRefType(ref string) (string, bool) {
 	if branch, ok := strings.CutPrefix(ref, "refs/heads/"); ok {
 		return GitHubRefBranch, branch != "" && gitHubLiteralPattern.MatchString(branch)
@@ -221,7 +240,19 @@ func GitHubRefType(ref string) (string, bool) {
 		return GitHubRefTag, gitHubTagPattern.MatchString(tag)
 	}
 
+	if strings.HasPrefix(ref, "refs/pull/") {
+		return GitHubRefPullRequest, ref == gitHubPullRequestRef
+	}
+
 	return "", false
+}
+
+// GitHubJobIsPullRequest says whether the job runs on pull requests: its ref
+// is the pull-request merge ref.
+func GitHubJobIsPullRequest(job GitHubJob) bool {
+	refType, ok := GitHubRefType(job.Ref)
+
+	return ok && refType == GitHubRefPullRequest
 }
 
 // ValidateGitHubJobs refuses a job whose matchers would admit more than one
@@ -254,8 +285,11 @@ func ValidateGitHubJobs(where string, jobs map[string]GitHubJob) []error {
 			fail("ref %q is not one branch, refs/heads/<name>", job.Ref)
 		case refType == GitHubRefTag:
 			fail("ref %q is not one tag pattern, refs/tags/<prefix> with at most a trailing *", job.Ref)
+		case refType == GitHubRefPullRequest:
+			fail("ref %q is not the pull-request ref, %s", job.Ref, gitHubPullRequestRef)
 		default:
-			fail("ref %q is neither one branch (refs/heads/<name>) nor one tag pattern (refs/tags/<prefix>*)", job.Ref)
+			fail("ref %q is neither one branch (refs/heads/<name>), one tag pattern (refs/tags/<prefix>*) nor %s",
+				job.Ref, gitHubPullRequestRef)
 		}
 
 		if len(job.Events) == 0 {
@@ -278,11 +312,24 @@ func ValidateGitHubJobs(where string, jobs map[string]GitHubJob) []error {
 				fail("event %q is not an event name", event)
 			}
 
+			switch {
+			// The pull-request ref is reached by `pull_request` alone. A
+			// matcher pairing it with any other event is one nothing can
+			// satisfy, or one that admits more than was meant.
+			case refType == GitHubRefPullRequest:
+				if event != "pull_request" {
+					fail("event %q cannot run on %s; that ref admits pull_request alone", event, gitHubPullRequestRef)
+				}
 			// `pull_request` runs the PROPOSED version of the workflow file,
-			// so a matcher on it would hand an identity to an edit nobody
-			// reviewed. `pull_request_target` is the one exception: GitHub runs
-			// the file from the BASE branch and the token says so.
-			if event != "pull_request_target" && strings.HasPrefix(event, "pull_request") {
+			// so on a branch or tag ref it would hand that ref's identity to
+			// an edit nobody reviewed. A pull-request job names its own ref,
+			// and may only read. `pull_request_target` runs the file from the
+			// BASE branch and the token says so; the other `pull_request_*`
+			// events are not admitted anywhere.
+			case event == "pull_request":
+				fail("event %q runs a proposed change of the files, not the reviewed ones;"+
+					" a read-only pull-request job names ref %s", event, gitHubPullRequestRef)
+			case event != "pull_request_target" && strings.HasPrefix(event, "pull_request"):
 				fail("event %q runs a proposed change of the files, not the reviewed ones", event)
 			}
 		}
@@ -459,6 +506,46 @@ func ValidateGitHubAppGrants(where string, grants map[string][]GitHubAppGrant, a
 	return granted, errs
 }
 
+// ValidateGitHubPullRequestGrants refuses a grant to a pull-request job
+// ([GitHubJobIsPullRequest]) that could do more than read named
+// repositories. Such a job runs whatever files the pull request proposes, so
+// whoever may push a branch holds its identity: every permission must be
+// `read`, and the repositories must be names, never a glob or `*`, so the
+// reach is a short list someone chose. where names the grants table in the
+// messages, as for [ValidateGitHubAppGrants].
+//
+// An installation that declares jobs and grants together calls this beside
+// [ValidateGitHubJobs] and [ValidateGitHubAppGrants]; it is the rule that
+// makes a pull-request job safe to declare.
+func ValidateGitHubPullRequestGrants(where string, jobs map[string]GitHubJob, grants map[string][]GitHubAppGrant) []error {
+	var errs []error
+
+	for _, id := range sortedKeys(grants) {
+		for i, grant := range grants[id] {
+			job, ok := jobs[grant.Group]
+			if !ok || !GitHubJobIsPullRequest(job) {
+				continue
+			}
+
+			row := fmt.Sprintf("%s[%s][%d] (%s)", where, id, i, grant.Group)
+
+			for _, name := range slices.Sorted(maps.Keys(grant.Permissions)) {
+				if level := grant.Permissions[name]; level != "read" {
+					errs = append(errs, fmt.Errorf("%s: %s: %s is more than read, and a pull-request job may only read", row, name, level))
+				}
+			}
+
+			for _, repository := range grant.Repositories {
+				if strings.ContainsAny(repository, "*?[") {
+					errs = append(errs, fmt.Errorf("%s: repository %q is a pattern; a pull-request job is granted named repositories only", row, repository))
+				}
+			}
+		}
+	}
+
+	return errs
+}
+
 func gitHubPermissionErrors(where string, permissions map[string]string) []error {
 	var errs []error
 
@@ -550,8 +637,13 @@ func GitHubJobMatchers(job GitHubJob) []GitHubMatcher {
 
 	// Validation has already refused anything else; an unknown ref here
 	// would render a matcher without a ref_type, which is a matcher that
-	// checks one thing less.
+	// checks one thing less. A pull-request job's matcher has no ref_type on
+	// purpose: GitHubRefPullRequest is not a value of the claim, and the ref
+	// pattern already says what kind of ref it is.
 	refType, _ := GitHubRefType(job.Ref)
+	if refType == GitHubRefPullRequest {
+		refType = ""
+	}
 
 	for _, workflow := range job.Workflows {
 		callerRef := job.Repository + "/" + workflow.Caller + "@" + job.Ref

@@ -28,7 +28,8 @@
 //     directory bindings rather than rungs.
 //
 // The validators beside the derivation ([ValidateGitHubJobs],
-// [ValidateGitHubApps], [ValidateWorkloads], [Endpoints.Validate] and the
+// [ValidateGitHubApps], [ValidateGitHubPullRequestGrants],
+// [ValidateWorkloads], [Endpoints.Validate] and the
 // rest) refuse at the installation's own render what the issuer would
 // refuse at load, with a message that names the row.
 package compile
