@@ -23,9 +23,14 @@ site-build: site-install
 # Front-matter descriptions of 40 to 160 characters, a valid status, and
 # registered open-decision ids on every page in docs/, and the requirements
 # catalogue in docs/requirements/ (schema, statement rules, traceability, public safety).
-site-lint: site-install
+site-lint: site-install check-requirements
     site/scripts/check-descriptions.mjs
     site/scripts/check-status.mjs
+
+# The requirements catalogue in docs/requirements/: every file valid against
+# requirements.schema.json (ids REQ-<AREA>-NNN), ids unique across files, and the
+# statement, traceability and public-safety rules of the script's header.
+check-requirements: site-install
     site/scripts/check-requirements.mjs
 
 # Rewrite the generated coverage block on docs/standards/conformance.md from the
@@ -65,3 +70,37 @@ site-v1 tag='':
 
 # Everything the Pages workflow publishes: the site and v1 under /v1/.
 site-all: site-check site-v1
+
+# Repository rules (tools/checks/). Each check fails when it finds nothing to check.
+
+# Decision records in docs/decisions/: NNNN-kebab-case.md names, the template's
+# fields and sections in order, a status the README allows, every road not taken
+# with its pros, cons and reason, and a README index row per record with its status.
+check-decisions:
+    tools/checks/decisions.mjs
+
+# Public content of every tracked text file: no account-id-shaped number other than
+# a documented placeholder, no private key block, no well-known token prefix, and no
+# term of the private deny-list (PUBLIC_CONTENT_DENYLIST, a repository secret; the
+# check skips that part, saying so, when the variable is empty).
+check-public:
+    tools/checks/public-content.mjs
+
+# YAML files use .yaml, except the names a tool requires (.github/ISSUE_TEMPLATE/config.yml, .yarnrc.yml).
+check-yaml-ext:
+    tools/checks/yaml-ext.mjs
+
+# Every path that AGENTS.md, CLAUDE.md and .claude/skills/*/SKILL.md point to exists.
+# Passes, saying so, while none of those files exists.
+check-agent-links:
+    tools/checks/agent-links.mjs
+
+# The checks above against scratch repositories that must pass or must fail.
+check-selftest:
+    tools/checks/selftest.mjs
+
+# Every repository rule.
+check-rules: check-selftest check-decisions check-requirements check-public check-yaml-ext check-agent-links
+
+# Everything a pull request must pass.
+check: check-rules site-check

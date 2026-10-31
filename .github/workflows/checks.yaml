@@ -1,7 +1,7 @@
 # Judges pull requests to the sluis.id website: description lint, a strict build,
-# a link check, the workflows themselves, and the v1 build under /v1/. It never
-# publishes (site.yaml does), and it is not path-filtered, so it can be made a
-# required check on `main`.
+# a link check, the workflows themselves, the v1 build under /v1/, and the
+# repository rules (`just check-rules`). It never publishes (site.yaml does), and
+# it is not path-filtered, so it can be made a required check on `main`.
 name: Checks
 
 on:
@@ -72,18 +72,34 @@ jobs:
       - uses: truvity/ci-actions/setup-devbox@eae9926515d96296eeed99aa358d2957a89647e8 # v3.3.1
       - run: devbox run -- actionlint
 
+  # The repository rules (tools/checks/, `just check-rules`). PUBLIC_CONTENT_DENYLIST is a
+  # repository secret: the private names that must never appear here. A pull request from a
+  # fork gets no secrets, and the check then skips that part and says so.
+  rules:
+    name: rules (decisions, requirements, public content, file names, agent links)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: truvity/ci-actions/setup-devbox@eae9926515d96296eeed99aa358d2957a89647e8 # v3.3.1
+      - run: devbox run -- just check-rules
+        env:
+          PUBLIC_CONTENT_DENYLIST: ${{ secrets.PUBLIC_CONTENT_DENYLIST }}
+
   # One name to require. A job that was skipped or cancelled is not a pass.
   checks:
-    needs: [site, v1, workflows]
+    needs: [site, v1, workflows, rules]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Every check succeeded
         env:
-          RESULTS: ${{ needs.site.result }} ${{ needs.v1.result }} ${{ needs.workflows.result }}
+          RESULTS: ${{ needs.site.result }} ${{ needs.v1.result }} ${{ needs.workflows.result }} ${{ needs.rules.result }}
         run: |
-          echo "site v1 workflows: $RESULTS"
+          echo "site v1 workflows rules: $RESULTS"
           for r in $RESULTS; do
             [ "$r" = "success" ] || { echo "::error::a check did not succeed"; exit 1; }
           done
