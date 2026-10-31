@@ -5,6 +5,7 @@
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 Rewritten in place on 2026-10-30 (realignment pass).
+Rewritten in place on 2026-10-31 (after spike S4, `key-holder` reaches a YubiKey through `piv-go` rather than PKCS#11 ([0060](/decisions/0060-the-language-follows-the-executable/)); PKCS#11 stays for the planned HSM drivers).
 
 ## Context
 
@@ -74,11 +75,11 @@ A YubiKey root with KMS intermediates is allowed but is not a main pattern.
 
 ### Other key hardware
 
-- **YubiHSM 2 and Nitrokey HSM 2 are planned PKCS#11 drivers of the `keys` port, not built now.** They are drivers, not root hardware: the roots stay on ordinary YubiKeys. `key-holder` is built on PKCS#11, so adding such a device later is cheap. Their detail is in ADR 0052, which also covers more `keys` drivers and a post-quantum root.
+- **YubiHSM 2 and Nitrokey HSM 2 are planned PKCS#11 drivers of the `keys` port, not built now.** They are drivers, not root hardware: the roots stay on ordinary YubiKeys. `key-holder` reaches a YubiKey through `piv-go` ([0060](/decisions/0060-the-language-follows-the-executable/)), and such a device is added later as a PKCS#11 driver beside it. Their detail is in ADR 0052, which also covers more `keys` drivers and a post-quantum root.
 
 ### The release subkey
 
-- **The node's OpenPGP release subkey lives in a PIV slot, reached through `key-holder` over PKCS#11.** The OpenPGP applet is used only on the root cards, for the primaries. How a release is signed is in ADR 0030.
+- **The node's OpenPGP release subkey lives in a PIV slot, reached through `key-holder`'s PIV driver.** The OpenPGP applet is used only on the root cards, for the primaries. How a release is signed is in ADR 0030.
 
 ### The card slot map
 
@@ -152,7 +153,7 @@ Two YubiHSM 2 devices. The pros and cons are from the root-hardware research.
 
 - Pros: an installation that wants a server-attached device or an on-device audit log could have one, through a PKCS#11 driver, without any change to the roots.
 - Cons: more drivers to write and keep conformant, before any installation asks for one. The Nitrokey HSM 2 has no Ed25519 and no audit log, conflicting figures for its capacity and unclear attestation of single keys.
-- Why not: they are not root hardware, because the roots stay on ordinary YubiKeys. They are planned as PKCS#11 drivers and not built now. `key-holder` is built on PKCS#11, so adding them later is cheap (ADR 0052).
+- Why not: they are not root hardware, because the roots stay on ordinary YubiKeys. They are planned as PKCS#11 drivers and not built now, added beside `key-holder`'s PIV driver when an installation asks for one (ADR 0052).
 
 ### The software key allowed in production, chosen by configuration only
 
@@ -163,7 +164,7 @@ Two YubiHSM 2 devices. The pros and cons are from the root-hardware research.
 ### The release subkey in the card's OpenPGP applet
 
 - Pros: GnuPG can use the card directly.
-- Cons: `key-holder` would need a second path to the card, besides PKCS#11, and the applet has its own PIN and slot layout to manage on every node.
+- Cons: `key-holder` would need a second path to the card, besides PIV, and the applet has its own PIN and slot layout to manage on every node.
 - Why not: a PIV slot reached through `key-holder` keeps one path to the card and one audit point. The applet stays on the root cards, for the primaries. (the cons are inferred)
 
 ### SSH CA keys outside the PKI chain
