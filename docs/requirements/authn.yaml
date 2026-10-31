@@ -402,6 +402,7 @@ requirements:
       - {id: ST-16, section: "2", depth: Full}
       - {id: ST-37, section: "5", depth: Partial}
     features: ["design"]
+    issues: [912]
     verification:
       - {kind: conformance-suite, ref: "FAPI2-SP"}
       - {kind: integration-test, ref: "reuse test"}
@@ -418,6 +419,7 @@ requirements:
       - {id: ST-16, section: "2", depth: Full}
       - {id: ST-37, section: "5", depth: Partial}
     features: ["design"]
+    issues: [912]
     verification:
       - {kind: integration-test, ref: "foreign-client test"}
   - id: REQ-AUTHN-039
@@ -433,6 +435,7 @@ requirements:
       - {id: ST-16, section: "2", depth: Full}
       - {id: ST-37, section: "5", depth: Partial}
     features: ["design"]
+    issues: [912]
     verification:
       - {kind: integration-test, ref: "expiry test"}
   - id: REQ-AUTHN-040
@@ -448,6 +451,7 @@ requirements:
       - {id: ST-16, section: "2", depth: Full}
       - {id: ST-37, section: "5", depth: Partial}
     features: ["design"]
+    issues: [912]
     verification:
       - {kind: conformance-suite, ref: "FAPI2-SP"}
       - {kind: integration-test, ref: "PAR-required client test"}
@@ -780,6 +784,7 @@ requirements:
     standards:
       - {id: ST-59, section: "1", depth: Partial}
     features: ["design"]
+    issues: [916, 1023]
     verification:
       - {kind: integration-test, ref: "password submission refusal test"}
   - id: REQ-AUTHN-054
@@ -794,6 +799,7 @@ requirements:
     standards:
       - {id: ST-59, section: "1", depth: Partial}
     features: ["design"]
+    issues: [916, 1023]
     verification:
       - {kind: integration-test, ref: "storage scan"}
   - id: REQ-AUTHN-055
@@ -808,6 +814,7 @@ requirements:
     standards:
       - {id: ST-59, section: "1", depth: Partial}
     features: ["design"]
+    issues: [916, 1023]
     verification:
       - {kind: integration-test, ref: "page scan"}
       - {kind: manual, ref: "design review"}

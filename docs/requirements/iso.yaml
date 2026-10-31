@@ -76,6 +76,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [963, 800]
     verification:
       - {kind: test-vectors, ref: "T-8 layer 3, layers 1 and 2 off: ca@env-a's credentials call env-b's key; refused because the key is in env-b's account or hosts"}
   - id: REQ-ISO-006
@@ -193,6 +194,7 @@ requirements:
     runtimes: [bare-metal]
     standards: []
     features: ["design"]
+    issues: [952]
     verification:
       - {kind: test-vectors, ref: "T-11 layer 2: a declared reader sends an execute to the owner's cluster; refused (query-only user)"}
       - {kind: test-vectors, ref: "T-11 layer 2: actor X presents its own client certificate to actor Y's cluster; refused (a certificate per cluster)"}
@@ -206,6 +208,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [975]
     verification:
       - {kind: test-vectors, ref: "T-11 layer 2, layer 1 off: the env-a role selects env-b rows of the same kind; zero rows"}
       - {kind: test-vectors, ref: "T-11 layer 2: the env-a role sets a session variable naming env-b; zero rows"}
@@ -220,6 +223,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [975, 952]
     verification:
       - {kind: test-vectors, ref: "T-11 layer 3, layers 1 and 2 off: an actor of env-a addresses env-b's records; not found, because they are in another store"}
   - id: REQ-ISO-017
@@ -311,6 +315,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [954]
     verification:
       - {kind: test-vectors, ref: "T-12 layer 3, layers 1 and 2 off: an actor of env-a writes into env-b's bucket; refused because its credentials do not reach that bucket"}
 
@@ -341,6 +346,7 @@ requirements:
       - {id: NC-17, depth: Partial}
       - {id: ST-102, depth: Partial}
     features: ["design"]
+    issues: [802]
     verification:
       - {kind: test-vectors, ref: "T-13 layer 2, layers 1 and 3 off: user X publishes on actor Y's audit subject; refused by the permission template"}
       - {kind: test-vectors, ref: "T-13 layer 2: a user of env-a subscribes to a subject of env-b's account; nothing is delivered"}
@@ -354,6 +360,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [802]
     verification:
       - {kind: test-vectors, ref: "T-13 layer 3, layers 1 and 2 off: an actor of env-a sends to env-b's queue; refused because its credentials do not reach it"}
 
@@ -385,6 +392,7 @@ requirements:
       - {id: ST-52, section: "4.1.3", depth: Partial}
       - {id: ST-56, section: "3.9", depth: Partial}
     features: ["design"]
+    issues: [962]
     verification:
       - {kind: test-vectors, ref: "T-2: a token with aud for client X presented to client Y's reference verifier; refused"}
   - id: REQ-ISO-029
@@ -411,6 +419,7 @@ requirements:
     standards:
       - {id: ST-28, section: "3.1.3.7", depth: Partial}
     features: ["design"]
+    issues: [962]
     verification:
       - {kind: test-vectors, ref: "T-3: each printed snippet, applied to its reference relying party, is fed a token of another issuer and a token of another client; both refused"}
   - id: REQ-ISO-031
@@ -424,6 +433,7 @@ requirements:
     standards:
       - {id: ST-50, depth: Partial}
     features: ["design"]
+    issues: [962]
     verification:
       - {kind: test-vectors, ref: "T-3: a token signed by env-a's key with iss set to env-b's issuer; refused at env-b because the kid is not in its key set"}
 
@@ -549,6 +559,7 @@ requirements:
       - {id: ST-109, section: "5", depth: Partial}
       - {id: ST-108, section: "2", depth: Partial}
     features: ["design"]
+    issues: [964, 963]
     verification:
       - {kind: test-vectors, ref: "T-21: a client certificate from an undeclared trust domain; refused"}
       - {kind: test-vectors, ref: "T-21: a certificate of env-a's trust domain whose path names an env-b actor; refused as an env-a caller"}
@@ -563,6 +574,7 @@ requirements:
     standards:
       - {id: ST-110, section: "3.2", depth: Partial}
     features: ["design"]
+    issues: [964]
     verification:
       - {kind: test-vectors, ref: "T-21: a JWT-SVID for target X presented to target Y; refused"}
 
@@ -605,6 +617,7 @@ requirements:
     standards:
       - {id: NC-06, depth: Partial}
     features: ["design"]
+    issues: [966, 967]
     verification:
       - {kind: test-vectors, ref: "T-22: a recorded HMAC replayed with an old nonce; refused"}
       - {kind: test-vectors, ref: "T-22: an HMAC over another CSR than the one sent; refused"}
@@ -618,6 +631,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [966]
     verification:
       - {kind: test-vectors, ref: "T-22: a single-use enrolment token used a second time; refused"}
   - id: REQ-ISO-046
@@ -630,6 +644,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [965]
     verification:
       - {kind: test-vectors, ref: "T-22: a second enrolment with the same instance identity document; refused"}
   - id: REQ-ISO-047
@@ -643,6 +658,7 @@ requirements:
     standards:
       - {id: ST-61, section: "5.1", depth: Partial}
     features: ["design"]
+    issues: [966]
     verification:
       - {kind: test-vectors, ref: "T-22: entry flips one byte of an enrolment ciphertext; decryption fails at the exchange actor"}
       - {kind: test-vectors, ref: "RFC 9180 appendix A test vectors"}
@@ -657,6 +673,7 @@ requirements:
     standards:
       - {id: ST-108, section: "4.1", depth: Partial}
     features: ["design"]
+    issues: [968]
     verification:
       - {kind: test-vectors, ref: "T-23: a validly signed trust bundle with a lower spiffe_sequence; refused, and the anchors on disk are unchanged"}
   - id: REQ-ISO-049
@@ -670,6 +687,7 @@ requirements:
     standards:
       - {id: ST-108, depth: Partial}
     features: ["design"]
+    issues: [968]
     verification:
       - {kind: test-vectors, ref: "T-23: a bundle signed by a key certified by one root only; refused"}
   - id: REQ-ISO-050
@@ -682,6 +700,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [966, 967]
     verification:
       - {kind: test-vectors, ref: "T-23: enrolment against a server with a valid web certificate but other roots; refused"}
 
@@ -722,6 +741,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [960]
     verification:
       - {kind: test-vectors, ref: "T-25: an operator delegated for company A edits a company B record; refused and audited"}
       - {kind: test-vectors, ref: "T-25: an operator delegated for devel edits a production machine-plane record; refused and audited"}
@@ -788,6 +808,7 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [807, 809]
     verification:
       - {kind: test-vectors, ref: "T-19: account A of company C holds a grant, and linked account B of company D asks for it; refused"}
   - id: REQ-ISO-059
@@ -812,5 +833,6 @@ requirements:
     runtimes: all
     standards: []
     features: ["design"]
+    issues: [973]
     verification:
       - {kind: test-vectors, ref: "T-26: a valid upstream ID token of the disconnected company at sign-in and at the token endpoint; refused"}

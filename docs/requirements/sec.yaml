@@ -161,6 +161,7 @@ requirements:
     standards:
       - {id: ST-14, section: "4", depth: Partial}
     features: ["design"]
+    issues: [796]
     verification:
       - {kind: integration-test, ref: "rate-limit test"}
   - id: REQ-SEC-017
@@ -175,6 +176,7 @@ requirements:
     standards:
       - {id: ST-14, section: "4", depth: Partial}
     features: ["design"]
+    issues: [796]
     verification:
       - {kind: integration-test, ref: "no-global-lockout test"}
   - id: REQ-SEC-007
@@ -188,6 +190,7 @@ requirements:
     standards:
       - {id: ST-49, section: "7515", depth: Partial}
     features: ["design"]
+    issues: [796, 958]
     verification:
       - {kind: integration-test, ref: "fuzz corpus in CI"}
   - id: REQ-SEC-008
@@ -259,6 +262,7 @@ requirements:
     standards:
       - {id: ST-14, section: "4", depth: Partial}
     features: ["design"]
+    issues: [958, 960]
     verification:
       - {kind: integration-test, ref: "404 on public listener"}
   - id: REQ-SEC-011
@@ -273,5 +277,6 @@ requirements:
       - {id: ST-52, section: "7", depth: Full}
       - {id: ST-56, section: "3", depth: Full}
     features: ["design"]
+    issues: [962]
     verification:
       - {kind: integration-test, ref: "cross-installation negative test"}

@@ -112,6 +112,7 @@ requirements:
     standards:
       - {id: NC-12, section: "Cedar", depth: Partial}
     features: ["design"]
+    issues: [977, 892]
     verification:
       - {kind: integration-test, ref: "policy reload refusal test"}
   - id: REQ-POLICY-009
@@ -125,5 +126,6 @@ requirements:
     standards:
       - {id: NC-12, section: "Cedar", depth: Partial}
     features: ["design"]
+    issues: [892]
     verification:
       - {kind: integration-test, ref: "delegation bound test"}

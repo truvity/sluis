@@ -13,6 +13,7 @@ requirements:
     standards:
       - {id: ST-65, section: "1", depth: Full}
     features: ["design"]
+    issues: [925]
     verification:
       - {kind: test-vectors, ref: "OpenSSH regress tests"}
       - {kind: integration-test, ref: "lifetime test"}
@@ -28,6 +29,7 @@ requirements:
     standards:
       - {id: ST-65, section: "1", depth: Full}
     features: ["design"]
+    issues: [925]
     verification:
       - {kind: integration-test, ref: "sshd acceptance test"}
   - id: REQ-SSH-006
@@ -42,6 +44,7 @@ requirements:
     standards:
       - {id: ST-65, section: "1", depth: Full}
     features: ["design"]
+    issues: [925]
     verification:
       - {kind: integration-test, ref: "critical-options test"}
   - id: REQ-SSH-002
@@ -55,6 +58,7 @@ requirements:
     standards:
       - {id: ST-65, section: "1", depth: Full}
     features: ["design"]
+    issues: [925]
     verification:
       - {kind: integration-test, ref: "sshd acceptance test"}
   - id: REQ-SSH-007
@@ -69,6 +73,7 @@ requirements:
     standards:
       - {id: ST-65, section: "1", depth: Full}
     features: ["design"]
+    issues: [925, 971]
     manual_reason: "A statement in the documentation is checked by reading it."
     verification:
       - {kind: manual, ref: "documentation review"}
@@ -83,6 +88,7 @@ requirements:
     standards:
       - {id: ST-66, section: "1", depth: Full}
     features: ["design"]
+    issues: [925, 971]
     verification:
       - {kind: integration-test, ref: "ssh-keygen -Qf check"}
   - id: REQ-SSH-004

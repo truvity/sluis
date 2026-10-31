@@ -13,6 +13,7 @@ requirements:
     standards:
       - {id: ST-62, section: "5280", depth: Full}
     features: ["design"]
+    issues: [913]
     verification:
       - {kind: integration-test, ref: "lifetime-ceiling test"}
   - id: REQ-PKI-002
@@ -27,6 +28,7 @@ requirements:
       - {id: ST-62, section: "4.1.2.2", depth: Full}
       - {id: ST-106, section: "test plan", depth: Full}
     features: ["design"]
+    issues: [913]
     verification:
       - {kind: test-vectors, ref: "x509-limbo"}
       - {kind: integration-test, ref: "serial entropy test"}
@@ -42,6 +44,7 @@ requirements:
       - {id: ST-62, section: "4", depth: Full}
       - {id: ST-106, section: "test plan", depth: Full}
     features: ["design"]
+    issues: [913]
     verification:
       - {kind: test-vectors, ref: "x509-limbo"}
       - {kind: integration-test, ref: "role-policy tests"}
@@ -57,6 +60,7 @@ requirements:
     standards:
       - {id: ST-62, section: "4", depth: Full}
     features: ["design"]
+    issues: [913]
     verification:
       - {kind: integration-test, ref: "CN-less request test"}
   - id: REQ-PKI-004
@@ -71,6 +75,7 @@ requirements:
       - {id: ST-62, section: "5280", depth: Full}
       - {id: NC-10, section: "PIV", depth: Full}
     features: ["design"]
+    issues: [914]
     verification:
       - {kind: manual, ref: "ceremony record"}
       - {kind: integration-test, ref: "attestation verification test"}
@@ -87,6 +92,7 @@ requirements:
       - {id: ST-62, section: "5280", depth: Full}
       - {id: NC-10, section: "PIV", depth: Full}
     features: ["design"]
+    issues: [914]
     manual_reason: "Independence of the roots is evidenced by the ceremony record and the token attestations."
     verification:
       - {kind: manual, ref: "ceremony record"}
@@ -103,6 +109,7 @@ requirements:
       - {id: ST-62, section: "5280", depth: Full}
       - {id: NC-10, section: "PIV", depth: Full}
     features: ["design"]
+    issues: [914]
     verification:
       - {kind: integration-test, ref: "attestation distinctness test"}
   - id: REQ-PKI-013
@@ -118,6 +125,7 @@ requirements:
       - {id: ST-62, section: "5280", depth: Full}
       - {id: NC-10, section: "PIV", depth: Full}
     features: ["design"]
+    issues: [914]
     verification:
       - {kind: integration-test, ref: "either-root chain test"}
   - id: REQ-PKI-014
@@ -133,6 +141,7 @@ requirements:
       - {id: ST-62, section: "5280", depth: Full}
       - {id: NC-10, section: "PIV", depth: Full}
     features: ["design"]
+    issues: [914, 968]
     verification:
       - {kind: integration-test, ref: "trust-bundle content test"}
   - id: REQ-PKI-005
@@ -146,6 +155,7 @@ requirements:
     standards:
       - {id: NC-10, section: "PIV", depth: Full}
     features: ["design"]
+    issues: [914]
     manual_reason: "The environment of a root ceremony is a human procedure that only a checklist can evidence."
     verification:
       - {kind: manual, ref: "ceremony checklist"}
@@ -161,6 +171,7 @@ requirements:
     standards:
       - {id: NC-10, section: "PIV", depth: Full}
     features: ["design"]
+    issues: [914]
     verification:
       - {kind: manual, ref: "ceremony checklist"}
       - {kind: integration-test, ref: "token policy attestation test"}
@@ -176,6 +187,7 @@ requirements:
       - {id: ST-62, section: "4", depth: Partial}
       - {id: ST-78, section: "RFC 8785", depth: Partial}
     features: ["design"]
+    issues: [914]
     verification:
       - {kind: integration-test, ref: "dry-run ceremony with a throwaway root"}
   - id: REQ-PKI-016
@@ -191,6 +203,7 @@ requirements:
       - {id: ST-62, section: "4", depth: Partial}
       - {id: ST-78, section: "RFC 8785", depth: Partial}
     features: ["design"]
+    issues: [914]
     verification:
       - {kind: integration-test, ref: "wrong-hash dry-run test"}
   - id: REQ-PKI-017
@@ -206,6 +219,7 @@ requirements:
       - {id: ST-62, section: "4", depth: Partial}
       - {id: ST-78, section: "RFC 8785", depth: Partial}
     features: ["design"]
+    issues: [914]
     verification:
       - {kind: integration-test, ref: "record chain and secret scan test"}
   - id: REQ-PKI-007
@@ -279,6 +293,7 @@ requirements:
       - {id: ST-62, section: "5280", depth: Full}
       - {id: NC-10, section: "PIV", depth: Partial}
     features: ["design"]
+    issues: [914, 913]
     verification:
       - {kind: integration-test, ref: "two-chain verification test"}
       - {kind: manual, ref: "ceremony record"}
@@ -293,6 +308,7 @@ requirements:
     standards:
       - {id: ST-62, section: "5280", depth: Full}
     features: ["design"]
+    issues: [914]
     verification:
       - {kind: integration-test, ref: "single-root chain verification test"}
   - id: REQ-PKI-021
@@ -306,6 +322,7 @@ requirements:
     standards:
       - {id: ST-62, section: "5280", depth: Partial}
     features: ["design"]
+    issues: [968, 914]
     verification:
       - {kind: integration-test, ref: "trust-bundle removal test"}
       - {kind: manual, ref: "runbook review"}
@@ -320,6 +337,7 @@ requirements:
     standards:
       - {id: NC-10, section: "PIV", depth: Full}
     features: ["design"]
+    issues: [914]
     manual_reason: "A runbook step is exercised in a drill by people."
     verification:
       - {kind: manual, ref: "runbook drill"}
@@ -334,6 +352,7 @@ requirements:
     standards:
       - {id: ST-62, section: "5280", depth: Partial}
     features: ["design"]
+    issues: [914, 913]
     verification:
       - {kind: manual, ref: "runbook drill"}
       - {kind: integration-test, ref: "orphaned-intermediate scan"}
@@ -348,6 +367,7 @@ requirements:
     standards:
       - {id: ST-62, section: "5280", depth: Partial}
     features: ["design"]
+    issues: [914]
     verification:
       - {kind: integration-test, ref: "cross-signature chain test"}
   - id: REQ-PKI-025
@@ -361,6 +381,7 @@ requirements:
     standards:
       - {id: NC-10, section: "PIV", depth: Partial}
     features: ["design"]
+    issues: [914]
     manual_reason: "A statement in the documentation is checked by reading it."
     verification:
       - {kind: manual, ref: "documentation review"}
