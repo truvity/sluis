@@ -61,11 +61,11 @@ How the site is hosted is decided in [ADR 0063](/decisions/0063-the-site-is-stat
 
   | Secret | Value |
   |---|---|
-  | `CLOUDFLARE_API_TOKEN` | A Cloudflare API token with the permission Workers Scripts: Edit on the operator's Cloudflare account, with an expiry |
+  | `CLOUDFLARE_API_TOKEN` | A Cloudflare API token limited to deploying this one Worker, with an expiry |
   | `CLOUDFLARE_ACCOUNT_ID` | The identifier of that account |
   | `SLUIS_STATUS_KV_ID` | The id of the KV namespace for the `STATUS` binding |
 
-  The maintainer creates the token and rotates it before it expires; a deploy that fails with an authentication error is the sign that it has. The token is long-lived and scoped to the account, which is why only `main` can read it. The job gives each secret to the one step that needs it, and checks first that all three are set, without printing them. GitHub masks a secret's value in the log, and no step prints the KV id or the account id. The status page data comes from the `sluis-status` GitHub App, as in the `build` job.
+  The maintainer creates the token and rotates it before it expires; a deploy that fails with an authentication error is the sign that it has. The token is long-lived; it cannot create or delete Workers, and only `main` can read it. The job gives each secret to the one step that needs it, and checks first that all three are set, without printing them. GitHub masks a secret's value in the log, and no step prints the KV id or the account id. The status page data comes from the `sluis-status` GitHub App, as in the `build` job.
 - Security headers and redirects are files in the repository, and the Worker, its KV namespace and the routes of the domain are declared in the operator's own infrastructure code, outside it. The deploy uploads a new version of the Worker and changes none of them. `just site-workers` and every pull request check hold no Cloudflare credential.
 
 ## Commands from an agent shell
