@@ -36,9 +36,9 @@ A change to the design model (the shape of components and how they depend on eac
 
 1. **Proposal.** Open an issue with the *Decision proposal* form. State the question, the context, the options with pros and cons, and the options you would not take. Label `status:needs-decision` is added.
 2. **Discussion.** Comments on the issue. The maintainer may also discuss it internally. Internal discussion can hold material that must not be public, such as details of a private deployment.
-3. **ADR pull request.** When the direction is clear, someone opens a pull request that adds `docs/decisions/NNNN-title.md` with status `Proposed`. It follows the [template](docs/decisions/0000-template.md) and must list the roads not taken.
-4. **Accepted.** The maintainer merges the pull request with status `Accepted`. Merging is the decision. A rejected proposal is merged with status `Rejected`, so the reasoning is kept.
-5. **Changing a decision.** An ADR is never edited to reverse it. A new ADR supersedes the old one, and the old status line says so.
+3. **ADR pull request.** When the direction is clear, someone opens a pull request that adds `docs/decisions/NNNN-title.md` with status `Proposed`. It follows the [template](docs/decisions/0000-template.md) and must list the roads not taken. The order of work is in [Decision records](docs/contributing/decisions.md); the format and the status values are in the [decisions README](docs/decisions/README.md).
+4. **Accepted.** A record is `Accepted` only when every part of it is decided. The maintainer merges it with status `Accepted`, and that merge is the decision. A record with a part still open is merged as `Proposed`, with the open part tracked in an issue the record links, and a later pull request sets it to `Accepted` once the part is decided. A rejected proposal is merged with status `Rejected`, so the reasoning is kept.
+5. **Changing a decision.** After the first v2 release, records are append-only: a new ADR supersedes the old one, and the old status line says so (`Superseded by NNNN`, or `Accepted; amended by NNNN`). Before that release, during the v2 design phase, the maintainer may have a record rewritten in place; the earlier text stays in git history, and the rewritten record says so in one dated line. The rules for the design phase are in the "Design phase" section of the [decisions README](docs/decisions/README.md).
 
 Small changes that follow existing ADRs need no proposal. A pull request is enough.
 

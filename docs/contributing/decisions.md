@@ -10,7 +10,7 @@ A decision record (ADR) says why sluis is shaped the way it is, what else was we
 
 ## The maintainer decides
 
-A contributor or an agent presents the options, each with its pros and cons, and a recommendation. It does not pick. The maintainer decides, and merging the record is the decision.
+A contributor or an agent presents the options, each with its pros and cons, and a recommendation. It does not pick. The maintainer decides: merging a record with status `Accepted` is the decision.
 
 ## From proposal to record
 
