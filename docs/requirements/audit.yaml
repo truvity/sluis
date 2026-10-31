@@ -1333,3 +1333,69 @@ requirements:
     features: ["#839"]
     verification:
       - {kind: integration-test, ref: "indexer log kind test"}
+  - id: REQ-AUDIT-099
+    area: AUDIT
+    statement: "An audit emitter in Go or Rust MUST validate each record against the schema of its catalogue entry before it emits the record."
+    rationale: "An ill-formed record is refused where it is made, before a blocking emit waits on it; the writer still validates and stays authoritative."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Full}
+    features: ["#841"]
+    verification:
+      - {kind: integration-test, ref: "emitter refuses an ill-formed record test"}
+  - id: REQ-AUDIT-100
+    area: AUDIT
+    statement: "The build MUST fail when an example record of the audit catalogue fails the OCSF toolkit's validation against the pinned OCSF version."
+    rationale: "The toolkit checks OCSF's cross-field rules, which the catalogue's JSON Schema does not, and it is pre-1.0, so it gates CI rather than the writer."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "validation", depth: Partial}
+    features: ["#841"]
+    verification:
+      - {kind: integration-test, ref: "OCSF toolkit check of the catalogue examples in CI"}
+  - id: REQ-AUDIT-101
+    area: AUDIT
+    split_from: REQ-AUDIT-100
+    statement: "The build MUST fail when the Go, Rust and TypeScript validators of the audit catalogue disagree on any catalogue test vector."
+    rationale: "One catalogue is enforced in three languages, and a disagreement means one of them accepts what another refuses."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Full}
+    features: ["#841"]
+    verification:
+      - {kind: test-vectors, ref: "catalogue vectors through every language's validator"}
+  - id: REQ-AUDIT-102
+    area: AUDIT
+    statement: "An audit record MUST declare every OCSF profile whose attributes it uses in `metadata.profiles`."
+    rationale: "OCSF validators refuse profile attributes that the record does not declare."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "profiles", depth: Partial}
+    features: ["#841"]
+    verification:
+      - {kind: test-vectors, ref: "catalogue example records through the OCSF schema validator"}
+  - id: REQ-AUDIT-103
+    area: AUDIT
+    statement: "Every blob driver MUST refuse to overwrite an existing object on a create-if-absent write."
+    rationale: "The blob store is the write-once fence of the audit log, so a second writer cannot overwrite or fork it."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-103, section: "blob port", depth: Full}
+    features: ["#837", "#851"]
+    verification:
+      - {kind: conformance-suite, ref: "port conformance suite, blob create-if-absent"}

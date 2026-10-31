@@ -5,6 +5,7 @@
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909). Build: [issue #915](https://github.com/truvity/sluis/issues/915).
 Rewritten in place on 2026-10-31 (balance effects, meters and request ids live in the usage log of [0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/), a parallel log in CloudEvents 1.0 JSON that the same writer writes; quota rolls forward from it, and the finance export is derived from it).
+Rewritten in place on 2026-10-31 (the points that the previous rewrite marked as inferred are confirmed by the maintainer, and their markers are removed).
 
 ## Context
 
@@ -54,8 +55,8 @@ The threats this record bears on are T-13 and T-25 of the [threat model](/securi
 
 ### The finance export
 
-- **The finance export is a table derived from the usage log, with rows in the style of FinOps FOCUS 1.4:** per charge period, account and meter, the consumed quantity and unit (`ChargePeriodStart`, `ChargePeriodEnd`, `BillingAccountId`, `SubAccountId`, `SkuMeter`, `ConsumedQuantity`, `ConsumedUnit`). sluis holds no prices, so cost columns are left to the billing system that reads the rows. (the columns are inferred)
-- **Like the meters, the export is derived:** it can be rebuilt from the usage log at any time, and it is never the record. Its contract and the actor that serves it are fixed with quota's contract ([issue #915](https://github.com/truvity/sluis/issues/915)). (inferred)
+- **The finance export is a table derived from the usage log, with rows in the style of FinOps FOCUS 1.4:** per charge period, account and meter, the consumed quantity and unit (`ChargePeriodStart`, `ChargePeriodEnd`, `BillingAccountId`, `SubAccountId`, `SkuMeter`, `ConsumedQuantity`, `ConsumedUnit`). sluis holds no prices, so cost columns are left to the billing system that reads the rows.
+- **Like the meters, the export is derived:** it can be rebuilt from the usage log at any time, and it is never the record. Its contract and the actor that serves it are fixed with quota's contract ([issue #915](https://github.com/truvity/sluis/issues/915)).
 
 ### Limits
 
@@ -75,7 +76,7 @@ The threats this record bears on are T-13 and T-25 of the [threat model](/securi
 | Meters, hourly aggregates and the finance export | derived | `quota` | not backed up; rebuilt from the usage log after a restore |
 
 - **Only `quota` writes balances,** one writer per record kind ([0017](/decisions/0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite/)). Every value is encrypted in the port library ([0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/)).
-- **Meters are derived from the usage log by `quota`,** which follows the usage log by checkpoint as the indexer follows the audit log. The usage log has no search index. (that `quota` derives is inferred from 0016, which names `quota` as the deriving actor)
+- **Meters are derived from the usage log by `quota`,** which follows the usage log by checkpoint as the indexer follows the audit log. The usage log has no search index.
 - **An hourly aggregate lists the ids of its events,** so the sum of the aggregates equals the count of the facts (REQ-QUOTA-012).
 
 ### Enforcement

@@ -53,14 +53,14 @@ shapes:
     nodes: 3
     node_agent: true
     edge: cloudflared
-    ports: { keys: yubikey, state: rqlite, blob: garage, transport: spool, index: rqlite_index }
+    ports: { keys: yubikey, state: rqlite, blob: r2, transport: spool, index: rqlite_index }
     keys: One YubiKey per node
     state: rqlite (Raft) across three nodes
     use: Integration tests and tutorials. Built in parallel with lambda and kubernetes after local; a Cloudflare tunnel serves sluis.example.com.
     notes:
       - text: "The audit pieces run on the same nodes as sluis, so they share driver instances. Each node has its own writer, spool and log key, and the other two nodes are its peer witnesses (the 2-of-3 co-signing). Readers merge the logs by time. The rule is exactly one writer per log."
         status: agreed
-      - text: "The blob is Garage, an S3-compatible store on the boards, through the one s3-compatible driver with keys from the cloud-garage credential driver (a bucket per actor). Garage has no object lock (lock mode none), so the peer witnesses are what protects against a rewritten history, and an off-site R2 copy keeps the audit log if the boards are lost. A spike comes first: conditional writes for the blob fence, memory on the boards and key expiry."
+      - text: "The blob is Cloudflare R2 in the first release, through the one s3-compatible driver with credentials from the cloudflare cloud driver. R2's lock can be removed by an account administrator (lock mode removable), so the peer witnesses are what protects against a rewritten history. Garage, a store on the boards themselves, is a later backend: its spike (2026-10-31) found no conditional writes and no prefix-scoped keys, both open upstream."
         status: agreed
       - text: "The index is rqlite, a replicated SQLite, so the reader can run on any node (ADR 0022). Its full-text support (FTS5) was verified on a three-node cluster on 2026-10-30; the board spike measures arm64 board hardware and the cost of writes on eMMC, and if it fails the boards fall back to sqlite on the indexer's node."
         status: agreed
@@ -276,7 +276,7 @@ drivers:
     instance: per-actor
     shared_name: null
     binary: drivers/aws
-    does: The blob port on Garage, run on the boards, served by the one s3-compatible driver with per-(boundary, actor) keys minted by the cloud-garage credential driver through a scoped admin token. Garage scopes keys per bucket, not per prefix, so each actor has its own bucket. It has no object lock (lock mode none), so tamper evidence leans on the witnesses, and the audit log is also copied off site to R2. Only the writer, the witness, the indexer and the reader use it.
+    does: A later backend of the blob port, blocked upstream on conditional writes and prefix-scoped keys. Garage, run on the boards, served by the one s3-compatible driver with per-(boundary, actor) keys minted by the cloud-garage credential driver through a scoped admin token. Garage scopes keys per bucket, not per prefix, so each actor has its own bucket. It has no object lock (lock mode none), so tamper evidence leans on the witnesses, and the audit log is also copied off site to R2. Only the writer, the witness, the indexer and the reader use it.
     holds: Nothing
     backing: Garage (S3 API)
     status: agreed

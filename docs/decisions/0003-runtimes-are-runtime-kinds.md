@@ -5,6 +5,7 @@
 
 Decided by the maintainer. Proposal: [issue #902](https://github.com/truvity/sluis/issues/902). Rewritten in place on 2026-10-29 during the v2 design phase (see "Design phase" in the decisions README). The earlier slug was `0003-environments-are-runtime-kinds`. The delivery-order bullet was edited in place on 2026-10-30 to follow ADR 0039.
 Rewritten in place on 2026-10-30 (realignment pass).
+Rewritten in place on 2026-10-31 (the boards' blob store is R2 in the first release; Garage is a later backend, blocked on conditional writes and prefix scoping upstream, after the spike in [issue #982](https://github.com/truvity/sluis/issues/982)).
 
 ## Context
 
@@ -27,7 +28,7 @@ Seven named installations were also too many to build and test. The maintainer c
 - **An installation is one concrete deployment:** runtime, nodes, available dependencies and one driver per port. For example: "bare-metal, 3 nodes, AWS account".
 - **Four installations are tested.** They are the ones we build, document and keep in the test matrix:
   - **local**: bare-metal, 1 node. Docker on a workstation, using the host's hardware key through the host's smart-card service. Not a software key.
-  - **boards**: bare-metal, 3 nodes. Three single-board computers (arm64, 2 GB RAM, eMMC), a hardware key in each node and a tunnel to the public hostname (`sluis.example.com` in docs). State and lease on rqlite. The index driver is decided in [0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/). Blob on Garage through the S3-compatible driver, with an off-site R2 copy of the audit log (after a spike), and spool transport. The audit pieces run on the same nodes and share driver instances. Each node keeps its own log with the other nodes as peer witnesses ([0004](/decisions/0004-audit-is-four-pieces-joined-by-a-transport-port/)).
+  - **boards**: bare-metal, 3 nodes. Three single-board computers (arm64, 2 GB RAM, eMMC), a hardware key in each node and a tunnel to the public hostname (`sluis.example.com` in docs). State and lease on rqlite. The index driver is decided in [0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/). Blob on R2 through the S3-compatible driver in the first release (Garage, with an off-site R2 copy of the audit log, is a later backend), and spool transport. The audit pieces run on the same nodes and share driver instances. Each node keeps its own log with the other nodes as peer witnesses ([0004](/decisions/0004-audit-is-four-pieces-joined-by-a-transport-port/)).
   - **lambda**: serverless on AWS. KMS for keys, DynamoDB for state and lease, SQS for transport, S3 for blob. The index driver is decided in [0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/). The writer runs with a reserved concurrency of 1 on a standard SQS queue; correctness comes from the blob fence (create-if-absent).
   - **kubernetes**: KMS, DynamoDB, SQS, S3 and the Kubernetes Lease. The index driver is decided in [0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/); the pod layout and chart in ADRs 0046 and 0047.
 
