@@ -58,7 +58,7 @@ const open = c.reqs.length - core;
   <div class="rq-table-wrap">
     <table class="rq-table rq-areas">
       <thead>
-        <tr><th>Area</th><th>Title</th><th>Total</th><th>MUST</th><th>planned</th><th>partial</th><th>open</th><th>out of scope</th></tr>
+        <tr><th>Area</th><th>Title</th><th>Total</th><th>MUST</th><th>done</th><th>planned</th><th>partial</th><th>open</th><th>out of scope</th></tr>
       </thead>
       <tbody>
         {c.areas.map((a) => (
@@ -67,6 +67,7 @@ const open = c.reqs.length - core;
             <td data-label="Title">{a.title.replace(/ \(open scope\)$/, '')} {a.scopeOpen && <span class="rq-badge rq-scope-badge">scope open</span>}</td>
             <td data-label="Total">{a.reqs.length}</td>
             <td data-label="MUST">{perArea(a.code, (r) => r.level === 'MUST')}</td>
+            <td data-label="done">{perArea(a.code, (r) => r.status === 'done')}</td>
             <td data-label="planned">{perArea(a.code, (r) => r.status === 'planned')}</td>
             <td data-label="partial">{perArea(a.code, (r) => r.status === 'partial')}</td>
             <td data-label="open">{perArea(a.code, (r) => r.status === 'open')}</td>
@@ -90,7 +91,7 @@ const open = c.reqs.length - core;
   <h2 id="ids">How ids and statuses work</h2>
   <p>
     An id is <code>REQ-&lt;AREA&gt;-&lt;nnn&gt;</code>. It is stable and never reused, and a test that proves a requirement names it, for
-    example <code>REQ-AUTHN-002/plain_method</code>. A status says how far the plan is: <em>planned</em> (an agreed feature or design covers it),
+    example <code>REQ-AUTHN-002/plain_method</code>. A status says how far the work is: <em>done</em> (implemented, and the record names the tests that pass), <em>planned</em> (an agreed feature or design covers it),
     <em>partial</em> (the plan is weaker), <em>open</em> (a decision or a plan is missing), <em>out-of-scope</em> (a boundary kept as a
     refusal) or <em>withdrawn</em> (a tombstone). An open or partial record names the <a href="/open-decisions/">open decision</a> or the gap it waits for.
   </p>

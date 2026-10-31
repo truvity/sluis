@@ -103,7 +103,7 @@ check-agent-links:
     tools/checks/agent-links.mjs
 
 # The checks above against scratch repositories that must pass or must fail.
-check-selftest:
+check-selftest: site-install
     tools/checks/selftest.mjs
 
 # Every repository rule.

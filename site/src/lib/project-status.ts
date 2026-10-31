@@ -40,8 +40,7 @@ const countReqs = (rs: Req[]): ReqCounts => ({
   open: rs.filter((r) => r.status === 'open').length,
   planned: rs.filter((r) => r.status === 'planned').length,
   partial: rs.filter((r) => r.status === 'partial').length,
-  // No record has the status `done` yet; the column fills once the vocabulary has it.
-  done: rs.filter((r) => (r.status as string) === 'done').length,
+  done: rs.filter((r) => r.status === 'done').length,
   auto: rs.filter(autoVerifiable).length,
 });
 

@@ -8,7 +8,7 @@ catalogue:
   vocabulary:
     level: [MUST, SHOULD, MAY]
     source: [v1-parity, stakeholder-ciam, stakeholder-integrator, security-review, design-decision, standard]
-    status: [planned, partial, open, out-of-scope, withdrawn]
+    status: [done, planned, partial, open, out-of-scope, withdrawn]
     runtimes: [bare-metal, serverless, kubernetes]
     verification: [conformance-suite, test-vectors, integration-test, manual]
     depth: [Full, Partial]

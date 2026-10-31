@@ -20,6 +20,7 @@ a.rq-chip:hover { border-color: var(--sl-color-accent); color: var(--sl-color-wh
 .rq-level-must { border-color: var(--sl-color-blue); color: var(--sl-color-blue-high); background: var(--sl-color-blue-low); }
 .rq-level-should { border-color: var(--sl-color-purple); color: var(--sl-color-purple-high); background: var(--sl-color-purple-low); }
 .rq-level-may { border-style: dashed; }
+.rq-status-done { border-color: var(--sl-color-green); color: var(--sl-color-green-high); background: var(--sl-color-green-low); font-weight: 600; }
 .rq-status-planned { border-color: var(--sl-color-green); color: var(--sl-color-green-high); background: var(--sl-color-green-low); }
 .rq-status-partial { border-color: var(--sl-color-orange); color: var(--sl-color-orange-high); background: var(--sl-color-orange-low); }
 .rq-status-open { border-color: var(--sl-color-red); color: var(--sl-color-red-high); background: var(--sl-color-red-low); }
