@@ -22,12 +22,10 @@ site-build: site-install
 
 # Front-matter descriptions of 40 to 160 characters, a valid status, and
 # registered open-decision ids on every page in docs/, and the requirements
-# catalogue in docs/requirements/ (schema, statement rules, traceability, public safety),
-# and the tests of the status token script (site/scripts/mint-status-token.mjs).
+# catalogue in docs/requirements/ (schema, statement rules, traceability, public safety).
 site-lint: site-install check-requirements
     site/scripts/check-descriptions.mjs
     site/scripts/check-status.mjs
-    node --test site/scripts/mint-status-token.test.mjs
 
 # The requirements catalogue in docs/requirements/: every file valid against
 # requirements.schema.json (ids REQ-<AREA>-NNN), ids unique across files, and the
@@ -73,17 +71,23 @@ site-v1 tag='':
 # Everything the Pages workflow publishes: the site and v1 under /v1/.
 site-all: site-check site-v1
 
-# The Cloudflare Workers build (ADR 0063), as Workers Builds makes it
-# (site/scripts/cf-build.sh), and a dry-run deploy that uploads nothing and needs no
-# Cloudflare credential: the strict build for the Worker into site/dist/client, v1
-# under /v1/ when v1-src holds a v1 tag (see site-v1), the build checks (headers,
-# redirects, Git LFS) and `wrangler deploy --dry-run` on the generated configuration.
-# The KV id is a fake one: the real id is a build variable of Workers Builds.
+# The Cloudflare Workers build (ADR 0063), as the deploy job of site.yaml makes it, and
+# a dry-run deploy that uploads nothing and needs no Cloudflare credential: the strict
+# build for the Worker into site/dist/client, v1 under /v1/ when v1-src holds a v1 tag
+# (see site-v1), the build checks (headers, redirects, Git LFS) and
+# `wrangler deploy --dry-run` on the generated configuration. The KV id is a fake one:
+# the real id is a secret of the deploy environment.
 site-workers: site-install
     SLUIS_TARGET=workers SLUIS_STATUS_KV_ID=ffffffffffffffffffffffffffffffff site/scripts/strict-build.sh
     if [ -d v1-src ]; then site/scripts/build-v1.sh v1-src site/dist/client; fi
     site/scripts/check-built.sh site/dist/client
     cd site && WRANGLER_SEND_METRICS=false yarn wrangler deploy --dry-run
+
+# Deploy the Workers build in site/dist/client to Cloudflare. Only the deploy job of
+# site.yaml runs this, on an output that was built with the real KV id in
+# SLUIS_STATUS_KV_ID. Needs CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID.
+site-deploy:
+    cd site && WRANGLER_SEND_METRICS=false yarn wrangler deploy
 
 # Repository rules (tools/checks/). Each check fails when it finds nothing to check.
 

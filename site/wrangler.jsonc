@@ -1,7 +1,7 @@
 // The Worker that serves sluis.id: static assets, and later /api/* (ADR 0063).
-// Built by `astro build` with the Cloudflare adapter (SLUIS_TARGET=workers, or
-// WORKERS_CI=1 in Workers Builds), which writes the configuration to deploy to
-// dist/client/wrangler.json from this file. The repository holds no account id, no
+// Built by `astro build` with the Cloudflare adapter (SLUIS_TARGET=workers), which
+// writes the configuration to deploy to dist/client/wrangler.json from this file.
+// The deploy job of .github/workflows/site.yaml runs `wrangler deploy` on it. The repository holds no account id, no
 // namespace id and no Cloudflare hostname.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -23,7 +23,7 @@
   },
   "kv_namespaces": [
     // The live status document (ADR 0063). The id comes from the build variable
-    // SLUIS_STATUS_KV_ID (src/cloudflare-kv-id.mjs rewrites the generated
+    // SLUIS_STATUS_KV_ID, a secret of the deploy environment (src/cloudflare-kv-id.mjs rewrites the generated
     // configuration); this placeholder is never deployed.
     { "binding": "STATUS", "id": "00000000000000000000000000000000" }
   ]

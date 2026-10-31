@@ -54,12 +54,12 @@ const naturalSize = Object.fromEntries(
 
 // Where the build is going. 'pages' is GitHub Pages (site.yaml): the plain static
 // build into dist/, with the renamed pages redirected by meta-refresh pages.
-// 'workers' is Cloudflare Workers static assets (ADR 0063; Workers Builds sets
-// WORKERS_CI): the @astrojs/cloudflare adapter writes the site to dist/client with
+// 'workers' is Cloudflare Workers static assets (ADR 0063; the deploy job of
+// site.yaml sets SLUIS_TARGET=workers): the @astrojs/cloudflare adapter writes the site to dist/client with
 // its Worker configuration, and the redirects below become a `_redirects` file
 // instead of pages. Both targets build the same pages. The switch goes when GitHub
 // Pages is turned off (the cutover issue); until then the Pages build must not move.
-const workers = (process.env.SLUIS_TARGET ?? (process.env.WORKERS_CI ? 'workers' : 'pages')) === 'workers';
+const workers = (process.env.SLUIS_TARGET ?? 'pages') === 'workers';
 const workersOptions = {
   // Every docs page is prerendered, so Pagefind search keeps working; the adapter
   // is only the way to a Worker. No `cacheCloudflare()`: it turns on Workers Cache,

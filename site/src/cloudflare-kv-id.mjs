@@ -1,6 +1,6 @@
 // Puts the id of the status KV namespace into the Worker configuration the build
-// generates, from the build variable SLUIS_STATUS_KV_ID, so that the id is never in
-// this repository.
+// generates, from the environment variable SLUIS_STATUS_KV_ID, so that the id is never
+// in this repository.
 //
 // wrangler.jsonc names the binding (STATUS) with a placeholder id, because Wrangler
 // does not read environment variables in its configuration. The Cloudflare adapter
@@ -8,14 +8,14 @@
 // .wrangler/deploy/config.json at it), and `wrangler deploy` uses that file. This
 // integration rewrites the id in that generated file after the adapter has written it.
 //
-//   - A Workers Builds build (WORKERS_CI is set) without a valid SLUIS_STATUS_KV_ID
-//     fails here, with a message. Without this, wrangler would deploy the placeholder.
-//   - Any other build (GitHub CI, a laptop) does not need the variable: it deploys
-//     nothing. The placeholder stays, and the build says so.
+//   - When SLUIS_STATUS_KV_ID is set, the id goes into the generated configuration. A
+//     value that is not a namespace id fails the build. The deploy job of site.yaml
+//     sets it from an environment secret.
+//   - When it is not set (a laptop, a pull request), the placeholder stays and the
+//     build says so: that build deploys nothing.
 //   - GitHub CI sets a fake id to exercise this path and `wrangler deploy --dry-run`.
 //
-// The id is a namespace identifier, not a secret, but the repository holds none; the
-// value is never printed.
+// The repository holds no id, and the value is never printed or logged.
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
@@ -28,14 +28,7 @@ export default function cloudflareKvId() {
     hooks: {
       'astro:build:done': async ({ dir, logger }) => {
         const id = process.env.SLUIS_STATUS_KV_ID?.trim();
-        const inWorkersBuilds = !!process.env.WORKERS_CI;
         if (!id) {
-          if (inWorkersBuilds) {
-            throw new Error(
-              'SLUIS_STATUS_KV_ID is not set. Add the id of the KV namespace for the binding ' +
-                `${BINDING} as a build variable of the Worker in Workers Builds (Settings, Build, Variables and secrets).`,
-            );
-          }
           logger.info(`SLUIS_STATUS_KV_ID is not set: the ${BINDING} binding keeps its placeholder id, so this build cannot be deployed.`);
           return;
         }

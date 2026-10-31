@@ -4,7 +4,7 @@
 **Date:** 2026-10-31
 
 Decided by the maintainer on 2026-10-31. Proposal: [issue #1010](https://github.com/truvity/sluis/issues/1010).
-Rewritten in place on 2026-10-31 (no preview per pull request: preview hostnames would publish the operator's account subdomain).
+Rewritten in place on 2026-10-31 (no preview per pull request: preview hostnames would publish the operator's account subdomain; the deploy is GitHub Actions, not Cloudflare's build service).
 
 ## Context
 
@@ -29,7 +29,6 @@ Cloudflare's own documentation now says Workers "is Cloudflare's primary platfor
 | KV, Free plan | 100,000 reads and 1,000 writes a day | Cloudflare pricing (2026-10-02) |
 | Cron Triggers, Free plan | 5 per account | Cloudflare limits (2026-10-29) |
 | Asset files per version, Free plan | 20,000 | Cloudflare limits (2026-10-29) |
-| Workers Builds, Free plan | 3,000 build minutes a month, 1 concurrent build, 20-minute timeout | Cloudflare Builds limits (2026-10-28) |
 | Workers Cache | "every request to your Worker is charged … including requests that are normally free: static asset requests" | Cloudflare Workers Cache (2026-10-30) |
 | Deploying from GitHub Actions | A long-lived API token; the docs name no OIDC federation | Cloudflare GitHub Actions (2026-10-18) |
 | Starlight `prerender: false` | Disables Pagefind search | Starlight configuration reference |
@@ -50,8 +49,11 @@ The project board's `Product milestone` field is a single-select with four optio
 
 ### Deploy
 
-- **Cloudflare's own build service, Workers Builds, is connected to the repository and deploys the site.** The repository's CI holds no Cloudflare credential.
-- **Workers Builds builds the production branch only.** Builds for other branches are off, and the Worker sets `workers_dev` and `preview_urls` to false. Pull requests are judged by the repository's GitHub CI, which runs the same build and a dry-run deploy with no Cloudflare credential, and by `wrangler dev` on a checkout. See "A preview per pull request" in the roads not taken.
+- **GitHub Actions builds and deploys the site.** The `deploy-workers` job of `.github/workflows/site.yaml` runs on a push to `main`, and on a manual run from `main`, after the site checks have passed. It builds the site for the Worker and runs `wrangler deploy`.
+- **The job runs in a GitHub environment, `cloudflare`, that allows `main` only.** The environment holds the three secrets of the deploy: the Cloudflare API token, the account identifier and the id of the KV namespace. A pull request never gets them, a fork's included, because the workflow has no pull request trigger and the environment refuses every other branch.
+- **The token has one permission, Workers Scripts: Edit, on the operator's account, and an expiry.** The maintainer rotates it.
+- **Deploys never overlap.** A concurrency group lets a running deploy finish, and a newer deploy replaces one that is still waiting.
+- **Only the production branch deploys.** The Worker sets `workers_dev` and `preview_urls` to false. Pull requests are judged by the repository's GitHub CI, which runs the same build and a dry-run deploy with no Cloudflare credential, and by `wrangler dev` on a checkout. See "A preview per pull request" in the roads not taken.
 - **The Cloudflare resources are declared in the operator's own infrastructure code, outside this repository:** the Worker, a KV namespace and the custom domain. The repository holds no account id and no KV namespace id.
 
 ### Headers and redirects
@@ -62,7 +64,7 @@ The project board's `Product milestone` field is a single-select with four optio
 ### Live data
 
 - **A read-only GitHub App owned by the organisation reads the live data.** Its permissions are issues, metadata, organisation projects, actions and checks, all read-only. Its private key is a Worker secret.
-- **The build reads the project board with the same App,** so the build-time snapshot has the board's data. Each build, in GitHub Actions and in Workers Builds alike, mints a one-hour token for the repository with `issues: read` and `organization_projects: read` only, from the App's client id and private key (a build variable and a build secret in Workers Builds; since 2026-10-31).
+- **The build reads the project board with the same App,** so the build-time snapshot has the board's data. Each build mints a one-hour token for the repository with `issues: read` and `organization_projects: read` only, from the App's client id and private key (a repository variable and a repository secret).
 - **GitHub webhooks refresh a KV document within seconds.** The Worker checks each delivery's signature before it acts on it.
 - **A cron every 15 minutes is the safety net** for missed deliveries. It uses conditional requests, so an unchanged answer costs little.
 - **CI posts coverage and conformance summaries to the API, authenticated by the GitHub Actions OIDC token.** No secret is stored for it. A pull request from a fork gets no OIDC token, so it cannot post.
@@ -93,8 +95,9 @@ The project board's `Product milestone` field is a single-select with four optio
 - The Worker holds two secrets: the GitHub App's private key and the webhook secret. The App is read-only and its key is rotated, so a leaked key gives read access and nothing more.
 - The OIDC check in the Worker pins the issuer `https://token.actions.githubusercontent.com`, the audience, the repository, its owner, the branch `main` and the workflow, so only trusted runs on `main` can post summaries.
 - The server island needs a fixed `ASTRO_KEY`, so that cached HTML can still decrypt the island's props after a redeploy. Its fallback is the build-time snapshot, which is what readers without JavaScript and crawlers see.
-- Workers Builds must produce the same output as today's CI build: the v1 documentation under `/v1/`, the Git LFS images and fonts, and the build checks, within the 20-minute timeout and the 20,000-file limit. `.github/workflows/site.yaml`, which deploys to GitHub Pages today, is retired after the cutover; until then it keeps proving that the site builds.
-- The production deploy no longer runs in this repository's CI, so a broken deploy shows in Workers Builds, not in a GitHub check. Its logs are kept for 90 days.
+- One CI shows the whole path. The deploy is a job of the workflow that builds the site, so its logs sit next to the build's, it runs only after the site checks have passed, and a broken deploy is a red check on the commit. Cloudflare posts no checks or comments on the repository.
+- The deploy needs a long-lived Cloudflare API token, because Cloudflare accepts no OIDC federation for deploys. The token is scoped to Workers Scripts on one account and expires, but a leak still lets its holder replace the Worker that serves the site. It lives only in the `cloudflare` environment, which allows `main` only; anyone who can merge to `main`, or edit a workflow that runs there, can use it. The maintainer rotates it before it expires, and a deploy that fails with an authentication error is the reminder.
+- The deploy job rebuilds the site for the Worker instead of passing on the build for GitHub Pages, because the KV namespace id is written into the generated Worker configuration at build time, from a secret that only this job can read. The build must produce the same output as the Pages build: the v1 documentation under `/v1/`, the Git LFS images and fonts, and the build checks, within the 20,000-file limit. `.github/workflows/site.yaml` keeps its GitHub Pages job as a manual fallback for one week after the cutover, and retires it then.
 - The repository's Cloudflare configuration names bindings, not resources, so a fork can build the site but cannot deploy it to the operator's account.
 - The status page changes when the maintainer edits the project board, with no pull request. Decision and requirement status still change only by a merged pull request.
 - Work that is not yet a decision record or a requirement is invisible on the status page until it has an issue with a `Product milestone`.
@@ -188,15 +191,15 @@ The project board's `Product milestone` field is a single-select with four optio
 - Cons: the content is not in the repository, so an agent or a person reading a checkout or GitHub sees nothing; it is not in `llms.txt` either. The measured gap above shows how easily code-rendered facts drop out of the agent outputs.
 - Why not: facts are built from the repository; the Worker adds freshness only for state that lives outside it (issues, CI, coverage, conformance), over a build-time snapshot.
 
-### A long-lived deploy token in GitHub Actions
+### Cloudflare's own build service, Workers Builds
 
-- Pros: the deploy is a step in the existing workflow, visible as a GitHub check; `cloudflare/wrangler-action` is the documented path.
-- Cons: a long-lived Cloudflare token stored as a repository secret, because Cloudflare accepts no OIDC federation for deploys; a fork's pull request receives no secret, so previews for forks need a second, privileged workflow.
-- Why not: Workers Builds deploys with no Cloudflare credential in the repository.
+- Pros: no Cloudflare credential in the repository or in GitHub at all; Cloudflare builds and deploys on every push to the production branch.
+- Cons: a second CI, with its own logs that live in the Cloudflare dashboard, are kept for 90 days and cannot be read by an agent or by anyone without account access. It deploys without waiting for the repository's checks. Its checks and bot comments on commits and pull requests carry links with the operator's account identifier. The build needs its own settings, a build command, the GitHub App key as a second copy of a secret, and a build script that repeats what the workflow does.
+- Why not: one CI with visible logs and a deploy gated on the checks is worth more than keeping a token out of GitHub. The token is long-lived and scoped to one account, which is the trade-off the decision accepts, with a main-only environment and an expiry to limit it.
 
 ### A preview per pull request
 
-- Pros: a reviewer sees the real site, with its real headers, before a change merges. Workers Builds can build other branches and `wrangler versions upload` publishes each as a version with its own URL.
+- Pros: a reviewer sees the real site, with its real headers, before a change merges. `wrangler versions upload` publishes each as a version with its own URL.
 - Cons: a version URL or a preview URL is a `workers.dev` hostname of the form `<name>.<account-subdomain>.workers.dev`. The account's subdomain is one per account, and the pull requests of a public repository would carry it in a comment or a status. It names the operator's account to everyone. The only way to keep it out is to switch previews off.
 - Why not: preview hostnames would publish the operator's account subdomain. GitHub CI builds the same output and dry-runs the deploy, and `wrangler dev` serves it locally with its `_headers` and `_redirects`, which covers what a review needs. This can be revisited if Cloudflare offers previews on a custom hostname of the project's own zone.
 
