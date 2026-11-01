@@ -7,11 +7,14 @@ Read `docs/contributing/workflow.md` and follow it, with `docs/contributing/tool
 
 Checklist:
 
-- [ ] `git remote -v` checked; the worktree is off `origin/main` with `--no-track`, on a `type/short-name` branch.
-- [ ] One topic in the pull request, with its tests and docs.
-- [ ] `devbox run -- just check` passes locally; say what you ran.
+- [ ] `git remote -v` checked. A fresh clone is on `master` (v1): branch from `origin/main`, with `--no-track`, on a `type/short-name` branch, in your own scratch area.
+- [ ] One topic in the pull request, with its tests and docs. No stacked pull requests: dependent work is one linear pull request, one commit per part.
+- [ ] `devbox run -- just check` passes locally (or the narrow recipes in "Local work" of `docs/contributing/tools.md`, with CI for the rest); say what you ran.
 - [ ] Commits are conventional and keep the tool's attribution lines.
-- [ ] Rebased on the current `main`; pushed with an explicit refspec, never to `main` or `master`.
+- [ ] Rebased on the current `main`; pushed with an explicit refspec, never to `main` or `master`, and never forced.
+- [ ] When `main` moved under the branch, or the branch holds a merge commit ("This branch can't be rebased"), rebuild: a new branch from `origin/main`, `git cherry-pick` or `git diff <base> <head> | git apply -3`, a new pull request, and the old one closed with a pointer.
+- [ ] If another open pull request changes the same generated file, re-run the generator on the second branch after the first lands.
 - [ ] The pull request follows `.github/pull_request_template.md`.
-- [ ] Before each further push, every reviewer and review-bot comment is read and answered.
-- [ ] CI is green. Merge only as the "Merging" section of `docs/contributing/workflow.md` allows.
+- [ ] Before each further push, and before the merge, every reviewer and review-bot thread (cubic, code scanning) is read, fixed or answered.
+- [ ] CI is green. Merge only as the "Merging" section of `docs/contributing/workflow.md` allows: `gh pr merge <n> -R truvity/sluis --rebase --match-head-commit <head>`, and never `--admin`.
+- [ ] After the merge, check the runs on `main`. For a site change, confirm the `Site` workflow's deploy and run the curl checks ("After every deploy" in `docs/contributing/tools.md`). Report the result: "merged" is not "done".

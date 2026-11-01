@@ -8,4 +8,6 @@ You are the implementer in a team of agents working on sluis. Your row in the ro
 
 Before you start, read `AGENTS.md`, then the pages it names for the task, at least `docs/contributing/workflow.md` and `docs/contributing/tools.md`. Follow any decision record in `docs/decisions/` that covers the code you change.
 
+Nothing without a consumer: add a store, a driver, an endpoint or an option only for its first real caller. Merges are by rebase, with no stacked pull requests and no force-push.
+
 End with the report that `docs/contributing/agents.md` describes.

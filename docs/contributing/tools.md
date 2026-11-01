@@ -86,6 +86,39 @@ The [project status](/status/) page shows live issue figures and the checks on `
 - **The webhook** is set on the App by the maintainer: the URL `https://sluis.id/api/hooks/github`, content type `application/json`, the same secret as `SLUIS_STATUS_WEBHOOK_SECRET`, and the events Issues, Label, Projects v2 item and Workflow run. The App's permissions stay read-only: issues, organisation projects, actions, checks and metadata.
 - **Locally**, `just site-test-worker` runs the tests. To see the Worker, run `just site-workers`, put a document into the local KV with `yarn wrangler kv key put --local --config dist/client/wrangler.json --binding STATUS board --path <file>` in `site/`, then `yarn wrangler dev` there.
 
+## Changing the site
+
+These rules hold for a change to the site itself: the layout, the home page, the Worker, the headers. A change to the text of a page follows [Pages and writing style](/contributing/pages/). The `site-change` skill (`.claude/skills/site-change/SKILL.md`) is the checklist.
+
+- **HSTS is one-way.** The domain is a custom domain of the Worker with `ssl: strict` and DNSSEC, and it serves `Strict-Transport-Security` for one year with `includeSubDomains` and `preload`. The domain is submitted to the browsers' preload list. Never lower the header, never shorten `max-age`, and never serve a name of the domain over plain HTTP.
+- **The Content-Security-Policy is exact.** It is the one in `site/public/_headers`, described under [The site](#the-site): `'self'` plus exactly the two origins of Cloudflare Web Analytics, `https://static.cloudflareinsights.com` in `script-src` and `https://cloudflareinsights.com` in `connect-src`, and the inline scripts by hash. Do not widen it to make something work; change the something.
+- **No remote assets.** No remote font, script, image or style. Use inline SVG, and embed icons: CC0 icons (simple-icons) are inlined and used nominatively, to name a product and not to imply an endorsement. `site/scripts/check-csp.mjs` fails on any other external origin.
+- **Moving a page** needs a line in the `redirects` map of `site/astro.config.mjs` (it becomes a 301 in the Worker's `_redirects` file) in the same pull request, pointing at the final page so nothing chains. After the deploy, check that the old URL answers 301 to the new one ([After every deploy](#after-every-deploy)).
+- **Link checking is bounded.** `just site-links` runs lychee with `-v`, so a stall names its URL, under `timeout --foreground 240` and at most three tries; `lychee.toml` bounds each request (`timeout`, `max_retries`, `max_redirects`). A host that loops on redirects (`www.rfc-editor.org` does) is excluded there, with a dated comment saying why. A CI job that runs far past its usual time is a finding, not bad luck: cancel one run to read its log, find the URL it stalled on, fix the bound or the exclusion, then run again.
+- **A strict build fails on one warning.** `site/scripts/strict-build.sh` fails on any warning. A slow external fetch can raise one (fonts in the v1 documentation build did). Retry that one failure, and only that one; keep strict mode for everything else. Do not turn the check off to get a green run.
+- **Do not re-run an old pull request run to pick up a fix.** A re-run uses the merge commit the first run made, and so the old configuration. After a fix lands on `main`, a stuck pull request needs a fresh push or a rebuilt branch ([Rebuilding a pull request](/contributing/workflow/#rebuilding-a-pull-request)).
+- **See the change, do not assume it.** Build with `just site-build`, serve `site/dist` (`python3 -m http.server -d site/dist`), and take screenshots with headless Chrome at desktop width (1440 px) and phone width (390 px), in light and dark (`site/scripts/check-render.mjs` shows how to emulate `prefers-color-scheme`). Look at them and fix what is off before you open the pull request, and give the screenshot paths in the report. Nothing scrolls sideways at 375 px.
+- **Home pages start from the reader's pain** ([Pages and writing style](/contributing/pages/#home-pages)).
+
+### After every deploy
+
+The merge to `main` starts the `deploy-workers` job of the `Site` workflow; wait for it to pass, then check the live site with `curl`, and say what you ran:
+
+1. A page answers 200: `curl -sSI https://sluis.id/`.
+2. A moved page answers 301 with the new address in `location`.
+3. The headers are intact: `strict-transport-security` is `max-age=31536000; includeSubDomains; preload`, and `content-security-policy` is the one in `site/public/_headers`.
+4. The status API answers: `curl -sS https://sluis.id/api/status` is JSON with 200, or 503 with `retry-after` until the first refresh.
+5. The webhook refuses an unsigned delivery: `curl -sS -o /dev/null -w '%{http_code}\n' -X POST https://sluis.id/api/hooks/github` prints `401`. A `503` means the webhook secret did not reach the Worker, and is a finding.
+
+## Local work
+
+- Work in a fresh clone, or a worktree off `origin/main`, under your own scratch area ([Branches and pull requests](/contributing/workflow/)). Never work inside someone else's checkout, and never run a command in a checkout that is not yours.
+- Run the narrow recipes while you work: `just check-rules`, `just site-lint` and `just site-build`, and `just check-actors`, `just check-examples` and `just check-installations` where the change touches them. Rely on GitHub CI for the rest.
+- If `just` is not on `PATH`, run it through devbox: `devbox run -c <dir> -- just <recipe>`.
+- If `yarn` fails with `EXDEV` in a scratch area, set `YARN_GLOBAL_FOLDER` to a folder on the same filesystem as the checkout.
+- Never print a token, a password or a secret. Read a credential file at run time, from the command that needs it, and do not echo it.
+- A deletion that a safety check refuses is left to the maintainer: report the exact command, and do not work around the check.
+
 ## Commands from an agent shell
 
 An AI agent's shell may reset its working directory between calls, so a `cd` in one call is gone in the next. Use absolute paths:

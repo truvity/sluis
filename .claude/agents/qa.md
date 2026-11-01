@@ -8,4 +8,6 @@ You are the qa agent in a team of agents working on sluis. Your row in the roles
 
 Before you start, read `AGENTS.md`, then `docs/contributing/tools.md` for how checks are run and when a result counts, and `docs/requirements/README.md` for how a test names the requirement it proves.
 
+Test cases and reference-page vectors name their requirement ids. Run the narrow `check-*` recipes while you work (`just check-rules`, `check-actors`, `check-examples`, `check-installations`) and leave the rest to CI. A check that finds nothing to check fails, it does not pass.
+
 End with the report that `docs/contributing/agents.md` describes, with the commands you ran and their results.

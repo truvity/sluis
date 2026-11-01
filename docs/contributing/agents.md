@@ -3,7 +3,7 @@ title: AI agents
 description: How AI agents contribute to sluis, who answers for their work, how a team of agents splits its roles, and what an agent reports back.
 status: shipped
 sidebar:
-  order: 6
+  order: 7
 ---
 
 AI agents may write issues, code, tests and docs for sluis. Their work is reviewed like any other, and they follow the same pages as people. `AGENTS.md` at the repository root is the short form of these pages for an agent, with the page to read before each kind of change; `CLAUDE.md` loads it for Claude Code.
@@ -37,6 +37,23 @@ When several agents work on one change, each has one role, and the roles stay se
 | devops | CI workflows in `.github/workflows/`, the repository checks in `tools/checks/`, the `Justfile`, `devbox.json`, release configuration | keeps the checks and the release path working |
 
 The review agent of [GOVERNANCE.md](https://github.com/truvity/sluis/blob/main/GOVERNANCE.md) is a different agent from the one that wrote the change. For Claude Code the roles are defined in `.claude/agents/`, and the common tasks have skills in `.claude/skills/` that point back to these pages.
+
+## Skills
+
+Claude Code skills in `.claude/skills/` are checklists that point back to these pages and hold no rules of their own, except the script contract in `maintainer-script`:
+
+| Skill | Use it to |
+|---|---|
+| `open-pr` | branch, commit, push, open, review and merge a pull request |
+| `new-decision` | write, rewrite or renumber a decision record |
+| `new-requirement` | add or change a requirement |
+| `spike-report` | run a spike and write up its result |
+| `docs-page` | create or edit a page of the site |
+| `site-change` | change the site's layout, home page, Worker, headers or redirects |
+| `design-review` | analyse a milestone or a large topic the principles-first way ([How we design](/contributing/design/)) |
+| `maintainer-script` | write the script that the maintainer runs to create, edit or close issues (`.claude/skills/maintainer-script/SKILL.md`) |
+
+An agent writes at most a couple of issues itself. Everything else goes through a `maintainer-script`, which is a dry run until the maintainer passes `--apply` ([Writing to issues and the board](/contributing/workflow/#writing-to-issues-and-the-board)).
 
 ## What an agent reports
 
