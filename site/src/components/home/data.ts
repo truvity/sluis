@@ -5,8 +5,8 @@
 
 export interface Chip {
   name: string;
-  /** A name in the sprite (marks.ts, or a glyph in Marks.astro). */
-  mark: string;
+  /** A name in the sprite (marks.ts, or a glyph in Marks.astro). Absent for a text-only chip. */
+  mark?: string;
   /** What is hard, in one short sentence. */
   note: string;
   /** Whether the mark is a brand mark, as opposed to a plain glyph. */
@@ -15,11 +15,11 @@ export interface Chip {
 
 // Pain 1: every system has its own place to say who may come in.
 export const fragmented: Chip[] = [
-  { name: 'AWS', mark: 'aws', brand: true, note: 'An identity provider and a trust policy in every account.' },
+  { name: 'AWS', note: 'An identity provider and a trust policy in every account.' },
   { name: 'Google Cloud', mark: 'googlecloud', brand: true, note: 'Its own project, its own consent screen.' },
   { name: 'GitHub', mark: 'github', brand: true, note: 'Single sign-on per organisation. CI uses Apps and tokens instead.' },
   { name: 'GitLab', mark: 'gitlab', brand: true, note: 'A second git host, a second sign-in to set up.' },
-  { name: 'Slack', mark: 'slack', brand: true, note: 'Sign-in is one setting. Bots and apps are another.' },
+  { name: 'Slack', note: 'Sign-in is one setting. Bots and apps are another.' },
   { name: 'CI jobs', mark: 'githubactions', brand: true, note: 'Secrets copied into each pipeline.' },
   { name: 'PostgreSQL', mark: 'postgresql', brand: true, note: 'Roles and passwords inside each database.' },
   { name: 'Kubernetes', mark: 'kubernetes', brand: true, note: 'OIDC settings on every API server.' },
@@ -32,11 +32,11 @@ export const fragmented: Chip[] = [
 // Pain 2: the setup that should be code is a ceremony in a web console.
 export const ceremonies: Chip[] = [
   { name: 'GitHub App', mark: 'github', brand: true, note: 'Created in a web form that an owner confirms. There is no API to change its permissions later.' },
-  { name: 'Slack app', mark: 'slack', brand: true, note: 'No one-click flow. A configuration token lasts 12 hours, and a new scope means a reinstall.' },
+  { name: 'Slack app', note: 'No one-click flow. A configuration token lasts 12 hours, and a new scope means a reinstall.' },
   { name: 'Cloudflare', mark: 'cloudflare', brand: true, note: 'No STS: no native way to trade an identity for a short-lived, scoped API token. The token that makes tokens is created by hand.' },
   { name: 'Google Workspace', mark: 'google', brand: true, note: 'Domain-wide delegation is granted by a Super Admin in the console, by client id.' },
   { name: 'Google OAuth consent', mark: 'googlecloud', brand: true, note: 'In testing mode, refresh tokens expire after seven days.' },
-  { name: 'AWS IAM', mark: 'aws', brand: true, note: 'One OIDC provider per account and a trust policy per role. At most 100 providers per account.' },
+  { name: 'AWS IAM', note: 'One OIDC provider per account and a trust policy per role. At most 100 providers per account.' },
   { name: 'Team wiki', mark: 'page', note: 'No service accounts: the API key belongs to a person.' },
   { name: 'On-call tool', mark: 'bell', note: 'A key that an administrator creates by hand.' },
   { name: 'Service-account keys', mark: 'key', note: 'Long-lived keys to rotate, or forbidden by policy.' },
