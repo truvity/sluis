@@ -11,7 +11,7 @@ A chain of trust has a few keys that almost never change, the roots, and many th
 
 Putting both in one product puts the rarest and most valuable keys beside the busiest code. The maintainer decided on 2026-11-01 to split them. A separate product, [ritueel](https://ritueel.id) (ADR 0001 in its repository), owns the roots, the ceremonies that certify an intermediate, and every transition of a root between key stores. sluis owns the intermediates and everything that signs with them. The two share no code and no hard dependency; they exchange standard formats.
 
-This record fixes sluis's side: which keys it holds, what it hands over, what it installs, how it warns, what it verifies, and what it signs. It rests on [0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/) (keys sign in place) and replaces the plan for a "two-root PKI hierarchy" record. Certificate profiles, leaf lifetimes and the revocation cadence for leaf certificates are not decided here; they are tracked in their own planned record.
+This record fixes sluis's side: which keys it holds, what it hands over, what it installs, how it warns, what it verifies, and what it signs. It rests on [0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/) (keys sign in place) and replaces the plan for a "two-root PKI hierarchy" record. Certificate profiles, leaf lifetimes and the revocation cadence for leaf certificates are not decided here; they are tracked in their own planned record, which also takes the profile of the token-signing key's certificate.
 
 Measurements used below were taken on 2026-10-31 on a YubiKey 5 Nano with firmware 5.8.0, on one of the operator's boards.
 
@@ -26,10 +26,10 @@ Measurements used below were taken on 2026-10-31 on a YubiKey 5 Nano with firmwa
 ### How an intermediate lives
 
 - **Every intermediate is born where it lives and never leaves.** On a board it is generated on the node's YubiKey in a PIV slot. In a cloud it is a key in the key service. It is non-extractable and attested where the hardware can attest.
-- **sluis signs directly with the intermediate.** There is no short-lived online key certified by the intermediate to sign in its place. A YubiKey 5 Nano signs about 7 P-384 signatures a second (147 ms each, measured 2026-10-31); three boards give about 21 a second against a measured peak of 0.8 tokens a second in the previous line. Where a cloud key service holds the keys, its rate is far higher. The keys in sluis's published key set are the intermediates themselves.
+- **sluis signs in place, and the token-signing key is its own key.** There is no short-lived online key certified by the intermediate to sign in its place. The intermediate signs certificates and nothing else; tokens are signed by a separate hardware key (below). A YubiKey 5 Nano signs about 7 P-384 signatures a second (147 ms each, measured 2026-10-31); three boards give about 21 a second against a measured peak of 0.8 tokens a second in the previous line. Where a cloud key service holds the keys, its rate is far higher. The keys in sluis's published key set are the token-signing keys, each certified by the node's own intermediate.
 - **`key-holder` has exclusive access to its card.** It runs as a dedicated user, the card service is limited to that user, and no other software that talks to cards runs on the board. Measured 2026-10-31: the card's PIN state belongs to the powered card and not to the connection, so while it is unlocked any local process can sign with it, any client's default disconnect resets it, and three wrong PINs from any local user lock it. Exclusive access is a requirement, not a hope.
 - **The first version supports three key stores.** A YubiKey in PIV mode, a cloud key service (AWS KMS), and software keys for development only, which the production floor of [0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/) refuses. PKCS#11 and HSM drivers come later (ADR 0052).
-- **Token-signing and issuer keys carry `x5c`.** An entry of the published key set includes the intermediate's certificate and the chain up to the root. Standard clients ignore the member and fetch the key over TLS as before; a verifier that wants to check custody can follow the chain to a root it trusts.
+- **The token-signing key is separate from the intermediate and carries `x5c`.** The node's own intermediate issues it a non-CA certificate that allows signing only, so a key that signs tokens cannot issue a certificate. An entry of the published key set includes that token certificate, the intermediate's certificate and the chain up to the root. The token certificate is issued on the node by the intermediate, so it is not part of the hand-off table below. Standard clients ignore the member and fetch the key over TLS as before; a verifier that wants to check custody can follow the chain to a root it trusts.
 - **SSH CA keys are anchors, not a chain.** They live in `key-holder`. Hosts trust a list of SSH CA keys that ritueel publishes, signed by a root. The break-glass SSH CA is made and held by ritueel; sluis only distributes its public key in that list.
 - **No code is shared with ritueel.** The profile of an intermediate (path length, name and URI constraints, extended key usage) and its test vectors are written once, in ritueel's hand-off specification. Each side tests against them.
 
@@ -83,7 +83,7 @@ OpenPGP has no intermediates, but it can delegate. A company root, kept by ritue
 
 ### Not decided here
 
-- Leaf certificate profiles and lifetimes, and the revocation cadence for leaf certificates.
+- Leaf certificate profiles and lifetimes, and the revocation cadence for leaf certificates. The profile of the non-CA token certificate belongs here and is planned.
 - Release signing and its channels (ADR 0030).
 - The detailed signing API (issue #890).
 
@@ -95,7 +95,7 @@ OpenPGP has no intermediates, but it can delegate. A company root, kept by ritue
 - Renewal needs a person on ritueel's side once a year. The long warning is sluis's only protection; if the person is away in month 13, certificates expire and `ca` stops issuing.
 - The revocation of a stolen board crosses the line between the products, and the end-to-end time from theft to verifiers refusing it belongs to neither alone. The runbook has to name both parts.
 - The root list can expire or be replaced. A host keeps its last good list, and a stale list is a warning on sluis's side and a renewal on ritueel's.
-- `x5c` in the key set adds one certificate chain to the published keys, which must be refreshed at each yearly renewal.
+- `x5c` in the key set adds one certificate chain to the published keys, which must be refreshed at each yearly renewal. The chain has the token certificate in front of the intermediate, and the intermediate issues a new token certificate with each renewal.
 - The attestation check and the OpenPGP packet code exist on both sides, because there is no shared library. The cost is a shared test matrix: `gpg`, `gpgv`, `sqv`, apt and rpm.
 - The requirements for root custody move to ritueel. sluis gains requirements for the hand-off, the back-signature, expiry warnings, the root list, exclusive card access, keys born in place, and the signing API.
 
@@ -124,6 +124,12 @@ OpenPGP has no intermediates, but it can delegate. A company root, kept by ritue
 - Pros: one implementation of attestation checks, OpenPGP packets and the intermediate's profile.
 - Cons: the products stop being replaceable; a change in one breaks the other; one release train for two.
 - Why not: a written profile with test vectors costs a specification and keeps either side replaceable.
+
+### The intermediate signs the tokens itself
+
+- Pros: one key fewer on the card, and a chain in the key set that is one certificate shorter. This was the earlier design.
+- Cons: one key both issues certificates and signs tokens, so it is used for every token and a flaw in token handling reaches the CA.
+- Why not: the token-signing key is its own hardware key with a non-CA certificate for signing only. It still signs in place, so it is not the online key above. The reasoning and the slot map are in [0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/).
 
 ### Plain key set with no `x5c`
 

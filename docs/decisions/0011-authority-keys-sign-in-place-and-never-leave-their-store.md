@@ -7,6 +7,7 @@ Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/slu
 Rewritten in place on 2026-10-30 (realignment pass).
 Rewritten in place on 2026-10-31 (after spike S4, `key-holder` reaches a YubiKey through `piv-go` rather than PKCS#11 ([0060](/decisions/0060-the-language-follows-the-executable/)); PKCS#11 stays for the planned HSM drivers).
 Rewritten in place on 2026-11-01 (the roots and their ceremonies moved to the separate product [ritueel](https://ritueel.id); this record keeps the keys sluis holds: intermediates, which sign directly and are certified through the hand-off of [0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)).
+Rewritten in place on 2026-11-01 (the maintainer approved a token-signing key that is separate from the CA key, and a static slot map for node cards with a rotation slot for each signing purpose).
 
 ## Context
 
@@ -25,17 +26,17 @@ sluis holds no root. The roots are made and kept by [ritueel](https://ritueel.id
 ### Signing and custody
 
 - **An authority key signs in place.** The non-extractable key signs each digest itself, in the key service or on the card, and never leaves that store. There are no derived signing keys: a key is never used to certify a short-lived software key that signs in its place. There is no burst key.
-- **There is one key for each purpose.** X.509 keys are separate for each trust domain (intermediates per trust domain: ADR 0031). The SSH user CA and the SSH host CA are separate keys. The token-signing key, the audit log key and the grant key are separate keys. An exception of [0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/) has its own key too. A key that is used for two purposes can be abused through the weaker of them.
+- **There is one key for each purpose.** X.509 keys are separate for each trust domain (intermediates per trust domain: ADR 0031). The SSH user CA and the SSH host CA are separate keys. The token-signing key, the audit log key, the usage log key and the grant key are separate keys, and the token-signing key is not the key of the intermediate that certifies it: a key that issues certificates never signs tokens. An exception of [0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/) has its own key too. A key that is used for two purposes can be abused through the weaker of them.
 - **On AWS, the layout follows how KMS works.** One symmetric key serves every sealing need inside the installation, separated by an encryption context. The key that wraps a backup archive is not that key: it may live in a separate account, and only the restore role may decrypt with it (ADR 0035). One P-384 signing key exists for each authority purpose, so each key policy names exactly one actor. KMS allows one usage for each key, and a signing call takes no encryption context, so this is the only way to say that only one actor may sign with one key.
 - **On a YubiKey, there are no symmetric keys.** Sealing uses ECDH and HKDF in the style of HPKE, with a P-384 key held in a slot. Sealing needs no hardware. Opening does. Older sealing keys stay in retired slots after a rotation so that what they sealed can still be opened. The slot plan is on the keys page.
 - **The `keys` port has `wrap` and `unwrap` beside `sign` and `public-key`** ([0002](/decisions/0002-actors-declare-ports-placement-is-derived/)). A caller protects a data key with them without the key that protects it leaving the device. On AWS this is an encrypt call with a context that names the purpose. On a YubiKey it is ECDH and HKDF. A backup archive's data key is wrapped this way.
 - **CA serial numbers are random and 128 bits long.** No serial ledger is needed.
-- **sluis signs directly with its intermediates.** The key in the published key set is the intermediate itself, and it carries an `x5c` chain (below). A short-lived online key is a road not taken ([0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)).
+- **sluis signs in place with the key of each purpose.** The key in the published key set is the token-signing key, a hardware key of its own that signs every token itself. It carries an `x5c` chain (below). A short-lived online key is a road not taken ([0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)).
 
 ### The key rule
 
 - **Every key whose public half is trusted through the PKI chain is a hardware-held child key.** It is attested where the hardware can attest, and it is certified through a root that ritueel holds. These are the CA intermediates and the OpenPGP signing subkeys.
-- **Token-signing and workload-issuer keys are hardware-held and published through a JWKS.** They are the intermediates, and each entry carries an `x5c` chain up to the root. A standard client ignores it and fetches the key over TLS; a verifier that wants to can check the chain.
+- **Token-signing and workload-issuer keys are hardware-held, separate from the CA key, and published through a JWKS.** The node's own intermediate certifies each of them with a **non-CA certificate that allows signing only**, so a key that signs tokens cannot issue a certificate. Each entry carries an `x5c` chain: the token certificate, the node intermediate, then up to the root. A standard client ignores it and fetches the key over TLS; a verifier that wants to can check the chain. The intermediate issues the token certificate on the node, without a ceremony. The profile of this certificate belongs with the leaf profiles that [0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/) leaves to a planned record; this record notes the token certificate's profile as planned there.
 - **Ephemeral keys are outside the rule.** Session keys, ECDH keys, wrapped data keys and derived keys are not hardware-held, and are not certified.
 - **SSH CA keys are anchors, not a chain.** The `ssh-user` and `ssh-host` keys are hardware-held in `key-holder`. Hosts trust a list of SSH CA keys that ritueel publishes, signed by a root; the list is the provenance. The SSH CA itself is decided in ADR 0013.
 
@@ -80,10 +81,25 @@ In both, the root is ritueel's: a KMS root, or root cards. A root on a YubiKey w
 
 ### The card slot map
 
-- **A documented, versioned map says which card slot serves which purpose.** It has a reservation per purpose, and ranges kept for rotation and future use. It covers PIV slots `9a`, `9c`, `9d` and `9e` and the retired slots `82` to `95`.
+- **A documented, versioned map says which card slot serves which purpose.** It has one slot per purpose and a rotation slot for each signing purpose, because the yearly renewal makes the new key while the old one is still valid. The table is the default map, version 1. It covers PIV slots `9a`, `9c`, `9d` and `9e` and the retired slots `82` to `95`, which in hex are 20 slots. With the four named slots that makes 24, and the map uses 23.
+
+  | Purpose | Slot | Rotation slot |
+  |---|---|---|
+  | X.509 CA (the node intermediate) | `9c` | `82` |
+  | Token signing | `9a` | `83` |
+  | `ssh-user` CA | `84` | `85` |
+  | `ssh-host` CA | `86` | `87` |
+  | OpenPGP release signing subkey | `88` | `89` |
+  | Audit log key | `8a` | `8b` |
+  | Usage log key | `8c` | `8d` |
+  | Mint grant | `8e` | `8f` |
+  | Sealing (ECDH, ring wrap) | `9d` | `90` to `95` hold older sealing keys until their data keys are re-wrapped |
+  | None | `9e` | Not used: the card-authentication slot signs without a PIN by default |
+
+- **Keys are per environment boundary, not per tenant.** A card belongs to one boundary. The data keys of tenants and companies are wrapped by the sealing key, so they need no slots.
 - **Defaults ship in code, and an installation may override them in declared configuration.** The map is for node cards. The slot map of root cards is ritueel's.
 - **`sluis config check`, `sluis key request` and node initialisation refuse a collision and a purpose with no slot.** The map records each slot's attestation in the registry.
-- **The exact slot numbers are settled when `key-holder` is built** (issue #914). The keys page shows the proposed numbers.
+- **The exact slot numbers are settled when `key-holder` is built** (issue #914). The table above is the default map and the keys page shows it.
 
 ### Related records
 
@@ -98,6 +114,8 @@ In both, the root is ritueel's: a KMS root, or root cards. A root on a YubiKey w
 - No key can be exported, so a backup never holds one. A restore on new hardware means new keys and a new certificate for each public key. The hand-off to ritueel and the yearly renewal are what make that safe. Secrets that are not keys, such as a vendor-issued App key, are archived sealed, and the escrow of the sealing key never copies a key out of its device ([0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
 - Signing speed is set by the store, not by software. A YubiKey signs P-384 at about 120 ms, or about 8 signatures a second, and the measured peak is a tenth of that. KMS costs about $2.62 a month at the measured volume. A software key is only for development and for CI.
 - Every purpose adds a key, a policy and a rotation schedule. In return a key policy names one actor and one use.
+- The token-signing key adds a certificate to issue under each new intermediate, and a certificate to the chain in the key set. In return no key signs both certificates and tokens.
+- Each signing purpose holds two slots, so a node card has room for the rotation of every purpose and for six older sealing keys, with only `9e` left empty.
 - The roots, their trust anchors and their revocation are ritueel's. What reaches sluis is a signed root list, and a revoked intermediate has to reach every verifier ([0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)).
 - Nodes that sign unattended depend on the PIN handling above. A full power loss needs a person. A wrong PIN is never retried, so a bad unlock cannot lock the card.
 - Intermediates are certified for about 13 months, so each is renewed once a year, and the renewal needs a person at ritueel's side.
@@ -136,6 +154,18 @@ In both, the root is ritueel's: a KMS root, or root cards. A root on a YubiKey w
 - Pros: every authority key has a record in the chain, and `sshd` ignores the certificate, so nothing breaks.
 - Cons: a second kind of record for a key that has no chain; hosts need the anchor list anyway.
 - Why not: an SSH CA key is an anchor, and a list of CA keys signed by a root gives the same provenance.
+
+### The intermediate signs the tokens itself
+
+- Pros: one key fewer on the card, and the published key is the intermediate, so the chain in the key set is one certificate shorter. This was the earlier design.
+- Cons: one key both issues certificates and signs tokens, so the key policy cannot say that the token signer may not mint a certificate, and a flaw in token handling reaches the CA. The CA key is used for every token, not only for certificates.
+- Why not: the maintainer decided on 2026-11-01 that the token-signing key is its own hardware key, certified by the intermediate with a non-CA certificate for signing only. It still signs in place on the card, so this is not the short-lived key road below.
+
+### One slot per purpose, rotated by overwriting
+
+- Pros: half as many slots, so a node card has room to spare.
+- Cons: the old key is gone before the new certificate is installed, so a failed renewal leaves a purpose with no key.
+- Why not: the renewal needs the old key to stay valid while the new one is certified, so each signing purpose gets a rotation slot. (the cons are inferred)
 
 ### Fixed slot numbers with no map
 

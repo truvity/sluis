@@ -155,16 +155,17 @@ Three actors declare **instances: exactly 1**: the audit writer (one per log), t
 
 ### The keys port
 
-The keys port binds a **key purpose** to a backend and refuses a backend that is too weak for the purpose when the configuration loads. The code refuses a software key in production; configuration picks among the modes the installation's runtime allows. The key purposes are the unit callers name: `token-signing`, `ca`, `ssh-user`, `ssh-host`, `audit-log`, `grant`, `sealing`, `enrolment`, and one per cloud federation. Callers never see an ARN, a slot or a path. Each boundary has its own keys.
+The keys port binds a **key purpose** to a backend and refuses a backend that is too weak for the purpose when the configuration loads. The code refuses a software key in production; configuration picks among the modes the installation's runtime allows. The key purposes are the unit callers name: `token-signing`, `ca`, `ssh-user`, `ssh-host`, `audit-log`, `usage-log`, `grant`, `sealing`, `enrolment`, and one per cloud federation. Callers never see an ARN, a slot or a path. Each boundary has its own keys. On a YubiKey the slot of each purpose comes from the card slot map, whose version 1 defaults are on [Keys](/concepts/keys/#yubikey-layout) (each signing purpose also has a rotation slot).
 
 | Key purpose | Requires | On AWS KMS | On a YubiKey (PIV) |
 | -------- | -------- | ---------- | ------------------ |
-| `token-signing` | Never exportable; used by the `signer` actor only | One `ECC_NIST_P384` key; tokens are signed directly | Slot 9c; about 8 signatures per second |
-| `ca` (X.509) | Never exportable; used by the `ca` actor only; one key per trust domain | One `ECC_NIST_P384` key per trust domain | Slot 9c |
-| `ssh-user`, `ssh-host` | Never exportable; used by the `ssh-ca` actor only | One `ECC_NIST_P384` key each | Slots 82 and 83 (proposed) |
-| `audit-log` | Never exportable; used by the audit `writer` only, through `key-holder` or a key policy | One `ECC_NIST_P384` key per log | The node's own key; a cluster keeps one log per node and peers witness it |
-| `grant` | Never exportable; used by the `policy` actor only | One `ECC_NIST_P384` key | A node key |
-| `sealing` | Wraps and unwraps; takes an encryption context. Wraps the data key of each (boundary, record kind) and the cookie-sealing key of `session` | One symmetric key with encryption contexts | ECDH plus HKDF (HPKE-style) with a P-384 key in slot 9d |
+| `token-signing` | Never exportable; used by the `signer` actor only; a key of its own, never the CA key, with a non-CA certificate for signing only that the intermediate issues | One `ECC_NIST_P384` key; tokens are signed directly | Slot 9a (rotation 83); about 8 signatures per second |
+| `ca` (X.509) | Never exportable; used by the `ca` actor only; one key per trust domain | One `ECC_NIST_P384` key per trust domain | Slot 9c (rotation 82) |
+| `ssh-user`, `ssh-host` | Never exportable; used by the `ssh-ca` actor only | One `ECC_NIST_P384` key each | Slots 84 and 86 (rotation 85 and 87) |
+| `audit-log` | Never exportable; used by the audit `writer` only, through `key-holder` or a key policy | One `ECC_NIST_P384` key per log | The node's own key in slot 8a (rotation 8b); a cluster keeps one log per node and peers witness it |
+| `usage-log` | Never exportable; used by the audit `writer` only, through `key-holder` or a key policy | One `ECC_NIST_P384` key per log | The node's own key in slot 8c (rotation 8d) |
+| `grant` | Never exportable; used by the `policy` actor only | One `ECC_NIST_P384` key | Slot 8e (rotation 8f) |
+| `sealing` | Wraps and unwraps; takes an encryption context. Wraps the data key of each (boundary, record kind) and the cookie-sealing key of `session` | One symmetric key with encryption contexts | ECDH plus HKDF (HPKE-style) with a P-384 key in slot 9d; slots 90 to 95 hold older sealing keys |
 | `enrolment` | Opens HPKE-sealed enrolment requests; used by `exchange` only | Held by KMS | Held by `key-holder` |
 
 Each backend describes itself with traits: exportability, attestation, whether a human must touch it, latency class, throughput, and who enforces which caller may use it (platform IAM, a shared driver, or nothing). The port signs bytes or digests; JWT shaping (`exp`, `iat`, lifetime limits) lives in a `jose` library in the token issuer, not in the port. `Derive` (a keyed, deterministic function) and `Agree` (ECDH) are separate operations because a PIV token has no HMAC. ES384 (P-384) is the default; the cloud-federation keys and the FAPI 2.0 algorithms (PS256, ES256, EdDSA) are the exceptions, each in its own slot or key. See [Keys](/concepts/keys/#algorithms).
