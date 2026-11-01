@@ -11,6 +11,26 @@ The roadmap lives in two public GitHub Projects under the `truvity` organization
 - **sluis v2**: [github.com/orgs/truvity/projects/9](https://github.com/orgs/truvity/projects/9). The line built on `main`.
 - **sluis v1**: [github.com/orgs/truvity/projects/10](https://github.com/orgs/truvity/projects/10). The agreed v1 roadmap (v1.80 to v1.85) and fixes, on `master`.
 
+## Where v2 stands
+
+As of 2026-11-01, v2 is in the design phase. There is no v2 code yet. The decision records, the requirements and the concept pages are what exists.
+
+What the design settled on 2026-11-01:
+
+- **The key model.** The token-signing key is separate from the CA key. Its certificate is a non-CA certificate from the node intermediate. One rule says which keys may be shared and which must be separate. The signing certificate is re-signed every year, and the key is rotated on an event or after at most three years. There is one log key, and grants are sealed. The page also fixes the compact seven-slot card map, the KMS layout per installation, and the reference installation shapes ([Keys](/concepts/keys/)).
+- **Design principles.** A public page says what sluis is, and is not ([Design principles](/concepts/principles/#what-sluis-is-and-is-not)).
+- **Audit records.** [ADR 0064](/decisions/0064-audit-records-are-ocsf-events-with-one-unmapped-sluis-object-and-usage-is-a-separate-stream/) was rewritten: OCSF events with no schema extension, one `unmapped.sluis` object, and no catalogue loaded at run time.
+- **Requirements.** No requirement record is open any more. Break-glass recovery uses passkeys only (REQ-AUTHN-066 to REQ-AUTHN-073). As of 2026-11-01, 184 of 695 requirement records have conformance coverage (26.5%). The live figure is on the [project status](/status/) page.
+
+Still open in the design, as of 2026-11-01:
+
+- ADR 0067, the profiles of the leaf certificates ([#1073](https://github.com/truvity/sluis/issues/1073)).
+- The decision record for directory sync.
+- The live status API ([#1037](https://github.com/truvity/sluis/issues/1037)).
+- The audit-with-quota installations that serve one product each. They are decided later.
+
+Root custody lives in [ritueel](https://github.com/truvity/ritueel), a separate project. It is in the design phase too, as of 2026-11-01. The first version of sluis needs ritueel's software-root mode ([#1071](https://github.com/truvity/sluis/issues/1071)).
+
 ## Product milestones
 
 v2 is delivered in four product milestones, in this priority order. They are the options of the `Product milestone` field on the v2 board (checked 2026-10-31), and the [project status](https://sluis.id/status/) page groups requirements, decision records and issues under them. Within milestone 2, the boards, lambda and kubernetes installations are built in parallel after local ([delivery order](#delivery-order)).
