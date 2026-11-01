@@ -60,7 +60,7 @@ A Rust row holds once its spikes pass ([The spikes are gates](/decisions/0014-th
 | `exchange` | Go | R4: the proof verifiers, HPKE and the OpenID Connect provider; its HPKE key and the session cookie-sealing key stay behind the `keys` port | none | yes |
 | `ca` | Go | R4: the X.509 CA and its issuance log | none | yes |
 | `writer`, `witness` | Go | R4: the C2SP log writer and witness | none | `writer` |
-| Integrations, among them `oidc@<name>` | Go | R4: the vendor SDKs and the OpenID Connect client | none | `oidc@<name>` |
+| Integrations | Go | R4: the vendor SDKs, and the OpenID Connect client of `oidc@<name>` | none | `oidc@<name>` |
 | Other drivers (`nats-jetstream`, the `postgres` index, witness drivers, `age` export) | Go | R5, R6; R4 for `age` export (age with post-quantum recipients) | none | no |
 | `ssh-ca`, `quota`, `sluis agent` | Rust | R11 | S1, S10 | no |
 | The `sluis` CLI, the cert-manager issuer | Go | R4, R6; not resident on a tier-0 board | none | the CLI |

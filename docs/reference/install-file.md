@@ -94,7 +94,7 @@ A mapping from an upstream's name to its declaration. Each upstream is one integ
 
 | Field | Required | Meaning |
 |---|---|---|
-| `kind` | yes | The integration that serves it ([below](#open-items)) |
+| `kind` | yes | The integration that serves it. The first working version has `oidc`, the generic OpenID Connect upstream, sign-in only, with subjects assigned at the first sign-in ([#1106](https://github.com/truvity/sluis/issues/1106), [ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#subjects)) |
 | `issuer` | yes | The upstream's issuer URL |
 | `client_id` | yes | sluis's client ID at the upstream |
 | `client_secret` | yes | A reference: `{ credential: NAME }` |
@@ -196,10 +196,6 @@ trust:
 ```
 
 ## Open items
-
-:::note[Proposed]
-**The upstream kind of the first working version.** The local installation signs people in through a fake upstream run from configuration, and the fake stands in for one real integration, because the product carries no test code ([ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/#the-local-installation)). Which one decides `upstreams.<name>.kind` and the fields beside it. Options: (a) a first slice of the workspace directory's sign-in and directory read, so subjects exist before the first sign-in (recommended; it is v1's upstream and has a consumer today); (b) the generic OpenID Connect upstream, sign-in only, with subjects assigned at the first sign-in; (c) no people in the first working version. The example file shows `kind: oidc` as a placeholder until this is decided. Tracked in [#1081](https://github.com/truvity/sluis/issues/1081).
-:::
 
 :::note[Proposed]
 **The hosts and the TLS of the local installation.** The example uses `local.test` names, outside the sluis host names, as a test installation must be ([ADR 0005](/decisions/0005-boundaries-and-the-isolation-ladder/#shared-parts-and-accepted-risks)). The forwarder that publishes `entry`'s socket, the certificate it serves, and whether a browser's virtual authenticator accepts `local.test` as the relying-party ID are measured with the local topology before these names are final. Tracked in [#877](https://github.com/truvity/sluis/issues/877).
