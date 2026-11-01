@@ -20,8 +20,6 @@ exclude = [
   # The site's own absolute URLs (canonical, sitemap, Open Graph) point at the
   # deployed copy, which does not have this build yet.
   '^https://sluis\.id/',
-  # ritueel.id is the site of the sibling product; it is not deployed yet. Remove this line once it is.
-  '^https://ritueel\.id',
   # Files and pages that exist only once the governance files and the roadmap
   # project are merged or created; the site links to them by their final path.
   '^https://github\.com/truvity/sluis/(blob|tree|edit)/',
