@@ -37,7 +37,7 @@ A field may also carry a **free-text** flag, for text a person typed: it never e
 
 Every **record kind** has exactly one **record writer**: one actor that may create and change it. Other actors may read it if their manifest says so. The port library scopes every call to `<boundary>/<kind>/…` from the actor's own identity, and the store checks the actor's own credential: a file per actor uid on `embedded`, an `execute` user for the owner and `query`-only users for readers on `rqlite`, a `dynamodb:LeadingKeys` condition per role on DynamoDB ([ADR 0011](/decisions/0011-state-is-one-port-with-compare-and-set/#one-writer-per-kind)). There is no state mediator in between.
 
-Examples (the full list is generated from the manifests):
+Examples; the record kinds of the first working version, with their writers, origins and lifetimes, are on [Storage](/reference/storage/#record-kinds-of-the-first-working-version), and the full list is generated from the manifests:
 
 | Record kind | Its single writer | Why only one |
 |---|---|---|
@@ -64,7 +64,7 @@ When two processes seem to need to write one record, the record is split instead
 
 ## Ports
 
-Actors reach their data through five ports. Each has a contract that does not change with the technology behind it. The drivers of each installation are on [Installations](/runtimes/installations/).
+Actors reach their data through five ports. Each has a contract that does not change with the technology behind it; the messages and the on-disk layout of the local drivers are on [Storage](/reference/storage/). The drivers of each installation are on [Installations](/runtimes/installations/).
 
 | Port | What it holds | The contract |
 |---|---|---|
@@ -72,7 +72,7 @@ Actors reach their data through five ports. Each has a contract that does not ch
 | `index` | A search index derived from the audit log | Apply a batch, read and set a cursor, query, rebuild from the batches |
 | `blob` | Immutable objects, such as audit batches | Put once (an atomic [create-if-absent](/concepts/drivers/#create-if-absent)), get and list by key, with a lock mode of none, removable or compliance |
 | `transport` | Messages that must survive a restart, or a stream of them to the writer | Put, receive, acknowledge, return with a delay; or a direct stream |
-| `lease` | Named, time-limited ownership | Acquire, renew, release |
+| `lease` | Named, time-limited ownership | Acquire and renew, with a fencing token; a lease ends when it is not renewed |
 
 A record past its lifetime reads as absent, whatever the engine did with it. There are no interactive transactions: a flow over several records is idempotent steps with a recovery marker.
 

@@ -127,12 +127,27 @@ check-yaml-ext:
 check-agent-links:
     tools/checks/agent-links.mjs
 
+# The actor registry, docs/architecture/actors.yaml, against the ADRs that name actors, the
+# architecture explorer's data, the requirement records' `actors:` and the generated tables on
+# docs/reference/actors.md. Each actor has the GitHub label `actor:<name>` that the registry lists.
+check-actors: site-install
+    tools/checks/actors.mjs
+
+# Rewrite the generated tables on docs/reference/actors.md from the registry.
+actors-write: site-install
+    tools/checks/actors.mjs --write
+
+# Example files shown on a page (a fenced block after `<!-- example: <path> -->` in docs/) equal
+# the files themselves, such as the local installation's example install file.
+check-examples:
+    tools/checks/examples.mjs
+
 # The checks above against scratch repositories that must pass or must fail.
 check-selftest: site-install
     tools/checks/selftest.mjs
 
 # Every repository rule.
-check-rules: check-selftest check-decisions check-requirements check-public check-yaml-ext check-agent-links
+check-rules: check-selftest check-decisions check-requirements check-actors check-examples check-public check-yaml-ext check-agent-links
 
 # Everything a pull request must pass.
 check: check-rules site-check site-workers

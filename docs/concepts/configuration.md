@@ -56,7 +56,7 @@ The **effective configuration** is declared overlaid with operator-set. Learned 
 
 **Switches never reach authority.** Authority says who may do what: policy, grants, the clients that may ask for tokens. Tunables (a log level, a timeout, the choice of a driver) are declared and may come from an environment override; runtime switches (recovery off, a paused reconciler, an acknowledged breaker) are operator-set, read live and tighten-only where they touch safety.
 
-A secret in configuration is a reference such as `cred:sluis-int-github.app-key`, resolved at run time through the `secrets` port ([Secrets and export](/concepts/data/#secrets-and-export)). The value never appears in a file, in `explain` output, in logs or in a crash dump.
+A secret in configuration is a reference such as `{ credential: idp-client-secret }`, resolved at run time from a read-only source, and later also through the `secrets` port ([Install file](/reference/install-file/#format), [Secrets and export](/concepts/data/#secrets-and-export)). The value never appears in a file, in `explain` output, in logs or in a crash dump.
 
 ## Live reload
 
@@ -68,32 +68,32 @@ Declared configuration may **live-reload as whole versioned snapshots**, from a 
 
 Both are **offline by default**, so CI runs them with no call to sluis. With `--live` they also read the operator-set records through the console API, with an operator's credentials: `check --live` lists held objects and the records a new declared fragment would lock or hold, and `explain --live` shows, for an operator-set value, the record id, its revision, who set it and when.
 
-An install file for the boards installation, `/etc/sluis/install.yaml` (field names are [illustrative](/integrations/#examples-are-illustrative)):
+A part of an install file, `/etc/sluis/install.yaml`, in the keys of [install-file schema v1](/reference/install-file/), which lists every key:
 
 ```yaml
 runtime: bare-metal
-nodes: 3
-public_url: https://sluis.example.com
-
-dependencies:
-  yubikey: { per_node: true }
-  cloudflare: { account: example }
-
+environment: production
+nodes: 1
+front:
+  host: sluis.example.com
+  rp_id: example.com
 drivers:
-  yubikey-piv: { instance: shared }
-
-integrations:
-  github:
-    actor: facts
-    app_key: cred:sluis-int-github.app-key   # a reference, never the key
+  keys: yubikey-piv
+  state: embedded
+upstreams:
+  workforce:
+    kind: oidc
+    issuer: https://idp.example.org
+    client_id: sluis-example
+    client_secret: { credential: idp-client-secret }   # a reference, never the secret
 ```
 
 What `sluis config explain` prints for it:
 
 ```text
-runtime                       = bare-metal                     install   /etc/sluis/install.yaml:1
-public_url                    = https://sluis.example.com      install   /etc/sluis/install.yaml:3
-drivers.yubikey-piv.instance  = shared                         install   /etc/sluis/install.yaml:10
-log.level                     = debug                          environment override   SLUIS_LOG_LEVEL (tunable)
-integrations.github.app_key   = cred:sluis-int-github.app-key  install   (reference, not resolved)
+runtime                                = bare-metal                  install   /etc/sluis/install.yaml:1
+front.host                             = sluis.example.com           install   /etc/sluis/install.yaml:5
+drivers.keys                           = yubikey-piv                 install   /etc/sluis/install.yaml:8
+actors.session.log_level               = debug                       environment override   (tunable)
+upstreams.workforce.client_secret      = credential:idp-client-secret  install   (reference, not resolved)
 ```

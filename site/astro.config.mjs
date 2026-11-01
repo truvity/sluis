@@ -203,6 +203,7 @@ export default defineConfig({
         { label: 'Design principles', slug: 'principles' },
         { label: 'Concepts', items: [{ autogenerate: { directory: 'concepts' } }] },
         { label: 'Architecture', items: [{ autogenerate: { directory: 'architecture' } }] },
+        { label: 'Reference', items: [{ autogenerate: { directory: 'reference' } }] },
         { label: 'Security', items: [{ autogenerate: { directory: 'security' } }] },
         { label: 'Runtimes', items: [{ autogenerate: { directory: 'runtimes' } }] },
         { label: 'Integrations', items: [{ autogenerate: { directory: 'integrations' } }] },

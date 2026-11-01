@@ -16,7 +16,7 @@ The architecture of sluis is described at three zoom levels ([ADR 0002](/decisio
 
 ## The permission manifest is the spine
 
-Every [actor](/concepts/actors/) has one **permission manifest**. It states which record kinds the actor reads and writes, which of its kinds accept operator-set writes, which secrets and keys it may use, which hosts it may reach, which actors may call it, and which actors it calls. The manifest is derived from L1 (the operations on each resource) and L2 (data ownership and the call graph), and it lives in `manifest/` ([ADR 0002](/decisions/0002-the-design-model-actors-ports-drivers-and-contracts/#the-permission-manifest)).
+Every [actor](/concepts/actors/) has one **permission manifest**. It states which record kinds the actor reads and writes, which of its kinds accept operator-set writes, which secrets and keys it may use, which hosts it may reach, which actors may call it, and which actors it calls. The manifest is derived from L1 (the operations on each resource) and L2 (data ownership and the call graph), and it lives in `manifest/` ([ADR 0002](/decisions/0002-the-design-model-actors-ports-drivers-and-contracts/#the-permission-manifest)). Its format and generators are on [Permission manifest](/architecture/manifest/), and the actors it covers are in the [actor registry](/reference/actors/).
 
 Nothing that enforces least privilege is written by hand. The manifest generates it, for every runtime:
 

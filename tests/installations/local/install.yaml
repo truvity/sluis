@@ -1,0 +1,50 @@
+# The local installation: Docker Compose on one workstation, software keys, one node
+# (ADR 0018). Install-file schema v1: https://sluis.id/reference/install-file/
+$schema: https://sluis.id/schema/install/v1/install.schema.json
+runtime: bare-metal
+environment: development
+nodes: 1
+
+front:
+  host: sluis.local.test
+  rp_id: local.test
+
+boundaries:
+  dev:
+    kind: environment
+    level: L2
+    host: sluis.dev.local.test
+    clients:
+      example-app:
+        kind: confidential
+        redirects: [https://app.local.test/callback]
+        secret: { credential: client-example-app }
+        requires: [example-users]
+
+drivers:
+  keys: software
+  state: embedded
+  lease: local-lock
+  blob: fs
+  transport: spool
+  index: sqlite
+
+upstreams:
+  workforce:
+    kind: oidc
+    issuer: https://idp.local.test
+    client_id: sluis-local
+    client_secret: { credential: upstream-workforce }
+
+clients:
+  sluis-cli:
+    kind: public
+    redirects: [http://127.0.0.1/callback]
+  dev:
+    kind: exchange
+
+policy:
+  files: [policy/local.cedar]   # written with the Cedar schema (#1008)
+
+trust:
+  root_list: trust/root-list.json   # from ritueel's software root, at first start

@@ -51,6 +51,7 @@ An id is `REQ-<AREA>-<nnn>`, for example `REQ-AUTHN-002`.
 | `features` | Optional: `parity` (part of v1 parity, no single issue) or `design` (specified, no issue yet). Issue numbers go in `issues`, never here. |
 | `issues` | Optional: the numbers of the truvity/sluis issues that deliver the record, for example `[915]`. Unique positive integers, at least one when present. The issues' Product milestone places the record on the status page. |
 | `tests` | The repository paths of the files that hold the passing tests, for example `[core/authn/authorize_test.go]`. Required when `status` is `done`, optional otherwise. Each path is relative to the repository root, names an existing file, and the file names the record's id. |
+| `actors` | Optional: the actors that implement the record, by their names in the [actor registry](../architecture/actors.yaml), for example `[policy]`. Each must be an actor whose requirement areas include the record's area; `just check-actors` checks it. |
 | `verification` | `{kind, ref}`; `kind` is `conformance-suite`, `test-vectors`, `integration-test` or `manual`. Every MUST needs at least one. |
 | `gap` | Required for an `open` or `partial` record: a key of `gaps` in `index.yaml` that says what is missing. |
 | `manual_reason` | Required for a MUST verified by manual review only; forbidden otherwise. |
