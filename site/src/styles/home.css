@@ -48,46 +48,190 @@
   --h-haze-b: rgb(201 138 0 / 0.12);
 }
 
-/* ---- The hero: Starlight's, left-aligned and set in the serif ---- */
-:root[data-has-hero] .hero {
-  display: block;
-  padding: clamp(1.5rem, 4vw, 3.5rem) 0 0;
-  text-align: start;
-}
-:root[data-has-hero] .hero .stack {
-  align-items: flex-start;
-  text-align: start;
-  gap: 1.75rem;
-}
-:root[data-has-hero] .hero .copy {
-  align-items: flex-start;
-  gap: 1.1rem;
-}
-:root[data-has-hero] .hero .copy > * {
-  max-width: 36ch;
-}
-:root[data-has-hero] .hero h1 {
-  max-width: 17ch;
+/* ---- The page title: one line, in the serif, above the three pains ---- */
+html :is(h1#_top, .sluis-title h1) {
   font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'URW Palladio L', P052, 'Book Antiqua', Georgia, serif;
-  font-size: clamp(2.15rem, 1.1rem + 4.2vw, 4.1rem);
+  font-size: clamp(1.35rem, 1rem + 1.3vw, 2rem);
   font-weight: 600;
-  line-height: 1.06;
-  letter-spacing: -0.012em;
+  line-height: 1.15;
+  letter-spacing: -0.008em;
   text-wrap: balance;
 }
-:root[data-has-hero] .hero .tagline {
-  max-width: 40ch;
-  font-size: clamp(1.05rem, 0.95rem + 0.5vw, 1.3rem);
-  line-height: 1.5;
-  color: var(--sl-color-gray-2);
+/* Starlight pads each content panel by 1.5rem; the pains come first, so the title sits
+   close to them. */
+.content-panel:not(:has(.home)) {
+  padding-block: 1rem 0.5rem;
 }
-:root[data-has-hero] .hero .actions {
-  justify-content: flex-start;
+.content-panel:has(.home) {
+  padding-top: 0.75rem;
+}
+.home-sprite {
+  position: absolute;
+}
+
+/* ---- The first screen: three pains side by side ---- */
+.home .band {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 clamp(1.25rem, 3vw, 2.5rem);
+  margin-top: 1rem;
+}
+.home .band-col {
+  min-width: 0;
+  padding-top: 0.85rem;
+  border-top: 4px solid var(--h-mute);
+}
+.home .band-code {
+  border-top-color: var(--h-amber);
+}
+.home .band-root {
+  border-top-color: var(--h-water);
+}
+.home .band h2 {
+  max-width: none;
+  font-size: clamp(1.25rem, 0.9rem + 0.9vw, 1.6rem);
+  line-height: 1.15;
+}
+.home .band h2 a {
+  color: var(--h-ink);
+  text-decoration: none;
+}
+.home .band h2 a:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+}
+.home .band p {
+  margin: 0.55rem 0 0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--h-mute);
+}
+.home .band-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.85rem;
+}
+.home .band-chip,
+.home .band-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.22rem 0.65rem;
+  border: 1px solid var(--h-line);
+  border-radius: 2rem;
+  background: var(--h-card);
+  font-size: 0.84rem;
+  line-height: 1.35;
+  color: var(--h-mute);
+}
+.home .band-chip b {
+  font-weight: 600;
+  color: var(--h-ink);
+}
+.home .band-chip .mark {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+.home .band-code .band-chip {
+  border-left: 3px solid var(--h-amber);
+  border-radius: 0.6rem;
+}
+.home .band-more {
+  border-style: dashed;
+  background: transparent;
+}
+/* The chain in miniature: three steps, each a little lower than the last. */
+.home .band-chain {
+  margin-top: 0.85rem;
+}
+.home .band-chain li {
+  display: grid;
+  padding: 0.4rem 0.75rem 0.45rem;
+  border: 1px solid var(--h-line);
+  border-radius: 0.6rem;
+  background: var(--h-card);
+  font-size: 0.84rem;
+  line-height: 1.35;
+  color: var(--h-mute);
+}
+.home .band-chain li + li {
+  position: relative;
+  margin-top: 0.7rem;
+}
+.home .band-chain li + li::before {
+  content: '';
+  position: absolute;
+  top: -0.7rem;
+  left: 1.25rem;
+  width: 2px;
+  height: 0.7rem;
+  background: var(--h-water);
+}
+.home .band-chain li:nth-child(2) {
+  margin-left: 0.9rem;
+  border-top: 3px solid var(--h-water);
+}
+.home .band-chain li:nth-child(3) {
+  margin-left: 1.8rem;
+}
+.home .band-chain li:first-child {
+  border-top: 3px solid var(--h-ink);
+}
+.home .band-chain b {
+  font-weight: 600;
+  color: var(--h-ink);
+}
+
+/* The call to action, straight after the pains */
+.home .cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.75rem;
+  margin-top: 1.5rem;
+}
+.home .btn {
+  display: inline-block;
+  padding: 0.5rem 1.1rem;
+  border: 1px solid var(--h-ink);
+  border-radius: 2rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--h-ink);
+  text-decoration: none;
+}
+.home .btn:hover {
+  background: var(--h-surface);
+}
+.home .btn-primary {
+  border-color: var(--sl-color-text-accent);
+  background: var(--sl-color-text-accent);
+  color: var(--sl-color-black);
+}
+.home .btn-primary:hover {
+  background: var(--sl-color-accent-high);
+}
+.home .btn-quiet {
+  border-color: transparent;
+}
+.home .cta p {
+  margin: 0 0 0 0.5rem;
+  font-size: 0.9rem;
+  color: var(--h-mute);
+}
+
+@media (max-width: 60rem) {
+  .home .band {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.4rem;
+  }
 }
 
 /* ---- Sections ---- */
 .home .pain {
   margin-top: clamp(3.5rem, 8vw, 6rem);
+  scroll-margin-top: 5rem;
 }
 .home h2,
 .home h3 {

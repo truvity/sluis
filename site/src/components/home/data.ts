@@ -11,6 +11,8 @@ export interface Chip {
   note: string;
   /** Whether the mark is a brand mark, as opposed to a plain glyph. */
   brand?: boolean;
+  /** The few words under which the first screen shows this chip, when it is one of the heaviest. */
+  band?: string;
 }
 
 // Pain 1: every system has its own place to say who may come in.
@@ -31,12 +33,12 @@ export const fragmented: Chip[] = [
 
 // Pain 2: the setup that should be code is a ceremony in a web console.
 export const ceremonies: Chip[] = [
-  { name: 'GitHub App', mark: 'github', brand: true, note: 'Created in a web form that an owner confirms. There is no API to change its permissions later.' },
-  { name: 'Slack app', note: 'No one-click flow. A configuration token lasts 12 hours, and a new scope means a reinstall.' },
-  { name: 'Cloudflare', mark: 'cloudflare', brand: true, note: 'No STS: no native way to trade an identity for a short-lived, scoped API token. The token that makes tokens is created by hand.' },
-  { name: 'Google Workspace', mark: 'google', brand: true, note: 'Domain-wide delegation is granted by a Super Admin in the console, by client id.' },
+  { name: 'GitHub App', mark: 'github', brand: true, band: 'click-through', note: 'Created in a web form that an owner confirms. There is no API to change its permissions later.' },
+  { name: 'Slack app', band: 'reinstall for a scope', note: 'No one-click flow. A configuration token lasts 12 hours, and a new scope means a reinstall.' },
+  { name: 'Cloudflare', mark: 'cloudflare', brand: true, band: 'no STS', note: 'No STS: no native way to trade an identity for a short-lived, scoped API token. The token that makes tokens is created by hand.' },
+  { name: 'Google Workspace', mark: 'google', brand: true, band: 'delegation by hand', note: 'Domain-wide delegation is granted by a Super Admin in the console, by client id.' },
   { name: 'Google OAuth consent', mark: 'googlecloud', brand: true, note: 'In testing mode, refresh tokens expire after seven days.' },
-  { name: 'AWS IAM', note: 'One OIDC provider per account and a trust policy per role. At most 100 providers per account.' },
+  { name: 'AWS IAM', band: 'a provider per account', note: 'One OIDC provider per account and a trust policy per role. At most 100 providers per account.' },
   { name: 'Team wiki', mark: 'page', note: 'No service accounts: the API key belongs to a person.' },
   { name: 'On-call tool', mark: 'bell', note: 'A key that an administrator creates by hand.' },
   { name: 'Service-account keys', mark: 'key', note: 'Long-lived keys to rotate, or forbidden by policy.' },
@@ -102,3 +104,31 @@ export const principles: { name: string; href: string; who: 'shared' | 'part' | 
   { name: 'One product, many shapes', href: '#10-one-product-many-shapes', who: 'sluis' },
   { name: 'Public by default, private where it protects', href: '#11-public-by-default-private-where-it-protects', who: 'shared' },
 ];
+
+// The first screen: the three pains side by side, each with its one-line headline, a
+// sentence, and the heaviest of its chips. The full clouds and the chain are below it;
+// `target` is the section that holds the whole of each.
+export const band = {
+  sso: {
+    target: '#fragmented',
+    headline: 'SSO stops at each product\u2019s edge',
+    text: 'Cloud consoles, git, chat, CI, databases, Kubernetes and SSH each have their own login setup, and no one product covers them all.',
+    // The names of the chips of `fragmented` shown here; the rest is counted.
+    chips: ['AWS', 'GitHub', 'Slack', 'Kubernetes', 'PostgreSQL', 'SSH hosts'],
+  },
+  code: {
+    target: '#as-code',
+    headline: 'An identity provider is hard to run as code',
+    text: 'The basics cost extra, the setup is fragile, and integrations are click-through ceremonies in a web console.',
+  },
+  root: {
+    target: '#no-root',
+    headline: 'Nothing is secure by design: no root of custody',
+    text: 'Many setups cannot say where the key behind their logins was made, or who could copy it.',
+    chain: [
+      { name: 'ritueel', role: 'the root of custody' },
+      { name: 'sluis', role: 'identity, tokens, certificates, audit' },
+      { name: 'Your systems', role: 'cloud, git, chat, CI, databases, SSH' },
+    ],
+  },
+};
