@@ -7,6 +7,8 @@ max_cache_age = "1d"
 max_retries = 3
 retry_wait_time = 5
 timeout = 30
+# A redirect loop must end in a few hops, not in ten hops of 30 s each, three times over.
+max_redirects = 5
 max_concurrency = 8
 # 429 is a host asking for patience, not a dead link.
 accept = ["200..=204", "429"]
@@ -24,6 +26,11 @@ exclude = [
   # project are merged or created; the site links to them by their final path.
   '^https://github\.com/truvity/sluis/(blob|tree|edit)/',
   '^https://github\.com/orgs/truvity/projects',
+  # www.rfc-editor.org redirects /rfc/rfcNNNN to /info/rfcNNNN/ and that page to itself
+  # (301 in a loop) or answers 502, as of 2026-11-01; with the timeout and the retries
+  # that kept the link check busy for the whole job. The RFC links are references, not
+  # something this site can fix; datatracker.ietf.org serves the same documents.
+  '^https://www\.rfc-editor\.org/',
   # Needs a token or a session.
   '^https://(www\.)?linkedin\.com',
 ]
