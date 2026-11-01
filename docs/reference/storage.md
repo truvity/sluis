@@ -80,7 +80,7 @@ The kinds that the actors of the first working version write. Each has one write
 |---|---|---|---|---|---|
 | `pending-signin` | `session` | issued, ephemeral | when the sign-in times out | no | The state of a sign-in between the authorize request and the upstream callback |
 | `auth-code` | `session` | issued, ephemeral | at most 10 minutes (RFC 6749, section 4.1.2) | no | An authorization code with its PKCE challenge; spent by compare-and-set, so it works once |
-| `session` | `session` | issued, ephemeral | the session's absolute limit ([#998](https://github.com/truvity/sluis/issues/998)) | no | A session, its subject, and the freshness of its authentication per boundary |
+| `session` | `session` | issued, ephemeral | the session's absolute limit ([ADR 0023](/decisions/0023-sessions-have-three-classes-with-limits-per-class/)) | no | A session, its subject, and the freshness of its authentication per boundary |
 | `refresh-token` | `session` | issued, ephemeral | the refresh token's lifetime | no | The hash of a refresh token, its chain and its spent marker |
 | `webauthn-challenge` | `session` | issued, ephemeral | the ceremony's timeout | no | A passkey challenge; spent once |
 | `passkey` | `session` | issued, durable | none | yes | A person's passkey: its public key, credential id hash and sign count |
@@ -88,7 +88,7 @@ The kinds that the actors of the first working version write. Each has one write
 | `issued-certificate` | `ca` | issued, durable | the certificate's expiry | yes | The serial, profile, requester, validity and public-key hash of a certificate |
 | `data-key` | the writer of the kind it serves | issued, durable | none | yes | A data key of one (boundary, kind), wrapped under the sealing key, with its encryption count |
 
-The short lifetimes are defaults in code, written with the actor that owns the kind; token and session lifetimes are policy's ([#999](https://github.com/truvity/sluis/issues/999), [#998](https://github.com/truvity/sluis/issues/998)). `entry`, `console` and `policy` write no record.
+The short lifetimes are defaults in code, written with the actor that owns the kind; token lifetimes are policy's ([#999](https://github.com/truvity/sluis/issues/999)), and session limits are per class ([ADR 0023](/decisions/0023-sessions-have-three-classes-with-limits-per-class/)). `entry`, `console` and `policy` write no record.
 
 ## The state envelope
 
