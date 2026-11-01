@@ -1,0 +1,19 @@
+---
+// What sluis does about the pain above it, and the pages to read next.
+import type { Link } from './data';
+
+interface Props {
+  heading: string;
+  text: string;
+  links: Link[];
+}
+const { heading, text, links } = Astro.props;
+---
+
+<div class="answer">
+  <h3>{heading}</h3>
+  <p>{text}</p>
+  <ul class="answer-links">
+    {links.map((l) => <li><a href={l.href}>{l.text}</a></li>)}
+  </ul>
+</div>

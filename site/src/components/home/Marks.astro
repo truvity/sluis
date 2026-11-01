@@ -1,0 +1,26 @@
+---
+// The one inline SVG sprite of the home page: the brand marks (marks.ts, CC0) and a few
+// plain glyphs drawn here for the chips that have no clean mark. <Mark name="..."/> draws
+// from it with <use>, so each outline is in the page once.
+import { MARKS } from './marks';
+
+const glyphs: Record<string, string> = {
+  terminal: 'M3 5h18v14H3z M7 10l3 2-3 2 M12 15h5',
+  key: 'M12 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0z M12 12h9 M18 12v3 M21 12v2',
+  page: 'M7 3h8l4 4v14H7z M15 3v4h4 M10 12h6 M10 16h6',
+  bell: 'M6 17h12l-1.5-2v-4a4.5 4.5 0 0 0-9 0v4z M10 20a2 2 0 0 0 4 0',
+  tag: 'M3 12V4h8l10 10-8 8z M8 8h.01',
+  drift: 'M4 8h13l-3-3 M20 16H7l3 3',
+  lock: 'M6 11h12v9H6z M8 11V8a4 4 0 0 1 8 0v3',
+  people: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M3 19a6 6 0 0 1 12 0 M17 11a2.5 2.5 0 1 0 0-5 M17 14a5 5 0 0 1 4 5',
+};
+---
+
+<svg class="home-sprite" width="0" height="0" aria-hidden="true" focusable="false">
+  {Object.entries(MARKS).map(([id, m]) => (
+    <symbol id={`m-${id}`} viewBox="0 0 24 24"><path fill="currentColor" d={m.d} /></symbol>
+  ))}
+  {Object.entries(glyphs).map(([id, d]) => (
+    <symbol id={`m-${id}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d={d} /></symbol>
+  ))}
+</svg>

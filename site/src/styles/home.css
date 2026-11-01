@@ -1,0 +1,497 @@
+/* The home page (docs/index.mdx, components in src/components/home/). Imported by the page
+   only, so none of it reaches another page. No font and no image comes from outside: the
+   serif is a system stack, the marks are inline SVG.
+
+   Dark is Starlight's default and light is its [data-theme='light'] override, as in the rest
+   of the site. Every text and chip colour below is checked against the surface it sits on
+   (4.5:1 for text, 3:1 for the borders that carry meaning). */
+
+:root {
+  --sl-color-bg: #0b171b;
+  --sl-color-bg-nav: #0e1d22;
+  --sl-color-accent-low: #0c3a40;
+  --sl-color-accent: #1a8a96;
+  --sl-color-accent-high: #8adce3;
+}
+:root[data-theme='light'] {
+  --sl-color-bg: #f5f8f8;
+  --sl-color-bg-nav: #ffffff;
+  --sl-color-accent-low: #cfe8ea;
+  --sl-color-accent: #0a6f7a;
+  --sl-color-accent-high: #064c54;
+}
+
+.home {
+  --h-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'URW Palladio L', P052, 'Book Antiqua', Georgia, serif;
+  --h-ink: #e8f1f2;
+  --h-mute: #a9bfc3;
+  --h-line: #2f4a51;
+  --h-card: #10242a;
+  --h-surface: #12262c;
+  --h-water: #6fd0d8;
+  --h-water-soft: #11363b;
+  --h-amber: #f0b94f;
+  --h-haze-a: rgb(120 150 160 / 0.16);
+  --h-haze-b: rgb(240 185 79 / 0.13);
+  color: var(--h-ink);
+}
+:root[data-theme='light'] .home {
+  --h-ink: #0f2329;
+  --h-mute: #3f565b;
+  --h-line: #b9cdd0;
+  --h-card: #ffffff;
+  --h-surface: #e8f0f1;
+  --h-water: #0a6670;
+  --h-water-soft: #dcefef;
+  --h-amber: #8f5a00;
+  --h-haze-a: rgb(60 100 115 / 0.1);
+  --h-haze-b: rgb(201 138 0 / 0.12);
+}
+
+/* ---- The hero: Starlight's, left-aligned and set in the serif ---- */
+:root[data-has-hero] .hero {
+  display: block;
+  padding: clamp(1.5rem, 4vw, 3.5rem) 0 0;
+  text-align: start;
+}
+:root[data-has-hero] .hero .stack {
+  align-items: flex-start;
+  text-align: start;
+  gap: 1.75rem;
+}
+:root[data-has-hero] .hero .copy {
+  align-items: flex-start;
+  gap: 1.1rem;
+}
+:root[data-has-hero] .hero .copy > * {
+  max-width: 36ch;
+}
+:root[data-has-hero] .hero h1 {
+  max-width: 17ch;
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'URW Palladio L', P052, 'Book Antiqua', Georgia, serif;
+  font-size: clamp(2.15rem, 1.1rem + 4.2vw, 4.1rem);
+  font-weight: 600;
+  line-height: 1.06;
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+}
+:root[data-has-hero] .hero .tagline {
+  max-width: 40ch;
+  font-size: clamp(1.05rem, 0.95rem + 0.5vw, 1.3rem);
+  line-height: 1.5;
+  color: var(--sl-color-gray-2);
+}
+:root[data-has-hero] .hero .actions {
+  justify-content: flex-start;
+}
+
+/* ---- Sections ---- */
+.home .pain {
+  margin-top: clamp(3.5rem, 8vw, 6rem);
+}
+.home h2,
+.home h3 {
+  font-family: var(--h-serif);
+  color: var(--h-ink);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+}
+.home h2 {
+  max-width: 24ch;
+  margin: 0;
+  font-size: clamp(1.65rem, 1.1rem + 2vw, 2.5rem);
+  line-height: 1.12;
+}
+.home h3 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+.home .lead {
+  max-width: 64ch;
+  margin: 1rem 0 0;
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  color: var(--h-mute);
+}
+.home a {
+  color: var(--h-water);
+  text-underline-offset: 0.2em;
+}
+.home a:hover {
+  text-decoration-thickness: 2px;
+}
+.home :is(a, summary):focus-visible {
+  outline: 3px solid var(--sl-color-accent-high);
+  outline-offset: 3px;
+  border-radius: 0.25rem;
+}
+.home :is(ul, ol) {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* ---- The clouds ---- */
+.home .cloud {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 2rem 1.25rem;
+  margin-top: 1.75rem;
+  padding: 3rem 2rem 2.75rem;
+  border-radius: 4rem;
+  background:
+    radial-gradient(ellipse 34% 62% at 16% 48%, var(--h-haze), transparent 72%),
+    radial-gradient(ellipse 30% 58% at 50% 30%, var(--h-haze), transparent 72%),
+    radial-gradient(ellipse 34% 62% at 84% 56%, var(--h-haze), transparent 72%);
+}
+.home .cloud-small {
+  --h-haze: var(--h-haze-a);
+}
+.home .cloud-wide {
+  --h-haze: var(--h-haze-b);
+}
+.home .chip {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+  padding: 0.7rem 0.9rem 0.8rem;
+  border: 1px solid var(--h-line);
+  border-radius: 0.9rem;
+  background: var(--h-card);
+  transform: translateY(var(--dy)) rotate(var(--r));
+}
+.home .cloud-small .chip {
+  flex: 0 1 var(--w);
+}
+.home .cloud-wide .chip {
+  flex: 0 1 var(--w);
+  border-left: 4px solid var(--h-amber);
+}
+.home .chip-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+.home .chip-head strong {
+  font-size: 0.975rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--h-ink);
+}
+.home .mark {
+  flex: none;
+  width: 1.3rem;
+  height: 1.3rem;
+  color: var(--h-ink);
+}
+.home .chip-note {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--h-mute);
+  overflow-wrap: anywhere;
+}
+.home .cloud-caption {
+  max-width: none;
+  margin: 0.75rem 0 0;
+  font-family: var(--h-serif);
+  font-size: 1rem;
+  font-style: italic;
+  text-align: center;
+  color: var(--h-mute);
+}
+
+/* ---- What sluis does about it, and link pills ---- */
+.home .answer {
+  margin-top: 2rem;
+  padding: 1.25rem clamp(1rem, 3vw, 1.75rem) 1.4rem;
+  border-left: 4px solid var(--h-water);
+  border-radius: 0 0.75rem 0.75rem 0;
+  background: var(--h-water-soft);
+}
+.home .answer p {
+  max-width: 72ch;
+  margin: 0.6rem 0 0;
+  line-height: 1.6;
+  color: var(--h-ink);
+}
+.home .answer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 1rem;
+}
+.home .answer-links a {
+  display: inline-block;
+  padding: 0.2rem 0.8rem;
+  border: 1px solid var(--h-water);
+  border-radius: 2rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  text-decoration: none;
+}
+.home .answer-links a:hover {
+  background: var(--h-water);
+  color: var(--sl-color-bg);
+}
+
+/* ---- The chain: root, sluis, your systems. The links step down like lock chambers ---- */
+.home .chain {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3.5rem minmax(0, 1.35fr) 3.5rem minmax(0, 1fr);
+  align-items: start;
+  margin-top: 2.25rem;
+}
+.home .link {
+  position: relative;
+  padding: 1.1rem 1.2rem 1.3rem;
+  border: 1px solid var(--h-line);
+  border-top-width: 5px;
+  border-radius: 0.75rem;
+  background: var(--h-card);
+}
+.home .link p {
+  margin: 0.55rem 0 0;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--h-mute);
+}
+.home .link .role {
+  margin-top: 0.2rem;
+  font-weight: 600;
+  color: var(--h-ink);
+}
+.home .link-root {
+  border-top-color: var(--h-ink);
+}
+.home .link-sluis {
+  margin-top: 2.5rem;
+  border-top-color: var(--h-water);
+}
+.home .link-systems {
+  margin-top: 5rem;
+}
+.home .link-more {
+  font-weight: 600;
+}
+.home .step {
+  width: 3.5rem;
+  height: 4.25rem;
+  overflow: visible;
+  fill: none;
+  stroke: var(--h-water);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.home .step-1 {
+  margin-top: 1.25rem;
+}
+.home .step-2 {
+  margin-top: 3.75rem;
+}
+.home .secure {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.8rem;
+}
+.home .secure a {
+  display: inline-block;
+  padding: 0.15rem 0.7rem;
+  border: 1px solid var(--h-water);
+  border-radius: 2rem;
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+.home .secure a:hover {
+  background: var(--h-water);
+  color: var(--sl-color-bg);
+}
+.home .marks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6.75rem, 1fr));
+  gap: 0.55rem 0.5rem;
+  margin-top: 0.9rem;
+}
+.home .marks li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--h-ink);
+}
+.home .rollout {
+  margin-top: 2.25rem;
+  padding: 1.1rem clamp(1rem, 3vw, 1.75rem) 1.3rem;
+  border-radius: 0.75rem;
+  background: var(--h-surface);
+}
+.home .rollout p {
+  max-width: 64ch;
+  margin: 0.4rem 0 0;
+  color: var(--h-mute);
+}
+
+@media (max-width: 60rem) {
+  .home .chain {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2.25rem;
+  }
+  .home .step {
+    display: none;
+  }
+  .home .link-sluis,
+  .home .link-systems {
+    margin-top: 0;
+  }
+  /* A downward arrow from each link to the next. */
+  .home .link-root::after,
+  .home .link-sluis::after {
+    content: '';
+    position: absolute;
+    left: 1.6rem;
+    bottom: -2.25rem;
+    width: 2px;
+    height: 2.25rem;
+    background: var(--h-water);
+  }
+  .home .link-root::before,
+  .home .link-sluis::before {
+    content: '';
+    position: absolute;
+    left: calc(1.6rem - 5px);
+    bottom: -2.25rem;
+    width: 12px;
+    height: 12px;
+    border-right: 2px solid var(--h-water);
+    border-bottom: 2px solid var(--h-water);
+    transform: rotate(45deg) translate(-2px, -2px);
+    transform-origin: center;
+  }
+}
+
+/* ---- Principles ---- */
+.home .principle-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 3rem;
+  margin-top: 1.75rem;
+  counter-reset: principle;
+}
+.home .principle-list li {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0 0.5rem;
+  padding: 0.7rem 0;
+  border-top: 1px solid var(--h-line);
+  counter-increment: principle;
+}
+.home .principle-list li::before {
+  content: counter(principle);
+  font-family: var(--h-serif);
+  font-size: 1.25rem;
+  color: var(--h-mute);
+}
+.home .principle-list a {
+  font-size: 1rem;
+  line-height: 1.4;
+}
+.home .who {
+  grid-column: 2;
+  font-size: 0.8125rem;
+  color: var(--h-mute);
+}
+.home .who[data-who='sluis'] {
+  color: var(--h-amber);
+}
+
+/* ---- Status ---- */
+.home .verdict {
+  max-width: 28ch;
+  margin: 0.9rem 0 0;
+  font-family: var(--h-serif);
+  font-size: clamp(1.4rem, 1rem + 1.4vw, 2rem);
+  line-height: 1.2;
+  color: var(--h-ink);
+}
+.home .figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 1rem 0;
+  margin: 1.75rem 0 0;
+}
+.home .figures > div {
+  padding: 0 1rem;
+  border-left: 2px solid var(--h-line);
+}
+.home .figures dt {
+  font-size: 0.8125rem;
+  color: var(--h-mute);
+}
+.home .figures dd {
+  margin: 0.2rem 0 0;
+  font-family: var(--h-serif);
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  color: var(--h-ink);
+  overflow-wrap: anywhere;
+}
+.home .status-note {
+  max-width: 72ch;
+  margin: 1rem 0 0;
+  font-size: 0.875rem;
+  color: var(--h-mute);
+}
+.home .status .answer-links {
+  margin-top: 1.25rem;
+}
+
+/* ---- Phones: the clouds become grids, the principles one column ---- */
+@media (max-width: 48rem) {
+  .home .cloud {
+    display: grid;
+    gap: 0.6rem;
+    padding: 1rem 0.5rem;
+    border-radius: 1.75rem;
+  }
+  .home .cloud-small {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.25rem), 1fr));
+  }
+  .home .cloud-wide {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  }
+  .home .chip {
+    transform: none;
+  }
+  .home .principle-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The steps between the links draw themselves as they scroll into view, where the browser
+   can tie an animation to scrolling. Everywhere else, and with reduced motion, they are
+   simply there. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .home .step path:not(.head) {
+      stroke-dasharray: 90;
+      stroke-dashoffset: 90;
+      animation: home-flow linear both;
+      animation-timeline: view();
+      animation-range: entry 10% cover 40%;
+    }
+    @keyframes home-flow {
+      to {
+        stroke-dashoffset: 0;
+      }
+    }
+  }
+}

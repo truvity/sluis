@@ -1,0 +1,75 @@
+---
+// Pain 3 and its answer as a chain: ritueel (the root of custody), then sluis, then the
+// systems that rely on it. The nodes step down like the chambers of a canal lock; on a
+// phone they stack and the arrows point down.
+import Mark from './Mark.astro';
+import { secure } from './data';
+
+const systems = [
+  ['aws', 'AWS'],
+  ['github', 'GitHub'],
+  ['slack', 'Slack'],
+  ['cloudflare', 'Cloudflare'],
+  ['kubernetes', 'Kubernetes'],
+  ['postgresql', 'PostgreSQL'],
+  ['terminal', 'SSH'],
+];
+---
+
+<section class="pain" aria-labelledby="no-root">
+  <h2 id="no-root">Most setups have no root of custody</h2>
+  <p class="lead">
+    Ask where the key behind your logins was made, who could copy it, and what record shows how it was used.
+    Many setups cannot answer. sluis starts from an answer: a chain from a root you can account for to every
+    system that relies on it.
+  </p>
+
+  <div class="chain">
+    <div class="link link-root">
+      <h3>ritueel</h3>
+      <p class="role">The root of custody</p>
+      <p>
+        Establishes the root: made on a card or in a key service, kept offline, used only in a ceremony that a
+        person attends. It signs sluis's intermediates. sluis never makes a root.
+      </p>
+      <p class="link-more"><a href="https://ritueel.id">Start at ritueel.id</a></p>
+    </div>
+
+    <svg class="step step-1" viewBox="0 0 56 68" aria-hidden="true" focusable="false">
+      <path d="M2 14H28V54H48" /><path class="head" d="M42 48l7 6-7 6" />
+    </svg>
+
+    <div class="link link-sluis">
+      <h3>sluis</h3>
+      <p class="role">Identity, tokens, certificates, audit</p>
+      <p>Holds intermediates only, and is built so that these stay true:</p>
+      <ul class="secure">
+        {secure.map((s) => <li><a href={s.href}>{s.name}</a></li>)}
+      </ul>
+    </div>
+
+    <svg class="step step-2" viewBox="0 0 56 68" aria-hidden="true" focusable="false">
+      <path d="M2 14H28V54H48" /><path class="head" d="M42 48l7 6-7 6" />
+    </svg>
+
+    <div class="link link-systems">
+      <h3>Your systems</h3>
+      <p class="role">Cloud, git, chat, CI, databases, Kubernetes, SSH</p>
+      <p>They trust sluis's issuer and keep no long-lived secret of their own.</p>
+      <ul class="marks">
+        {systems.map(([m, name]) => <li><Mark name={m} /><span>{name}</span></li>)}
+      </ul>
+    </div>
+  </div>
+
+  <div class="rollout">
+    <h3>Then the rollout</h3>
+    <p>Procedures to install, connect and check, from the root ceremony to the last integration.</p>
+    <ul class="answer-links">
+      <li><a href="https://ritueel.id/guides/">Root ceremonies</a></li>
+      <li><a href="/tutorials/single-node-install/">Install on a board</a></li>
+      <li><a href="/runtimes/installations/">The four installations</a></li>
+      <li><a href="/integrations/connecting/">Connect an integration</a></li>
+    </ul>
+  </div>
+</section>
