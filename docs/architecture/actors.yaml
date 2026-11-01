@@ -193,7 +193,7 @@ actors:
     requirement_areas: [AUDIT]
     standards: [ST-71, ST-72, ST-73, ST-75, ST-114]
     label: actor:writer
-    issues: [837, 838]
+    issues: [837, 838, 1121]
 
   - name: witness
     group: audit
@@ -222,7 +222,7 @@ actors:
     requirement_areas: [AUDIT]
     standards: [ST-72, ST-75]
     label: actor:indexer
-    issues: [839]
+    issues: [839, 1122]
 
   - name: reader
     group: audit
@@ -236,7 +236,7 @@ actors:
     requirement_areas: [AUDIT]
     standards: [ST-114]
     label: actor:reader
-    issues: [839, 985]
+    issues: [839, 985, 1122]
 
   # ---- platform (ADR 0003, "The other actors are named elsewhere")
   - name: key-holder

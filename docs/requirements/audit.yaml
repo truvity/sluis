@@ -1617,7 +1617,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-114, section: "authentication", depth: Partial}
-    issues: [1120]
+    issues: [841]
     verification:
       - {kind: integration-test, ref: "step-up record test"}
   - id: REQ-AUDIT-123
