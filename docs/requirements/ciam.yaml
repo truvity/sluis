@@ -240,6 +240,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-28, section: "5", depth: Partial}
-    issues: [1023, 1000]
+    issues: [1023, 795]
     verification:
       - {kind: integration-test, ref: "administrative catalogue and storage schema negative test: no account record and no end-user password store"}

@@ -91,7 +91,7 @@ sequenceDiagram
   participant S as AWS STS
   participant B as Issuer bucket
   participant A as S3
-  D->>N: token for aws-<account-alias>
+  D->>N: token for aws:<account>:<role>
   N->>N: uid to actor, sign
   N-->>D: workload JWT
   D->>S: AssumeRoleWithWebIdentity
@@ -100,7 +100,7 @@ sequenceDiagram
   D->>A: write
 ```
 
-The driver, under the actor's own uid, asks for a token whose audience is the account's registered client id (`aws-<account-alias>`, never `sts.amazonaws.com`). `sluis-node` signs it with ES384: `iss=https://sluis.prod.example.com`, `sub=writer@prod`, `iat`, `exp`. STS checks the signature, `iss`, `aud` and `sub` against the role's trust policy and returns temporary credentials. The driver never holds a key, and the trust policy names this actor's `sub`, so the token is refused for every other actor. The signing cost per actor per hour is small next to a card's signing rate ([Board capacity](/runtimes/bare-metal/#board-capacity)).
+The driver, under the actor's own uid, asks for a token whose audience is the role's registered client id (`aws:<account>:<role>`, with the account's declared name, never `sts.amazonaws.com`). `sluis-node` signs it with ES384: `iss=https://sluis.prod.example.com`, `sub=writer@prod`, `iat`, `exp`. STS checks the signature, `iss`, `aud` and `sub` against the role's trust policy and returns temporary credentials. The driver never holds a key, and the trust policy names this actor's `sub`, so the token is refused for every other actor. The signing cost per actor per hour is small next to a card's signing rate ([Board capacity](/runtimes/bare-metal/#board-capacity)).
 
 **No local credential helper.** The AWS signing helper (`aws_signing_helper serve`) exposes credentials on a local port that every process on the node can read, so sluis does not use it. IAM Roles Anywhere is AWS-only; the design above serves all three clouds.
 

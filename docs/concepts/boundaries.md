@@ -100,7 +100,7 @@ Each environment has its own issuer, and so does a product boundary. Companies h
 | grants | Only that boundary's grants |
 | `org` | The person's company |
 
-Client ids are unique per issuer, readable, and the same in every environment (`kubernetes`, `argocd`, `aws-<account-alias>`); each AWS account's OIDC provider uses its own, not `sts.amazonaws.com`. Every relying party pins `iss` and `aud`.
+Client ids are unique per issuer, readable, and the same in every environment (`kubernetes`, `argocd`); an AWS role is a client of its own, `aws:<account>:<role>` with the account's declared name, and its account's OIDC provider lists it, never `sts.amazonaws.com` ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#audiences)). Every relying party pins `iss` and `aud`.
 
 ## The reference federation
 

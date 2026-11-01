@@ -574,3 +574,94 @@ requirements:
     issues: [914]
     verification:
       - {kind: integration-test, ref: "a slot map without ssh-user and ssh-host slots for an installation that enables neither; accepted"}
+  - id: REQ-PKI-043
+    area: PKI
+    statement: "A workload X.509-SVID MUST carry exactly one URI SAN, the workload's SPIFFE ID."
+    rationale: "SPIFFE verifiers read the identity from that one name (ADR 0021)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-109, section: "2", depth: Partial}
+    issues: [913]
+    verification:
+      - {kind: integration-test, ref: "workload SVID profile test: one URI SAN, empty subject"}
+  - id: REQ-PKI-044
+    area: PKI
+    statement: "The certificate authority actor MUST refuse to issue a leaf certificate whose names fall outside its intermediate's permitted subtrees."
+    rationale: "A mistake is a refusal at the issuer, not a certificate that verifiers reject later (ADR 0021)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "4.2.1.10", depth: Partial}
+    issues: [913]
+    verification:
+      - {kind: integration-test, ref: "a request for a DNS name outside the boundary's zones; refused before signing"}
+  - id: REQ-PKI-045
+    area: PKI
+    statement: "An intermediate request MUST carry critical name constraints that permit only the boundary's trust domain and its declared DNS zones."
+    rationale: "An intermediate of one environment must not vouch for another environment's names (ADR 0021)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "4.2.1.10", depth: Partial}
+    issues: [1066]
+    verification:
+      - {kind: integration-test, ref: "key request name-constraints test against the hand-off vectors"}
+  - id: REQ-PKI-046
+    area: PKI
+    statement: "An intermediate request MUST exclude every IP address range when the boundary declares none."
+    rationale: "Without an IP subtree RFC 5280 leaves IP addresses unconstrained (ADR 0021)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "4.2.1.10", depth: Partial}
+    issues: [1066]
+    verification:
+      - {kind: integration-test, ref: "key request without declared ranges; excluded 0.0.0.0/0 and ::/0 present"}
+  - id: REQ-PKI-047
+    area: PKI
+    statement: "The certificate authority actor MUST refuse a leaf lifetime above its profile's maximum."
+    rationale: "Short leaves are the revocation control that works for every relying party (ADR 0021)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "4.1.2.5", depth: Partial}
+    issues: [913]
+    verification:
+      - {kind: integration-test, ref: "a request for a lifetime above the profile maximum; refused"}
+  - id: REQ-PKI-048
+    area: PKI
+    statement: "sluis MUST re-sign each intermediate's certificate revocation list at least every 24 hours."
+    rationale: "A relying party that configures the list needs a fresh one (ADR 0021)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "5", depth: Partial}
+    issues: [913]
+    verification:
+      - {kind: integration-test, ref: "CRL cadence test with a moved clock"}
+  - id: REQ-PKI-049
+    area: PKI
+    statement: "A published certificate revocation list MUST carry a nextUpdate no later than seven days after its thisUpdate."
+    rationale: "A relying party that misses a day of fetches keeps a valid list (ADR 0021)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "5.1.2.5", depth: Partial}
+    issues: [913]
+    verification:
+      - {kind: integration-test, ref: "CRL nextUpdate test"}

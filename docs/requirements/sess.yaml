@@ -64,7 +64,7 @@ requirements:
   - id: REQ-SESS-015
     area: SESS
     split_from: REQ-SESS-002
-    statement: "A refresh token MUST end at sign-out, at the idle limit and at the absolute limit."
+    statement: "A refresh token of a human session MUST end at sign-out, at the idle limit and at the absolute limit."
     rationale: "A session limit that tokens can outlive is no limit."
     level: MUST
     source: v1-parity
@@ -345,3 +345,133 @@ requirements:
     issues: [793]
     verification:
       - {kind: integration-test, ref: "disabled person session end test"}
+  - id: REQ-SESS-025
+    area: SESS
+    statement: "Every session MUST have a class, human or agent, that is fixed when the session is created."
+    rationale: "The classes differ in their limits and in what ends them (ADR 0023)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    issues: [959]
+    verification:
+      - {kind: integration-test, ref: "session class test: the class never changes on refresh"}
+  - id: REQ-SESS-026
+    area: SESS
+    statement: "sluis MUST NOT issue a refresh token for a client-credentials grant or a workload exchange."
+    rationale: "A machine client has no session; it presents its credential again (ADR 0023)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-01, section: "4.4", depth: Partial}
+    issues: [961]
+    verification:
+      - {kind: integration-test, ref: "client credentials and workload exchange return no refresh token"}
+  - id: REQ-SESS-027
+    area: SESS
+    statement: "A human session MUST end at its absolute limit from auth_time, whatever its activity."
+    rationale: "Use must not extend a person's sign-in (v1 ADR 0001, ADR 0023)."
+    level: MUST
+    source: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    issues: [793]
+    verification:
+      - {kind: integration-test, ref: "absolute limit test with a moved clock and steady refreshes"}
+  - id: REQ-SESS-028
+    area: SESS
+    statement: "A step-up re-authentication MUST NOT extend a session's absolute limit."
+    rationale: "Step-up refreshes freshness, not the sign-in (ADR 0023)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    issues: [885]
+    verification:
+      - {kind: integration-test, ref: "step-up then refresh past the original limit; refused"}
+  - id: REQ-SESS-029
+    area: SESS
+    statement: "A person's sign-out MUST NOT end that person's agent sessions."
+    rationale: "A background agent must not break silently when its person closes a browser (ADR 0023)."
+    level: MUST
+    source: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    issues: [794, 822]
+    verification:
+      - {kind: integration-test, ref: "sign-out leaves agent sessions live"}
+  - id: REQ-SESS-030
+    area: SESS
+    statement: "Revoking a consent MUST end at once every agent session that the consent started."
+    rationale: "An agent acts only while its person allows it (ADR 0023)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    issues: [794, 822]
+    verification:
+      - {kind: integration-test, ref: "consent revocation ends agent sessions"}
+  - id: REQ-SESS-031
+    area: SESS
+    statement: "An agent session MUST NOT outlive the absolute lifetime of the consent that started it."
+    rationale: "An agent's lifetime is bounded by its consent (ADR 0023)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    issues: [794, 822]
+    verification:
+      - {kind: integration-test, ref: "agent session past the consent lifetime; refresh refused"}
+  - id: REQ-SESS-032
+    area: SESS
+    statement: "sluis MUST refuse a new agent session past the cap of concurrent agent sessions for that person and client."
+    rationale: "A client that starts a session on every run must not pile up live grants (ADR 0023)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    issues: [794, 822]
+    verification:
+      - {kind: integration-test, ref: "agent session cap test"}
+  - id: REQ-SESS-033
+    area: SESS
+    statement: "A boundary MUST NOT extend a session beyond the absolute limit of the session that seeded it."
+    rationale: "A limit at one boundary is worthless if another can extend it (ADR 0023)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    issues: [959, 963]
+    verification:
+      - {kind: integration-test, ref: "exchange into a boundary near the front's limit; the boundary session ends with it"}
+  - id: REQ-SESS-034
+    area: SESS
+    statement: "sluis MUST let a person list and revoke each of their agent sessions."
+    rationale: "A person must see what acts on their behalf (ADR 0023)."
+    level: MUST
+    source: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    issues: [794, 822]
+    verification:
+      - {kind: integration-test, ref: "agent session listing and revocation by the person"}

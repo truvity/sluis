@@ -30,7 +30,7 @@ v1's audit volume, measured in October 2026, is about 2.4 records a second at pe
 - **The stored record is lean:** enum ids without captions (`activity_name` only for activity 99 or where the table names one), no `observables`, enrichments or `raw_data`, and no `unmapped` but `unmapped.sluis`.
 - **A record validates in three places.** The writer enforces the JSON Schema 2020-12 generated from the action table (the pinned OCSF schema, `unmapped.sluis` and sluis's rules: no names, e-mail addresses or phone numbers, no floating point, bounded text), and is authoritative. Go and Rust emitters validate before they emit; a browser emitter does not. The pre-1.0 OCSF toolkit runs in CI only, on the table's example records, and one set of test vectors runs through the Go, Rust and TypeScript validators. The schema is one shared definitions document with a slim schema per action.
 - **A record never carries a secret, an e-mail address, a name or a token** (REQ-AUDIT-003, REQ-AUDIT-037); a secret appears as a fingerprint and a revision.
-- **A record may point at a trace; the trace never carries what the record says.** Telemetry is OTLP configured by `OTEL_*` ([0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/)).
+- **A record may point at a trace; the trace never carries what the record says.** Telemetry is OTLP configured by `OTEL_*` ([0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/)), and the record carries the trace id in `metadata.correlation_uid` ([0022](/decisions/0022-telemetry-is-opentelemetry-with-fixed-conventions/#pointing-from-audit-to-a-trace)).
 
 ### The sluis fields: `unmapped.sluis`
 
@@ -177,5 +177,4 @@ Checked against OCSF 1.9.0 on 2026-11-01.
 - Emitter, action table and metering: [#841](https://github.com/truvity/sluis/issues/841).
 - Quota service, its contract and the finance export: [#915](https://github.com/truvity/sluis/issues/915).
 - A conditional counter adjust on the state port, if the load test shows contention on balances: [#1009](https://github.com/truvity/sluis/issues/1009).
-- Telemetry details: [#1003](https://github.com/truvity/sluis/issues/1003).
 - The quota installation's front: [#1026](https://github.com/truvity/sluis/issues/1026).

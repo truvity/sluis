@@ -31,7 +31,7 @@ Forces:
 ### X.509
 
 - **`ca` issues every leaf from the boundary's one intermediate.** The trust domain is the boundary ([0007](/decisions/0007-workload-identity-and-host-enrolment/#trust-domains)), so there is one intermediate per trust domain and no intermediate per use. Uses are kept apart by certificate profiles: each profile fixes the key usages, the extended key usage and a subject or SAN form that no other profile can produce, and an intermediate carries name constraints where its relying parties need them. The profile of the intermediate itself is in ritueel's hand-off contract.
-- **The leaf profiles are:** the host X.509-SVID, the workload X.509-SVID, sluis's own mutual-TLS certificates, the database client certificate (below), and the certificates cert-manager requests. The token-signing certificate is a non-CA profile of [0012](/decisions/0012-cryptography-and-authority-keys/#the-token-signing-key). Leaf lifetimes and the revocation cadence are out of scope here ([#1073](https://github.com/truvity/sluis/issues/1073)).
+- **The leaf profiles are:** the host X.509-SVID, the workload X.509-SVID, sluis's own mutual-TLS certificates, the database client certificate (below), and the certificates cert-manager requests. The token-signing certificate is a non-CA profile of [0012](/decisions/0012-cryptography-and-authority-keys/#the-token-signing-key). Each profile's fields, the leaf lifetimes, the intermediates' name constraints and the CRL cadence are [0021](/decisions/0021-leaf-certificate-profiles-lifetimes-and-revocation/).
 - **Clusters keep cert-manager and trust-manager.** `ca` signs for cert-manager through an external issuer, shipped as its own chart; the issuer accepts a CSR with an empty subject and takes the identity from the requester. sluis writes no Kubernetes object.
 - **ACME (RFC 8555) comes after the first release** ([#978](https://github.com/truvity/sluis/issues/978)). Until then a host sends a CSR to `ca`'s issue call, through the enrolment API or the certificate module of `sluis-host`.
 
@@ -102,5 +102,4 @@ Forces:
 ## Follow-ups
 
 - ACME in `ca`, after the first release: [#978](https://github.com/truvity/sluis/issues/978).
-- Leaf profiles' lifetimes and the revocation cadence: [#1073](https://github.com/truvity/sluis/issues/1073).
 - Merkle Tree Certificates (`mtc-tlog`) on the post-quantum track: Later, [#1029](https://github.com/truvity/sluis/issues/1029).

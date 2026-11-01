@@ -28,20 +28,21 @@ Tokens are standard JWS and JWT, signed by the token-signing keys of [0012](/dec
 - **Company boundaries have no issuer.** They hold no authority key; the company is the claim `org` and a policy scope.
 - **Each issuer has its own host, one host is one origin, and the issuer URL has no path.** The group issuer is `https://sluis.example.com`; a boundary issuer is `https://sluis.<env>.example.com`. A test installation lives outside these names.
 - **Discovery and the JWKS are static documents**, one set per issuer, in a bucket of that boundary, so a relying party verifies tokens while the issuer's compute is down. The JWKS lists every active token key, each with its `x5c` chain; a next key appears only while a rotation is in progress ([0012](/decisions/0012-cryptography-and-authority-keys/#rotation)).
-- **Lifetimes are set per issuer.**
+- **Lifetimes are set per issuer,** under the session classes of [0023](/decisions/0023-sessions-have-three-classes-with-limits-per-class/).
 
 ### Audiences
 
 - **`iss` is the issuer URL. `aud` is exactly one registered `client_id`, never a URL.**
 - **A resource indicator (RFC 8707 `resource=`) selects a registered client.** It is never copied into `aud`.
 - **Between actors of different boundaries, `aud` is the target's SPIFFE ID**, and the call runs over mutual TLS ([0007](/decisions/0007-workload-identity-and-host-enrolment/#spiffe-identities)).
-- **Client IDs are unique per issuer and readable, with the same name in every environment**, such as `kubernetes`, `argocd` or `aws-<account-alias>`. Each AWS account's IAM OIDC provider uses its own client ID.
+- **Client IDs are unique per issuer and readable, with the same name in every environment**, such as `kubernetes` or `argocd`. A client ID names the relying party that accepts the token.
+- **An AWS role is a relying party, so each role is a client:** `aws:<account>:<role>`, where `<account>` is the account's name as the install file declares it (for example `aws:example-prod:deployer`), never the account number. The role's trust policy pins that `aud`, so which person or workload may assume which role is decided by sluis's policy and carried in the token, and AWS holds no per-person statement. Each account's IAM OIDC provider lists the client IDs of its roles.
 - **A token exchange into a boundary uses that boundary's client ID at the group issuer.**
 - **Every relying party pins both `iss` and `aud`.** sluis prints reference configuration for each kind of relying party, and the infrastructure code applies it.
 
 ### Subjects
 
-- **`sub` is an opaque random ID, the same at every issuer.** sluis assigns it when it first sees a person from a directory, so it is known before the first sign-in. It is never an e-mail address or a directory account name.
+- **`sub` is an opaque random ID, the same at every issuer.** sluis assigns it when it first sees a person: at a directory read where the upstream has a directory, so it is known before the first sign-in, and otherwise at the person's first sign-in. The first working version signs people in through the generic OpenID Connect upstream, sign-in only, so its subjects are assigned at first sign-in ([#1106](https://github.com/truvity/sluis/issues/1106)); directory sync, and with it the subject before the first sign-in, comes in the parity milestone ([#805](https://github.com/truvity/sluis/issues/805)). It is never an e-mail address or a directory account name.
 - **The directory account and `email` are claims of their own.** Tokens carry `acr`, `amr` and `auth_time`, and `cnf.jkt` when bound to a DPoP key.
 - **A token carries only the grants of its own boundary.** Grants are names declared per audience, continuing v1 ADR 0010; the claim vocabulary itself is out of scope here ([#999](https://github.com/truvity/sluis/issues/999)).
 - **Workload tokens come from the same issuer.** A JWT-SVID has the boundary's URL as `iss` and the workload's `spiffe://` ID as `sub` ([0007](/decisions/0007-workload-identity-and-host-enrolment/#spiffe-identities)).
@@ -54,7 +55,7 @@ Tokens are standard JWS and JWT, signed by the token-signing keys of [0012](/dec
 - **The relying-party ID is the registrable parent domain**, `example.com`, because the boundary hosts are siblings of the group host. One passkey then works on every sluis host.
 - **Every verifier keeps a strict allow-list of origins:** the group host and the boundary hosts, nothing else. An assertion from any other origin under the parent domain is refused.
 - **Passkeys are tested from outside the product:** a browser's virtual authenticator and a software authenticator library drive the released binary. There is no test code in sluis.
-- **Break-glass recovery uses passkeys only**: two attested hardware keys and one pinned synced passkey, recovery scope only ([REQ-AUTHN-066](/requirements/authn/#REQ-AUTHN-066) to [REQ-AUTHN-073](/requirements/authn/#REQ-AUTHN-073)); its detail is [#1000](https://github.com/truvity/sluis/issues/1000).
+- **Break-glass recovery uses passkeys only**: two attested hardware keys and one pinned synced passkey, recovery scope only ([REQ-AUTHN-066](/requirements/authn/#REQ-AUTHN-066) to [REQ-AUTHN-073](/requirements/authn/#REQ-AUTHN-073)); its record is [0024](/decisions/0024-break-glass-recovery-uses-passkeys-only/). Session classes and limits are [0023](/decisions/0023-sessions-have-three-classes-with-limits-per-class/).
 
 ### Step-up
 
@@ -86,7 +87,7 @@ sluis claims a conformance plan only when it passes, and discovery says only wha
 
 - A signer compromise stays in its environment: each relying party pins its own environment's issuer, so a development key cannot mint a production token.
 - Five issuers mean five key sets and five sets of static documents to publish and rotate, and a DNS name and TLS certificate per host.
-- A token is useful to exactly one relying party, and a token for one AWS account is refused by another's provider. The cost is a client registration per relying party per environment.
+- A token is useful to exactly one relying party, and a token for one AWS role is refused by every other role, in that account or another. The cost is a client registration per relying party per environment.
 - The CLI keeps a token per issuer under one sign-in. An outage of the front stops new sign-ins; tokens already issued keep verifying against the static JWKS.
 - `sub` links one person across issuers without exposing an e-mail address, and does not change when the person is renamed.
 - The broad passkey relying-party ID means any page under the parent domain could ask a browser for an assertion; the origin allow-list is therefore a security control and is tested as one. Moving sluis to another parent domain means new passkeys.
@@ -103,6 +104,8 @@ sluis claims a conformance plan only when it passes, and discovery says only wha
 - **Boundary hosts under the group host (`prod.sluis.example.com`).** It would narrow the passkey relying-party ID, but breaks the per-environment naming the rest of each environment uses.
 - **An issuer per company.** Applications shared by every company would break, and it does not stop a development key from minting production tokens.
 - **`aud` as a URL, several audiences, or `sts.amazonaws.com` for AWS.** Each lets a token for one party be replayed to another.
+- **One AWS client per account (`aws-<account-alias>`).** A token for the account would then be accepted by every role that trusts the provider, so each role's trust policy would need per-person or per-group conditions.
+- **The account number in the AWS client ID.** It names the account by a number nobody reads, and puts the number in every token and log line.
 - **`sub` as the e-mail address or directory account.** Readable, but it changes on rename and puts personal data into every log line.
 - **Upstream multi-factor authentication only, or checked once at the front.** Slow, and a compromised front could claim a fresh factor in every boundary.
 - **A relying-party ID per host.** A person would register a passkey for every environment.
@@ -111,8 +114,7 @@ sluis claims a conformance plan only when it passes, and discovery says only wha
 ## Follow-ups
 
 - Claim vocabulary per audience: [#999](https://github.com/truvity/sluis/issues/999).
-- Session absolute limit: [#998](https://github.com/truvity/sluis/issues/998).
-- Break-glass recovery with passkeys only: [#1000](https://github.com/truvity/sluis/issues/1000).
+- The generic OpenID Connect upstream for the first working version: [#1106](https://github.com/truvity/sluis/issues/1106); directory sync and subjects before the first sign-in: [#805](https://github.com/truvity/sluis/issues/805).
 - End-user subject lifecycle and pairwise subjects: [#1024](https://github.com/truvity/sluis/issues/1024).
 - FAPI 2 profile, after the parity milestone: [#1025](https://github.com/truvity/sluis/issues/1025).
 - Device login: [#855](https://github.com/truvity/sluis/issues/855).
