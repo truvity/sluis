@@ -1,6 +1,6 @@
 ---
 title: Keys
-description: "Which key backs which purpose: key modes, topologies, the key rule, touch and PIN policy, algorithms, KMS and YubiKey layouts, and how an intermediate is certified."
+description: "Which key backs which purpose: key modes, topologies, the key rule, touch and PIN, algorithms, KMS and YubiKey layouts, and certifying an intermediate."
 status: target
 sidebar:
   order: 4
