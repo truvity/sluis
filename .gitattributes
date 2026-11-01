@@ -7,7 +7,7 @@
 # Binary assets live in Git LFS.
 # Keep LFS to documentation and site assets: Go module downloads do not
 # resolve LFS objects, so nothing that code embeds or ships may be in LFS.
-# The Pages workflow must check out with `lfs: true`.
+# The Site workflow must check out with `lfs: true`.
 *.png  filter=lfs diff=lfs merge=lfs -text
 *.jpg  filter=lfs diff=lfs merge=lfs -text
 *.jpeg filter=lfs diff=lfs merge=lfs -text

@@ -18,8 +18,9 @@
 # SHA-256), and the JSON schemas published at the path their $id says.
 #
 # The schemas are also copied to /schemas/ at the root of the site: their $id
-# names `https://truvity.github.io/sluis/schemas/...`, which redirects to the
-# same path on the custom domain once it is set, so the root path must resolve.
+# names `https://truvity.github.io/sluis/schemas/...`. GitHub redirected that to the
+# same path on the custom domain while GitHub Pages served the site (off since
+# 2026-11-01), so the root path must still resolve on sluis.id.
 set -euo pipefail
 
 src=${1:?usage: build-v1.sh <v1-checkout> <site-output>}

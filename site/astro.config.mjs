@@ -53,18 +53,19 @@ const naturalSize = Object.fromEntries(
     'block', 'radar'].map((t) => [t, { useMaxWidth: false }]),
 );
 
-// Where the build is going. 'pages' is GitHub Pages (site.yaml): the plain static
-// build into dist/, with the renamed pages redirected by meta-refresh pages.
-// 'workers' is Cloudflare Workers static assets (ADR 0063; the deploy job of
+// Where the build is going. 'pages' is the plain static build into dist/, with the
+// renamed pages redirected by meta-refresh pages: the build of `just site-build`
+// and the pull request checks. Nothing deploys it; the name is from when GitHub
+// Pages served the site, which is off since 2026-11-01.
+// 'workers' is Cloudflare Workers static assets (ADR 0020; the deploy job of
 // site.yaml sets SLUIS_TARGET=workers): the @astrojs/cloudflare adapter writes the site to dist/client with
 // its Worker configuration, and the redirects below become a `_redirects` file
-// instead of pages. Both targets build the same pages. The switch goes when GitHub
-// Pages is turned off (the cutover issue); until then the Pages build must not move.
+// instead of pages. Both targets build the same pages.
 const workers = (process.env.SLUIS_TARGET ?? 'pages') === 'workers';
 const workersOptions = {
   // Every docs page is prerendered, so Pagefind search keeps working; the adapter
   // is only the way to a Worker. No `cacheCloudflare()`: it turns on Workers Cache,
-  // which bills static asset requests (ADR 0063).
+  // which bills static asset requests (ADR 0020).
   //
   // prerenderEnvironment 'node': the default, workerd, resolves the browser build of
   // the Markdown processor (Sätteri), which cannot be bundled. Pages are rendered by
