@@ -12,7 +12,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Full}
-    decisions: ["OD-32"]
     issues: [864, 867]
     verification:
       - {kind: integration-test, ref: "driver-requirement tests"}
@@ -27,7 +26,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Full}
-    decisions: ["OD-32"]
     issues: [864, 867]
     verification:
       - {kind: integration-test, ref: "compatibility matrix tests"}

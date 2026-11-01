@@ -63,7 +63,6 @@ requirements:
       - {id: ST-53, section: "3", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
       - {id: ST-106, section: "test plan", depth: Full}
-    decisions: ["OD-15"]
     issues: [774, 788, 800]
     verification:
       - {kind: test-vectors, ref: "Wycheproof ECDSA"}
@@ -82,7 +81,6 @@ requirements:
       - {id: ST-50, section: "5", depth: Full}
       - {id: ST-53, section: "3", depth: Full}
       - {id: ST-106, section: "test plan", depth: Full}
-    decisions: ["OD-15"]
     issues: [774, 788, 800]
     verification:
       - {kind: test-vectors, ref: "Wycheproof ECDSA"}
@@ -100,7 +98,6 @@ requirements:
       - {id: ST-50, section: "5", depth: Full}
       - {id: ST-53, section: "3", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    decisions: ["OD-15"]
     issues: [774, 788, 800]
     verification:
       - {kind: test-vectors, ref: "RFC 7517 appendix"}

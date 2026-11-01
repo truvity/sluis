@@ -82,7 +82,7 @@ const perArea = (code: string, f: (r: (typeof c.reqs)[number]) => boolean) => c.
     An id is <code>REQ-&lt;AREA&gt;-&lt;nnn&gt;</code>. It is stable and never reused, and a test that proves a requirement names it, for
     example <code>REQ-AUTHN-002/plain_method</code>. A status says how far the work is: <em>done</em> (implemented, and the record names the tests that pass), <em>planned</em> (an agreed feature or design covers it),
     <em>partial</em> (the plan is weaker), <em>open</em> (a decision or a plan is missing), <em>out-of-scope</em> (a boundary kept as a
-    refusal) or <em>withdrawn</em> (a tombstone). An open or partial record names the <a href="/open-decisions/">open decision</a> or the gap it waits for.
+    refusal) or <em>withdrawn</em> (a tombstone). An open or partial record names the gap it waits for.
   </p>
   <ul>
     {Object.entries(c.gaps).map(([k, text]) => (<li><code>{k}</code>: {text}</li>))}

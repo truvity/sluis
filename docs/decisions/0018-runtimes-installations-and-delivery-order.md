@@ -35,7 +35,7 @@ Four installations are tested: built, documented and kept in the test matrix. An
 | **local** | bare-metal, 1 node | A workstation with Docker | `software` (a development card is opt-in) | `embedded`; a local lock | `fs` | `spool` or `direct` | `sqlite` |
 | **boards** | bare-metal, 3 nodes | Three single-board computers (arm64, 2 GB RAM, eMMC), a YubiKey in each, a Cloudflare account for the tunnel to the public hostname (`sluis.example.com` in docs) and for R2 | `yubikey-piv`, one key per node | `rqlite` | R2 through `s3-compatible` | `spool` | `rqlite` |
 | **lambda** | serverless, elastic | An AWS account with Lambda, KMS, DynamoDB, SQS and S3 | `aws-kms` | `dynamodb` | `s3` | `sqs` | `postgres` (`aurora` mode) |
-| **kubernetes** | kubernetes, N nodes | A cluster and an AWS account with KMS, DynamoDB, SQS and S3 | `aws-kms` | `dynamodb` | `s3` | `sqs` | `postgres` (`cnpg` mode) |
+| **kubernetes** | kubernetes, N nodes | A cluster with NATS JetStream, and an AWS account with KMS, DynamoDB and S3 | `aws-kms` | `dynamodb` | `s3` | `nats-jetstream` (`sqs` possible) | `postgres` (`cnpg` mode) |
 
 - **On the boards the audit pieces run on the same nodes** and share driver instances. Each node keeps its own log, and the other nodes are its peer witnesses ([0016](/decisions/0016-the-audit-log/#witnesses)). Garage is backlog: it ignores conditional writes.
 - **On Lambda the audit writer runs with a reserved concurrency of 1 on a standard SQS queue.** Correctness does not come from the limit but from the write-once fence on the bucket ([0016](/decisions/0016-the-audit-log/#the-write-once-fence)); the cost of the throttling is measured on the Lambda installation.
@@ -54,11 +54,10 @@ Four installations are tested: built, documented and kept in the test matrix. An
 
 ### Kubernetes
 
-Decided on 2026-10-30.
-
 - **The fusion unit is the container** ([0003](/decisions/0003-core-actors-with-one-responsibility-each/#the-fusion-rule)). A generated check proves that no container holding a key credential exposes a listener.
 - **Cloud identity: a projected ServiceAccount token per container** by default, with one audience per role. EKS Pod Identity is used for single-actor pods, and `sluis-node` only as a fallback ([0007](/decisions/0007-workload-identity-and-host-enrolment/#proofs-and-the-exchange)).
-- **Drivers:** AWS KMS only for keys, DynamoDB only for state and leases, SQS for the audit transport, S3 for blobs.
+- **The reference Kubernetes installation is the customer-identity one.** It proves the Kubernetes drivers, and with them the `nats-jetstream` transport; the workforce installation on serverless proves `sqs` ([0004](/decisions/0004-drivers-listeners-and-boundary-enforcement/#per-driver-checks)).
+- **Drivers:** AWS KMS only for keys, DynamoDB only for state and leases, NATS JetStream for the audit transport (SQS stays possible), S3 for blobs.
 - **The edge is a key-less edge relay container in the pod.** It listens on the pod address and forwards to `entry`'s Unix socket; `entry` stays socket-only. A `cloudflared` sidecar is a supported mode.
 - **A pod per integration**, each with its own egress NetworkPolicy to its vendor.
 - **The audit side is a separate audit installation** with its own front ([0015](/decisions/0015-audit-pieces-transport-search-and-front/#the-audit-front)), from the chart's `audit-install` preset.

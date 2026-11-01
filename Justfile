@@ -20,7 +20,7 @@ site-build: site-install
     site/scripts/strict-build.sh
     site/scripts/check-built.sh site/dist
 
-# Front-matter descriptions of 40 to 160 characters, a valid status, and
+# a Proposed note that links its issue on every page in docs/, and the requirements
 # registered open-decision ids on every page in docs/, and the requirements
 # catalogue in docs/requirements/ (schema, statement rules, traceability, public safety).
 site-lint: site-install check-requirements

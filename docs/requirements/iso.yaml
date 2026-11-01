@@ -635,7 +635,7 @@ requirements:
       - {kind: test-vectors, ref: "T-22: a second enrolment with the same instance identity document; refused"}
   - id: REQ-ISO-047
     area: ISO
-    statement: "An enrolment request MUST be encrypted end to end with HPKE to the enrolment public key carried in the signed bundle."
+    statement: "An enrolment request MUST be encrypted end to end with HPKE to the enrolment public key whose certificate the trust bundle carries."
     rationale: "The edge and entry then cannot read or alter an enrolment."
     level: MUST
     source: design-decision
@@ -659,7 +659,7 @@ requirements:
       - {id: ST-108, section: "4.1", depth: Partial}
     issues: [968]
     verification:
-      - {kind: test-vectors, ref: "T-23: a validly signed trust bundle with a lower spiffe_sequence; refused, and the anchors on disk are unchanged"}
+      - {kind: test-vectors, ref: "T-23: a trust bundle of valid certificates with a lower spiffe_sequence; refused, and the anchors on disk are unchanged"}
   - id: REQ-ISO-049
     area: ISO
     statement: "sluis trust sync MUST refuse a trust bundle that is not signed by a key certified by both roots."
@@ -937,3 +937,16 @@ requirements:
     issues: [914]
     verification:
       - {kind: test-vectors, ref: "generated key policies for a shared symmetric key: every Allow statement carries an encryption-context condition; a policy without one fails the build"}
+  - id: REQ-ISO-071
+    area: ISO
+    statement: "sluis trust sync MUST drop every certificate of a trust bundle that does not chain to a root in the pinned root list."
+    rationale: "The bundle has no signature of its own, so each certificate is trusted only through its chain to a pinned root."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-108, depth: Partial}
+    issues: [968]
+    verification:
+      - {kind: test-vectors, ref: "T-23: a bundle with one certificate that chains to an unpinned root; that certificate is not written and the rest are"}

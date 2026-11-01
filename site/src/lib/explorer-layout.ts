@@ -1,17 +1,18 @@
 // Shared by both explorers: the shapes of a map (boxes, lines), the geometry,
-// and the routing of the lines. No fact about sluis is stated here.
+// the routing of the lines, and the status check. No fact about sluis is
+// stated here.
 
-export type Row = { k: string; v: string; code?: boolean };
+export type Row = { k: string; v: string; code?: boolean; href?: string };
 export type Detail = {
   title: string;
   kind: string;
   cls: string;
   status?: string;
-  od?: string;
+  issue?: number;
   does: string;
   rows: Row[];
   lists: { title: string; items: string[] }[];
-  notes: { id?: string; text: string }[];
+  notes: { text: string; status?: string; issue?: number }[];
 };
 export type MapNode = {
   id: string;
@@ -31,13 +32,43 @@ export type MapModel = {
   id: string;
   name: string;
   intro: string;
-  notes: { text: string; status: string; od?: string }[];
+  notes: { text: string; status: string; issue?: number }[];
   nodes: MapNode[];
   edges: MapEdge[];
   width: number;
   height: number;
   lanes: { x: number; title: string }[];
 };
+
+// Status. An item of the data files is `decided` or `proposed`. A proposed item
+// names its open tracking issue (`issue: <n>`, an issue of truvity/sluis), and
+// the chip links to it. A decided item names no issue: it is stated as fact.
+export const ISSUES = 'https://github.com/truvity/sluis/issues/';
+export const issueUrl = (n: number) => `${ISSUES}${n}`;
+
+/**
+ * Fails the build when an item of a data file has a status that is not a key of
+ * `statuses`, when a proposed item names no issue, or when a decided item names
+ * one. Walks the whole parsed file, so every `status:` is checked wherever it is.
+ */
+export function assertStatuses(tree: unknown, statuses: Record<string, string>, file: string, path = ''): void {
+  if (Array.isArray(tree)) {
+    tree.forEach((x, i) => assertStatuses(x, statuses, file, `${path}[${i}]`));
+    return;
+  }
+  if (!tree || typeof tree !== 'object') return;
+  const o = tree as Record<string, unknown>;
+  const at = `explorer: ${file}${path ? ` at ${path}` : ''}`;
+  if ('status' in o) {
+    const s = o.status;
+    if (typeof s !== 'string' || !(s in statuses)) throw new Error(`${at}: status "${String(s)}" is not one of ${Object.keys(statuses).join(', ')}`);
+    if (s === 'proposed' && !(Number.isInteger(o.issue) && (o.issue as number) > 0)) throw new Error(`${at}: a proposed item needs \`issue: <n>\`, its open tracking issue`);
+    if (s !== 'proposed' && o.issue != null) throw new Error(`${at}: only a proposed item names an issue; a ${s} item is stated as fact`);
+  } else if (o.issue != null) {
+    throw new Error(`${at}: \`issue\` without \`status: proposed\``);
+  }
+  for (const [k, v] of Object.entries(o)) if (k !== 'statuses') assertStatuses(v, statuses, file, path ? `${path}.${k}` : k);
+}
 
 export const W = 170;
 export const H = 58;

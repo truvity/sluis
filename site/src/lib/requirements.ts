@@ -10,7 +10,7 @@ export interface Verification { kind: 'conformance-suite' | 'test-vectors' | 'in
 export interface Req {
   id: string; area: string; split_from?: string; statement: string; rationale: string;
   level: 'MUST' | 'SHOULD' | 'MAY'; source: string; status: string; runtimes: 'all' | string[];
-  standards: StandardRef[]; features: ('parity' | 'design')[]; decisions?: string[]; issues?: number[]; tests?: string[]; verification: Verification[];
+  standards: StandardRef[]; features: ('parity' | 'design')[]; issues?: number[]; tests?: string[]; verification: Verification[];
   gap?: string; manual_reason?: string; superseded_by?: string[]; moved_to?: string;
 }
 export interface Area { code: string; title: string; file: string; reqs: Req[] }
@@ -65,7 +65,6 @@ export function catalogue(): Catalogue {
 
 export const areaPath = (code: string) => `/requirements/${code.toLowerCase()}/`;
 export const reqPath = (r: Req) => `${areaPath(r.area)}#${r.id}`;
-export const odPath = (od: string) => `/open-decisions/#od-${od.replace(/^OD-/, '')}`;
 // The issues that deliver a record (`issues`), linked at build time; no live state is fetched.
 export const issueUrl = (n: number) => `${ISSUES}${n}`;
 export const runtimesOf = (r: Req) => (r.runtimes === 'all' ? 'all' : r.runtimes.join(' '));

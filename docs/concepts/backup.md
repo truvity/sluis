@@ -3,93 +3,77 @@ title: Backup and restore
 description: "What sluis backs up (authoritative state only), what it does not, how archives are encrypted, and how a restore proves and rebuilds the rest."
 status: target
 sidebar:
-  order: 11
+  order: 8
 ---
 
-A backup exists for the day the installation is lost or hostile. It is deliberately small. sluis backs up the **authoritative state that nothing else can recreate**, and rebuilds everything else after a restore.
-
-This page is the design. Nothing on it is shipped yet. Where a detail is not settled it is marked as proposed.
+A backup exists for the day an installation is lost or hostile, and it is deliberately small. sluis backs up the **authoritative state that nothing else can recreate**, and rebuilds everything else after a restore. What goes in and what a restore does follow from each record kind's [origin](/concepts/data/#origins-and-sensitivity) ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/#backup-and-restore-by-origin)).
 
 ## What is backed up
 
-The backup is a **logical archive**: the `backup` side reads records through the ports (never through a database), and the restore side writes them back through the same ports. The archive is therefore the same on every driver, and it can be restored onto a different driver of the same port (rqlite to DynamoDB, for example).
-
-Only **authoritative, non-recreatable state** goes in. What that is follows from each record kind's [origin](/concepts/data/#origins-and-sensitivity) ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/)):
+The backup is a **logical archive**: the backup side reads records through the ports, never through a database, and the restore writes them back through the same ports. The archive is therefore the same on every driver, and it can be restored onto another driver of the same port (rqlite to DynamoDB, for example). Only authoritative, non-recreatable state goes in:
 
 - **operator-set records**: chat channels managed from the console, runtime switches, console-connected tenants, secrets put at run time;
-- **durable issued records**: the issued parts of clients (generated secret versions and their rotation metadata), revocations, the certificate issuance log and revocation state, pins (the workspace at first install, the first subject, an App id), account links, approvals and consents, quota balances and top-ups;
+- **durable issued records**: the issued parts of clients (generated secret versions and their rotation metadata), revocations and revocation state, the issuance log, pins (the workspace at first install, the first subject, an App id), account links, approvals and consents, quota balances and top-ups;
 - **vendor-issued secrets**, such as a GitHub App key or a chat bot token, which cannot be fetched again;
-- the metadata that other records depend on, such as the signing ring's public side and the record of which keys were expected.
+- the metadata other records depend on, such as the signing ring's public side and the record of which keys were expected.
 
-Secrets are archived **sealed**: the backup side never reads one. An **escrow ceremony** for the sealing key gives a restore a way to open them when the sealing key is gone. The escrow never copies a key out of a device that cannot export it.
-
-Each record kind's origin, and for issued kinds its durability, is an annotation in the configuration schema. The list of what is backed up is generated from the schema, not written here by hand.
+Secrets are archived **sealed**: the backup side never reads one. The list of what is backed up is generated from the origin and durability annotations of the configuration schema, not written by hand.
 
 ## What is not backed up
 
 | Not backed up | Why |
 |---|---|
-| **Non-extractable keys** (a KMS key, a key on a YubiKey) | They cannot leave the device or the service. Their "backup" is the way they were provisioned: the key policy and the [hand-off that certifies the new key](/concepts/keys/#roots-and-certification). A board that is lost is replaced by a new key, not restored. A restore checks that each key purpose can still `sign` and that the public key matches. |
-| **Derived keys** | They are recomputed from a key that is held elsewhere. |
-| **Declared configuration** | It lives in version control. The archive keeps the resolved document and its digest only as evidence, and the restore starts from `sluis config check` against it. |
-| **Secrets referenced from declared configuration** | The operator's own store holds them, and the configuration only names them. (A secret put at run time into sluis's store is operator-set, and *is* backed up, sealed.) |
-| **Learned facts** | Directory snapshots, group memberships and the like are pulled again from their sources. |
-| **Derived data** | The search index, quota meters and hourly aggregates are rebuilt from the log. |
-| **Sessions and refresh tokens** | Not backed up, on purpose. A restore invalidates every one of them (agreed), so a stolen token does not survive a restore, and everyone signs in again. |
-| **The transport spool** | It holds records not yet written to the log. Cluster peers and witnesses narrow the window; a backup cannot close it. |
+| **Non-extractable keys** (a KMS key, a key on a card) | They cannot leave their store. Their "backup" is the way they were provisioned: the key policy and the [hand-off that certifies a new key](/concepts/keys/#roots-and-certification). A node whose card is lost gets a new key on a new card and a new certificate; it is not restored. A restore checks that each key purpose can still sign and that the public key matches |
+| **Declared configuration** | It lives in version control. The archive keeps the resolved document and its digest as evidence, and the restore starts with `sluis config check` against it |
+| **Secrets referenced from declared configuration** | The operator's own store holds them. A secret put at run time is operator-set and *is* backed up, sealed |
+| **Learned facts** | Directory snapshots and memberships are pulled again from their sources |
+| **Derived data** | The search index, quota meters and hourly aggregates are rebuilt from the log |
+| **Sessions and refresh tokens** | On purpose: a restore invalidates every one, so a stolen token does not survive it and everyone signs in again |
+| **The transport spool** | It holds records not yet written to the log. Cluster peers and witnesses narrow the window; a backup cannot close it |
 
 ## The audit log is handled separately
 
-The [audit log](/concepts/audit/) is not tarred into the archive. It is the record, and it is protected by other means:
+The [audit log](/concepts/audit/) is not copied into the archive. It is the record, and it is protected by its **lock mode**, by the **witnesses** that cosigned its checkpoints, and by its store, readable by a verifier with no help from sluis ([ADR 0016](/decisions/0016-the-audit-log/#retention)). The **search index** is a rebuildable cache: a snapshot of it may shorten a restore and is never evidence.
 
-- a **lock mode** on the log store (`compliance` where the installation has it, so that nobody can delete or overwrite before retention ends);
-- **witnesses** that have co-signed the heads;
-- **replication** to another account or credential, readable by a verifier with no help from sluis.
-
-The **search index** is a rebuildable cache. A snapshot of it is an optional accelerator that shortens a restore, and it is never evidence. Without a snapshot, the indexer replays the log.
-
-The archive records its own existence in the audit log: a `backup.completed` record carries the archive's digest and the fingerprints of its recipients. That record is what a restore later uses to prove where an archive came from.
+The archive records its own existence in the audit log: a `backup.completed` record carries the archive's digest and the fingerprints of its recipients. A restore later uses that record to prove where an archive came from.
 
 ## Encryption
 
+The archive is encrypted with a fresh data key, and the data key is wrapped for **at least two recipients held apart**, one of them an **offline operator hardware token** for break-glass ([REQ-BACKUP-001](/requirements/backup/#REQ-BACKUP-001), [REQ-BACKUP-020](/requirements/backup/#REQ-BACKUP-020)). The archive is age-encrypted, a named exception to sluis's algorithm rules ([ADR 0012](/decisions/0012-cryptography-and-authority-keys/#named-exceptions)). The offline recipient is a public key, for example an `age-plugin-yubikey` recipient, whose identity sits on a card that is in no node; it lets an operator open an archive when the installation, the cloud account or the node is gone.
+
+- **The key that wraps a backup archive is not the sealing key** ([ADR 0012](/decisions/0012-cryptography-and-authority-keys/#keys-sign-in-place)). On AWS it may live in another account, and only the restore role may decrypt with it. The archive and its key preferably live in a separate account, because the backup exists for the case where the primary account is lost or hostile.
+- **Sealed values stay sealed.** When a data key is sealed, an escrow copy of it is encrypted to the archive's recipients ([ADR 0011](/decisions/0011-state-is-one-port-with-compare-and-set/#sealed-secrets)). Losing the sealing key is a restore from those recipients; it needs no ceremony and copies no key out of its store.
+- **The backup side holds public material and a wrap permission only**, so a compromised backup job cannot read earlier archives.
+
 :::note[Proposed]
-The archive is encrypted with a fresh data key, and the data key is wrapped for two kinds of reader.
+The archive format, the escrow copies, the recipient set of each installation and the restore tooling are fixed by the planned backup decision record ([#1015](https://github.com/truvity/sluis/issues/1015)). The steps below are the design it starts from.
 :::
-
-- **Through the keys port.** The `keys` port gains `wrap` and `unwrap` (or an `ecdh` operation). On AWS the data key is wrapped with KMS `Encrypt`, with an encryption context that names the backup, so only the restore role can decrypt. On boards a YubiKey wraps it.
-- **Plus at least one offline operator YubiKey recipient, for break-glass.** The recipient is a public key (for example an `age-plugin-yubikey` recipient). The identity is on a card that is not on any node. This is what lets an operator open an archive when the installation, the cloud account or the node is gone.
-
-On AWS, only the restore role may decrypt. The archive and its KMS key preferably live in a **separate account**, because the backup exists for the case where the primary account is lost or hostile. The backup side holds public material and a wrap permission only, so a compromised backup job cannot read earlier archives.
 
 ## Restoring
 
-A restore is started by an operator and never by the console, so that it works when `entry` and `signer` are down. It runs as its own actor with its own identity.
+A restore is started by an operator, never by the console, so that it works when `entry` and `signer` are down. It runs as its own actor with its own identity. The order follows [ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/#backup-and-restore-by-origin):
 
 1. **Maintenance mode.** Every actor refuses writes and sign-in stops. A failure at any later step leaves maintenance mode on. The restore preview lists every secret written since the archive was taken, with an alarm: audit never carries secrets, so those cannot be rolled forward and have to be rotated or reconnected.
-2. **Provenance check.** The archive is accepted only if the audit log has a `backup.completed` record carrying its digest, and the record sits under a checkpoint that a witness has co-signed where the installation has one. When the log cannot be reached, the operator can override, and the override is itself recorded first.
-3. **Decrypt.** The restore actor unwraps the data key through the keys port, or the operator brings the offline YubiKey.
-4. **Write the records** through the ports, under maintenance mode. Every member's digest is checked first, and every record is read back afterwards.
-5. **Roll forward from the audit log.** For every record kind marked for it, the restore replays the log from the archive's time to the present: operator-set records, revocations, the issued parts of clients, pins, account links, approvals, quota balances and the issuance log. The audit records of those kinds carry the full value apart from secrets, and they never carry secrets. A revocation that happened after the last archive is therefore not lost. Each kind has a merge rule: replace, or a union for tighten-only switches, so a restore never loosens one (a disabled recovery generation stays disabled).
-6. **Rebuild derived state.** The indexer rebuilds the search index (or loads a snapshot), quota meters are rebuilt from the log, and learned facts are pulled again.
-7. **Everyone re-signs in.** Sessions and refresh tokens do not exist after a restore. Clients obtain new ones.
-8. **Lift maintenance** only after the read-back is clean.
+2. **Provenance check.** The archive is accepted only if the audit log has a `backup.completed` record carrying its digest, under a checkpoint that a witness has cosigned where the installation has one. When the log cannot be reached, the operator can override, and the override is recorded first.
+3. **Check the configuration** with `sluis config check` against the archived document.
+4. **Decrypt.** The restore actor unwraps the data key, or the operator brings the offline token.
+5. **Write the records** through the ports. Every member's digest is checked first, and every record is read back afterwards.
+6. **Roll forward from the audit log.** For every record kind marked for it, the restore replays the log from the archive's time to the present: operator-set records, revocations, the issued parts of clients, pins, account links, approvals, quota balances (from the usage log) and the issuance log. Their audit records carry the full value apart from secrets, so a revocation made after the last archive is not lost. Each kind has a merge rule, replace or union; tighten-only switches use union, so a restore never loosens one.
+7. **Rebuild derived state and learn again.** The indexer rebuilds the search index (or loads a snapshot), quota meters are rebuilt from the usage log, and learned facts are pulled again.
+8. **Lift maintenance** only after the read-back is clean. Sessions and refresh tokens do not exist after a restore, so everyone signs in again.
 
-A witness is **not restored**. A witness restored to an older state would co-sign a rolled-back view. After a restore it is reset and re-trusted, or taken from its peers.
+**A witness is never restored to an older state**, because it would cosign a rolled-back view. A restore re-registers the node with its peers and re-bootstraps the witness ([ADR 0016](/decisions/0016-the-audit-log/#witnesses)).
 
-### Certificate serial numbers need no ledger
+**Certificate serial numbers are random** 128-bit values, so no record of serials has to be backed up, and a restored CA cannot hand out a serial that collides with one issued after the archive was taken.
 
-CA serial numbers are **random 128-bit values**. No serial ledger has to be backed up or restored, and a restored CA cannot hand out a serial that collides with one issued after the archive was taken.
-
-### Rehearsal
-
-A restore that has never been tried is a guess. A scheduled **rehearsal** restores the latest archive into an empty scratch installation, compares the per-kind counts and digests with the manifest, and records `restore.rehearsed`. Missing rehearsals alarm, in the same way as missing backups.
+**Rehearsal.** A scheduled rehearsal restores the latest archive into an empty scratch installation, compares the per-kind counts and digests with the archive's manifest, and records `restore.rehearsed`. Missing rehearsals alarm, like missing backups.
 
 ## On each runtime
 
 | Runtime | Backup runs as | Restore runs as |
 |---|---|---|
-| [bare-metal](/runtimes/bare-metal/) | A systemd timer. On a cluster the lease picks one node | A CLI on one node with the other actors stopped |
+| [bare-metal](/runtimes/bare-metal/) | A systemd timer; on a cluster the lease picks one node | A CLI on one node with the other actors stopped |
 | [serverless](/runtimes/serverless/) | A scheduled function. It spools to `/tmp`, so one invocation bounds the archive size | A separate function, invokable only by an administrator or a break-glass role |
 | [kubernetes](/runtimes/kubernetes/) | A CronJob | A Job started by the operator, never a CronJob |
 
-The archive's blob driver declares its own dependencies and lock mode. On the boards the archive and the audit log are on Cloudflare R2 in the first release (Garage, which has no object lock, is a later backend), and the `s3-compatible` driver's lock on R2 can be removed by an account administrator; an installation on boards therefore also keeps a second, offline copy.
+The archive's blob driver declares its own dependencies and lock mode. The boards installation keeps its archive and its audit log on Cloudflare R2, whose lock an account administrator can remove, so it also keeps a second, offline copy of the archive.

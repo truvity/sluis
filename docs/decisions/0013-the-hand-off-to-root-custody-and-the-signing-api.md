@@ -44,6 +44,7 @@ sluis hands ritueel a request and installs what comes back. The specification li
 
 - **sluis verifies a signed root list and never makes one.** `sluis trust sync` takes the list ritueel produces. It accepts a list signed by a root it already trusts and refuses an older version: the list carries a version number that only increases.
 - **sluis pins the public keys of roots (SPKI hashes), never certificate fingerprints.** A root whose validity is extended gets a new certificate over the same key, and a pin on the certificate would break every host.
+- **The trust bundle needs no signature of its own.** It is a set of certificates, and each one chains to a root in the root list; the root list is what a root signs ([0007](/decisions/0007-workload-identity-and-host-enrolment/#the-trust-bundle)).
 - **A host keeps its last good list.** A list close to expiry is a warning on sluis's side and a renewal on ritueel's.
 - **The limits of root security are ritueel's to state:** any single root may change the root set, and whoever holds one root card and its PIN can sign until that root is revoked. sluis's threat model points to ritueel's documents. How hosts receive the bundle is [0007](/decisions/0007-workload-identity-and-host-enrolment/#the-trust-bundle).
 

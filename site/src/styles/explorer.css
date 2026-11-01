@@ -13,9 +13,9 @@
 /* chips */
 .ex-chip { display: inline-block; padding: 0 .55em; border: 1px solid var(--sl-color-gray-4); border-radius: 1em;
   font-size: var(--sl-text-xs); line-height: 1.7; white-space: nowrap; color: var(--sl-color-gray-2); background: var(--sl-color-bg-nav); text-decoration: none; }
-.ex-chip-agreed { border-color: var(--sl-color-green); color: var(--sl-color-green-high); background: var(--sl-color-green-low); }
+.ex-chip-decided { border-color: var(--sl-color-green); color: var(--sl-color-green-high); background: var(--sl-color-green-low); }
 .ex-chip-proposed { border-color: var(--sl-color-orange); color: var(--sl-color-orange-high); background: var(--sl-color-orange-low); }
-.ex-chip-open { border-color: var(--sl-color-red); color: var(--sl-color-red-high); background: var(--sl-color-red-low); }
+a.ex-chip:hover, a.ex-chip:focus-visible { text-decoration: underline; }
 .ex-chip-illustrative { border-style: dashed; }
 
 /* shape toggle */
@@ -101,7 +101,7 @@
 .ex-kind.k-role { --k: var(--k-role); } .ex-kind.k-driver-role, .ex-kind.k-driver-shared { --k: var(--k-driver); }
 .ex-kind.k-integration { --k: var(--k-integration); } .ex-kind.k-edge, .ex-kind.k-node { --k: var(--k-edge); }
 .ex-note { margin: .6rem 0 0; padding: .4rem .7rem; border-inline-start: 3px solid var(--sl-color-gray-4); font-size: var(--sl-text-sm); background: var(--sl-color-gray-6); }
-.ex-note.open { border-color: var(--sl-color-red); }
+.ex-note.proposed { border-color: var(--sl-color-orange); }
 .ex-steps { list-style: none; counter-reset: step; padding: 0; margin: .8rem 0 0; }
 .ex-steps li { counter-increment: step; margin: 0 0 .5rem; padding: .4rem .7rem .4rem 2.4rem; position: relative; border: 1px solid var(--sl-color-gray-5); border-radius: .4rem; background: var(--sl-color-bg); }
 .ex-steps li::before { content: counter(step); position: absolute; left: .6rem; top: .45rem; font: 600 var(--sl-text-sm) var(--ex-mono); color: var(--sl-color-gray-3); }
@@ -145,7 +145,7 @@ html:not(.ex-js) [data-detail] { margin-bottom: 1rem; }
 .ex-chain-box span { font-family: var(--ex-mono); font-size: var(--sl-text-xs); color: var(--sl-color-gray-2); }
 .ex-chain-box em { font-size: var(--sl-text-xs); color: var(--sl-color-gray-3); font-style: normal; margin-top: .2rem; }
 .ex-chain-box.by-writer { border-color: var(--sl-color-blue); }
-.ex-chain-box.by-notary { border-color: var(--sl-color-purple); }
+.ex-chain-box.by-key-holder { border-color: var(--sl-color-purple); }
 .ex-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: .8rem; margin-top: 1rem; }
 .ex-card { border: 1px solid var(--sl-color-gray-5); border-radius: .5rem; padding: .7rem .9rem; background: var(--sl-color-bg-nav); font-size: var(--sl-text-sm); }
 .ex-card p { margin: .3rem 0 0; }

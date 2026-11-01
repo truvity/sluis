@@ -3,7 +3,7 @@ title: Public content and secrets
 description: What may appear in the public sluis repository, which example names to use instead of real ones, and how secrets and test hardware are handled.
 status: shipped
 sidebar:
-  order: 8
+  order: 5
 ---
 
 This repository is public, and so is everything around it: code, docs, the CHANGELOG, tests, test data, commit messages, issues and pull requests.
@@ -25,7 +25,7 @@ Internal reasoning that needs real names stays internal; only the final, generic
 
 CI scans every tracked text file for content that must not be public, such as account-id-shaped numbers, private key blocks and token prefixes (`just check-public`). Maintainers run additional checks before merging. A pass is not permission: the rule above is.
 
-Cloudflare posts nothing on commits or pull requests any more; the links it posted on older commits contain the operator's Cloudflare account identifier, which the maintainer accepts and does not remove, and a contributor never writes an account identifier in the repository, a commit message, an issue or a pull request.
+Never write a cloud or service account identifier in the repository, a commit message, an issue or a pull request.
 
 ## Secrets
 

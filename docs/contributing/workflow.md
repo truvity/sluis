@@ -49,7 +49,7 @@ Start a breaking bullet with **Breaking:** and say what to do first. Pure refact
 
 ## Checks are the gate
 
-Green CI is the merge gate: a pull request with a red or a skipped required check is not merged. Run the same checks locally first, with `devbox run -- just check` ([Tools, checks and verification](/contributing/tools/)). CI checks the site build and its links, the requirements catalogue, the structure of the decision records, file names, the agent wiring, and content that must not be public. Maintainers run additional checks before merging.
+Green CI is the merge gate: a pull request with a red or a skipped required check is not merged. Run the same checks locally first, with `devbox run -- just check` ([Tools, checks and verification](/contributing/tools/)). CI checks the site build and its links, the requirements catalogue, the decision records, file names, the agent wiring, and content that must not be public.
 
 ## Review
 

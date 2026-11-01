@@ -1,18 +1,16 @@
 ---
 title: Audit explorer
-description: An interactive map of how sluis audit works in each tested installation, from the transport to the signed blob and the index, drawn from data files.
+description: An interactive map of how sluis audit works in each tested installation, from the transport to the signed log and the index, drawn from data files.
 status: target
 tableOfContents: false
 sidebar:
   order: 8
 ---
 import AuditExplorer from '../../site/src/components/explorer/AuditExplorer.astro';
-import OpenDecision from '../../site/src/components/explorer/OpenDecision.astro';
-import Proposed from '../../site/src/components/explorer/Proposed.astro';
 
-This is the target state, not a running system. Every actor puts its records on the transport and moves on. One writer turns them into ordered batches in a blob (object storage with a lock mode) and has each batch head signed through the keys port, an optional witness cosigns the heads, and an indexer feeds a search index from the same ordered batch stream. There is no notary. The page is drawn from `site/src/data/explorer/audit.yaml`, which today is written by hand from the design; once the permission manifest exists, the actors, sockets and call edges are generated from it. The ideas behind the page are on [Audit](/concepts/audit/); the actors are described under [Actors](/concepts/actors/). The audit actors are the writer, the witness, the indexer and the reader.
+This is the target state, not a running system. Every actor puts its records on the transport and moves on. The writer seals them into a C2SP tiled log in a blob and asks `key-holder` to sign each checkpoint with the log key; an optional witness cosigns the checkpoints, and an indexer feeds a search index from the signed log. The page is drawn from `site/src/data/explorer/audit.yaml`, written by hand from the design. The ideas are on [Audit](/concepts/audit/); the reasoning is in [ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/), [ADR 0016](/decisions/0016-the-audit-log/) and [ADR 0017](/decisions/0017-audit-records-the-usage-stream-and-quota/).
 
-Audit shares the sluis port definitions: keys, state, lease, blob, transport, index and cloud, plus witness, the only port audit adds. The same actors, the same records and the same integrity chain run in every installation. Only the drivers behind the transport, keys, state, blob and index ports change. Audit is four separate pieces, the emitter, the log, Search and Quota, and pieces combined in one installation share driver instances, even with sluis ([OD-37](/open-decisions/#od-37)). Pick an installation: local, boards or lambda. The map, the flows, the sockets and the outage table follow it. Without script the page shows boards and every table is plain HTML. A cluster keeps one log per node, and the rule is exactly one writer per log.
+Audit uses the sluis ports plus `witness`, the only port it adds. The same actors, records and integrity chain run in every installation; only the drivers behind the ports change. Audit is four pieces, the emitter, the log, Search and Quota, and pieces combined in one installation, even with sluis, share driver instances ([ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/#four-pieces)). Pick an installation: local, boards or lambda. The map, the flows and the outage table follow it. Without script the page shows boards, and every table is plain HTML. The explorer does not draw the Kubernetes installation yet; there the audit side is a separate audit installation ([ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/#kubernetes)).
 
 ## Installations
 
@@ -20,9 +18,9 @@ Audit shares the sluis port definitions: keys, state, lease, blob, transport, in
 
 ## Map and flows
 
-Select a box to see what it holds, what it never holds and who it calls. Choose a flow to step through it: each step lights the lines it uses, in order. Every actor listens on Unix sockets. `entry`'s public API is a Unix socket that the edge connector forwards to on bare-metal, and a loopback port inside the sandbox on serverless, where the Lambda Web Adapter connects to it. The only network listeners are that loopback port and, on a bare-metal cluster, the Raft ports of the rqlite clusters. The architecture explorer shows [the sockets and processes](/architecture/explorer/) of each installation.
+Select a box to see what it holds, what it never holds and who it calls. Choose a flow to step through it: each step lights the lines it uses, in order. Every actor listens on Unix sockets; [the architecture explorer](/architecture/explorer/) shows the sockets and processes of each installation.
 
-Search (the indexer, the search index and the reader) and Quota are separate pieces. Where each runs is derived from the port and driver rules, not decided per installation: see [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived) and [OD-32](/open-decisions/#od-32). Quota meters by default and enforces per policy rule ([OD-33](/open-decisions/#od-33), [OD-38](/open-decisions/#od-38)). The witness is optional everywhere ([OD-36](/open-decisions/#od-36)), and there is no notary ([OD-39](/open-decisions/#od-39)).
+Where Search (the indexer, the search index and the reader) and Quota run is derived from the port and driver rules ([ADR 0002](/decisions/0002-the-design-model-actors-ports-drivers-and-contracts/#placement-is-derived)). Quota meters by default and enforces per policy rule ([ADR 0017](/decisions/0017-audit-records-the-usage-stream-and-quota/#quota)). The witness is optional everywhere ([ADR 0016](/decisions/0016-the-audit-log/#witnesses)).
 
 <AuditExplorer part="map" />
 
@@ -34,31 +32,27 @@ The promises are the same in every installation. How each is kept changes with t
 
 ## The transport port
 
-The emitter (a library in every actor) and the writer are decoupled by the transport port. It replaces the older queue port and "outbox". The port has two modes. In **direct** mode the producer streams the record to the writer. In **queue** mode the record goes through a spool, SQS or NATS JetStream. In direct mode, when the writer is down, the emitter falls back to a local spool, so direct mode needs a disk and is not available on serverless. A request returns once its audit record is durable on the transport, never waiting for the archive or the index. One contract; the driver behind it depends on the installation. The transport may deliver out of order, twice or late: the sequence is made later, when the writer registers a batch, and the writer dedupes by record id. A writer on the same node as sluis is one installation's placement, not the model.
+The emitter, a library in every actor, and the writer are joined by the transport port. In **direct** mode the emitter streams the record to the writer; in **queue** mode the record goes through a spool, SQS or NATS JetStream. When the writer is down in direct mode, the emitter falls back to a local spool, so direct mode needs a disk and is not available on serverless. A request returns once its audit record is durable on the transport, never waiting for the log or the index. The transport may deliver out of order, twice or late, and the writer removes duplicates by record id.
 
 <AuditExplorer part="transport" />
 
-The installation defaults are a local spool on the bare-metal installations and an SQS queue on serverless and Kubernetes ([OD-22](/open-decisions/#od-22), [OD-34](/open-decisions/#od-34)); direct and NATS JetStream are supported with no default. Kubernetes is proposed and is not drawn here: see [Kubernetes](/runtimes/kubernetes/). The recovery path is separate: it spools locally in every installation and never blocks.
+The installation defaults are a local spool on bare-metal, an SQS queue on serverless and NATS JetStream on Kubernetes; direct is supported with no default ([ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/#transport)). The recovery path is separate: it spools locally in every installation and never blocks.
 
 ## The integrity chain
 
-How an auditor can tell that nothing was removed, changed or added. The writer has each batch head signed with the log key through the keys port (there is no notary), the heads form a hash chain, a witness may cosign them, and verification never trusts the search index or the state.
+How an auditor can tell that nothing was removed, changed or added. The writer has each checkpoint signed with the log key through the keys port, each checkpoint commits to the whole log, a witness may cosign it, and verification never trusts the search index or the state.
 
 <AuditExplorer part="chain" />
-
-<Proposed>
-The state store sits on the write path of every batch. This is acceptable given the transport, a reconciler that compares the bucket listing with `audit_batches`, and verification that reads the blob and the seals only.
-</Proposed>
 
 ## Search index and lag
 
 <AuditExplorer part="lag" />
 
-The default index of each tested installation is decided in [ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/): `sqlite` on local, a replicated `rqlite` index on boards, so the reader can run on any node, `postgres` on Aurora on lambda, reached through RDS Proxy ([OD-12](/open-decisions/#od-12), revised), and `postgres` on `cnpg` on Kubernetes. The indexer follows each log's signed checkpoints, so the index lags the log by the seal interval, a few seconds, plus its own pass. Where Search runs is derived from the port and driver rules ([OD-32](/open-decisions/#od-32)): with a `sqlite` index on a cluster, for example, the reader runs on the indexer's node. The search index is a rebuildable cache; the chain in the blob is the record.
+The default index of each tested installation is in [ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/#search-and-the-index): `sqlite` on local, a replicated `rqlite` index on boards, `postgres` on Aurora on lambda, reached through RDS Proxy, and `postgres` on `cnpg` on Kubernetes. The indexer follows each log's signed checkpoints, so the index lags the log by the seal interval, a few seconds, plus its own pass. With a `sqlite` index on a cluster the reader runs on the indexer's node. The search index is a rebuildable cache; the log in the blob is the record.
 
 ## When the writer is down for an hour
 
-Step through the last flow on the map for the order of events. This table says what queues where in each installation and how it drains. It describes queue mode; in direct mode the emitter falls back to a local spool when the writer is down ([OD-35](/open-decisions/#od-35)).
+Step through the last flow on the map for the order of events. This table says what queues where in each installation and how it drains. It describes queue mode; in direct mode the emitter falls back to a local spool when the writer is down.
 
 <AuditExplorer part="outage" />
 
@@ -70,7 +64,7 @@ What stays and what changes. v1 is the audit product in the repository today.
 
 ## Open points
 
-Ids are rows of [Open decisions](/open-decisions/). A point without an id is proposed in the design and not yet decided.
+These points are proposed in the design and not yet decided. Each links its tracking issue.
 
 <AuditExplorer part="open" />
 

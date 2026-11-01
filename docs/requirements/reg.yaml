@@ -403,11 +403,11 @@ requirements:
     rationale: "Recovery and security alerts depend on mail."
     level: MUST
     source: stakeholder-ciam
-    status: planned
+    status: withdrawn
     runtimes: all
     standards:
       - {id: NC-14, section: "SPF DKIM DMARC", depth: Partial}
-    issues: [927]
+    superseded_by: [REQ-CIAM-017, REQ-REG-074]
     verification:
       - {kind: integration-test, ref: "code delivery to sink test"}
   - id: REQ-REG-030
@@ -1019,3 +1019,17 @@ requirements:
     superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "fallback sign-in code refusal test"}
+  - id: REQ-REG-074
+    area: REG
+    split_from: REQ-REG-029
+    statement: "The e-mail Notifier MUST send security alerts through the configured provider."
+    rationale: "A person learns of a new passkey or a sign-in from a new device by mail."
+    level: MUST
+    source: stakeholder-ciam
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-14, section: "SPF DKIM DMARC", depth: Partial}
+    issues: [927]
+    verification:
+      - {kind: integration-test, ref: "security alert delivery to sink test"}

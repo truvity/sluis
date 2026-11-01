@@ -1,9 +1,10 @@
 ---
 // The audit explorer. `part` picks the piece, so the page can put its own
 // headings between them. The facts are in src/data/explorer/audit.yaml.
-// The CSS class by-notary is the purple border of a step signed through the
-// keys driver; the class keeps its old name.
+// The CSS class by-key-holder is the purple border of a step signed through
+// the keys driver.
 import '../../styles/explorer.css';
+import Chip from './Chip.astro';
 import MapView from './MapView.astro';
 import { data, shapes, statuses } from '../../lib/explorer-audit';
 
@@ -13,7 +14,6 @@ interface Props {
 const { part } = Astro.props;
 const models = shapes();
 const dflt: string = data.default_shape;
-const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
 ---
 
 {part === 'toggle' && (
@@ -59,7 +59,7 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
         <thead><tr><th>Promise</th><th>What it means</th><th>Status</th></tr></thead>
         <tbody>
           {data.promises.map((p: any) => (
-            <tr><td><b>{p.title}</b></td><td>{p.text}</td><td><span class={`ex-chip ${chip(p.status).cls}`}>{chip(p.status).text}</span></td></tr>
+            <tr><td><b>{p.title}</b></td><td>{p.text}</td><td><Chip status={p.status} issue={p.issue} statuses={statuses} /></td></tr>
           ))}
         </tbody>
       </table>
@@ -76,7 +76,7 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
           {Object.values(data.transport_kinds).map((o: any) => (
             <tr data-transport-kind={o.driver}>
               <td><b>{o.title}</b></td><td>{o.used_on}</td><td>{o.durable}</td><td>{o.wait}</td><td>{o.instance}</td>
-              <td>{o.od ? <a class={`ex-chip ${chip(o.status).cls}`} href="/open-decisions/">{chip(o.status).text} · {o.od}</a> : <span class={`ex-chip ${chip(o.status).cls}`}>{chip(o.status).text}</span>}</td>
+              <td><Chip status={o.status} issue={o.issue} statuses={statuses} /></td>
             </tr>
           ))}
         </tbody>
@@ -87,11 +87,11 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
 
 {part === 'chain' && (
   <div class="ex">
-    <div class="ex-chain" role="group" aria-label="The integrity chain, from a record to a signed head">
+    <div class="ex-chain" role="group" aria-label="The integrity chain, from a record to a cosigned checkpoint">
       {data.chain.stages.map((s: any, i: number) => (
         <>
           {i > 0 && <span class="ex-chain-arrow" aria-hidden="true">→</span>}
-          <div class={`ex-chain-box ${s.by === 'writer' ? 'by-writer' : 'by-notary'}`}>
+          <div class={`ex-chain-box ${s.by === 'writer' ? 'by-writer' : 'by-key-holder'}`}>
             <b>{s.title}</b>
             {s.lines.map((l: string) => <span>{l}</span>)}
             <em>by {s.by_label ?? (s.by === 'writer' ? 'the writer' : s.by)}</em>
@@ -99,20 +99,20 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
         </>
       ))}
     </div>
-    <p style="font-size:var(--sl-text-sm);margin:.8rem 0 .3rem">Seals chain through <code>prev</code>. A seal covers the batches since the previous one (numbers are examples).</p>
-    <div class="ex-chain" role="group" aria-label="The seal chain">
-      {data.chain.seals.map((s: any, i: number) => (
+    <p style="font-size:var(--sl-text-sm);margin:.8rem 0 .3rem">One checkpoint per sealed batch. Each covers the whole tree up to its size, and a verifier checks that it is consistent with the one before (numbers are examples).</p>
+    <div class="ex-chain" role="group" aria-label="The checkpoints of a log">
+      {data.chain.checkpoints.map((s: any, i: number) => (
         <>
-          {i > 0 && <span class="ex-chain-arrow" aria-hidden="true">← prev</span>}
-          <div class="ex-chain-box by-notary"><b>{s.id}</b><span>{s.covers}</span></div>
+          {i > 0 && <span class="ex-chain-arrow" aria-hidden="true">← consistent with</span>}
+          <div class="ex-chain-box by-key-holder"><b>{s.id}</b><span>{s.covers}</span></div>
         </>
       ))}
     </div>
-    <p class="ex-sub">An auditor verifies with <code>audit verify</code> (illustrative), which reads the blob and nothing else:</p>
+    <p class="ex-sub">An auditor verifies with <code>sluis audit verify</code>, which reads the bucket and nothing else:</p>
     <ol>{data.chain.verifier.map((v: string) => <li>{v}</li>)}</ol>
     <div class="ex-cards">
       {data.chain.notes.map((n: any) => (
-        <div class="ex-card"><b>{n.title}</b> <span class={`ex-chip ${chip(n.status).cls}`}>{chip(n.status).text}</span><p>{n.text}</p></div>
+        <div class="ex-card"><b>{n.title}</b> <Chip status={n.status} issue={n.issue} statuses={statuses} /><p>{n.text}</p></div>
       ))}
     </div>
   </div>
@@ -143,7 +143,7 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
     <p class="ex-only-js" data-lag-msg style="font-size:var(--sl-text-sm)">Move the slider to take the writer down. The leader sequence stops, so lag stays where it is while the transport grows: watch the transport age as well as the lag.</p>
     <div class="ex-cards">
       {data.index_notes.map((n: any) => (
-        <div class="ex-card"><b>{n.title}</b> <span class={`ex-chip ${chip(n.status).cls}`}>{chip(n.status).text}</span><p>{n.text}</p></div>
+        <div class="ex-card"><b>{n.title}</b> <Chip status={n.status} issue={n.issue} statuses={statuses} /><p>{n.text}</p></div>
       ))}
     </div>
   </div>
@@ -163,7 +163,7 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
         </tbody>
       </table>
     </div>
-    <p style="font-size:var(--sl-text-sm);margin-top:.5rem">In every case requests keep succeeding, because they return when the record is durable on the transport (in queue mode). The search index serves what it already has, and the blob and seals have nothing new.</p>
+    <p style="font-size:var(--sl-text-sm);margin-top:.5rem">In every case requests keep succeeding, because they return when the record is durable on the transport (in queue mode). The search index serves what it already has, and the log has nothing new.</p>
   </div>
 )}
 
@@ -183,12 +183,12 @@ const chip = (s: string) => ({ cls: `ex-chip-${s}`, text: statuses[s] });
   <div class="ex">
     <div class="ex-table-wrap">
       <table>
-        <thead><tr><th>Id</th><th>Point</th><th>Detail</th></tr></thead>
+        <thead><tr><th>Point</th><th>Detail</th><th>Status</th></tr></thead>
         <tbody>
           {data.open_points.map((o: any) => (
             <tr>
-              <td>{o.od ? <a class="ex-chip ex-chip-open" href="/open-decisions/">{o.od}</a> : <span class="ex-chip ex-chip-proposed">not yet decided</span>}</td>
               <td><b>{o.title}</b></td><td>{o.text}</td>
+              <td><Chip status={o.status} issue={o.issue} statuses={statuses} /></td>
             </tr>
           ))}
         </tbody>
