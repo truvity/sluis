@@ -134,7 +134,7 @@ require (
 	github.com/theupdateframework/go-tuf/v2 v2.4.2 // indirect
 	github.com/transparency-dev/formats v0.1.1 // indirect
 	github.com/transparency-dev/merkle v0.0.2 // indirect
-	github.com/truvity/policy v1.54.5 // indirect
+	github.com/truvity/policy v1.55.0 // indirect
 	github.com/truvity/sluis v1.80.0 // indirect
 	github.com/truvity/sluis/audit v1.80.0 // indirect
 	github.com/truvity/sluis/audit/deploy/pulumi v1.80.0 // indirect
