@@ -37,8 +37,8 @@ const ADR = '/decisions/0020-the-site-is-static-on-cloudflare-workers/';
     </p>
     <p class="ps-legend">
       <Badge text="build-time" variant="note" /> from the repository, as of the build at {asOf}.{' '}
-      <Badge text="live" variant="tip" /> read from the board and CI by the site's Worker, and refreshed within seconds of a change; each
-      block says the time its data is as of. Without JavaScript the page shows the snapshot taken at the build.
+      <Badge text="live" variant="tip" /> read from the board and CI by the site's Worker, kept current by GitHub webhooks and a check
+      every 15 minutes; each block says the time its data is as of. Without JavaScript the page shows the snapshot taken at the build.
     </p>
 
     {
