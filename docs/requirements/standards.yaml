@@ -8,8 +8,9 @@
 # ST-48 keeps its id for SPIRE as prior art, which sluis does not deploy.
 # The optional OpenID plans (ADR 0061, decided 2026-10-30): Form Post (ST-34) is a v2 target; Front-Channel Logout (ST-32)
 # and 3rd Party-Initiated Login (ST-35) are not planned; CIBA (ST-36) is planned later, in poll mode, after v2 parity.
-# The audit record formats (ADR 0021, decided 2026-10-31): OCSF (ST-114) is the audit record; CloudEvents (ST-100) is back on
-# the page for the usage log, not as an audit envelope; FOCUS (ST-115) names the columns of the finance export.
+# The audit record formats (ADR 0064, decided 2026-11-01): OCSF (ST-114), with a sluis extension, is the audit record;
+# CloudEvents (ST-100) is back on the page for the usage stream, not as an audit envelope; FOCUS (ST-115) names the columns
+# of the finance export.
 schema: 1
 standards:
   - {id: ST-01, name: "RFC 6749 OAuth 2.0", group: "OAuth", register: true, url: "https://www.rfc-editor.org/rfc/rfc6749"}

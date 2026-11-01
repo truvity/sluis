@@ -1163,8 +1163,8 @@ requirements:
       - {kind: integration-test, ref: "audit host origin test"}
   - id: REQ-AUDIT-086
     area: AUDIT
-    statement: "Every audit record MUST be an OCSF 1.x event that uses only core classes, objects and profiles, with no vendor extension and no `unmapped` object."
-    rationale: "A plain OCSF event is read by any OCSF-aware tool with no sluis schema."
+    statement: "Every audit record MUST be an OCSF 1.x event of core classes, with the profile of the sluis extension and no `unmapped` object."
+    rationale: "A core class is read by any OCSF-aware tool, and the extension types what OCSF lacks."
     level: MUST
     source: design-decision
     status: planned
@@ -1203,7 +1203,7 @@ requirements:
       - {kind: integration-test, ref: "pinned OCSF version test"}
   - id: REQ-AUDIT-089
     area: AUDIT
-    statement: "The build MUST fail when the audit catalogue uses an OCSF class, attribute or enum value that the pinned OCSF version marks deprecated."
+    statement: "The build MUST fail when the audit catalogue or the sluis extension uses an OCSF class, attribute or enum value that the pinned OCSF version marks deprecated."
     rationale: "OCSF deprecates often, and an upgrade must be a deliberate, checked change."
     level: MUST
     source: design-decision
@@ -1373,7 +1373,7 @@ requirements:
       - {kind: test-vectors, ref: "catalogue vectors through every language's validator"}
   - id: REQ-AUDIT-102
     area: AUDIT
-    statement: "An audit record MUST declare every OCSF profile whose attributes it uses in `metadata.profiles`."
+    statement: "An audit record MUST declare every OCSF profile whose attributes it uses in `metadata.profiles`, among them `sluis/audit`."
     rationale: "OCSF validators refuse profile attributes that the record does not declare."
     level: MUST
     source: design-decision
@@ -1397,3 +1397,91 @@ requirements:
     issues: [837, 851]
     verification:
       - {kind: conformance-suite, ref: "port conformance suite, blob create-if-absent"}
+  - id: REQ-AUDIT-104
+    area: AUDIT
+    statement: "An audit record MUST name the sluis extension, with its name, uid and version, in `metadata.extensions`."
+    rationale: "A reader needs the extension version to compile the right schema for a record of any age."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "extensions", depth: Partial}
+    issues: [841]
+    verification:
+      - {kind: test-vectors, ref: "catalogue example records through the OCSF schema validator"}
+  - id: REQ-AUDIT-105
+    area: AUDIT
+    statement: "The build MUST fail when a change to the sluis extension removes or retypes a field without a new major version of the extension."
+    rationale: "Records are never rewritten, so a field of the extension has to keep its meaning for every record that carries it."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [841]
+    verification:
+      - {kind: integration-test, ref: "extension compatibility check in CI"}
+  - id: REQ-AUDIT-106
+    area: AUDIT
+    statement: "The writer MUST refuse an audit record whose bytes differ from the RFC 8785 canonical form of the same record."
+    rationale: "A record that is not canonical would hash differently in another implementation."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-78, section: "8785", depth: Full}
+    issues: [837]
+    verification:
+      - {kind: test-vectors, ref: "RFC 8785 test data and non-canonical records"}
+  - id: REQ-AUDIT-107
+    area: AUDIT
+    statement: "An audit record MUST NOT carry a floating-point number or an integer outside the range of plus or minus 2^53 minus 1."
+    rationale: "RFC 8785 writes numbers as IEEE 754 doubles, and a larger integer would not survive it."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-78, section: "8785", depth: Partial}
+    issues: [841]
+    verification:
+      - {kind: test-vectors, ref: "catalogue vectors with numbers at and beyond the bound"}
+  - id: REQ-AUDIT-108
+    area: AUDIT
+    statement: "The emitter MUST build the audit record and the usage events of an action from one call, with one message id."
+    rationale: "One call cannot emit a usage event without its audit record or the audit record twice."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [841, 915]
+    verification:
+      - {kind: integration-test, ref: "single-call emit test"}
+  - id: REQ-AUDIT-109
+    area: AUDIT
+    statement: "The writer MUST refuse a message whose usage part carries a meter that its catalogue entry does not declare."
+    rationale: "The catalogue says what an action may meter, so a writer can check usage without parsing the security record."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [837, 915]
+    verification:
+      - {kind: integration-test, ref: "undeclared meter refusal test"}
+  - id: REQ-AUDIT-110
+    area: AUDIT
+    statement: "The `id` of a usage event MUST be the `metadata.uid` of the audit record of its message, a slash, and the position of the event in the message."
+    rationale: "The usage event deduplicates by source and id like the message, and joins to its audit record by the prefix."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-100, section: "1.0.2 id", depth: Partial}
+    issues: [841, 915]
+    verification:
+      - {kind: integration-test, ref: "usage event id test"}
