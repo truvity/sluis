@@ -3,11 +3,12 @@
 **Status:** Accepted
 **Date:** 2026-10-30
 
-Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909). This record continues the one-train rule of v1 ADR 0042 for v2, retires the build profiles of the early v2 design, and renames the package directory that earlier v2 notes called `roles`. Release signing and upload credentials: ADR 0030. Kubernetes pod layout and the Kubernetes baseline: ADRs 0046 and 0047.
+Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909). This record continues the one-train rule of v1 ADR 0042 for v2, retires the build profiles of the early v2 design, and renames the package directory that earlier v2 notes called `roles`. Release signing and upload credentials: ADR 0030. Keys and the hand-off to root custody: [0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/). Kubernetes pod layout and the Kubernetes baseline: ADRs 0046 and 0047.
 Rewritten in place on 2026-10-30 (realignment pass; then the package split by function, the Lambda, OCI and Helm packaging, one S3-compatible blob driver, and Rust executables on the same train).
-Rewritten in place on 2026-10-30 (two open points of [issue #910](https://github.com/truvity/sluis/issues/910) decided: a package per driver executable with installation meta-packages, the ceremony helper inside `sluis`, and the Lambda audit writer on reserved concurrency 1 with the blob fence; two points stay open).
+Rewritten in place on 2026-10-30 (two open points of [issue #910](https://github.com/truvity/sluis/issues/910) decided: a package per driver executable with installation meta-packages, and the Lambda audit writer on reserved concurrency 1 with the blob fence; two points stay open).
 Rewritten in place on 2026-10-31 (no `sluis-install-local` meta-package until a native local mode exists, decided by the maintainer).
 Rewritten in place on 2026-10-31 (no FIPS build in the release, after [ADR 0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/); the Rust FIPS open point is closed).
+Rewritten in place on 2026-11-01 (root ceremonies moved to the separate product [ritueel](https://ritueel.id): there is no ceremony helper and no `helpers` directory; the CLI has `sluis key request|install|status`; `sluis trust sync` checks a root list).
 
 ## Context
 
@@ -38,7 +39,7 @@ This record does not set the compatibility rule between releases (what may break
 - **One build tool: GoReleaser v2, open-source edition.** A release contains Rust executables as well as Go ones, and they are built through the same train, with the same SBOM, signing and provenance. There is one build definition for every artifact below. GoReleaser's Rust builder is documented for simple projects, so a multi-binary Cargo workspace for two architectures is proved by a spike (S10, tracked with ADR 0060) before the first Rust code ships.
 - **No FIPS build in the release.** The Rust executables are built on GoReleaser's open-source path with cargo-zigbuild, with current crates and rustls. A future FIPS build variant would need its own build design, decided when it is added ([0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/)).
 - **The YubiKey driver is built in a native per-architecture CI job** while it needs cgo, inside the userland of the oldest supported distribution, so it runs on every supported glibc. It needs cgo against pcsc-lite, so the amd64 build runs on amd64 and the arm64 build on arm64. The job's outputs join the rest of the release.
-- **One command-line tool: `sluis`, with subcommands** for operators and users. Examples are `sluis config check`, `sluis doctor` and `sluis trust sync`. The actors, drivers, the node agent and the host service are separate executables, one per process, because each runs as its own user, unit, function or container ([0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/)). The ceremonies are `sluis ceremony …` subcommands. The part that drives the root cards is a Rust helper executable under `/usr/libexec/sluis/helpers/`, which ships inside the `sluis` package ([0060](/decisions/0060-the-language-follows-the-executable/)). (the directory name is inferred)
+- **One command-line tool: `sluis`, with subcommands** for operators and users. Examples are `sluis config check`, `sluis doctor` and `sluis trust sync`. The actors, drivers, the node agent and the host service are separate executables, one per process, because each runs as its own user, unit, function or container ([0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/)). The key commands are `sluis key request`, `sluis key install` and `sluis key status` ([0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)); root ceremonies belong to [ritueel](https://ritueel.id), not to sluis.
 
 ### Packaging follows the runtime
 
@@ -51,7 +52,7 @@ There are no build profiles. The runtime decides the packaging, and every artifa
 | kubernetes | One multi-arch OCI image per process, and one Helm chart, with the images pinned by digest |
 
 - **`dev` is not a build.** What the profile `dev` used to mean is the local installation ([0038](/decisions/0038-the-local-installation-is-docker-compose-with-one-container-per-actor/)), which runs the published images in Docker.
-- **The install directory is `/usr/libexec/sluis/{actors,drivers,integrations,node,helpers,vendor}/<short-name>`.** It is the same in a package, a tarball and an image. The directory that held the actors is called `actors`; earlier v2 notes called it `roles`, and this rename amends that package layout. File names inside it are unchanged.
+- **The install directory is `/usr/libexec/sluis/{actors,drivers,integrations,node,vendor}/<short-name>`.** It is the same in a package, a tarball and an image. The directory that held the actors is called `actors`; earlier v2 notes called it `roles`, and this rename amends that package layout. File names inside it are unchanged.
 
 ### Packages for hosts
 
@@ -59,7 +60,7 @@ The deb and rpm packages are split by function, and every driver executable is a
 
 | Package | Holds |
 |---|---|
-| `sluis` | The CLI, `sluis agent`, the `sluis trust sync` timer, and the `sluis ceremony` subcommands with their OpenPGP-card helper |
+| `sluis` | The CLI, `sluis agent`, the `sluis trust sync` timer, and the `sluis key` subcommands |
 | `sluis-node` | The node agent |
 | `sluis-server` | The core actors and the first-party integrations |
 | `sluis-driver-<name>` | One driver executable, with the system packages it needs |
@@ -80,7 +81,7 @@ The deb and rpm packages are split by function, and every driver executable is a
 - **Meta-packages exist only for the bare-metal installations.** The lambda and kubernetes installations have no deb or rpm, so they have none. `sluis-install-boards` installs what the boards run. The local installation runs the published images under Docker ([0038](/decisions/0038-the-local-installation-is-docker-compose-with-one-container-per-actor/)), so there is no `sluis-install-local` until a native local mode exists (decided 2026-10-31).
 - **`sluis-server`, `sluis-audit-writer`, `sluis-audit-search` and `sluis-quota` depend on no driver package.** The drivers an installation chooses come from its meta-package or from the operator, so a host that runs only the audit log or only Quota does not install the core actors, and no host installs a driver it does not use.
 - **`sluis-host` is a separate root host service, mainly for SSH.** It never listens on the network. It fetches a signed bundle, verifies it, writes it atomically and keeps the last good one. It ships as signed deb and rpm packages. There is no NixOS module.
-- **The trust bundle reaches hosts through the generic `sluis` package.** It ships `sluis trust sync` as a oneshot service with a `sluis-trust-sync.timer`, which stays off until `sluis trust enroll --url … --fingerprint …` configures it. The sync fetches the bundle in SPIFFE format, checks its signature by a key that both roots certified, refuses a lower sequence number, writes the anchors and runs the distribution's trust update. Its unit may write only the anchors and the extracted store. **sluis generates no packages.** On Kubernetes the bundle reaches pods through a trust-manager source or a ClusterTrustBundle.
+- **The trust bundle reaches hosts through the generic `sluis` package.** It ships `sluis trust sync` as a oneshot service with a `sluis-trust-sync.timer`, which stays off until `sluis trust enroll --url … --fingerprint …` configures it. The sync fetches the bundle in SPIFFE format, checks its signature against the root list and the pinned roots, refuses a lower sequence number or a lower root-list version, writes the anchors and runs the distribution's trust update. Its unit may write only the anchors and the extracted store. **sluis generates no packages.** On Kubernetes the bundle reaches pods through a trust-manager source or a ClusterTrustBundle.
 
 ### Lambda
 
@@ -149,7 +150,7 @@ These are tracked in [issue #910](https://github.com/truvity/sluis/issues/910):
 
 - whether GHCR accepts three-segment names under the repository prefix (the fallback is `ghcr.io/truvity/sluis/<kind>-<name>`).
 
-Decided on 2026-10-30: the ceremony helper ships inside the `sluis` package, and the Lambda audit writer uses a reserved concurrency of 1 on a standard queue with the blob fence (both above). Closed on 2026-10-31: whether a Rust FIPS build can be static, because the release has no FIPS build.
+Decided on 2026-10-30: the Lambda audit writer uses a reserved concurrency of 1 on a standard queue with the blob fence (both above). Closed on 2026-10-31: whether a Rust FIPS build can be static, because the release has no FIPS build.
 
 ## Consequences
 

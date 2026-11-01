@@ -6,6 +6,7 @@
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 Rewritten in place on 2026-10-30 (the federation model: boundary kinds, the isolation ladder, a front installation with boundary installations, and the rules across boundaries). The slug is unchanged.
 Rewritten in place on 2026-10-30 (threat IDs from the threat model added to the consequences).
+Rewritten in place on 2026-11-01 (the roots are ritueel's; an installation gets its intermediates through the hand-off of [0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)).
 
 ## Context
 
@@ -60,7 +61,7 @@ Each boundary declares a level. A higher level adds to the ones below it.
 
 ### What each boundary owns
 
-- **Keys per environment.** An installation that already has a cloud-key root may certify the environment intermediates with it first, and add the two offline hardware roots later through a dual-trust window.
+- **Keys per environment.** An installation that already has a cloud-key root may certify the environment intermediates with it first, and add hardware roots kept off the network later through a dual-trust window. The roots are held by [ritueel](https://ritueel.id), and each installation gets its intermediates through the hand-off of [0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/).
 - **An issuer per environment** (ADR 0059).
 - **Process level, at least, for every environment on a cloud runtime.**
 - **State.** Below L3 one state engine holds a prefix per boundary. From L3 a boundary has its own store.
@@ -81,7 +82,7 @@ Each boundary declares a level. A higher level adds to the ones below it.
 
 ### Shared parts and accepted risks
 
-- **Shared by every boundary:** the front with its `entry`, the console, the roots and the operator.
+- **Shared by every boundary:** the front with its `entry`, the console, the roots (held by ritueel) and the operator.
 - **Accepted risks,** which no boundary level removes:
   - a compromise of the roots;
   - the operator who deploys sluis, and cluster administrators;
