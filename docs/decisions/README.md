@@ -77,6 +77,10 @@ On 2026-11-01, before any code was written, the maintainer had the 32 records ac
 | [0023](0023-sessions-have-three-classes-with-limits-per-class.md) | Sessions have three classes: a person's sessions end at an absolute limit, an agent's end with its consent, and a machine client has no session | Accepted |
 | [0024](0024-break-glass-recovery-uses-passkeys-only.md) | Break-glass recovery uses passkeys only: two attested hardware keys and one pinned synced passkey, a recovery scope, an alert on every use and a quarterly drill | Accepted |
 | [0025](0025-audit-pseudonyms-are-keyed-per-company-and-epoch.md) | Audit pseudonyms are HMAC-SHA384 of the subject under a data key per company and month, wrapped by the sealing key, and only the company's audit role reverses them | Accepted |
+| [0026](0026-integrations-return-facts-or-carry-out-effects-that-core-authorised.md) | Integrations return facts or carry out effects that core authorised, never decide, and are split by credential | Accepted |
+| [0027](0027-a-person-is-tied-to-an-upstream-account-by-issuer-and-subject-claim.md) | A person is tied to an upstream account by the issuer and a configured subject claim, never by e-mail, and a directory only adds facts | Accepted |
+| [0028](0028-grants-come-from-a-declared-vocabulary-and-a-token-carries-fixed-claims-for-one-audience.md) | Grants come from a declared vocabulary, a token carries a fixed set of claims narrowed to its one audience, and token lifetimes have defaults and caps | Accepted |
+| [0029](0029-the-signing-api-signs-sent-content-for-an-authorised-proof-and-returns-an-armoured-detached-signature.md) | The signing API signs the content it is sent for a proof that policy authorised, and its first stage returns an armoured OpenPGP detached signature | Accepted |
 
 ## Where the old records went
 

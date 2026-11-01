@@ -22,7 +22,7 @@ Forces: the actor decides whether a mint is allowed, so it must be small, memory
 - **Evaluation fails closed.** A request is denied unless a policy explicitly permits it, an explicit `forbid` wins over a `permit`, and an evaluation that cannot be completed is a denial.
 - **The output is a grant sealed under the environment's sealing key, not signed** ([0012](/decisions/0012-cryptography-and-authority-keys/#grants-are-sealed-not-signed)). `policy` asks the keys port to seal it and holds no key.
 - **Callers do not link Cedar.** Other actors reach `policy` through its ConnectRPC contract ([0002](/decisions/0002-the-design-model-actors-ports-drivers-and-contracts/#contracts)); the language never appears in their code.
-- **Grant names are declared per audience**, continuing v1 ADR 0010 ([0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#subjects)).
+- **Grant names are declared in a vocabulary and narrowed per audience**, continuing v1 ADR 0010 ([0028](/decisions/0028-grants-come-from-a-declared-vocabulary-and-a-token-carries-fixed-claims-for-one-audience/#grant-names-and-the-vocabulary)).
 
 ### Template links
 
@@ -53,5 +53,4 @@ Forces: the actor decides whether a mint is allowed, so it must be small, memory
 ## Follow-ups
 
 - Cedar schema, entity model and the template-link record: [#1008](https://github.com/truvity/sluis/issues/1008).
-- Claim and grant vocabulary per audience: [#999](https://github.com/truvity/sluis/issues/999).
 - Cutover and migration from v1, including policy: [#1017](https://github.com/truvity/sluis/issues/1017).
