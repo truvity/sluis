@@ -1,6 +1,6 @@
 # 0023 — Sessions have three classes: a person's sessions end at an absolute limit, an agent's end with its consent, and a machine client has no session
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-11-01
 
 Proposal: [issue #998](https://github.com/truvity/sluis/issues/998).
@@ -26,7 +26,7 @@ Principle 3 keeps things apart where their audience, lifetime and revocation dif
 
 ### Human sessions
 
-- **An absolute limit from `auth_time`, never reset by use:** default 24 hours, as in v1. A token's `exp` is capped at the limit, a refresh past it is refused, and a silent authorization past it ends the browser session.
+- **An absolute limit from `auth_time`, never reset by use:** default 24 hours, as in v1, which is also its maximum: an installation may only shorten it. A token's `exp` is capped at the limit, a refresh past it is refused, and a silent authorization past it ends the browser session.
 - **An idle limit on each refresh token, under the absolute limit:** default 12 hours, as in v1, and never above the absolute limit. A per-client session ends at the earlier of the last refresh plus the idle limit and `auth_time` plus the absolute limit, recomputed at every rotation.
 - **Step-up re-authentication** follows [0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#step-up). A step-up refreshes the freshness of the authentication, not `auth_time`, so it does not extend the absolute limit.
 - **The person's sign-out ends the browser session and every human session under it,** at every client, with back-channel logout to the clients that registered for it.
@@ -41,14 +41,7 @@ Principle 3 keeps things apart where their audience, lifetime and revocation dif
 - **Tokens are narrow:** one resource per token (RFC 8707), with the scopes the consent names for that resource. They are sender-constrained by DPoP where the client supports it, when DPoP arrives ([0003](/decisions/0003-core-actors-with-one-responsibility-each/#the-actors)).
 - **The person's sign-out does not end agent sessions,** and the sign-out page says so.
 - **Each agent session is listed and revocable by the person,** in the console, and recorded in audit as a record kind of its own, separate from human sessions.
-- **Concurrent agent sessions are capped per person and client.** A new consent past the cap is refused; the person revokes one first.
-
-### Open part
-
-Two numbers have no basis in v1 or in a standard, and the maintainer chooses them before this record is accepted ([#998](https://github.com/truvity/sluis/issues/998)):
-
-- **The cap on concurrent agent sessions per person and client.** Options: (a) a default of 5 and a maximum of 20, enough for one client on a few devices; (b) a default of 1, so a second device replaces the first, which is simplest to explain but surprises a person with two laptops; (c) no default, so each installation must declare one. Recommendation: (a).
-- **The maximum of the human absolute limit.** v1 had a default of 24 hours and no maximum for interactive sessions. Options: (a) 24 hours, the default is the ceiling; (b) 7 days, the ceiling v1 once allowed for read-only resources; (c) no maximum below the agent class's. Recommendation: (a), because a longer human session is what the agent class is for.
+- **Concurrent agent sessions are capped per person and client:** a default of 5 and a maximum of 20, set per installation. A new consent past the cap is refused; the person revokes one first.
 
 ### Across boundaries
 
@@ -69,6 +62,9 @@ Two numbers have no basis in v1 or in a standard, and the maintainer chooses the
 
 ## Roads not taken
 
+- **A human absolute limit above 24 hours.** v1 kept 24 hours, and a person who needs a longer-lived grant is what the agent class is for.
+- **A cap of one agent session per person and client.** A person who uses the same client on two devices would lose one each time they signed in on the other.
+- **No default cap, left to each installation.** An installation that sets none would have no bound on live agent grants.
 - **One idle and one absolute limit for every refresh token.** An agent would either stop every day or a person's browser would stay signed in for a month.
 - **An idle timeout measured at the issuer for agents.** An agent refreshes on its own schedule, so the issuer has no signal of a person's attention to measure.
 - **Agent sessions ended by the person's sign-out.** Signing out of a browser would silently break every background agent; v1 made the same choice for the same reason.
@@ -78,7 +74,6 @@ Two numbers have no basis in v1 or in a standard, and the maintainer chooses the
 
 ## Follow-ups
 
-- The two numbers of the open part (the agent session cap, the maximum of the human absolute limit), then this record becomes Accepted: [#998](https://github.com/truvity/sluis/issues/998).
 - Sessions, sign-in, listing and revocation for people: [#793](https://github.com/truvity/sluis/issues/793).
 - Agent-class sessions and consent: [#794](https://github.com/truvity/sluis/issues/794); MCP authorization: [#822](https://github.com/truvity/sluis/issues/822); Client ID Metadata Documents: [#792](https://github.com/truvity/sluis/issues/792).
 - Sender-constrained tokens with DPoP: [#912](https://github.com/truvity/sluis/issues/912).
