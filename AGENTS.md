@@ -13,6 +13,13 @@ Instructions for AI agents working in this repository. People follow the same ru
 - The maintainer decides. Present options with pros, cons and a recommendation; do not pick. Merge only as the "Merging" section of `docs/contributing/workflow.md` allows.
 - If a safety check or a permission prompt blocks you, stop and report; do not work around it.
 
+## Keys, roots and ceremonies
+
+- Roots and ceremonies (root keys, root transitions, keyrings, trust bundles, the ceremony CLI) live in the separate project ritueel: https://github.com/truvity/ritueel and https://ritueel.id. sluis holds intermediates only.
+- Keys are generated in place, on a card or in a cloud key service, and are never extractable.
+- sluis has no two-person ceremonies, no air-gapped live CD and no YubiHSM in its design.
+- The source of truth is `docs/decisions/0031-intermediates-and-the-hand-off-to-root-custody.md` (ADR 0031, "Intermediates and the hand-off to root custody").
+
 ## Before you act, read the page
 
 | Before you | Read and follow |
@@ -27,5 +34,6 @@ Instructions for AI agents working in this repository. People follow the same ru
 | write a test that uses a hardware token | "Hardware tokens" in `docs/contributing/tools.md` |
 | write a hostname, an address, an id or a name | `docs/contributing/public-content.md` |
 | report a vulnerability you found or suspect | `SECURITY.md`, never an issue or a pull request |
+| change anything that touches keys, PKI or signing | `docs/decisions/0031-intermediates-and-the-hand-off-to-root-custody.md` |
 | change `GOVERNANCE.md`, `SECURITY.md` or `LICENSE` | stop: only with the maintainer's request |
 | take a role in a team of agents, or report back | `docs/contributing/agents.md` |
