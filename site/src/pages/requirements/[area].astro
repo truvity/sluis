@@ -18,7 +18,7 @@ const next = c.areas[index + 1];
 
 <ReqLayout
   title={`${area.code}: ${title}`}
-  description={`The ${area.reqs.length} sluis v2 requirements of the ${title.toLowerCase()} area, with their standards, features, decisions and verification.`}
+  description={`The ${area.reqs.length} sluis v2 requirements of the ${title.toLowerCase()} area, with their standards, features, issues and verification.`}
 >
   <p>
     {area.reqs.length} requirements: {n((r) => r.level === 'MUST')} MUST, {n((r) => r.level === 'SHOULD')} SHOULD,

@@ -12,7 +12,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    decisions: ["OD-32"]
     issues: [842, 843]
     verification:
       - {kind: integration-test, ref: "test installations per runtime"}
@@ -27,7 +26,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    decisions: ["OD-32"]
     issues: [842, 843]
     verification:
       - {kind: integration-test, ref: "runtime capability validation test"}
@@ -109,7 +107,6 @@ requirements:
     runtimes: ["bare-metal"]
     standards:
       - {id: ST-81, section: "8446", depth: Full}
-    decisions: ["OD-4"]
     issues: [847, 952]
     verification:
       - {kind: integration-test, ref: "network scan"}

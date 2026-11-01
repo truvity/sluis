@@ -1,56 +1,90 @@
 ---
 title: Integrations
-description: "Every system sluis connects to, the integration actor it plays, the use case it serves, and how to connect it, one page each."
+description: "How vendors plug into sluis: six kinds of integration, the rule that they never decide, client profiles, and a page per system sluis connects to."
 status: target
 sidebar:
   order: 0
 ---
 
-An integration connects sluis to something outside it. [Concepts: Integrations](/concepts/integrations/) explains the model: six kinds of integration actor, each integration its own process holding only its own vendor credential, and one rule, **integrations return facts, or carry out effects that core has already authorized; they never decide**. This section is the other half: what each integration is *for*, what it asks the vendor for, and how an operator connects it.
+An **integration** connects sluis to something outside it: a sign-in provider, a directory, a cloud, a chat workspace. Each integration actor is its own process and holds only its own vendor credential: one process per vendor tenant and per credential, named `<vendor>[-<capability>]@<tenant>`. Sign-in and the directory of one workspace tenant are two credentials and so two processes, `google-signin@<company>` and `google-directory@<company>` ([ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/#names)).
 
-## How to read a page
+This page is the model and the index; the [setup patterns](/integrations/connecting/) describe the vendor ceremonies once.
 
-Every integration page has the same seven parts, in this order.
+## Six kinds of integration
 
-| Part | Answers |
-|---|---|
-| What it's for | The real use cases, written generically: "a CI job publishes a package", "an engineer opens a database session". |
-| Integration actors | Which of the six kinds of integration actor the integration plays. |
-| What sluis asks the vendor for | The credentials, scopes and permissions sluis needs, at least privilege. |
-| What policy controls | Which decisions stay in the reviewed policy, and which limits live in core. |
-| What is audited | Which events leave a record. A credential value is never recorded. |
-| Setup | The operator steps, linking to the [setup patterns](/integrations/connecting/). |
-| v1 → v2 notes | What v1 does today, and the parity issue that tracks it. |
+Five kinds are integration actors, each a ConnectRPC contract over one shared base contract. The sixth, the workload verifier, is a verifier driver of `exchange` that holds public material only ([ADR 0007](/decisions/0007-workload-identity-and-host-enrolment/#proofs-and-the-exchange)).
+
+| Kind | It answers or does | Examples |
+|---|---|---|
+| `Upstream` | Sign-in with an upstream identity provider | A workspace identity provider, a generic OIDC provider |
+| `FactsSource` | Supplies directory facts: users, groups, teams | A workspace directory, GitHub teams |
+| `CredentialMinter` | Mints a downstream credential for a grant that core sealed | GitHub installation tokens, Cloudflare API tokens |
+| `Provisioner` | Reconciles an external system to a desired state that core publishes | GitHub teams, Slack channels |
+| `Notifier` | Sends a message | A chat app, an on-call tool |
+| `WorkloadVerifier` | Verifies a token a workload presents and returns what it proves | GitHub Actions, Kubernetes ServiceAccounts, AWS roles |
+
+Every vendor-shaped value travels as an opaque reference or a namespaced attribute (for example a subject in namespace `github` with an id only the integration understands). Core never parses what an integration returns. Each integration declares its attribute names and types, so a policy file is validated at load time without core knowing the vendor.
+
+## Facts or core-authorized effects, never decisions
+
+> Integrations return facts, or carry out effects that core has already authorized. They never decide.
+
+[ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/#the-actors) states the rule; the record that fixes the contract every integration is built against is planned ([#997](https://github.com/truvity/sluis/issues/997)).
+
+- A **FactsSource** or **WorkloadVerifier** returns facts. Whether a fact entitles anyone to anything is `policy`'s question.
+- A **CredentialMinter** carries out an effect. It receives a **mint grant that `policy` sealed under the sealing key**, opens it (which fails for a grant from any other environment), and mints exactly what the grant says. It decides nothing about whether to mint ([ADR 0012](/decisions/0012-cryptography-and-authority-keys/#grants-are-sealed-not-signed)).
+- A **Provisioner** pulls a desired state **addressed by its digest** and reconciles to it. It does not choose what the state should be.
+
+Caps and rate limits live in core, in `policy` and `quota`, so a minter never holds a rule about how much is too much.
+
+```mermaid
+sequenceDiagram
+  participant C as entry
+  participant P as policy
+  participant M as CredentialMinter
+  participant V as Vendor API
+  C->>P: caller's facts, request
+  P-->>C: sealed mint grant
+  C->>M: grant and request
+  M->>M: open grant, check expiry and nonce
+  M->>V: mint, narrowed to the grant
+  V-->>M: short-lived credential
+  M-->>C: credential
+```
+
+## Core calls integrations, never the reverse
+
+`session` calls its upstreams, `exchange` its verifiers, minters and notifiers, `console` the integrations that own operator-set kinds, and `entry` only routes a push notification. An integration never calls a core actor; what it needs from core, such as a provisioner's desired state, core publishes as data in a read-only prefix.
+
+Three invariants are tested, so the rule survives changes: core packages never import vendor packages; there is no edge from an integration to a core component; policy matchers have no vendor-specific fields.
+
+## Client profiles
+
+Many things that look like integrations call no external system: databases, SSH hosts, cert-manager, GitOps consoles, MCP servers. They are clients of sluis, and sluis calls nothing outside for them. Each is a **client profile**: configuration for how that client signs in and what it may ask for, with no process, no credential and no manifest of its own, checked by [`sluis config check`](/concepts/configuration/) like the rest of the configuration.
+
+The AWS and Kubernetes pages sit between the two: the integration part is the workload verifier, and the rest is configuring the account or cluster to trust sluis.
+
+## Isolation and permissions
+
+An integration declares its configuration block and the permissions it needs in a descriptor. The installer never grants more than the descriptor asks, and never accepts a descriptor above the installation's admission policy: no authority keys for a third-party integration, and outbound access only to the hosts it declares. Because each integration is a separate process with its own user and credential, a compromised connector to one vendor does not reach another vendor's token. On Kubernetes each integration is a pod with its own egress NetworkPolicy ([ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/#kubernetes)); the other runtimes are on [Runtimes](/runtimes/).
 
 ## The integrations
 
-The six integration actors are `Upstream` (sign-in providers), `WorkloadVerifier` (verifies workload tokens), `FactsSource` (directory facts), `CredentialMinter` (downstream credentials), `Provisioner` (reconciles an external system to a desired state) and `Notifier` (sends a message).
+Every page has the same parts: what it's for, the kinds it plays, what sluis asks the vendor for, what policy controls, what is audited, and setup. v1 behaviour and the parity issues are on the [v1 parity checklist](/features/).
 
-| Integration | Integration actors | The use cases it serves | Page |
-|---|---|---|---|
-| GitHub | `FactsSource`, `Provisioner`, `CredentialMinter`, `WorkloadVerifier` | A CI job publishes a package or opens a release with a token that lives for minutes and covers one repository. A new engineer joins the organisation's teams because the directory says so. A job proves where it runs with its Actions identity token. | [GitHub](/integrations/github/) |
-| Google Workspace | `Upstream`, `FactsSource` | People sign in with the account they already have. Policy says "members of this group" and the group lives in the company directory. | [Google Workspace](/integrations/google-workspace/) |
-| Generic OIDC and peer sluis | `Upstream`, `FactsSource` (claims), `WorkloadVerifier`, `CredentialMinter` (peer) | A customer or partner signs in with their own OpenID Connect provider. A second sluis installation vouches for its own people. | [Generic OIDC and peer sluis](/integrations/oidc-upstream/) |
-| Slack | `Provisioner`, `Notifier`, `FactsSource` | A private channel always holds exactly the people of one group. An approver gets a message when a request waits. | [Slack](/integrations/slack/) |
-| Cloudflare | `CredentialMinter` | A release job gets a DNS-edit token for one zone, or an object-store credential for one bucket, that expires within the hour. | [Cloudflare](/integrations/cloudflare/) |
-| AWS | `WorkloadVerifier`, plus accounts that trust sluis | An engineer assumes a role in an AWS account without an identity-centre product. A CI job deploys with a role. A Lambda function proves itself to a service. | [AWS](/integrations/aws/) |
-| Kubernetes | `WorkloadVerifier`, plus clusters that trust sluis | An engineer runs `kubectl` with their group mapped to RBAC. A service in one cluster calls a service in another with its ServiceAccount identity. | [Kubernetes](/integrations/kubernetes/) |
-| PostgreSQL | Client profile on the `ca` actor | An engineer opens a database session with a client certificate that expires the same day, in place of a password. | [PostgreSQL](/integrations/postgresql/) |
-| SSH | Client profile on the `ca` actor | An engineer or a robot logs in to a host with an SSH certificate; a client trusts a host's CA, not each host key. | [SSH](/integrations/ssh/) |
-| Outline | `Provisioner` | A wiki's admins, groups and collection grants follow the directory, and a leaver loses access. | [Outline](/integrations/outline/) |
-| GoAlert and Telegram | `Provisioner`, `Notifier` | The on-call tool knows who is on which rotation, and a person can be reached on a chat app linked to their identity. | [GoAlert and Telegram](/integrations/oncall/) |
-| Applications and gateways | Client profiles | A deployment console, an MCP server or an application with its own sign-in trusts sluis as its issuer. cert-manager asks for a certificate. | [Applications and gateways](/integrations/applications/) |
+| Page | Kinds | The use cases it serves |
+|---|---|---|
+| [GitHub](/integrations/github/) | `WorkloadVerifier`, `FactsSource`, `CredentialMinter`, `Provisioner` | A CI job gets a token for one repository that lives minutes; teams follow the directory. |
+| [Google Workspace](/integrations/google-workspace/) | `Upstream`, `FactsSource` | People sign in with the account they have; policy names directory groups. |
+| [Generic OIDC and peer sluis](/integrations/oidc-upstream/) | `Upstream`, `FactsSource`; a peer adds `WorkloadVerifier` and `CredentialMinter` | A partner signs in with their own provider; another sluis vouches for its people. |
+| [Cloudflare](/integrations/cloudflare/) | `CredentialMinter` | A job gets a DNS token for one zone, or R2 credentials for one bucket, for an hour. |
+| [AWS](/integrations/aws/) | `WorkloadVerifier`, plus accounts that trust sluis | People and CI jobs assume roles without stored keys; a Lambda function proves itself. |
+| [Kubernetes API server](/integrations/kubernetes/) | `WorkloadVerifier`, plus clusters that trust sluis | `kubectl` with directory groups in RBAC; a ServiceAccount calls another cluster. |
+| [PostgreSQL](/integrations/postgresql/) | Client profile on `ca` | A database session with a short-lived client certificate. |
+| [SSH](/integrations/ssh/) | Client profile on `ssh-ca` | Host logins with SSH certificates; clients trust a host CA. |
+| [Applications and gateways](/integrations/applications/) | Client profiles | Consoles, applications, gateways and MCP servers trust sluis; cert-manager gets certificates. |
+| [More integrations](/integrations/more/) | `Provisioner`, `FactsSource`, `Notifier` | Slack channels, a team wiki and an on-call tool follow the directory. |
 
-## Client profiles are not integrations
+## Examples are illustrative
 
-Six of v1's 16 "integrations" call no external system. They are clients of sluis: databases, SSH hosts, cert-manager, the GitOps controllers, MCP and SSH sign-in. In v2 they are **client profiles**: configuration for how that client signs in and what it may ask for. A client profile has no process, no credential and no manifest of its own. Their pages here say what the client needs and what the operator writes.
-
-The AWS and Kubernetes pages sit between the two: the integration part is the `WorkloadVerifier` that checks the token a workload presents, and the rest is configuring the account or cluster to trust sluis.
-
-## Setup
-
-The mechanics of connecting each vendor repeat. The [setup patterns](/integrations/connecting/) describe them once: the GitHub App manifest flow, Slack app manifests, Google Workspace delegation (with and without a stored key), Cloudflare's minting token, AWS trust, and a generic OIDC upstream.
-
-## Status
-
-The pages describe the target state. v1 does most of this today; the [features page](/features/) lists each v1 capability against its parity issue, and every integration page links its issues in the last section. [Open decisions](/open-decisions/) lists the points the maintainer has not decided.
+Command names and configuration keys in the examples on these pages show the shape, not decided names, until the command tree and the configuration keys are designed ([#1097](https://github.com/truvity/sluis/issues/1097)).

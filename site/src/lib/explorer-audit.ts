@@ -3,15 +3,14 @@
 // agree. Nothing here states a fact about audit. A "shape" in this file is a
 // tested installation (local, boards, lambda) of a runtime; a "role" is an actor.
 import { parse } from 'yaml';
-import { assertOpenDecision } from './od';
 import raw from '../data/explorer/audit.yaml?raw';
-import { data as arch } from './explorer-arch';
-import { fill, place, routeEdges, size, label, type Detail, type MapModel, type MapNode, type Row } from './explorer-layout';
+import { data as arch, statuses } from './explorer-arch';
+import { assertStatuses, fill, place, routeEdges, size, label, type Detail, type MapModel, type MapNode, type Row } from './explorer-layout';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export const data: any = parse(raw);
-for (const m of raw.matchAll(/\bOD-\d+\b/g)) assertOpenDecision(m[0]);
-export const statuses: Record<string, string> = arch.statuses;
+assertStatuses(data, statuses, 'audit.yaml');
+export { statuses };
 
 export type AuditShape = MapModel & {
   shape: any;
@@ -46,7 +45,7 @@ function build(sh: any): AuditShape {
     let rows: Row[] = [];
     let kind = '';
     let status: string | undefined;
-    let od: string | undefined;
+    let issue: number | undefined;
     const notes: Detail['notes'] = [];
 
     if (n.role) {
@@ -57,7 +56,7 @@ function build(sh: any): AuditShape {
         if (n.role !== 'entry') { l2 = fill(rt.role.id_short, { id: rid }); l3 = fill(rt.role.sock_short, { id: rid }); }
       }
       kind = 'actor';
-      status = 'agreed';
+      status = 'decided';
       rows = [
         { k: 'Unit', v: fill(rt.role.unit, { id: rid }), code: true },
         { k: 'Identity', v: fill(rt.role.identity, { id: rid }), code: true },
@@ -76,7 +75,7 @@ function build(sh: any): AuditShape {
       l3 = `${portTitle} port`;
       kind = perRole ? 'driver service, per-actor' : `driver service, shared${d.shared_name ? ` (${d.shared_name})` : ''}`;
       status = d.status;
-      od = d.od;
+      issue = d.issue;
       rows = [
         { k: 'Driver', v: `${d.title}, instance: ${d.instance}` },
         { k: 'Backed by', v: d.backing },
@@ -103,14 +102,14 @@ function build(sh: any): AuditShape {
       l2 = bl[0];
       l3 = bl[1] || n.title;
       kind = 'backing store';
-      status = n.port === 'index' ? d.status : 'agreed';
-      od = n.port === 'index' ? d.od : undefined;
+      status = n.port === 'index' ? d.status : 'decided';
+      issue = n.port === 'index' ? d.issue : undefined;
       rows = [{ k: 'Backend', v: d.backing }];
       if (n.port === 'blob') {
-        rows = [{ k: 'Backend', v: au.blob }, { k: 'Lock', v: `${au.lock} (which installs, and which mode, is not yet decided)` }, { k: 'Prefixes', v: 'batch objects, seals/, keys/ (the trust log)' }];
+        rows = [{ k: 'Backend', v: au.blob }, { k: 'Lock mode', v: au.lock }, { k: 'Layout', v: '<kind>/<boundary>/<log>/ per log: the tlog-tiles entry bundles and tiles, and checkpoints/<size>' }];
       }
       if (n.port === 'keys') rows.push({ k: 'Log key', v: au.log_key });
-      if (n.port === 'state') rows = [{ k: 'Backend', v: sh.state }, { k: 'Holds', v: 'audit_batches, cursors and dedupe, replicated; no record bodies' }];
+      if (n.port === 'state') rows = [{ k: 'Backend', v: sh.state }, { k: 'Holds', v: 'audit_batches, the transport cursor and the dedupe ids, written in one atomic batch; no record bodies' }];
       if (n.port === 'index') {
         rows = [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: au.index_placement }];
       }
@@ -118,28 +117,26 @@ function build(sh: any): AuditShape {
       kind = 'outside sluis';
     } else if (id === 'producers') {
       kind = 'actors, producers';
-      status = 'agreed';
+      status = 'decided';
     } else if (id === 'recovery') {
       kind = 'break-glass tool';
-      status = 'agreed';
+      status = 'decided';
     } else if (id === 'rspool') {
       kind = 'local spool, break-glass';
-      status = 'agreed';
+      status = 'decided';
     }
     if (id === 'index' && !n.port) rows = [];
-    // Optional per-node overrides from the YAML (used by actors whose placement is open).
+    // Optional per-node overrides from the YAML.
     if (n.kind) kind = n.kind;
-    if (n.status) status = n.status;
-    if (n.od) od = n.od;
+    if (n.status) { status = n.status; issue = n.issue; }
     if (n.rows) rows = n.rows;
     if (n.extra_rows) rows = [...rows, ...n.extra_rows];
-    for (const o of n.od_note ?? []) notes.push({ id: o.id, text: o.text });
 
     const detail: Detail = {
       title: n.title,
       kind: kind || n.cls,
       cls: cls === 'driver' ? 'driver-shared' : cls,
-      status, od,
+      status, issue,
       does: n.does,
       rows: [...rows, ...(n.holds ? [{ k: 'Holds', v: n.holds }] : []), ...(n.never ? [{ k: 'Never holds', v: n.never }] : [])],
       lists: [],
@@ -149,7 +146,7 @@ function build(sh: any): AuditShape {
       // The index node is an index store, not a driver.
       const d = arch.drivers[sh.ports.index];
       const bl = arch.backing_lines[`index.${sh.ports.index}`];
-      nodes.push(place({ id, lane: n.lane, row: n.row, cls: 'store', shared: false, title: 'search index', l2: bl[0], l3: bl[1], detail: { ...detail, kind: 'search index', cls: 'store', status: d.status, od: d.od, rows: [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: au.index_placement }], notes: [] } }));
+      nodes.push(place({ id, lane: n.lane, row: n.row, cls: 'store', shared: false, title: 'search index', l2: bl[0], l3: bl[1], detail: { ...detail, kind: 'search index', cls: 'store', status: d.status, issue: d.issue, rows: [{ k: 'Backend', v: d.backing }, { k: 'Placement', v: au.index_placement }], notes: [] } }));
       nameOf[id] = 'search index';
       continue;
     }
@@ -170,12 +167,11 @@ function build(sh: any): AuditShape {
   }
 
   const { width, height, lanes } = size(nodes, data.lanes);
-  const noteList = [];
-  if (au.note) noteList.push({ text: au.note, status: au.assumed ? 'proposed' : 'agreed' });
+  const shapeNotes: MapModel['notes'] = au.note ? [{ text: au.note, status: 'decided' }] : [];
   return {
     id: sh.id, name: sh.name, nodes, edges, width, height, lanes,
     intro: `Runtime: ${sh.environment}. Transport: ${ok.short}. Keys: ${sh.keys}. State: ${sh.state}. Blob: ${au.blob}, ${au.lock}.`,
-    notes: noteList.map((x) => (x.od ? x : { ...x, od: undefined })) as any,
+    notes: shapeNotes,
     shape: sh, audit: au, transport: ok,
     ack: ok.durable,
     wait: ok.wait + (cluster ? ok.cluster_wait ?? '' : ''),

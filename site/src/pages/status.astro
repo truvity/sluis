@@ -2,8 +2,8 @@
 // The project status page (ADR 0020), built at build time. Groups and their order come
 // from the project's `Product milestone` field (src/lib/project.ts); requirement and
 // decision facts from the repository; issue figures from the board as read at build
-// time. Conformance, tests and CI are live columns with no data yet. The page needs no
-// JavaScript.
+// time. Conformance, tests and CI wait for the live status API (#1037) and have no data
+// yet. Everything on the page is a snapshot of the build. The page needs no JavaScript.
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import { Aside, Badge } from '@astrojs/starlight/components';
 import '../styles/project-status.css';
@@ -41,8 +41,9 @@ const label = (g: Group, i: number) => (g.milestone ? `${i + 1}. ${g.name}` : g.
       its proposal issue. <a href="#how-this-page-is-built">How this page is built</a> is at the end.
     </p>
     <p class="ps-legend">
-      <Badge text="build-time" variant="note" /> from the repository and the board, as of {asOf}.{' '}
-      <Badge text="live" variant="tip" /> will be read live; until then it shows the build-time snapshot.
+      Every figure is a <Badge text="snapshot" variant="note" /> of the repository and the board, taken when the site was built
+      (as of {asOf}); the page changes when the site is rebuilt. Conformance, tests and CI have no data until the
+      <a href="https://github.com/truvity/sluis/issues/1037">live status API</a> exists.
     </p>
 
     {
@@ -101,12 +102,12 @@ const label = (g: Group, i: number) => (g.milestone ? `${i + 1}. ${g.name}` : g.
         <thead>
           <tr class="ps-groups">
             <th scope="col" rowspan="2">Milestone / area</th>
-            <th scope="colgroup" colspan="6">Requirements <Badge text="build-time" variant="note" size="small" /><span class="ps-asof">as of {asOf}</span></th>
-            <th scope="colgroup" colspan="3">ADRs <Badge text="build-time" variant="note" size="small" /><span class="ps-asof">as of {asOf}</span></th>
-            <th scope="colgroup" colspan="4">Issues <Badge text="live" variant="tip" size="small" /><span class="ps-asof">snapshot as of {asOf}</span></th>
-            <th scope="colgroup">Conformance <Badge text="live" variant="tip" size="small" /><span class="ps-asof">no CI data yet</span></th>
-            <th scope="colgroup">Tests <Badge text="live" variant="tip" size="small" /><span class="ps-asof">no CI data yet</span></th>
-            <th scope="colgroup">CI on main <Badge text="live" variant="tip" size="small" /><span class="ps-asof">no CI data yet</span></th>
+            <th scope="colgroup" colspan="6">Requirements <span class="ps-asof">as of {asOf}</span></th>
+            <th scope="colgroup" colspan="3">ADRs <span class="ps-asof">as of {asOf}</span></th>
+            <th scope="colgroup" colspan="4">Issues <span class="ps-asof">as of {asOf}</span></th>
+            <th scope="colgroup">Conformance <span class="ps-asof">no data yet</span></th>
+            <th scope="colgroup">Tests <span class="ps-asof">no data yet</span></th>
+            <th scope="colgroup">CI on main <span class="ps-asof">no data yet</span></th>
           </tr>
           <tr>
             <th scope="col" class="ps-first" title="Not withdrawn and not out of scope">Total</th>
@@ -145,7 +146,7 @@ const label = (g: Group, i: number) => (g.milestone ? `${i + 1}. ${g.name}` : g.
                       <td class:list={['ps-num', { 'ps-first': k === 0, 'ps-zero': v === 0 }]}>{v}</td>
                     ))
                   : [0, 1, 2, 3].map((k) => <td class:list={['ps-num', 'ps-zero', { 'ps-first': k === 0 }]} title="project data not available at build time">—</td>)}
-                {[0, 1, 2].map(() => <td class="ps-num ps-zero ps-first">—<span class="ps-sr"> no CI data yet</span></td>)}
+                {[0, 1, 2].map(() => <td class="ps-num ps-zero ps-first">—<span class="ps-sr"> no data yet</span></td>)}
               </tr>
               {g.areas.map((a) => (
                 <tr class="ps-area-row">
@@ -224,8 +225,8 @@ const label = (g: Group, i: number) => (g.milestone ? `${i + 1}. ${g.name}` : g.
       build. Requirement and decision status come from the repository (<code>docs/requirements/</code> and <code>docs/decisions/</code>)
       and are published as <a href="/data/repo.json"><code>/data/repo.json</code></a>. A requirement is <code>done</code> only when a pull request set it together with the passing test. A requirement is placed under the earliest
       milestone of the issues it links, a decision record under the milestone of its proposal issue, and the current milestone is the
-      first one that still has open issues. The issue figures are a snapshot of the board at build time; a live layer will refresh
-      them, and add conformance, tests and CI, from the project's status API.
+      first one that still has open issues. The issue figures are a snapshot of the board at build time. The live status API
+      (<a href="https://github.com/truvity/sluis/issues/1037">#1037</a>) will refresh them and add conformance, tests and CI.
     </p>
   </div>
 </StarlightPage>

@@ -1,125 +1,154 @@
 ---
-title: Data
-description: "How sluis keeps records safe: origins and sensitivity, one writer per record kind, encryption of every value, the data ports, fencing tokens and backups."
+title: Data and secrets
+description: "Who owns which sluis record and how it is sealed: origins and sensitivities, one writer per kind, encryption, the data ports, secrets and export."
 status: target
 sidebar:
-  order: 8
+  order: 7
 ---
 
-sluis keeps records: sessions, directory facts, operator-set configuration, quota balances and meters, the signing ring's metadata, audit batches. Most of the security of the design rests on who is allowed to change which of them. Three rules carry it: every record kind has an origin and a sensitivity, every record kind has one writer, and trust classes are kept apart.
+sluis keeps records: sessions, directory facts, operator-set configuration, quota balances, the signing ring's metadata, audit batches. Most of the security of the design rests on who may change which of them and who can read them. Three rules carry it: every record kind has an origin and a sensitivity ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/)), every record kind has one writer, and every value is sealed before it reaches a store ([ADR 0011](/decisions/0011-state-is-one-port-with-compare-and-set/)). Secrets follow the same rules, behind a port of their own.
 
 ## Origins and sensitivity
 
-Every stored **record kind** declares one **origin**, and every field one **sensitivity**, in the configuration schema ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/)). Together they decide where a value lives, who may write it, whether it is in a backup, what a restore does with it, whether it may leave sluis, and what an audit record, a log line or a span may say about it. The backup list, the deny matrix, the telemetry allowlist and the audit redaction are generated from them.
+Every stored **record kind** declares one **origin**, and every field one **sensitivity**, in the configuration schema. Together they decide where a value lives, who may write it, whether it is in a backup, what a restore does with it, whether it may leave sluis, and what an audit record, a log line or a span may say about it. The backup list, the deny matrix, the telemetry allowlist and the audit redaction are generated from them ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/#origins)).
 
 To classify a record kind, ask in order; the first "yes" is its origin.
 
 | Origin | The question | Examples | Written by |
 |---|---|---|---|
-| **declared** | Did an operator write it in a reviewed file, delivered read-only? | the install file, policy, clients, exchange trust, quota limits, export recipients | Nobody at run time |
+| **declared** | Did an operator write it in a reviewed file, delivered read-only? | the install file, policy, clients, exchange trust, quota limits, export recipients, the card slot map override | Nobody at run time |
 | **operator-set** | Did a person choose it at run time, on the console, the CLI or the API, as a lasting intent? | chat channels managed from the console, runtime switches, a console-connected directory tenant, a secret put at run time | The actor that owns the kind |
 | **learned** | Can sluis rebuild it without a person from an external system, by pull or by push? | directory users and groups, memberships, discovered channels, a client metadata cache | The integration that observed it |
 | **derived** | Can sluis rebuild it from its own records or log? | the search index, quota meters and hourly aggregates | The deriving actor |
 | **issued** | Otherwise: sluis created it, or a vendor or a person handed it over once. **Durable** or **ephemeral** | durable: client secret versions, revocations, the issuance log, vendor-issued secrets, pins, account links, approvals, quota balances; ephemeral: sessions, refresh tokens, codes, leases | The issuing actor |
 
-An act, such as an approval or a consent, is an issued record of the act, not configuration. The audit log itself and the keys in the `keys` port are outside the model.
-
-**Push is notify, then pull.** A product that pushes (a customer identity product pushing membership, for example) sends a small notification to `entry`, which routes it to the integration actor. The integration reads the full state from the product's API, and a periodic full re-sync runs as well. The product authenticates with its workload identity and touches only its own organisations.
+An act, such as an approval or a consent, is an issued record of the act, not configuration. A grant is not a stored record: it is a sealed output of `policy` in flight. The audit log and the non-extractable keys are outside the model.
 
 | Sensitivity | Meaning | Audit record | Telemetry | Logs |
 |---|---|---|---|---|
 | **public** | Meant to be published (key sets, CA certificates) | yes | only allowlisted | yes |
 | **internal** | Not published, personal or secret (client ids, channel names, digests) | yes | allowlisted identifiers only | yes |
-| **personal** | About an identifiable person (an email, a subject, a membership) | with identity treatment | never | redacted by default |
+| **personal** | About an identifiable person (an e-mail address, a subject, a membership) | pseudonymised | never | redacted by default |
 | **secret** | Credential material that is read | a fingerprint and a revision only | never | never |
 
 A field may also carry a **free-text** flag, for text a person typed: it never enters telemetry, and its length in an audit record is bounded.
 
 ## One writer per record kind
 
-Every **record kind** has exactly one **record writer**: one actor that is allowed to create and change it. Other actors may read it, if their manifest says so, and may not write it. The writer of a kind is written down in the manifests and enforced in two layers ([Defence in depth](/concepts/drivers/#defence-in-depth)): the port library scopes every call to `<boundary>/<kind>/…` from the actor's own identity, and the store checks the actor's own credentials. The owner of an rqlite cluster has the only user that may `execute`, and its readers have `query`-only users; on DynamoDB, an IAM `dynamodb:LeadingKeys` condition per actor role; on Postgres, grants and row-level security. There is no shared state driver in between.
+Every **record kind** has exactly one **record writer**: one actor that may create and change it. Other actors may read it if their manifest says so. The port library scopes every call to `<boundary>/<kind>/…` from the actor's own identity, and the store checks the actor's own credential: a file per actor uid on `embedded`, an `execute` user for the owner and `query`-only users for readers on `rqlite`, a `dynamodb:LeadingKeys` condition per role on DynamoDB ([ADR 0011](/decisions/0011-state-is-one-port-with-compare-and-set/#one-writer-per-kind)). There is no state mediator in between.
 
-Examples (illustrative; the full list is generated from the manifests):
+Examples (the full list is generated from the manifests):
 
 | Record kind | Its single writer | Why only one |
 |---|---|---|
-| Audit batch sequence | The audit `writer` of that log | The sequence must have no gaps or forks, so there is exactly one writer per log. Purge and erasure requests go to the writer through a call and are appended by it. |
-| Quota balances | `quota` | Balances are issued records that change only through `quota`; the meters are derived from the log |
+| Audit batch sequence | The audit writer of that log | The sequence must have no gaps or forks ([One writer per log](/concepts/audit/#exactly-one-writer-per-log)) |
+| Quota balances | `quota` | Balances change only through `quota`; the meters are derived from the usage log |
 | Signing ring | `signer` | The ring is the authority for token keys |
 | Sessions | `session` | The owner of sessions and the session cookie |
 | Directory snapshots | The facts integration that produced them | Another process holds only a cached copy with an expiry |
 | Operator-set records of a kind | The actor that owns the kind, on a request routed by `console` | The owner validates the write with its own logic; the manifest says which kinds accept operator-set writes |
 
-When two processes seem to need to write one record, the record is split instead: the learned fields become a kind the integration writes, and the operator-set fields a kind its owning actor writes, each with its own writer. The word **writer** by itself means this on this page, and not the audit `writer` actor.
+When two processes seem to need to write one record, the record is split instead: the learned fields become a kind the integration writes, and the operator-set fields a kind its owning actor writes. The word **writer** by itself means this on this page, not the audit writer actor.
 
-## Trust classes are kept apart
-
-In v1 one state store holds hot sessions, the signing key ring, leases, controller journals, directory records and run records. Write access to that store is therefore inside the trust boundary, and on a store without per-record permissions the isolation between them is only a rule in a query layer.
-
-v2 keeps records of different **trust classes** and origins apart, in separate namespaces at least and in separate stores where an installation allows. Operator-set records, learned facts, issued records and sessions never share a namespace, even when pieces of an installation share one driver instance. The signing ring and leases never share a namespace with sessions and directory records. Key material has its own three classes:
-
-1. the ring and its wrapping, used by the issuer only;
-2. vendor-issued secrets held for integrations (a GitHub App key, a chat token), behind the `secrets` port;
-3. authority keys (the audit log key, the CA keys), which have their own holder and are never read by the issuer.
+**Trust classes are kept apart.** Operator-set records, learned facts, issued records, sessions and quota state never share a namespace, even when pieces share one driver instance, and they use separate stores where an installation allows. Vendor-issued secrets sit behind the `secrets` port, and authority keys have their own holder.
 
 ## Every value is encrypted
 
-**Every state value is encrypted in the port library**, before it reaches any driver (agreed, EC-1). A store, its replicas and its backups hold ciphertext.
+**Every state value is encrypted in the port library**, before it reaches any driver, whatever its sensitivity. A store, its replicas and its backups hold ciphertext and record keys only ([ADR 0011](/decisions/0011-state-is-one-port-with-compare-and-set/#every-value-is-encrypted)).
 
-- **AES-256-GCM**, which is FIPS-compatible.
-- **A data key per (boundary, record kind).** It is wrapped by the boundary's sealing key through the `keys` port. Unwrapping is allowed for the kind's writer and its declared readers only: by the `key-holder` access list, or by the KMS key policy with an encryption-context condition.
+- **AES-256-GCM, with a data key per (boundary, record kind).** It is wrapped under the boundary's sealing key through the `keys` port, and a data key is rotated before its AES-GCM usage limit.
+- **The sealing key is one per environment boundary**: on AWS a symmetric KMS key with an encryption context per use, on a card the P-384 ECDH key in slot `9d` ([Keys](/concepts/keys/#the-card-slot-map)). Tenants have no key of their own, only data keys wrapped under it; grants and the session cookie key are wrapped under it with their own purpose.
+- **Unwrapping is allowed for the kind's writer and its declared readers only**: by the `key-holder` access list, or by the KMS key policy with an encryption-context condition.
 - **The additional authenticated data is (boundary, kind, key, version)**, so a value moved to another record, kind, boundary or version fails to decrypt.
-- **Record keys never contain personal data.** Only the values are encrypted, so the keys must not carry an email address or a name.
+- **Record keys never contain personal data.** They stay in the clear so the store can index and list them, so they must not carry an e-mail address or a name.
 
 ## Ports
 
-Actors reach their data through five ports. Each has a contract that does not change with the technology behind it.
+Actors reach their data through five ports. Each has a contract that does not change with the technology behind it. The drivers of each installation are on [Installations](/runtimes/installations/).
 
 | Port | What it holds | The contract |
 |---|---|---|
-| `state` | Records, with revisions | Get, put with a precondition, compare-and-set, an atomic batch and expiry ([ADR 0011](/decisions/0011-state-is-one-port-with-compare-and-set/)). Delete, listing by prefix, a conditional adjust and a feed of changes are proposed further operations ([#1009](https://github.com/truvity/sluis/issues/1009)) |
-| `index` | A search index derived from batches | Apply a batch, read and set a cursor, query, rebuild from the batches |
-| `blob` | Immutable objects, such as audit batches | Put once (an atomic create-if-absent that every driver must give, [Drivers](/concepts/drivers/#create-if-absent)), get and list by key, with a lock mode of none, removable or compliance |
-| `transport` | Messages that must survive a restart, such as audit records, or a stream of them to the writer | Put, receive, acknowledge, return with a delay; or a direct stream |
-| `lease` | Named, time-limited ownership | Acquire a named lease, renew, release |
+| `state` | Records, with revisions | `get`, `put` that creates only if absent, compare-and-set, an atomic batch and expiry. There is no unconditional put: a caller changes a record only against the revision it read |
+| `index` | A search index derived from the audit log | Apply a batch, read and set a cursor, query, rebuild from the batches |
+| `blob` | Immutable objects, such as audit batches | Put once (an atomic [create-if-absent](/concepts/drivers/#create-if-absent)), get and list by key, with a lock mode of none, removable or compliance |
+| `transport` | Messages that must survive a restart, or a stream of them to the writer | Put, receive, acknowledge, return with a delay; or a direct stream |
+| `lease` | Named, time-limited ownership | Acquire, renew, release |
 
-The contract has no unconditional put. A caller changes a record only against the revision it read.
+A record past its lifetime reads as absent, whatever the engine did with it. There are no interactive transactions: a flow over several records is idempotent steps with a recovery marker.
 
 ### The atomic batch
 
-A **write batch** applies several writes together or none of them. The audit `writer` uses it to register the sealed batches of its audit log and its usage log in the sequence, record the ids it deduplicated and move its cursor, so a crash cannot leave one without the others, and the two logs never disagree ([ADR 0016](/decisions/0016-the-audit-log/)). The next number of the sequence is allocated by a compare-and-swap inside the same batch.
+A **write batch** applies several writes together or none of them. The audit writer uses it to register the sealed batches of its audit log and its usage log, record the ids it de-duplicated and move its cursor, so a crash cannot leave one without the others and the two logs never disagree ([ADR 0016](/decisions/0016-the-audit-log/#sealing)). The next number of the sequence is allocated by a compare-and-set inside the same batch.
 
-### Conditional adjust
+### Further operations
 
 :::note[Proposed]
-The conditional adjust is a proposed further operation of the state port ([#1009](https://github.com/truvity/sluis/issues/1009)). Until it is decided, quota uses compare-and-set.
+Delete, listing by prefix, a feed of changes and a **conditional adjust** are further state operations, planned in [#1009](https://github.com/truvity/sluis/issues/1009). A conditional adjust changes a number by a delta and refuses if the result would cross a floor, as one operation on the store. It is added if the quota load test shows that compare-and-set on a hot counter contends; until then quota uses compare-and-set.
 :::
-
-A **conditional adjust** changes a number by a delta, and refuses if the result would cross a floor. It is one operation on the store, not a read followed by a write. If it is decided, quota would use it for strict admission: a counter that many requests hit at once would make a compare-and-set loop contend, and a read-then-write would let two requests both pass.
 
 ### Leases and fencing tokens
 
-A lease is **named**: there is one lease for each thing that needs a single owner, and many can be held at once by different holders. Acquiring a lease returns a **fencing token**, a number that grows each time the lease changes hands. A holder passes its token with every write it makes under the lease, and the store refuses a token that is lower than one it has seen. A holder that was paused, lost its lease, and woke up believing it still held it, cannot write over the new holder.
+A lease is **named**: one for each thing that needs a single owner, and many can be held at once by different holders. Acquiring a lease returns a **fencing token**, a number that grows each time the lease changes hands. A holder passes its token with every write it makes under the lease, and the store refuses a token lower than one it has seen, so a holder that was paused, lost its lease and woke up believing it still held it cannot write over the new holder ([ADR 0011](/decisions/0011-state-is-one-port-with-compare-and-set/#leases)).
 
-The final form is agreed:
+- **Leases live on the state store**, built on compare-and-set with a fencing token, on every state driver, independent of the Raft leader. A named lease `leader` stays available. On a single node a local lock is enough.
+- **Where the target store can fence, the fence is in that store.** A Postgres index write checks the token in the same transaction, and audit batches are created only if absent, so a log cannot fork; with one log per node, the boards' audit writers need no lease.
+- **External side effects** rely on the lease plus idempotent reconcilers. A database advisory lock is never used alone, because it gives no fencing token.
+- On Kubernetes, leases and state are on DynamoDB; there is no Kubernetes Lease driver and no PostgreSQL state driver in 2.0.
 
-- **Leases live on the state store**, built on compare-and-set with a fencing token, and independent of the Raft leader. A named lease `leader` stays available.
-- **Where the target store can fence, the fence is in that store.** A Postgres write checks the token in the same transaction. Blob batches are created with `If-None-Match: *` (create-if-absent), so an audit log cannot fork; with one log per node, the writers on boards need no lease at all.
-- **External side effects** (the GitHub, chat and directory reconcilers) rely on the lease plus reconcilers that are idempotent.
-- **A session advisory lock is never used alone**, because it gives no fencing token.
-- A Kubernetes Lease driver is in the backlog. There is no PostgreSQL state driver in 2.0: Kubernetes keeps state on DynamoDB ([ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/#kubernetes)).
+## Secrets and export
 
-## Where the data lives
+sluis holds secrets because it has to: a GitHub App key that the vendor issued through a manifest flow, a chat token, a generated client secret. **sluis stores its own secrets and its integrations' secrets, and publishes a small, typed set of values.** It is not a general secrets engine: it offers no arbitrary key-value storage, dynamic secrets, leases or transit to others. Where a caller needs a credential for a vendor, sluis **mints a scoped credential** ([Integrations](/integrations/)) instead of storing the caller's own.
 
-The drivers behind the ports differ by installation (see [Ports and drivers by installation](/concepts/drivers/#ports-and-drivers-by-installation)). Two choices matter for data:
+| Port | What it is for |
+|---|---|
+| `secrets` | Whole values under addresses: sluis's own secrets and the secrets of its integrations. A listing returns names, never values |
+| `export` | A small set of typed, versioned documents that something outside sluis may read |
 
-- **State** is the embedded single-node store on one node, **rqlite on Raft** across the three boards, with **one cluster per (boundary, owning actor)**, and **DynamoDB** on serverless and on Kubernetes, with a table per boundary. The Raft peer traffic is each cluster's own port over mutual TLS.
-- **Index** is `sqlite` on a single server, and `rqlite` on a cluster of boards, so the reader can run on any node. It is `postgres` on Kubernetes (the `cnpg` mode, or `external` with any connection string), and `postgres` on Aurora on the lambda installation, reached through RDS Proxy ([ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/)). The search index is derived from the audit batches and can always be rebuilt from them.
+`keys` holds material that never leaves its store; `secrets` holds values that are read. A secret is never a plain record in `state`, and never appears in an audit record (a fingerprint and a revision only), in telemetry or in a log line.
 
-## Secrets
+### Where a secret comes from
 
-Two further ports hold values that are not records. The **`secrets`** port holds whole values under addresses: sluis's own secrets and its integrations' secrets. The **`export`** port publishes a small, typed set of documents that something outside sluis may read, with file and bucket drops age-encrypted to the consumer's own recipient. sluis is not a general secrets engine. See [Secrets and export](/concepts/secrets/).
+A secret's origin decides who wrote it and whether it is backed up ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/#origins)):
+
+| Origin | Example | Lives in | In a backup |
+|---|---|---|---|
+| declared, by reference | a vendor root token the operator keeps in their own store | the operator's store, read through a source | no; sluis only names it |
+| operator-set | a secret put with `sluis secrets put` or pasted on the console | sluis's own store | yes, sealed |
+| issued by a vendor | a GitHub App key from the manifest flow, a chat bot token | sluis's own store | yes, sealed |
+| issued by sluis | a generated client secret, a minted credential | sluis's own store, or not stored if short-lived | durable ones yes, sealed |
+
+### Sealed state
+
+A **`sealed-state`** driver is a `secrets` driver that keeps its ciphertext in `state`. Sealed state is allowed on every runtime ([ADR 0011](/decisions/0011-state-is-one-port-with-compare-and-set/#sealed-secrets)); a store the cloud provides is still the usual choice where there is one. On the [boards](/runtimes/installations/#boards) it is the store, because there is no cloud store for vendor-issued secrets.
+
+- **A sealed value uses the same envelope as every value**, with `purpose=secret` in the encryption context and the additional authenticated data, so it cannot be read as an ordinary value or the other way round.
+- **Each version of a secret is one immutable item**, and the record that names the current version changes by compare-and-set, so a rotated secret can overlap with its predecessor.
+- **A re-seal rewraps the data keys** under the new sealing key without decrypting the values.
+- **A backup archives sealed values sealed**, with escrow copies of the data keys encrypted to the archive's recipients; losing the sealing key is a restore from those recipients, not a ceremony ([Backup](/concepts/backup/#encryption)).
+
+Nobody outside sluis can read sealed state, so an exported value goes out through a drop.
+
+### The export port
+
+Exports are **typed and versioned**: a document has a kind, a schema and a version, and a breaking change is a new version written beside the old one for a deprecation window. Whether a value may leave sluis is a property of its kind: a kind marked external is published through `export` ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/#backup-and-restore-by-origin)).
+
+| Class | Example | Channel |
+|---|---|---|
+| Public material | The key set, CA certificates, trust bundles | Static publication; no secret involved |
+| Declared data | Rendered policy, the objects an integration needs at its vendor | Rendered files, applied by the operator |
+| Learned data | Directory snapshots, group memberships | An authenticated read with a grant |
+| Secrets | A generated client secret, an App key, a minted credential | A drop, or a read from a consumer-readable store |
+
+**Copies are not made twice.** An exported value is stored once. The consumer is granted the path on its own side (its role, its policy), and sluis may render that grant for the operator to apply; sluis never holds the consumer's identity. A secret referenced from declared configuration is exported by granting the consumer the operator's own path, not by copying it. A drop is a derived, single-writer artefact of one document, replaced as a whole. sluis never writes Kubernetes objects: it exports, and clusters pull.
+
+### Drops are age-encrypted to the consumer
+
+A **file drop** (a file in a directory that a node-local consumer reads) and a **bucket drop** (an object in a bucket) are **age-encrypted to the consumer's own recipient**, a named exception to sluis's algorithm rules ([ADR 0012](/decisions/0012-cryptography-and-authority-keys/#named-exceptions)). The consumer's private key can sit on a hardware token (an `age-plugin-yubikey` recipient); sluis holds only the public recipient. A drop is therefore safe in a bucket others can read, and a stolen copy of sluis's state does not open it.
+
+:::note[Proposed]
+The interfaces of the `secrets` and `export` ports are fixed by a planned decision record ([#1014](https://github.com/truvity/sluis/issues/1014)). It must fix the `secrets` operations (`get`, `put` against a revision, `delete`, `list` of names only); writable **stores** (one per installation, such as a cloud parameter store or `sealed-state`) against read-only **sources** (a systemd credential, a mounted file) for referenced and bootstrap secrets, a store's own credentials always coming from a source; the flags `writable`, `encryption`, `versioned`, `consumer-readable` and `per-path-grants`; and the `export` operations (`put`, `delete`, `status`) with the drop drivers.
+:::
 
 ## What is backed up
 
-A backup contains only authoritative state that nothing else can recreate: operator-set records and durable issued records, which include quota balances, pins and vendor-issued secrets (archived sealed). Declared configuration, learned facts, derived data such as quota meters and the search index, sessions, refresh tokens and the transport spool are not in it, and a restore invalidates every session. The audit log is protected separately by its lock, its witnesses and replication. See [Backup and restore](/concepts/backup/).
+A backup holds only operator-set records and durable issued records, with secrets archived sealed; a restore invalidates every session ([Backup and restore](/concepts/backup/)).

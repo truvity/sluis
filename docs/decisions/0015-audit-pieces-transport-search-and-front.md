@@ -34,7 +34,7 @@ The log itself, its layout, sealing, witnesses, lock modes and encryption, is [0
 - **Transport is a port, not a piece.** It joins the emitter to the writer and replaces the old queue port and outbox. It has four drivers in two modes:
   - **direct:** the emitter streams to the writer, over a Unix socket on the same host or over mutual TLS;
   - **queue:** the emitter puts records into a queue and the writer receives them. Queue drivers are **spool**, **SQS** and **NATS JetStream**.
-- **The default transport follows the runtime:** spool on bare-metal, SQS on serverless and Kubernetes. Direct and NATS JetStream are supported drivers with no default. A writer on the same node as sluis is one installation's placement, not part of the model.
+- **The default transport follows the runtime:** spool on bare-metal, SQS on serverless, and NATS JetStream on Kubernetes, which the reference Kubernetes installation, the customer-identity one, runs. Each of the three stays possible on the other runtimes where it fits. Direct is a supported driver with no default. A writer on the same node as sluis is one installation's placement, not part of the model.
 - **In direct mode the emitter falls back to a local spool** when the writer is down. Direct mode therefore needs a disk and is not available on serverless.
 - **An emitter is authenticated by the transport driver's own layer** ([0004](/decisions/0004-drivers-listeners-and-boundary-enforcement/#three-layers-per-port)), T-13.
 

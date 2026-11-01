@@ -2,6 +2,7 @@
 // The process map, the detail panel and the flows, shared by both explorers.
 // The model is built in the page's own lib; this renders it.
 import '../../styles/explorer.css';
+import Chip from './Chip.astro';
 import { W, H, type MapModel } from '../../lib/explorer-layout';
 
 interface Props {
@@ -13,7 +14,6 @@ interface Props {
   storageKey: string;
 }
 const { models, flows, statuses, dflt, defaultNode, storageKey } = Astro.props;
-const chip = (status?: string, od?: string) => (status ? { cls: `ex-chip-${status}`, text: od ? `${statuses[status]} · ${od}` : statuses[status] } : null);
 const ARROW = 'M0 0L8 4L0 8z';
 ---
 <div class="ex" data-ex-map data-default={dflt} data-default-node={defaultNode} data-storage-key={storageKey}>
@@ -28,8 +28,8 @@ const ARROW = 'M0 0L8 4L0 8z';
         <p style="font-size:var(--sl-text-sm);margin:.4rem 0">
           <b>{m.id} · {m.name}.</b> {m.intro}
         </p>
-        {m.notes.map((n: any) => (
-          <p class={`ex-note ${n.status === 'open' ? 'open' : ''}`}><span class={`ex-chip ex-chip-${n.status}`}>{statuses[n.status]}{n.od ? ` · ${n.od}` : ''}</span> {n.text}</p>
+        {m.notes.map((n) => (
+          <p class={`ex-note ${n.status === 'proposed' ? 'proposed' : ''}`}><Chip status={n.status} issue={n.issue} statuses={statuses} /> {n.text}</p>
         ))}
         <div class="ex-diagram" tabindex="0" role="group" aria-label={`Process map of ${m.id}. Scrolls sideways on narrow screens.`}>
           <svg viewBox={`0 0 ${m.width} ${m.height}`} role="group" aria-label={`Processes of ${m.name}`}>
@@ -78,16 +78,12 @@ const ARROW = 'M0 0L8 4L0 8z';
               <h3>{n.detail.title}</h3>
               <p>
                 <span class={`ex-kind k-${n.detail.cls}`}>{n.detail.kind}</span>
-                {chip(n.detail.status, n.detail.od) && (
-                  n.detail.od
-                    ? <a class={`ex-chip ${chip(n.detail.status, n.detail.od)!.cls}`} href="/open-decisions/">{chip(n.detail.status, n.detail.od)!.text}</a>
-                    : <span class={`ex-chip ${chip(n.detail.status)!.cls}`}>{chip(n.detail.status)!.text}</span>
-                )}
+                <Chip status={n.detail.status} issue={n.detail.issue} statuses={statuses} />
               </p>
               <p>{n.detail.does}</p>
               {n.detail.rows.length > 0 && (
                 <dl>
-                  {n.detail.rows.map((r) => (<><dt>{r.k}</dt><dd>{r.code ? <code>{r.v}</code> : r.v}</dd></>))}
+                  {n.detail.rows.map((r) => (<><dt>{r.k}</dt><dd>{r.href ? <a href={r.href}>{r.v}</a> : r.code ? <code>{r.v}</code> : r.v}</dd></>))}
                 </dl>
               )}
               {n.detail.lists.filter((l) => l.items.length).map((l) => (
@@ -97,8 +93,8 @@ const ARROW = 'M0 0L8 4L0 8z';
                 </>
               ))}
               {n.detail.notes.map((x) => (
-                <p class={`ex-note ${x.id ? 'open' : ''}`}>
-                  {x.id && <a class="ex-chip ex-chip-open" href="/open-decisions/">{x.id}</a>} {x.text}
+                <p class={`ex-note ${x.status === 'proposed' ? 'proposed' : ''}`}>
+                  <Chip status={x.status} issue={x.issue} statuses={statuses} /> {x.text}
                 </p>
               ))}
             </article>

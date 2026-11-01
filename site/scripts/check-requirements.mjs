@@ -17,14 +17,13 @@
 //   L12 a MUST verified by manual review only has manual_reason; manual_reason is forbidden elsewhere
 //   L13 every cited standard is a row of standards.yaml; a Full citation has a section (warning)
 //   L14 a planned record links an issue (issues) or a feature entry (parity or design)
-//   L15 an open or partial record names an open decision or a declared gap key; gap is allowed on no other status
+//   L15 an open or partial record names a declared gap key; gap is allowed on no other status
 //   L16 a standard that no requirement cites (warning)
 //   L17 an out-of-scope record is a MUST NOT or a MAY and has a verification
 //   L18 a done record names its evidence: `tests` lists repository paths, each a file that exists
 //       inside the repository and that names the record's id (a test carries its id in its name)
 //   ISS a planned or partial record links the issues that deliver it (one warning with the count;
 //       the summary line gives the count per area). The schema checks the numbers themselves.
-//   OD  every decision id is a row of docs/open-decisions.md
 //   COV the coverage figures on docs/standards/conformance.md equal the catalogue: the share of
 //       requirements (not withdrawn), and of MUSTs, whose verification includes an external suite
 //       or a vector set (`conformance-suite` or `test-vectors`). --write-coverage rewrites the block.
@@ -155,12 +154,6 @@ for (const [key, def] of [['level', 'level'], ['source', 'source'], ['status', '
   if (JSON.stringify(cat.vocabulary[key]) !== JSON.stringify(enumOf(def))) E(`L3 index.yaml: vocabulary ${key} differs from the schema`);
 }
 
-// open-decision ids: the rows of docs/open-decisions.md
-const decisionIds = new Set(
-  [...readFileSync(join(root, 'docs', 'open-decisions.md'), 'utf8').matchAll(/^\|\s*(?:<a id="od-\d+"><\/a>)?\s*(OD-\d+)\s*\|/gm)].map((m) => m[1]),
-);
-if (decisionIds.size === 0) E('OD docs/open-decisions.md: no decision rows found; an empty registry proves nothing');
-
 // L2
 const reqs = [];
 const byId = new Map();
@@ -239,8 +232,7 @@ for (const r of reqs) {
   }
   checkTests(r);
   if (r.status === 'planned' && !r.issues?.length && !r.features?.length) E(`L14 ${i}: a planned record needs issues, or features parity or design`);
-  for (const d of r.decisions ?? []) if (!decisionIds.has(d)) E(`OD ${i}: ${d} is not a row of docs/open-decisions.md`);
-  if ((r.status === 'open' || r.status === 'partial') && !(r.decisions?.length) && !r.gap) E(`L15 ${i}: an ${r.status} record needs a decision id or a gap key`);
+  if ((r.status === 'open' || r.status === 'partial') && !r.gap) E(`L15 ${i}: an ${r.status} record needs a gap key`);
   if (r.gap) {
     if (!(r.gap in cat.gaps)) E(`L15 ${i}: gap key ${r.gap} is not declared in index.yaml`);
     if (r.status !== 'open' && r.status !== 'partial') E(`L15 ${i}: gap is set on a ${r.status} record`);

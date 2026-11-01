@@ -44,7 +44,6 @@ requirements:
     standards:
       - {id: ST-88, section: "1", depth: Full}
       - {id: ST-89, section: "6", depth: Full}
-    decisions: ["OD-3"]
     issues: [800]
     verification:
       - {kind: manual, ref: "driver attestation review"}
@@ -121,7 +120,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-51, section: "3.3", depth: Partial}
-    decisions: ["OD-15"]
     issues: [788]
     verification:
       - {kind: integration-test, ref: "per-audience key separation test"}

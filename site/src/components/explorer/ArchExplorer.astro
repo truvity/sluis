@@ -6,14 +6,14 @@
 //   map     the process map, the detail panel and the flows
 //   tables  the same facts as tables, which read without script
 //   cluster what runs where on a cluster (bare-metal, N nodes)
-//   open    the open points the data carries
 // The facts are in src/data/explorer/architecture.yaml.
 import '../../styles/explorer.css';
+import Chip from './Chip.astro';
 import MapView from './MapView.astro';
-import { data, shapes } from '../../lib/explorer-arch';
+import { data, shapes, statuses } from '../../lib/explorer-arch';
 
 interface Props {
-  part: 'toggle' | 'legend' | 'map' | 'tables' | 'cluster' | 'open';
+  part: 'toggle' | 'legend' | 'map' | 'tables' | 'cluster';
 }
 const { part } = Astro.props;
 const models = shapes();
@@ -62,14 +62,14 @@ const dflt: string = data.default_shape;
       <li><svg viewBox="0 0 34 14" aria-hidden="true"><path d="M1 7H33" stroke="var(--sl-color-accent)" stroke-width="2.4" /></svg>calls made by the selected box</li>
       <li><svg viewBox="0 0 34 14" aria-hidden="true"><path d="M1 7H33" stroke="var(--sl-color-orange-high)" stroke-width="2.4" /></svg>calls it receives</li>
       <li><svg viewBox="0 0 34 14" aria-hidden="true"><path d="M1 7H33" stroke="var(--sl-color-accent-high)" stroke-width="3.2" /></svg>the current flow step</li>
-      <li><span class="ex-chip ex-chip-agreed">Agreed</span><span class="ex-chip ex-chip-proposed">Proposed</span><span class="ex-chip ex-chip-open">Open</span></li>
+      <li><span class="ex-chip ex-chip-decided">{statuses.decided}</span><span class="ex-chip ex-chip-proposed">{statuses.proposed}</span>a proposed point links its tracking issue</li>
     </ul>
     <p style="font-size:var(--sl-text-sm);margin-top:.6rem">A box shows its name, then its user (or role, on serverless) and its socket. A line is a ConnectRPC call from the box on its tail to the box on its head; the answer travels back along the same line.</p>
   </div>
 )}
 
 {part === 'map' && (
-  <MapView models={models} flows={data.flows} statuses={data.statuses} dflt={dflt} defaultNode="entry" storageKey="sluis-explorer-arch-shape" />
+  <MapView models={models} flows={data.flows} statuses={statuses} dflt={dflt} defaultNode="entry" storageKey="sluis-explorer-arch-shape" />
 )}
 
 {part === 'tables' && (
@@ -109,22 +109,7 @@ const dflt: string = data.default_shape;
         <thead><tr><th>Process</th><th>On a bare-metal cluster (boards)</th><th>Status</th></tr></thead>
         <tbody>
           {data.cluster.map((r: any) => (
-            <tr><td>{r.process}</td><td>{r.where}</td><td><span class={`ex-chip ex-chip-${r.status}`}>{data.statuses[r.status]}</span></td></tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </div>
-)}
-
-{part === 'open' && (
-  <div class="ex">
-    <div class="ex-table-wrap">
-      <table>
-        <thead><tr><th>Id</th><th>What the map does meanwhile</th></tr></thead>
-        <tbody>
-          {data.open_points.map((o: any) => (
-            <tr><td><a class="ex-chip ex-chip-open" href="/open-decisions/">{o.od}</a></td><td>{o.text}</td></tr>
+            <tr><td>{r.process}</td><td>{r.where}</td><td><Chip status={r.status} issue={r.issue} statuses={statuses} /></td></tr>
           ))}
         </tbody>
       </table>

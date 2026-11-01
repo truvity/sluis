@@ -67,7 +67,6 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-12, section: "Cedar", depth: Full}
-    decisions: ["OD-10"]
     issues: [892, 852]
     verification:
       - {kind: test-vectors, ref: "policy-language corpus"}
@@ -82,7 +81,6 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-12, section: "Cedar", depth: Full}
-    decisions: ["OD-10"]
     issues: [892, 852]
     verification:
       - {kind: integration-test, ref: "fail-closed test"}

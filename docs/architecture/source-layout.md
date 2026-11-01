@@ -3,49 +3,35 @@ title: Source layout
 description: Which language each sluis component is written in, the shared kits every language implements, and the layout of the repository tree.
 status: target
 sidebar:
-  order: 6
+  order: 4
 ---
 
 ## Languages
 
-**One executable, one language.** The language of each executable follows a set of rules, agreed on 2026-10-30 ([ADR 0014](/decisions/0014-the-language-follows-the-executable/)):
+**One executable, one language.** Go is the default; Rust is used at the unauthenticated edge, in the trusted base, in the cloud drivers and on the smallest boards. The rules and the reasoning are in [ADR 0014](/decisions/0014-the-language-follows-the-executable/); this table follows its [per-actor table](/decisions/0014-the-language-follows-the-executable/#per-actor-table).
 
-| Rule | Reading |
-|---|---|
-| R1 | One executable is written in one language |
-| R2 | Rust at the unauthenticated edge, when no Go-only protocol library is needed |
-| R3 | Rust for the trusted base, with one named exception: `key-holder` is Go |
-| R4 | Go where the deciding library is Go-only, or best in Go |
-| R5 | A driver follows its backend's best SDK: AWS, GCP and Azure are Rust |
-| R6 | Go by default, except on the smallest board tier (R11) |
-| R7 | No Rust where the only library for a security function is experimental or unaudited |
-| R8 | No FIPS build in v2.0; when a FIPS variant is added, Rust uses `aws-lc-rs` in FIPS mode, mirroring [ADR 0012](/decisions/0012-cryptography-and-authority-keys/) |
-| R9 | The kits of both languages pass one conformance suite |
-| R10 | Contracts are on the wire, so a choice can be reversed |
-| R11 | On the smallest board tier an actor prefers Rust, unless a serious trade-off is named; the list per actor is in ADR 0014 |
+| Component | Language | Why |
+|---|---|---|
+| `entry` (slim), the Kubernetes edge relay | Rust | The unauthenticated edge |
+| `sluis-node`, `sluis-host` | Rust | The trusted base |
+| `key-holder` | Go with `piv-go` | The one exception in the trusted base: `piv-go` holds the card exclusively |
+| `policy` | Rust | Cedar's engine is the `cedar-policy` crate |
+| The `cloud` port drivers (web identity, platform role, GCP and Azure federation) and the AWS-backed drivers (`aws-kms`, `dynamodb`, `sqs`, `s3-compatible`) | Rust | One AWS SDK language |
+| `cloud-cloudflare` | Go | Shares the library of the `cloudflare@<company>` integration |
+| `session`, `exchange` | Go | The embeddable OpenID Connect provider, the proof verifiers and HPKE |
+| `ca` | Go | The X.509 CA and its issuance log |
+| `writer`, `witness` | Go | The C2SP log writer and witness |
+| Integrations | Go | The vendor SDKs |
+| Other drivers (local backends, indexes, witnesses, `nats-jetstream`, `age` export) | Go | The default, and age with post-quantum recipients |
+| `signer`, `ssh-ca`, `quota`, `console` (the actor), `indexer`, `reader`, the local drivers (rqlite state, lease and index, the spool, the local lock, the files blob, `sqlite`), `sluis agent` | Rust unless the component's design names a serious trade-off | They run on the smallest boards |
+| The `sluis` CLI, the cert-manager issuer | Go | Not resident on a board |
+| The console's single-page application | TypeScript | |
 
-| Executable | Language |
-|---|---|
-| `entry` (slim) | Rust |
-| `sluis-node` | Rust |
-| `sluis-host` | Rust |
-| The AWS driver and the other cloud drivers | Rust |
-| `policy` and its Cedar engine (the `cedar-policy` crate) | Rust |
-| `key-holder`, with `piv-go` for YubiKey PIV | Go (an exception to R3, after spike S4); PKCS#11 only for the later YubiHSM 2 and Nitrokey drivers |
-| `cloud-cloudflare` | Go, sharing the library of the `cloudflare@<company>` integration (an exception to R5) |
-| `session`, `exchange`, `ca` | Go |
-| `signer`, `ssh-ca`, `quota`, `console` (the actor), `indexer`, `reader`, the local drivers, `sluis agent` | Rust unless the component's design names a serious trade-off (R11 of [ADR 0014](/decisions/0014-the-language-follows-the-executable/#per-actor-table)) |
-| The audit actors `writer` and `witness` | Go |
-| Integrations | Go |
-| The `sluis` CLI | Go |
-| The cert-manager issuer | Go |
-| Console | TypeScript |
+PKCS#11 is used only by the later YubiHSM 2 and Nitrokey drivers, whose language is chosen with them. Every Rust choice is [gated by its spike](/decisions/0014-the-language-follows-the-executable/#the-spikes-are-gates), and the languages are fixed before code of the first working version is written; when a spike fails, the fallback for that component is chosen from the candidates in ADR 0014.
 
-Every Rust choice is **gated by its spike**, and the languages are fixed from the spikes before the first code of step 1 ([Roadmap](/roadmap/#spikes-before-code)): Connect for Rust over Unix sockets and a slim `entry` built in both languages decide `entry`; Spike S4 is done for YubiKey PIV (2026-10-31): `piv-go` holds the card exclusively, which is what one `key-holder` per node needs, while `ykcs11` reset the card when a second client appeared and cached the PIN in its own library, so `key-holder` is Go. Spike S5 is done (2026-10-31): the boards' memory fits with Go or with Rust actors. The FIPS spike with `aws-lc-rs` is done; with no FIPS build in v2.0 it no longer gates the AWS drivers, which stay Rust, and its result is kept for a later FIPS variant. When a Rust choice fails its spike, its fallback is chosen then from the written-down candidates ([ADR 0014](/decisions/0014-the-language-follows-the-executable/)).
+Tokens are standard JWS and JWT, so any language verifies them against the published key set. An actor can move between languages because every contract is ConnectRPC and every integration and driver is out of process: the language is chosen per executable, and the contracts do not change.
 
-There is no Rust JOSE driver; tokens are standard JWS/JWT, so any language verifies them against the published key set.
-
-The command-line tool is one `sluis` binary with subcommands for operators and for users, including `sluis key request`, `install` and `status`. An actor can be written in either language, because every contract is ConnectRPC and every integration is out of process. The language choice is per executable; the contracts do not change.
+The command-line tool is one Go `sluis` binary with subcommands for operators and for users, including `sluis key request`, `install` and `status`.
 
 ## Shared kits
 
@@ -54,8 +40,8 @@ Parallel implementations of the same small kits, one per language, keep the lang
 | Kit | What it is |
 | --- | ---------- |
 | ConnectRPC over Unix sockets | A server and client that read peer credentials (`SO_PEERCRED`) on every call and expose them to the call-graph interceptor |
-| Config loader and validator | Loads the layered configuration (defaults, runtime, install file, environment overrides; the layering is proposed) and validates it against the generated JSON Schema, with strict unknown-field handling |
-| CLI conventions | One command-line convention: `config check`, `config explain`, `doctor`, and a uniform `--help` |
+| Config loader and validator | Loads the layered configuration and validates it against the generated JSON Schema, with strict unknown-field handling |
+| CLI conventions | `config check`, `config explain`, `doctor`, and a uniform `--help` |
 | Conformance suite | Shared vectors and behavioural tests that every kit and driver must pass, whatever its language |
 
 Configuration validation uses `santhosh-tekuri/jsonschema/v6` in Go, the `jsonschema` crate in Rust and `ajv` in TypeScript, with one shared set of conformance vectors. The schema is generated from the Pkl sources at build time; there is no Pkl at run time.
@@ -87,20 +73,20 @@ docs/  site/
 | `proto/` | The contracts every other directory implements or calls. A contract change is reviewed here first |
 | `schema/` | The Pkl sources that define the configuration shape, and the JSON Schema (draft 2020-12) generated from them. The schema is part of the public API |
 | `kits/` | The shared kits above, one directory per language, plus the conformance suite |
-| `actors/`, `drivers/`, `integrations/` | One directory per component, matching the layout under `/usr/libexec/sluis/` that the [packages](/architecture/processes/#packaging) install. The directory is called `actors` (agreed; it amends the layout, which first called it `roles`) |
+| `actors/`, `drivers/`, `integrations/` | One directory per component, matching the layout under `/usr/libexec/sluis/` that the [packages](/architecture/components/#packaging) install |
 | `node/agent/` | The node agent (`sluis-node`) |
-| `cli/sluis/` | The one `sluis` binary, with subcommands for operators and users |
+| `cli/sluis/` | The one `sluis` binary |
 | `host/sluis-host/` | The SSH host service ([SSH](/integrations/ssh/)) |
 | `console/` | The TypeScript console |
-| `manifest/` | The permission manifests, one per actor. They generate the IAM policies, key policies, shared-driver ACLs, systemd units, network rules and the deny-matrix tests |
+| `manifest/` | The permission manifests, one per actor, which generate the enforcement ([Architecture](/architecture/#the-permission-manifest-is-the-spine)) |
 | `deploy/` | Packaging for each artifact: `.deb` and `.rpm` packages, Helm charts, Lambda archives, infrastructure as code |
-| `tests/installations/`, `tests/tutorials/` | Integration tests that run on the four tested installations (local, boards, lambda and kubernetes), and the tutorials as tests |
+| `tests/installations/`, `tests/tutorials/` | Integration tests on the four tested installations, and the tutorials as tests |
 | `docs/`, `site/` | This documentation and the site that builds it |
 
 One version covers the whole repository. See [Distribution](/distribution/) for what is built from the tree.
 
 ## Board OS images live elsewhere
 
-Operating system images for the single-board computers are built in a **separate public repository**, not here. The boards run the vendor's Ubuntu 22.04 for now, as a declared exception; building Ubuntu 26.04 and Rocky Linux 10.2 images is a backlog task.
+Operating system images for the single-board computers are built in a separate public repository, not here ([#881](https://github.com/truvity/sluis/issues/881)). The supported distributions are on [Packages](/distribution/packages/).
 
 Next: [Architecture](/architecture/) lists the pages, and [Runtimes](/runtimes/) shows where each binary runs.

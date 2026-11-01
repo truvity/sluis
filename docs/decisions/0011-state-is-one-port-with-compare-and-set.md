@@ -69,7 +69,7 @@ Facts about the backends, checked on the dates given: rqlite authorises per endp
 | `rqlite` | Bare metal, 1, 3 or 5 nodes | Replicated SQLite on Raft, a cluster per boundary and owning actor; 3 or more to survive a failure; needs a disk; provides the lease |
 | `dynamodb` | Anywhere with an AWS account: serverless and Kubernetes | A table per boundary, a leading key per actor role; needs no node or disk; provides the lease |
 
-- **Kubernetes uses `dynamodb` only** for state and leases (decided 2026-10-30; [0018](/decisions/0018-runtimes-installations-and-delivery-order/#kubernetes)). A PostgreSQL or CloudNativePG state driver is not in 2.0; `postgres` exists as an index driver ([0015](/decisions/0015-audit-pieces-transport-search-and-front/#search-and-the-index)), isolated as [0004](/decisions/0004-drivers-listeners-and-boundary-enforcement/#postgresql-row-level-security) says.
+- **Kubernetes uses `dynamodb` only** for state and leases ([0018](/decisions/0018-runtimes-installations-and-delivery-order/#kubernetes)). A PostgreSQL or CloudNativePG state driver is not in 2.0; `postgres` exists as an index driver ([0015](/decisions/0015-audit-pieces-transport-search-and-front/#search-and-the-index)), isolated as [0004](/decisions/0004-drivers-listeners-and-boundary-enforcement/#postgresql-row-level-security) says.
 - **`sluis config check` refuses a driver that does not fit the runtime**, such as rqlite or `embedded` on serverless, and an actor that needs a lease with no lease driver.
 
 How the rqlite clusters are run:

@@ -49,11 +49,10 @@ An id is `REQ-<AREA>-<nnn>`, for example `REQ-AUTHN-002`.
 | `runtimes` | `all`, or a list of `bare-metal`, `serverless`, `kubernetes`. |
 | `standards` | `{id, section, depth}`: an id from `standards.yaml`, the section, and `Full` or `Partial`. |
 | `features` | Optional: `parity` (part of v1 parity, no single issue) or `design` (specified, no issue yet). Issue numbers go in `issues`, never here. |
-| `decisions` | Open-decision ids `OD-nn`, rows of [open decisions](../open-decisions.md). |
 | `issues` | Optional: the numbers of the truvity/sluis issues that deliver the record, for example `[915]`. Unique positive integers, at least one when present. The issues' Product milestone places the record on the status page. |
 | `tests` | The repository paths of the files that hold the passing tests, for example `[core/authn/authorize_test.go]`. Required when `status` is `done`, optional otherwise. Each path is relative to the repository root, names an existing file, and the file names the record's id. |
 | `verification` | `{kind, ref}`; `kind` is `conformance-suite`, `test-vectors`, `integration-test` or `manual`. Every MUST needs at least one. |
-| `gap` | For an `open` or `partial` record that names no decision: a key of `gaps` in `index.yaml`. |
+| `gap` | Required for an `open` or `partial` record: a key of `gaps` in `index.yaml` that says what is missing. |
 | `manual_reason` | Required for a MUST verified by manual review only; forbidden otherwise. |
 | `superseded_by` | A `withdrawn` record needs this or `moved_to`: the ids of the records that replace it. |
 | `moved_to` | A `withdrawn` record that moved to another product: the URL of the truvity/ritueel issue that carries it. |
@@ -76,7 +75,7 @@ and the `planned` MUST records that no test names (a gap).
 2. Write one clause: one keyword, one behaviour, one sentence. If you want to write "and" between two behaviours, write two records.
 3. Fill the traceability: the standards it implements (`section` when `depth` is `Full`), the issues that deliver it (`issues`; `features: [design]`
    when there is none yet), and how it is verified. A MUST needs a verification.
-4. Set the status honestly. A new record is never `done`: that status is set later, by the pull request that adds the passing test (see "Marking a requirement done" in the [contributing page](../contributing/requirements.md)). An `open` or `partial` record names the open decision it waits for, or a `gap` key.
+4. Set the status honestly. A new record is never `done`: that status is set later, by the pull request that adds the passing test (see "Marking a requirement done" in the [contributing page](../contributing/decisions.md#marking-a-requirement-done)). An `open` or `partial` record names a `gap` key; an undecided point it waits for is an issue in `issues`.
 5. Keep it public. No names of people or companies, no tickets, no addresses, no mention of any private infrastructure; the lint scans for them.
 6. Run `devbox run -- just check`. The pages and `requirements.json` are generated, never committed.
 

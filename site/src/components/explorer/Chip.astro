@@ -1,0 +1,19 @@
+---
+// A status chip, shared by both explorers. A decided item is a plain chip; a
+// proposed item links its open tracking issue. The data files are checked at
+// build time (assertStatuses in lib/explorer-layout.ts), so a proposed item here
+// always has an issue.
+import { issueUrl } from '../../lib/explorer-layout';
+
+interface Props {
+  status?: string;
+  issue?: number;
+  statuses: Record<string, string>;
+}
+const { status, issue, statuses } = Astro.props;
+---
+{status && (
+  issue
+    ? <a class={`ex-chip ex-chip-${status}`} href={issueUrl(issue)}>{statuses[status]} · #{issue}</a>
+    : <span class={`ex-chip ex-chip-${status}`}>{statuses[status]}</span>
+)}
