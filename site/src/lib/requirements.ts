@@ -10,7 +10,7 @@ export interface Verification { kind: 'conformance-suite' | 'test-vectors' | 'in
 export interface Req {
   id: string; area: string; split_from?: string; statement: string; rationale: string;
   level: 'MUST' | 'SHOULD' | 'MAY'; source: string; status: string; runtimes: 'all' | string[];
-  standards: StandardRef[]; features: ('parity' | 'design')[]; issues?: number[]; tests?: string[]; verification: Verification[];
+  standards: StandardRef[]; features: ('parity' | 'design')[]; issues?: number[]; tests?: string[]; verification: Verification[]; actors?: string[];
   gap?: string; manual_reason?: string; superseded_by?: string[]; moved_to?: string;
 }
 export interface Area { code: string; title: string; file: string; reqs: Req[] }

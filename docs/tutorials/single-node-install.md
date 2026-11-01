@@ -97,30 +97,55 @@ Then plug the card into the board. From now on only `key-holder` talks to it.
 
 ## 6. Write a minimal config
 
-Configuration has four layers inside declared configuration: defaults, the runtime, your install file, and overrides per environment ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/)). The bare-metal runtime sets the key mode and the audit spool. Start from the boards example file and change what is yours, plus the drivers that differ with one node.
+Configuration has four layers inside declared configuration: defaults, the runtime, your install file, and overrides per environment ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/)). The bare-metal runtime sets the key mode and the audit spool. The keys are those of [install-file schema v1](/reference/install-file/); start from the [local example file](/reference/install-file/#the-example-file-for-local) and change what differs on a board: the environment, the hosts, the keys driver and the upstream.
 
 ```yaml
 # Example: /etc/sluis/install.yaml
+$schema: https://sluis.id/schema/install/v1/install.schema.json
 runtime: bare-metal
+environment: production
 nodes: 1
-state:
-  driver: embedded     # one node: a SQLite file per actor, no Raft
-audit:
-  index: sqlite        # one node: no replicated index
+
+front:
+  host: sluis.example.com
+  rp_id: example.com
+
+boundaries:
+  prod:
+    kind: environment
+    level: L2
+    host: sluis.prod.example.com
+
+drivers:
+  keys: yubikey-piv    # the board's card; schema v1 lists it with the boards installation
+  state: embedded      # one node: a SQLite file per actor, no Raft
+  lease: local-lock
   blob: fs             # on the board's disk; the cluster uses R2
-issuer: https://sluis.example.com
+  transport: spool
+  index: sqlite        # one node: no replicated index
+
 upstreams:
-  - id: workforce
-    type: oidc
+  workforce:
+    kind: oidc
     issuer: https://idp.example.org
     client_id: sluis-example
-    client_secret:
-      credential: idp-client-secret   # referenced, never inlined
+    client_secret: { credential: idp-client-secret }   # referenced, never inlined
+
+clients:
+  sluis-cli:
+    kind: public
+    redirects: [http://127.0.0.1/callback]
+
+policy:
+  files: [policy/board.cedar]
+
+trust:
+  root_list: trust/root-list.json
 ```
 
 This file enables neither SSH certificates nor release signing, so `ssh-ca` does not run and the node gets no `ssh-user`, `ssh-host` or release-signing key. Only an enabled purpose gets a slot ([the card slot map](/concepts/keys/#the-card-slot-map)).
 
-The client secret is referenced: the config names a credential, and the secret itself is a file.
+The client secret is referenced: the config names a credential, and the secret itself is a file, the unit's systemd credential ([secrets in the install file](/reference/install-file/#format)).
 
 ```sh
 # Example
@@ -171,10 +196,11 @@ scp -r ./response root@board:/var/lib/sluis/keys/response
 
 A production installation gets the same files from a ritueel ceremony with the root cards instead.
 
-Back on the board, install the chain and the root list:
+Back on the board, put the root list where the install file names it (`trust.root_list`), then install the chain:
 
 ```sh
 # Example
+install -D -m 0644 -t /etc/sluis/trust /var/lib/sluis/keys/response/root-list.json /var/lib/sluis/keys/response/root-list.json.jws
 sluis key install /var/lib/sluis/keys/response
 sluis key status
 ```

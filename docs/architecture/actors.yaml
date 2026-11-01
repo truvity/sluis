@@ -1,0 +1,384 @@
+# The actor registry: one row per actor of sluis, the source of truth for which actors exist.
+#
+# An actor is a process with one responsibility (ADR 0002, ADR 0003). This file names each one
+# and says what no other file says about it in one place: its language (ADR 0014), where it runs,
+# the keys and card slots it uses (ADR 0012), the ADRs that govern it, the requirement areas and
+# standards it implements, and the GitHub label and open issues that track its build.
+#
+# One fact, one place. What the architecture explorer already draws stays in
+# site/src/data/explorer/architecture.yaml and is not repeated here: for an actor drawn there as a
+# role, its executable (`binary`), the ports it uses (`uses`) and the actors it calls (`calls`) are
+# read from that file. An actor the explorer does not draw as a role gives `binary`, `ports` and
+# `calls` here. tools/checks/actors.mjs (`just check-actors`) enforces the split, checks this file
+# against the ADRs, the requirement records and the explorer, and writes the generated tables on
+# docs/reference/actors.md (`just actors-write`).
+#
+# Fields of an actor:
+#   name               the actor's name, as in ADR 0003; the label is `actor:<name>`
+#   group              core | quota | audit | platform | integration
+#   purpose            one sentence
+#   aka                other words the ADRs use for it (prose names of the integration kinds)
+#   contract           integration kinds only: the contract name on the Integrations page
+#   language           Go or Rust; must agree with the ADR 0014 per-actor table
+#   language_rule      the ADR 0014 rule (R1 to R11) that picks the language
+#   language_row       the text that finds its row in the ADR 0014 table, when not `name` in backticks
+#   language_note      optional: a gate or an exception
+#   placement          scope (per-boundary | front | per-node | per-tenant | beside-sluis), instances
+#                      (any | exactly-1), runtimes (where it may run), and an optional note
+#   keys               the key purposes it uses: purpose, slot (the card slot map v1 of ADR 0012;
+#                      "spare" for a purpose that takes a spare slot when enabled, "none" for a key
+#                      that is not a card key), ops (sign | public-key | wrap | unwrap) and context
+#                      (the encryption context of a wrap or an unwrap)
+#   binary, ports, calls   only for actors the explorer does not draw as a role
+#   adrs               the four-digit numbers of the ADRs that govern it; each names the actor
+#   requirement_areas  area codes of docs/requirements/index.yaml
+#   standards          ids of docs/requirements/standards.yaml
+#   label              actor:<name>
+#   issues             open issues of truvity/sluis that build it; the labels script applies the label
+schema: 1
+
+actors:
+  # ---- core (ADR 0003, "The actors")
+  - name: entry
+    group: core
+    purpose: "Parses each request, validates it against closed parameter lists generated from the contracts, and routes it to the actor that owns the step; it holds nothing."
+    language: Rust
+    language_rule: R2
+    language_note: "Gated by spikes S1, S3 and S10; the fallback candidate is Go first."
+    placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "The only actor with a public listener: a Unix socket on bare-metal and Kubernetes, loopback TCP on serverless." }
+    keys: []
+    adrs: ['0003', '0004', '0005', '0006', '0014', '0018']
+    requirement_areas: [SEC, ISO]
+    standards: [NC-05, ST-97]
+    label: actor:entry
+    issues: [958, 941, 796]
+
+  - name: session
+    group: core
+    purpose: "Sign-in, session records, the session cookie and the freshness of each person's authentication per boundary (step-up)."
+    language: Go
+    language_rule: R4
+    placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes] }
+    keys:
+      - { purpose: sealing, slot: 9d, ops: [wrap, unwrap], context: "purpose=cookie (the cookie-sealing key)" }
+      - { purpose: sealing, slot: 9d, ops: [wrap, unwrap], context: "the data keys of its own record kinds" }
+    adrs: ['0003', '0006', '0010', '0012', '0014']
+    requirement_areas: [AUTHN, SESS, TOKEN, FED]
+    standards: [ST-28, ST-29, ST-03, ST-24, ST-34, ST-59, ST-30, ST-31]
+    label: actor:session
+    issues: [959, 775, 776, 777, 778, 885, 979, 1081, 793]
+
+  - name: console
+    group: core
+    purpose: "The operator API, as the browser's backend: it checks the operator's delegation and routes each operator-set write to the actor that owns the record kind."
+    language: Rust
+    language_rule: R11
+    language_note: "Rust unless its design names a serious trade-off; the single-page application is TypeScript."
+    placement: { scope: front, instances: any, runtimes: [bare-metal, serverless, kubernetes] }
+    keys: []
+    adrs: ['0003', '0010', '0014']
+    requirement_areas: [UX, OPS]
+    standards: [ST-97]
+    label: actor:console
+    issues: [960, 831, 832]
+
+  - name: exchange
+    group: core
+    purpose: "Token exchange (RFC 8693), enrolment of hosts and workloads, and the verifiers of proofs."
+    language: Go
+    language_rule: R4
+    placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes] }
+    keys:
+      - { purpose: enrolment, slot: spare, ops: [unwrap], context: "opens an HPKE-sealed enrolment request" }
+      - { purpose: sealing, slot: 9d, ops: [wrap, unwrap], context: "the data keys of its own record kinds" }
+    adrs: ['0003', '0007', '0012', '0014']
+    requirement_areas: [EXCH, WORKLOAD, CLIENT]
+    standards: [ST-07, ST-08, ST-44, ST-45, ST-46, ST-61, ST-110]
+    label: actor:exchange
+    issues: [961, 782, 783, 784, 785, 965, 966]
+
+  - name: signer
+    group: core
+    purpose: "Signs tokens under a signing policy with the token-signing key, checking the issuer, the audience, the lifetime and the algorithm."
+    language: Rust
+    language_rule: R11
+    language_note: "Rust unless its design names a serious trade-off; gated by spikes S1 and S10."
+    placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "Never fused with entry (the fusion rule)." }
+    keys:
+      - { purpose: token-signing, slot: 9a, ops: [sign, public-key] }
+      - { purpose: sealing, slot: 9d, ops: [wrap, unwrap], context: "the data keys of its own record kinds" }
+    adrs: ['0003', '0014']
+    requirement_areas: [KEYS, TOKEN]
+    standards: [ST-49, ST-50, ST-51, ST-52, ST-13]
+    label: actor:signer
+    issues: [962, 774]
+
+  - name: policy
+    group: core
+    purpose: "The decision point: a declared Cedar policy maps facts to grants; it has no state and no network, and seals mint grants."
+    language: Rust
+    language_rule: R4
+    placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes] }
+    keys:
+      - { purpose: sealing, slot: 9d, ops: [wrap], context: "purpose=grant" }
+    adrs: ['0003', '0009', '0012', '0014']
+    requirement_areas: [POLICY]
+    standards: [NC-12]
+    label: actor:policy
+    issues: [892, 786, 787, 852, 1008]
+
+  - name: ca
+    group: core
+    purpose: "The X.509 certificate authority: host and workload SVIDs, sluis's own mutual-TLS certificates and database client certificates, each logged in its issuance log."
+    language: Go
+    language_rule: R4
+    placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes] }
+    keys:
+      - { purpose: x509-intermediate, slot: 9c, ops: [sign, public-key] }
+      - { purpose: issuance-log, slot: spare, ops: [sign] }
+      - { purpose: sealing, slot: 9d, ops: [wrap, unwrap], context: "the data keys of its own record kinds" }
+    adrs: ['0003', '0008', '0012', '0014']
+    requirement_areas: [PKI, DB]
+    standards: [ST-62, ST-69, ST-109]
+    label: actor:ca
+    issues: [913, 969, 926, 978]
+
+  - name: ssh-ca
+    group: core
+    purpose: "The SSH certificate authority, for user and host certificates that carry identity only."
+    language: Rust
+    language_rule: R11
+    language_note: "Rust unless its design names a serious trade-off."
+    placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes] }
+    keys:
+      - { purpose: ssh-user, slot: '82', ops: [sign, public-key] }
+      - { purpose: ssh-host, slot: '83', ops: [sign, public-key] }
+      - { purpose: sealing, slot: 9d, ops: [wrap, unwrap], context: "the data keys of its own record kinds" }
+    adrs: ['0003', '0008', '0014']
+    requirement_areas: [SSH]
+    standards: [ST-65, ST-66]
+    label: actor:ssh-ca
+    issues: [925, 1072]
+
+  # ---- the Quota piece (ADR 0017)
+  - name: quota
+    group: quota
+    purpose: "Rate limits, caps and balances, with compare-and-set on the state port; it meters by default and enforces per policy rule."
+    language: Rust
+    language_rule: R11
+    language_note: "Rust unless its design names a serious trade-off."
+    placement: { scope: beside-sluis, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "Runs beside sluis, sharing its driver instances, or in an installation of its own." }
+    keys:
+      - { purpose: sealing, slot: 9d, ops: [wrap, unwrap], context: "the data keys of its own record kinds" }
+    adrs: ['0003', '0017', '0014']
+    requirement_areas: [QUOTA]
+    standards: [NC-15]
+    label: actor:quota
+    issues: [915]
+
+  # ---- audit (ADR 0015, "Four pieces")
+  - name: writer
+    group: audit
+    purpose: "Seals the records it takes from the transport into its audit log and usage log in the blob, and has key-holder sign each checkpoint."
+    aka: ["audit writer"]
+    language: Go
+    language_rule: R4
+    placement: { scope: per-boundary, instances: exactly-1, runtimes: [bare-metal, serverless, kubernetes], note: "Exactly one writer per log; a cluster keeps one log per node." }
+    keys:
+      - { purpose: log, slot: '84', ops: [sign] }
+      - { purpose: sealing, slot: 9d, ops: [wrap, unwrap], context: "the audit tenants' data keys and its own record kinds" }
+    adrs: ['0003', '0012', '0014', '0015', '0016']
+    requirement_areas: [AUDIT]
+    standards: [ST-71, ST-72, ST-73, ST-75, ST-114]
+    label: actor:writer
+    issues: [837, 838]
+
+  - name: witness
+    group: audit
+    purpose: "Cosigns each new checkpoint the writer sends once it is consistent with the last one it cosigned; optional everywhere."
+    language: Go
+    language_rule: R4
+    placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "On the boards the other nodes are a node's peer witnesses." }
+    keys:
+      - { purpose: witness, slot: none, ops: [sign], context: "its own key, Ed25519 or ML-DSA-44 as tlog-cosignature requires (a named exception)" }
+    adrs: ['0003', '0012', '0014', '0016']
+    requirement_areas: [AUDIT]
+    standards: [ST-73, ST-74]
+    label: actor:witness
+    issues: [955]
+
+  - name: indexer
+    group: audit
+    purpose: "Follows each audit log of its boundary by signed checkpoint and applies the entries to the search index; the index's only writer."
+    language: Rust
+    language_rule: R11
+    language_note: "Rust unless its design names a serious trade-off."
+    placement: { scope: per-boundary, instances: exactly-1, runtimes: [bare-metal, serverless, kubernetes] }
+    keys:
+      - { purpose: sealing, slot: 9d, ops: [unwrap], context: "a declared reader of each company's audit data key" }
+    adrs: ['0003', '0014', '0015']
+    requirement_areas: [AUDIT]
+    standards: [ST-72, ST-75]
+    label: actor:indexer
+    issues: [839]
+
+  - name: reader
+    group: audit
+    purpose: "Answers audit queries from the search index, filtered by the caller's grant, and records each read."
+    language: Rust
+    language_rule: R11
+    language_note: "Rust unless its design names a serious trade-off."
+    placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "With a sqlite index on a cluster it runs on the indexer's node." }
+    keys: []
+    adrs: ['0003', '0014', '0015']
+    requirement_areas: [AUDIT]
+    standards: [ST-114]
+    label: actor:reader
+    issues: [839, 985]
+
+  # ---- platform (ADR 0003, "The other actors are named elsewhere")
+  - name: key-holder
+    group: platform
+    purpose: "The one mediating driver: owns a node's card (or the software key files) exclusively and serves each caller its own socket, with a peer-uid check and content-aware signing."
+    language: Go
+    language_rule: R4
+    language_note: "Go with piv-go: the named exception to R3."
+    binary: drivers/key-holder
+    ports: []
+    calls: []
+    placement: { scope: per-node, instances: exactly-1, runtimes: [bare-metal], note: "No key-holder with a cloud key service: KMS key policies take its place." }
+    keys:
+      - { purpose: every enabled purpose, slot: "9a, 9c, 9d, 82 to 95", ops: [sign, public-key, wrap, unwrap], context: "for the callers its access list names" }
+    adrs: ['0003', '0004', '0012', '0013', '0014']
+    requirement_areas: [KEYS, SEC]
+    standards: [NC-10, ST-83]
+    label: actor:key-holder
+    issues: [951, 1067, 914]
+
+  - name: sluis-node
+    group: platform
+    purpose: "The node agent: issues each local actor a short-lived workload JWT, from its uid by peer credentials, signed with the node's hardware key."
+    language: Rust
+    language_rule: R3
+    binary: node/sluis-node
+    ports: [keys]
+    calls: []
+    placement: { scope: per-node, instances: exactly-1, runtimes: [bare-metal], note: "On Kubernetes only as a fallback; none on serverless." }
+    keys:
+      - { purpose: workload-issuer, slot: open, ops: [sign], context: "the node's workload JWTs" }
+    adrs: ['0003', '0004', '0007', '0014']
+    requirement_areas: [WORKLOAD]
+    standards: [ST-110, ST-46]
+    label: actor:sluis-node
+    issues: [870]
+
+  # ---- integrations (ADR 0003): one process per vendor tenant and credential
+  - name: upstream
+    group: integration
+    contract: Upstream
+    purpose: "Federates sign-in from an upstream identity provider and returns facts; it never decides."
+    language: Go
+    language_rule: R4
+    language_row: Integrations
+    binary: "integrations/<integration>"
+    ports: [secrets, transport]
+    calls: []
+    placement: { scope: per-tenant, instances: any, runtimes: [bare-metal, serverless, kubernetes] }
+    keys: []
+    adrs: ['0003', '0006']
+    requirement_areas: [FED]
+    standards: [ST-28, ST-29]
+    label: actor:upstream
+    issues: [916, 807]
+
+  - name: facts-source
+    group: integration
+    contract: FactsSource
+    aka: ["facts source"]
+    purpose: "Returns directory facts (users, groups, teams) and writes them as learned records of its own."
+    language: Go
+    language_rule: R4
+    language_row: Integrations
+    binary: "integrations/<integration>"
+    ports: [secrets, state, transport]
+    calls: []
+    placement: { scope: per-tenant, instances: exactly-1, runtimes: [bare-metal, serverless, kubernetes], note: "Its reconciler declares instances: exactly 1 (ADR 0002)." }
+    keys:
+      - { purpose: sealing, slot: 9d, ops: [wrap, unwrap], context: "the data keys of its own record kinds" }
+    adrs: ['0002', '0003']
+    requirement_areas: [FED]
+    standards: [ST-42]
+    label: actor:facts-source
+    issues: [805, 806, 808]
+
+  - name: credential-minter
+    group: integration
+    contract: CredentialMinter
+    aka: ["credential minter"]
+    purpose: "Mints a short-lived downstream credential for a grant that policy sealed, and nothing the grant does not cover."
+    language: Go
+    language_rule: R4
+    language_row: Integrations
+    binary: "integrations/<integration>"
+    ports: [keys, secrets, transport]
+    calls: []
+    placement: { scope: per-tenant, instances: any, runtimes: [bare-metal, serverless, kubernetes] }
+    keys:
+      - { purpose: sealing, slot: 9d, ops: [unwrap], context: "purpose=grant" }
+    adrs: ['0003', '0012']
+    requirement_areas: [EXCH]
+    standards: [ST-07]
+    label: actor:credential-minter
+    issues: [811, 816, 817]
+
+  - name: provisioner
+    group: integration
+    contract: Provisioner
+    purpose: "Pulls a digest-addressed desired state that core publishes and reconciles an external system to it."
+    language: Go
+    language_rule: R4
+    language_row: Integrations
+    binary: "integrations/<integration>"
+    ports: [secrets, transport]
+    calls: []
+    placement: { scope: per-tenant, instances: exactly-1, runtimes: [bare-metal, serverless, kubernetes] }
+    keys: []
+    adrs: ['0003']
+    requirement_areas: []
+    standards: []
+    label: actor:provisioner
+    issues: [1018]
+
+  - name: notifier
+    group: integration
+    contract: Notifier
+    purpose: "Sends notifications, such as an enrolment waiting for approval."
+    language: Go
+    language_rule: R4
+    language_row: Integrations
+    binary: "integrations/<integration>"
+    ports: [secrets, transport]
+    calls: []
+    placement: { scope: per-tenant, instances: any, runtimes: [bare-metal, serverless, kubernetes] }
+    keys: []
+    adrs: ['0003']
+    requirement_areas: []
+    standards: []
+    label: actor:notifier
+    issues: [899]
+
+# The example integration instances the ADRs name (`<vendor>[-<capability>]@<tenant>`), and the
+# integration kinds each one plays. An instance name in an ADR must be an actor or one of these.
+integration_instances:
+  google-signin: [upstream]
+  google-directory: [facts-source]
+  oidc: [upstream]
+  github: [facts-source, credential-minter, provisioner]
+  slack: [provisioner, notifier]
+  cloudflare: [credential-minter]
+  aws-minter: [credential-minter]
+
+# Names that look like actors and are not, with the reason. The check refuses them as actors.
+not_actors:
+  cloud-cloudflare: "A cloud port driver, cloud-cloudflare@<boundary> (ADR 0004)."
+  WorkloadVerifier: "A verifier driver of exchange with public material only, not a process (ADR 0007)."

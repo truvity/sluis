@@ -5,6 +5,11 @@
 # actors, drivers, edges, uids and sockets below are generated from it and the
 # prose fields stay.
 #
+# Which actors exist is the actor registry's, docs/architecture/actors.yaml. Every role below is an
+# actor of the registry, every core, Quota and audit actor of the registry is a role here, and the
+# registry reads `binary`, `uses` and `calls` from this file instead of repeating them
+# (`just check-actors`).
+#
 # Status: `status` is decided | proposed. A proposed item carries `issue: <n>`,
 # its open tracking issue in truvity/sluis, and the chip links to it; a decided
 # item carries no issue. The build fails otherwise (assertStatuses in

@@ -25,7 +25,7 @@ The front runs in `entry`, which parses, validates against closed parameter list
 
 ## Processes
 
-Each process below is an actor instance, `<actor>@<boundary>` ([ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/#names)). "Holds" names the keys and credentials it can use; "writes" the record kinds it owns; "calls" and "called by" are edges of the call graph, which is default deny. Every process also puts audit records on the transport, because every success is audited; that edge is not repeated in the tables.
+Each process below is an actor instance, `<actor>@<boundary>` ([ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/#names)). The [actor registry](/reference/actors/) lists every actor in one table, with its language, placement, keys and card slots, governing records and issue label. "Holds" names the keys and credentials it can use; "writes" the record kinds it owns; "calls" and "called by" are edges of the call graph, which is default deny. Every process also puts audit records on the transport, because every success is audited; that edge is not repeated in the tables.
 
 ### Core actors
 
