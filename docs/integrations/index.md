@@ -29,7 +29,7 @@ Every vendor-shaped value travels as an opaque reference or a namespaced attribu
 
 > Integrations return facts, or carry out effects that core has already authorized. They never decide.
 
-[ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/#the-actors) states the rule; the record that fixes the contract every integration is built against is planned ([#997](https://github.com/truvity/sluis/issues/997)).
+[ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/#the-actors) states the rule; [ADR 0026](/decisions/0026-integrations-return-facts-or-carry-out-effects-that-core-authorised/) fixes the contract every integration is built against: what an integration may return, how core authorises an effect, and the split by credential.
 
 - A **FactsSource** or **WorkloadVerifier** returns facts. Whether a fact entitles anyone to anything is `policy`'s question.
 - A **CredentialMinter** carries out an effect. It receives a **mint grant that `policy` sealed under the sealing key**, opens it (which fails for a grant from any other environment), and mints exactly what the grant says. It decides nothing about whether to mint ([ADR 0012](/decisions/0012-cryptography-and-authority-keys/#grants-are-sealed-not-signed)).

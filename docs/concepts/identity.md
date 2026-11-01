@@ -10,9 +10,9 @@ sluis gives credentials to people and to machines. A person comes from an upstre
 
 ## A person's subject
 
-- **`sub` is an opaque random id, the same at every issuer.** sluis assigns it when it first sees a person from a directory, so it is known before the first sign-in. It is never an e-mail address or a directory account name, so it survives a rename and keeps personal data out of log lines.
+- **`sub` is an opaque random id, the same at every issuer.** sluis assigns it when it first sees a person: at a directory read where the upstream has a directory, so it is known before the first sign-in, and otherwise at the first sign-in, which is how the first working version works. An upstream account is tied to the person by the issuer and a configured subject claim (`sub`, or `oid` for Microsoft Entra), never by e-mail ([ADR 0027](/decisions/0027-a-person-is-tied-to-an-upstream-account-by-issuer-and-subject-claim/)). The subject is never an e-mail address or a directory account name, so it survives a rename and keeps personal data out of log lines.
 - **The directory account and `email` are claims of their own**, beside `acr`, `amr`, `auth_time` and, for a DPoP-bound token, `cnf.jkt`.
-- **A person disabled in the directory is refused at once**, whatever the cached state.
+- **A person disabled in the directory, or held by an operator, is refused at once**, whatever the cached state.
 - What happens to a subject over its life, and pairwise subjects per sector for customers, are for the subject-lifecycle decision record (planned, [#1024](https://github.com/truvity/sluis/issues/1024)).
 
 Each environment has its own issuer, and tokens carry exactly one audience; see [Boundaries](/concepts/boundaries/#issuers-and-tokens).
@@ -68,9 +68,9 @@ An actor that talks to a cloud, such as the audit `writer` writing to a bucket, 
 
 **Where the platform gives an identity, sluis uses it.** On serverless it is the function's role. On Kubernetes it is a projected ServiceAccount token per container, with one audience per role; EKS Pod Identity serves pods that hold a single actor, and `sluis-node` is only a fallback ([ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/#kubernetes)).
 
-**On a self-hosted node, the node agent fills the gap.** `sluis-node` reads the caller's uid from the peer credentials of its Unix socket, maps it to an actor, and issues that actor a short-lived **workload JWT** signed with the node's token-signing key. The caller cannot name another actor. The token's `sub` is the actor instance, `<actor>@<boundary>` ([Naming](/concepts/actors/#naming)), and lasts about an hour.
+**On a self-hosted node, the node agent fills the gap.** `sluis-node` reads the caller's uid from the peer credentials of its Unix socket, maps it to an actor, and issues that actor a short-lived **workload JWT** signed with the node's **workload-issuer key**, a key of its own in a slot of its own, never shared with `signer`'s token-signing key ([the card slot map](/concepts/keys/#the-card-slot-map)). The caller cannot name another actor. The token's `sub` is the actor instance, `<actor>@<boundary>` ([Naming](/concepts/actors/#naming)), and lasts about an hour.
 
-**One workload issuer per boundary.** The boundary's issuer is the issuer of these tokens. Its key set holds one token key per node, three on the boards, and is published as static documents in a bucket. Per-node issuers, at `https://<issuer>/nodes/<node>/`, are an option for a fleet whose nodes run different sets of actors, so that a cloud role trusts only the nodes that run its actor. The cost of one issuer is that a compromised node can sign a token for any actor of its boundary until its key leaves the key set. AWS bounds the design: at most 100 keys in a key set and 100 OIDC providers per account, an `https` issuer URL with no port or query, and `iat` in every token.
+**One workload issuer per boundary.** The boundary's issuer is the issuer of these tokens. Its key set holds one workload-issuer key per node, three on the boards, beside the token-signing keys, and is published as static documents in a bucket. Per-node issuers, at `https://<issuer>/nodes/<node>/`, are an option for a fleet whose nodes run different sets of actors, so that a cloud role trusts only the nodes that run its actor. The cost of one issuer is that a compromised node can sign a token for any actor of its boundary until its key leaves the key set. AWS bounds the design: at most 100 keys in a key set and 100 OIDC providers per account, an `https` issuer URL with no port or query, and `iat` in every token.
 
 **A cloud driver exchanges the token.**
 

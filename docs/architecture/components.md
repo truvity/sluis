@@ -159,7 +159,7 @@ The keys port binds a **key purpose** to a backend and refuses a backend too wea
 | `log` | The audit `writer` only, through `key-holder` or a key policy; one key signs the audit log and the usage log | One `ECC_NIST_P384` key per log |
 | `sealing` | Wraps and unwraps under an encryption context: the data key of each (boundary, record kind), the cookie-sealing key of `session`, and the mint grants of `policy` | One symmetric key per environment boundary, an encryption context per use enforced by key-policy conditions; multi-Region in production |
 | `enrolment` | `exchange` only: opens HPKE-sealed enrolment requests. Hosts get its public key as a certificate that the boundary's intermediate issues, in the trust bundle | A key of its own |
-| release signing | The signing API: an OpenPGP subkey for detached signatures over releases | A key of its own |
+| release signing | `signer` only, for the signing API: an OpenPGP subkey for detached signatures over releases | A key of its own |
 
 There is no `grant` purpose: a grant is sealed, not signed ([ADR 0012](/decisions/0012-cryptography-and-authority-keys/#grants-are-sealed-not-signed)). Tenants have no keys of their own; their data keys are wrapped under the sealing key. The port signs bytes or digests; JWT shaping lives in the token issuer. ES384 (P-384) is the default, and the cloud-federation keys and the FAPI 2.0 algorithms are the named exceptions, each a key of its own ([ADR 0012](/decisions/0012-cryptography-and-authority-keys/#named-exceptions)).
 

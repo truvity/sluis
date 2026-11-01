@@ -20,9 +20,7 @@ Each actor has a GitHub label, `actor:<name>`, on the open issues that build it;
 
 ## Open items
 
-:::note[Proposed]
-**The slot of the node's workload-issuer key.** ADR 0012 says token-signing and workload-issuer keys are hardware-held, one per node, and its slot map v1 has one slot for token signing, `9a`, which `signer` uses; `sluis-node` signs workload JWTs with "the node's token-signing key" (ADR 0007). The invariant "an authority key has exactly one user actor" ([Integration invariants](/architecture/components/#integration-invariants)) then fails on a node. Options: (a) a separate workload-issuer purpose in a spare slot, used by `sluis-node` only and published in the boundary's key set beside the token keys (recommended: one key per signing purpose, one user per key); (b) one key in `9a` shared by `signer` and `sluis-node`, as a named exception. The local installation of the first working version has no `sluis-node`, so this does not block it. Tracked in [#914](https://github.com/truvity/sluis/issues/914).
-:::
+None. The workload-issuer key of `sluis-node` is a key of its own in slot `86`, never shared with the token-signing key of `signer` in `9a` ([card slot map](/concepts/keys/#the-card-slot-map)).
 
 ## The actors
 
@@ -95,31 +93,31 @@ The operator API, as the browser's backend: it checks the operator's delegation 
 
 ### `exchange`
 
-Token exchange (RFC 8693), enrolment of hosts and workloads, and the verifiers of proofs.
+Token exchange (RFC 8693), enrolment of hosts and workloads, the front of the signing API, and the verifiers of proofs.
 
 - **Language:** Go, rule R4 of [ADR 0014](/decisions/0014-the-language-follows-the-executable/).
 - **Placement:** one per boundary; any number of instances; on bare-metal, serverless, kubernetes.
 - **Keys:** `enrolment`, slot from the spare range: unwrap; opens an HPKE-sealed enrolment request. `sealing`, slot `9d`: wrap, unwrap; the data keys of its own record kinds.
 - **Ports:** keys, state, transport. On local: keys: `software`, state: `embedded`, transport: `spool`.
 - **Calls:** `policy`, `quota`, `signer`, `ca`, `credential-minter`, `notifier`.
-- **Decisions:** [ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/), [ADR 0007](/decisions/0007-workload-identity-and-host-enrolment/), [ADR 0012](/decisions/0012-cryptography-and-authority-keys/), [ADR 0014](/decisions/0014-the-language-follows-the-executable/).
-- **Requirement areas:** [EXCH](/requirements/exch/), [WORKLOAD](/requirements/workload/), [CLIENT](/requirements/client/).
+- **Decisions:** [ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/), [ADR 0007](/decisions/0007-workload-identity-and-host-enrolment/), [ADR 0012](/decisions/0012-cryptography-and-authority-keys/), [ADR 0014](/decisions/0014-the-language-follows-the-executable/), [ADR 0029](/decisions/0029-the-signing-api-signs-sent-content-for-an-authorised-proof-and-returns-an-armoured-detached-signature/).
+- **Requirement areas:** [EXCH](/requirements/exch/), [WORKLOAD](/requirements/workload/), [CLIENT](/requirements/client/), [SUPPLY](/requirements/supply/).
 - **Standards:** ST-07 RFC 8693 Token exchange; ST-08 RFC 8707 Resource indicators; ST-44 GitHub Actions OIDC; ST-45 K8s SA token / TokenReview; ST-46 AWS web identity; ST-61 RFC 9180 HPKE; ST-110 JWT-SVID.
-- **Issues:** [#961](https://github.com/truvity/sluis/issues/961), [#782](https://github.com/truvity/sluis/issues/782), [#783](https://github.com/truvity/sluis/issues/783), [#784](https://github.com/truvity/sluis/issues/784), [#785](https://github.com/truvity/sluis/issues/785), [#965](https://github.com/truvity/sluis/issues/965), [#966](https://github.com/truvity/sluis/issues/966); label `actor:exchange`.
+- **Issues:** [#961](https://github.com/truvity/sluis/issues/961), [#782](https://github.com/truvity/sluis/issues/782), [#783](https://github.com/truvity/sluis/issues/783), [#784](https://github.com/truvity/sluis/issues/784), [#785](https://github.com/truvity/sluis/issues/785), [#965](https://github.com/truvity/sluis/issues/965), [#966](https://github.com/truvity/sluis/issues/966), [#890](https://github.com/truvity/sluis/issues/890); label `actor:exchange`.
 
 ### `signer`
 
-Signs tokens under a signing policy with the token-signing key, checking the issuer, the audience, the lifetime and the algorithm.
+Signs tokens under a signing policy with the token-signing key, checking the issuer, the audience, the lifetime and the algorithm, and signs artifacts with the release-signing key for a grant that policy sealed.
 
 - **Language:** Rust, rule R11 of [ADR 0014](/decisions/0014-the-language-follows-the-executable/). Rust unless its design names a serious trade-off; gated by spikes S1 and S10.
 - **Placement:** one per boundary; any number of instances; on bare-metal, serverless, kubernetes. Never fused with entry (the fusion rule).
-- **Keys:** `token-signing`, slot `9a`: sign, public-key. `sealing`, slot `9d`: wrap, unwrap; the data keys of its own record kinds.
+- **Keys:** `token-signing`, slot `9a`: sign, public-key. `release-signing`, slot `85`: sign, public-key; the OpenPGP release subkey, for a signing grant. `sealing`, slot `9d`: wrap, unwrap; the data keys of its own record kinds. `sealing`, slot `9d`: unwrap; purpose=grant (opens the signing grant of an artifact signature).
 - **Ports:** keys, state, transport. On local: keys: `software`, state: `embedded`, transport: `spool`.
 - **Calls:** none.
-- **Decisions:** [ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/), [ADR 0014](/decisions/0014-the-language-follows-the-executable/).
-- **Requirement areas:** [KEYS](/requirements/keys/), [TOKEN](/requirements/token/).
-- **Standards:** ST-49 RFC 7515 JWS; ST-50 RFC 7517 JWKS; ST-51 RFC 7518 JWA; ST-52 RFC 7519 JWT; ST-13 RFC 9068 JWT access tokens.
-- **Issues:** [#962](https://github.com/truvity/sluis/issues/962), [#774](https://github.com/truvity/sluis/issues/774); label `actor:signer`.
+- **Decisions:** [ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/), [ADR 0014](/decisions/0014-the-language-follows-the-executable/), [ADR 0029](/decisions/0029-the-signing-api-signs-sent-content-for-an-authorised-proof-and-returns-an-armoured-detached-signature/).
+- **Requirement areas:** [KEYS](/requirements/keys/), [TOKEN](/requirements/token/), [SUPPLY](/requirements/supply/).
+- **Standards:** ST-49 RFC 7515 JWS; ST-50 RFC 7517 JWKS; ST-51 RFC 7518 JWA; ST-52 RFC 7519 JWT; ST-13 RFC 9068 JWT access tokens; ST-83 RFC 9580 OpenPGP.
+- **Issues:** [#962](https://github.com/truvity/sluis/issues/962), [#774](https://github.com/truvity/sluis/issues/774), [#890](https://github.com/truvity/sluis/issues/890); label `actor:signer`.
 
 ### `policy`
 
@@ -253,7 +251,7 @@ The node agent: issues each local actor a short-lived workload JWT, from its uid
 
 - **Language:** Rust, rule R3 of [ADR 0014](/decisions/0014-the-language-follows-the-executable/).
 - **Placement:** one per node; exactly one instance; on bare-metal. On Kubernetes only as a fallback; none on serverless.
-- **Keys:** `workload-issuer`, slot not yet assigned ([open](#open-items)): sign; the node's workload JWTs.
+- **Keys:** `workload-issuer`, slot `86`: sign; the node's workload JWTs.
 - **Ports:** keys.
 - **Calls:** none.
 - **Decisions:** [ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/), [ADR 0004](/decisions/0004-drivers-listeners-and-boundary-enforcement/), [ADR 0007](/decisions/0007-workload-identity-and-host-enrolment/), [ADR 0014](/decisions/0014-the-language-follows-the-executable/).
