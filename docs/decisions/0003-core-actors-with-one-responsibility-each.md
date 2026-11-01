@@ -23,8 +23,8 @@ v2 states the permissions of every process in a manifest ([0002](/decisions/0002
   | `entry` | Parses each request, validates it against closed parameter lists generated from the contracts, and routes it to the actor that owns the step. It sits behind the edge connector. | Nothing: no key, no secret, no state, no outbound network. It reaches only the sockets of the actors it routes to (on serverless it invokes them) |
   | `session` | Sign-in, session records, the session cookie and freshness per boundary (step-up) | The cookie-sealing key, behind the keys port |
   | `console` | The operator API, as the browser's backend. It checks the operator's delegation and routes each write to the owning actor | No key |
-  | `exchange` | Token exchange (RFC 8693), enrolment, and the verifiers of proofs | Verifier drivers, which hold public material only. The enrolment private key stays in `key-holder` or the cloud key service |
-  | `signer` | Signs tokens under a signing policy. It is not a pure signing oracle | The token-signing keys |
+  | `exchange` | Token exchange (RFC 8693), enrolment, the front of the signing API, and the verifiers of proofs | Verifier drivers, which hold public material only. The enrolment private key stays in `key-holder` or the cloud key service |
+  | `signer` | Signs tokens under a signing policy, and artifacts for a grant that `policy` sealed ([0029](/decisions/0029-the-signing-api-signs-sent-content-for-an-authorised-proof-and-returns-an-armoured-detached-signature/)). It is not a pure signing oracle | The token-signing keys and the release-signing key |
   | `policy` | The decision point. A declared Cedar policy maps facts to grants ([0009](/decisions/0009-policy-is-cedar-in-a-rust-actor/)). It has no state and no network | Use of the sealing key, to seal grants only ([0012](/decisions/0012-cryptography-and-authority-keys/#grants-are-sealed-not-signed)) |
   | `ca` | The X.509 certificate authority | The X.509 CA keys |
   | `ssh-ca` | The SSH certificate authority, for user and host certificates | The SSH CA keys |
@@ -36,7 +36,7 @@ v2 states the permissions of every process in a manifest ([0002](/decisions/0002
 - **A copied token is worth little, and later nothing.** Authorization codes are always bound by PKCE. The first working version issues bearer tokens with short lifetimes, because the relying parties of v1 parity (AWS web identity, the Kubernetes API server, Argo CD) accept bearer JWTs only. Sender-constrained tokens, by DPoP or mutual TLS, arrive after the parity milestone ([#912](https://github.com/truvity/sluis/issues/912)); from then on binding is declared per audience, required where the client and the relying party support it, and the actor that serves the endpoint checks it.
 - **`entry` is hardened as the edge it is.** It is written in a memory-safe language ([0014](/decisions/0014-the-language-follows-the-executable/)), fuzzed against its closed parameter lists, loads no plugins and runs on a read-only file system. Its listener is in [0004](/decisions/0004-drivers-listeners-and-boundary-enforcement/#listeners).
 - **The other actors are named elsewhere.** `quota` is the engine of the Quota piece, beside core ([0017](/decisions/0017-audit-records-the-usage-stream-and-quota/#quota)). The audit actors are writer, witness, indexer and reader, with no notary ([0015](/decisions/0015-audit-pieces-transport-search-and-front/#four-pieces)). The platform actors are the node agent `sluis-node` and the one mediating driver, `key-holder` ([0004](/decisions/0004-drivers-listeners-and-boundary-enforcement/#key-holder-is-the-one-mediator)).
-- **Integration actors return facts or carry out effects that core has authorised:** upstream, facts source, credential minter, provisioner and notifier. They are split by credential, so each process holds one vendor tenant's credential only. The verifiers of proofs are not actors but verifier drivers of `exchange` ([0007](/decisions/0007-workload-identity-and-host-enrolment/)).
+- **Integration actors return facts or carry out effects that core has authorised, and never decide** ([0026](/decisions/0026-integrations-return-facts-or-carry-out-effects-that-core-authorised/)): upstream, facts source, credential minter, provisioner and notifier. They are split by credential, so each process holds one vendor tenant's credential only. The verifiers of proofs are not actors but verifier drivers of `exchange` ([0007](/decisions/0007-workload-identity-and-host-enrolment/)).
 
 ### Names
 
@@ -100,5 +100,4 @@ v2 states the permissions of every process in a manifest ([0002](/decisions/0002
 
 ## Follow-ups
 
-- Integrations return facts or carry out effects and never decide: [#997](https://github.com/truvity/sluis/issues/997).
 - Sender-constrained tokens with DPoP, after the parity milestone: [#912](https://github.com/truvity/sluis/issues/912).

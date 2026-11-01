@@ -75,11 +75,11 @@ A key is shared between two uses only when all of these are equal: **the audienc
 
 ### Grants are sealed, not signed
 
-A mint grant is read only by sluis itself, so no outside verifier needs a signature. `policy` seals the grant with authenticated encryption under the sealing key, with `purpose=grant` in the encryption context, and the actor that carries it out opens it under the same context. On AWS the key policy lets `policy` encrypt and the minters decrypt under that context only; on a YubiKey the sealing slot serves grants too. `policy` holds no signing key, and there is no grant-signing key. A grant sealed in one environment cannot be opened in another.
+A mint grant is read only by sluis itself, so no outside verifier needs a signature. `policy` seals the grant with authenticated encryption under the sealing key, with `purpose=grant` in the encryption context, and the actor that carries it out opens it under the same context. On AWS the key policy lets `policy` encrypt and the minters and `signer` decrypt under that context only; on a YubiKey the sealing slot serves grants too. A grant to `signer` authorises one artifact signature ([0029](/decisions/0029-the-signing-api-signs-sent-content-for-an-authorised-proof-and-returns-an-armoured-detached-signature/)). `policy` holds no signing key, and there is no grant-signing key. A grant sealed in one environment cannot be opened in another.
 
 ### The token-signing key
 
-- **Token-signing and workload-issuer keys are hardware-held, separate from the CA key, one per node.** The node's own intermediate certifies each with a **non-CA certificate that allows digital signatures only**, issued on the node without a ceremony under the profile of [0021](/decisions/0021-leaf-certificate-profiles-lifetimes-and-revocation/#leaf-profiles), so a key that signs tokens cannot issue a certificate.
+- **Token-signing and workload-issuer keys are hardware-held, separate from the CA key and from each other, one of each per node.** `signer` uses the token-signing key and `sluis-node` the workload-issuer key, each in a slot of its own; the two are never shared, because their callers and their blast radius differ. The node's own intermediate certifies each with a **non-CA certificate that allows digital signatures only**, issued on the node without a ceremony under the profile of [0021](/decisions/0021-leaf-certificate-profiles-lifetimes-and-revocation/#leaf-profiles), so a key that signs tokens cannot issue a certificate.
 - **Each key-set entry carries an `x5c` chain:** the token certificate, the node intermediate, then up to the root. A standard client ignores it and fetches the key over TLS; a verifier that wants to can check custody down to a root it trusts. The chain is in the key set, not in each token.
 - **The key set carries every active token key, and a next key only while an event rotation is in progress.**
 
@@ -96,7 +96,8 @@ A documented, versioned map says which card slot serves which purpose: one slot 
 | `83` | `ssh-host` CA |
 | `84` | Log key (audit and usage) |
 | `85` | OpenPGP release-signing subkey |
-| `86` to `95` | Spare (sixteen slots, hex), shared by every purpose |
+| `86` | Workload issuer, for `sluis-node` |
+| `87` to `95` | Spare (fifteen slots, hex), shared by every purpose |
 | `9e` | Not used: the card-authentication slot signs without a PIN by default |
 
 - **The spare range holds the new key of an event rotation** while the old one finishes, and older sealing keys until their data keys are re-wrapped.
@@ -131,7 +132,7 @@ A documented, versioned map says which card slot serves which purpose: one slot 
 - NATS keys add Ed25519 to the key types that the cloud key service and `key-holder` must offer. Each connection costs a few signatures, far below the key service's quotas at the volumes measured. Without the xkey, a callout request is protected by TLS only, so TLS on every client connection is a requirement, not an option.
 - No key can be exported, so a backup never holds one. A restore on new hardware means new keys and new certificates; secrets that are not keys are archived sealed ([0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/#backup-and-restore-by-origin)).
 - Every enabled signing purpose adds a key and a policy; in return a key policy names one actor and one use. Sharing symmetric keys per environment and sealing grants, cookies and tenant data keys under the sealing key keep the number of keys small.
-- A node card uses seven slots in the default map and keeps sixteen spare slots (`86` to `95` in hex), shared by event rotations, older sealing keys and purposes outside the default map; `9e` stays empty.
+- A node card uses eight slots in the default map and keeps fifteen spare slots (`87` to `95` in hex), shared by event rotations, older sealing keys and purposes outside the default map; `9e` stays empty.
 - The token-signing key adds a certificate under each new intermediate and one more certificate to the key set's chain, refreshed at each yearly re-signing.
 - A full power loss needs a person for one unlock. A wrong PIN is never retried, so a bad unlock cannot lock the card.
 - `sluis config check` has to know the key modes, the floor and the slot map. Tests need a virtual card or a software stand-in, and rehearsals on a real card.

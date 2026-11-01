@@ -28,7 +28,7 @@ Tokens are standard JWS and JWT, signed by the token-signing keys of [0012](/dec
 - **Company boundaries have no issuer.** They hold no authority key; the company is the claim `org` and a policy scope.
 - **Each issuer has its own host, one host is one origin, and the issuer URL has no path.** The group issuer is `https://sluis.example.com`; a boundary issuer is `https://sluis.<env>.example.com`. A test installation lives outside these names.
 - **Discovery and the JWKS are static documents**, one set per issuer, in a bucket of that boundary, so a relying party verifies tokens while the issuer's compute is down. The JWKS lists every active token key, each with its `x5c` chain; a next key appears only while a rotation is in progress ([0012](/decisions/0012-cryptography-and-authority-keys/#rotation)).
-- **Lifetimes are set per issuer,** under the session classes of [0023](/decisions/0023-sessions-have-three-classes-with-limits-per-class/).
+- **Lifetimes are set per issuer,** under the session classes of [0023](/decisions/0023-sessions-have-three-classes-with-limits-per-class/); the token lifetimes and their caps are in [0028](/decisions/0028-grants-come-from-a-declared-vocabulary-and-a-token-carries-fixed-claims-for-one-audience/#lifetimes).
 
 ### Audiences
 
@@ -42,9 +42,9 @@ Tokens are standard JWS and JWT, signed by the token-signing keys of [0012](/dec
 
 ### Subjects
 
-- **`sub` is an opaque random ID, the same at every issuer.** sluis assigns it when it first sees a person: at a directory read where the upstream has a directory, so it is known before the first sign-in, and otherwise at the person's first sign-in. The first working version signs people in through the generic OpenID Connect upstream, sign-in only, so its subjects are assigned at first sign-in ([#1106](https://github.com/truvity/sluis/issues/1106)); directory sync, and with it the subject before the first sign-in, comes in the parity milestone ([#805](https://github.com/truvity/sluis/issues/805)). It is never an e-mail address or a directory account name.
-- **The directory account and `email` are claims of their own.** Tokens carry `acr`, `amr` and `auth_time`, and `cnf.jkt` when bound to a DPoP key.
-- **A token carries only the grants of its own boundary.** Grants are names declared per audience, continuing v1 ADR 0010; the claim vocabulary itself is out of scope here ([#999](https://github.com/truvity/sluis/issues/999)).
+- **`sub` is an opaque random ID, the same at every issuer.** sluis assigns it when it first sees a person: at a directory read where the upstream has a directory, so it is known before the first sign-in, and otherwise at the person's first sign-in. The first working version signs people in through the generic OpenID Connect upstream, sign-in only, so its subjects are assigned at first sign-in ([#1106](https://github.com/truvity/sluis/issues/1106)); directory sync, and with it the subject before the first sign-in, comes in the parity milestone ([#805](https://github.com/truvity/sluis/issues/805)). It is never an e-mail address or a directory account name. An upstream account is tied to a person by the issuer and a configured subject claim, never by e-mail ([0027](/decisions/0027-a-person-is-tied-to-an-upstream-account-by-issuer-and-subject-claim/)).
+- **The directory account and `email` are claims of their own.** Tokens carry `acr`, `amr` and `auth_time`, and `cnf.jkt` when the audience declares binding to a DPoP key; an audience that declares none gets a bearer token ([0003](/decisions/0003-core-actors-with-one-responsibility-each/#the-actors), [0028](/decisions/0028-grants-come-from-a-declared-vocabulary-and-a-token-carries-fixed-claims-for-one-audience/#binding)).
+- **A token carries only the grants of its own boundary.** Grants are names declared in a vocabulary and narrowed per audience, continuing v1 ADR 0010; the vocabulary, the claims of a token and its lifetimes are [0028](/decisions/0028-grants-come-from-a-declared-vocabulary-and-a-token-carries-fixed-claims-for-one-audience/).
 - **Workload tokens come from the same issuer.** A JWT-SVID has the boundary's URL as `iss` and the workload's `spiffe://` ID as `sub` ([0007](/decisions/0007-workload-identity-and-host-enrolment/#spiffe-identities)).
 - **Pairwise subjects per sector, for customers that come through a CIAM upstream, are out of scope**, tracked with the end-user subject lifecycle in [#1024](https://github.com/truvity/sluis/issues/1024). That design must keep one sign-in working across several sites.
 
@@ -113,7 +113,6 @@ sluis claims a conformance plan only when it passes, and discovery says only wha
 
 ## Follow-ups
 
-- Claim vocabulary per audience: [#999](https://github.com/truvity/sluis/issues/999).
 - The generic OpenID Connect upstream for the first working version: [#1106](https://github.com/truvity/sluis/issues/1106); directory sync and subjects before the first sign-in: [#805](https://github.com/truvity/sluis/issues/805).
 - End-user subject lifecycle and pairwise subjects: [#1024](https://github.com/truvity/sluis/issues/1024).
 - FAPI 2 profile, after the parity milestone: [#1025](https://github.com/truvity/sluis/issues/1025).

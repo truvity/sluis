@@ -54,12 +54,12 @@ sluis hands ritueel a request and installs what comes back. The specification li
 sluis signs four kinds of thing, each with a key bound to its purpose: artifacts through the signing API; tokens and the key set that verifies them; X.509 leaf and SSH certificates, by `ca` and `ssh-ca` ([0008](/decisions/0008-certificate-authorities-for-x509-ssh-and-databases/)); and, later, OpenPGP certifications of people's keys.
 
 - **A caller, such as a CI job, proves its identity with an OIDC token.** Policy decides which repository, branch or workflow may use which key. sluis signs in place, records the signature in the audit log and returns it. The key is never shown.
-- **The outputs are an OpenPGP detached signature and a raw signature;** a Sigstore bundle comes later. The policy action names and audit events live in code, like every other action ([0017](/decisions/0017-audit-records-the-usage-stream-and-quota/#the-action-table-is-code-and-the-release-identifies-it)).
+- **The first stage returns an OpenPGP detached signature;** a raw signature and a Sigstore bundle come later, each with a key of its own. The request, the response, the policy action and the audit record are [0029](/decisions/0029-the-signing-api-signs-sent-content-for-an-authorised-proof-and-returns-an-armoured-detached-signature/). The action names and audit events live in code, like every other action ([0017](/decisions/0017-audit-records-the-usage-stream-and-quota/#the-action-table-is-code-and-the-release-identifies-it)).
 - **OpenPGP artifact signing arrives in stages:**
 
 | Stage | What sluis signs |
 |---|---|
-| First working version | A detached, ASCII-armoured `.asc` signature over a file or a digest |
+| First working version | A detached, ASCII-armoured `.asc` signature over the content it is sent |
 | Parity milestone | The `Release.gpg` and `InRelease` files of an apt repository, and the `repomd.xml.asc` of an rpm repository |
 | Later | The header signature of each rpm package, and a stand-in for `gpg` that git can call (`gpg.program`), for CI |
 
@@ -96,4 +96,4 @@ Later, not in the first working version. OpenPGP has no intermediates as X.509 d
 
 ## Follow-ups
 
-- The request and response contract of the signing API: [#890](https://github.com/truvity/sluis/issues/890).
+- The signing API's later stages: [#1074](https://github.com/truvity/sluis/issues/1074), [#1075](https://github.com/truvity/sluis/issues/1075).
