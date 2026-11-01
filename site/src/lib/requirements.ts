@@ -11,7 +11,7 @@ export interface Req {
   id: string; area: string; split_from?: string; statement: string; rationale: string;
   level: 'MUST' | 'SHOULD' | 'MAY'; source: string; status: string; runtimes: 'all' | string[];
   standards: StandardRef[]; features: ('parity' | 'design')[]; decisions?: string[]; issues?: number[]; tests?: string[]; verification: Verification[];
-  gap?: string; manual_reason?: string; superseded_by?: string[];
+  gap?: string; manual_reason?: string; superseded_by?: string[]; moved_to?: string;
 }
 export interface Area { code: string; title: string; file: string; reqs: Req[] }
 export interface Standard { id: string; name: string; group: string; register: boolean; url?: string }
@@ -31,7 +31,7 @@ export const STATUS_HINT: Record<string, string> = {
   partial: 'The plan is weaker than the requirement.',
   open: 'Needs a decision or has no plan.',
   'out-of-scope': 'A boundary kept as a refusal.',
-  withdrawn: 'A tombstone; see the superseding record.',
+  withdrawn: 'A tombstone; see the superseding record, or the product it moved to.',
 };
 
 const dir = resolve(process.cwd(), '../docs/requirements');

@@ -665,17 +665,17 @@ requirements:
     rationale: "One compromised root then cannot rewrite what every host trusts."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    superseded_by: [REQ-ISO-064]
     runtimes: [bare-metal, kubernetes]
     standards:
       - {id: ST-108, depth: Partial}
-    issues: [968]
     verification:
       - {kind: test-vectors, ref: "T-23: a bundle signed by a key certified by one root only; refused"}
   - id: REQ-ISO-050
     area: ISO
-    statement: "Enrolment by any path other than manual approval MUST pin the root fingerprint."
-    rationale: "Web PKI gives reachability, not trust, so a client must know which roots it is joining."
+    statement: "Enrolment by any path other than manual approval MUST pin the public keys of the roots."
+    rationale: "Web PKI gives reachability, not trust, so a client must know which roots it is joining, and a pin on a public key survives a root whose validity is extended."
     level: MUST
     source: design-decision
     status: planned
@@ -814,3 +814,65 @@ requirements:
     issues: [973]
     verification:
       - {kind: test-vectors, ref: "T-26: a valid upstream ID token of the disconnected company at sign-in and at the token endpoint; refused"}
+  - id: REQ-ISO-061
+    area: ISO
+    statement: "A node's card service MUST accept connections only from the key-holder's user."
+    rationale: "While the PIN is verified any local process can sign, and any client can reset the card or lock its PIN."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards: []
+    issues: [951]
+    verification:
+      - {kind: test-vectors, ref: "K2: a process under another uid connects to the card service; refused"}
+  - id: REQ-ISO-062
+    area: ISO
+    statement: "The key-holder MUST make the OpenPGP primary-key binding signature of a node subkey on the card."
+    rationale: "The subkey stays in a PIV slot, so only the card can make its back-signature."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards: []
+    issues: [951, 1067]
+    verification:
+      - {kind: integration-test, ref: "on a test card the gpg, gpgv and sqv verifiers accept the subkey with the back-signature and refuse it without"}
+  - id: REQ-ISO-063
+    area: ISO
+    statement: "The key-holder MUST NOT accept a caller-supplied digest for an OpenPGP binding signature."
+    rationale: "It builds the digest from the keys itself, so a caller cannot turn the purpose into a general signer."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards: []
+    issues: [951, 1067]
+    verification:
+      - {kind: test-vectors, ref: "T-9: the OpenPGP binding purpose is asked to sign a caller-supplied digest; refused (content-aware)"}
+  - id: REQ-ISO-064
+    area: ISO
+    statement: "sluis trust sync MUST refuse a root list that is not signed by a root in the list the host already holds."
+    rationale: "Any single root may change the root set, but only a root the host already trusts."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-108, depth: Partial}
+    issues: [968]
+    verification:
+      - {kind: test-vectors, ref: "T-23: a root list signed by a key outside the held list; refused and the anchors on disk are unchanged"}
+  - id: REQ-ISO-065
+    area: ISO
+    statement: "sluis trust sync MUST refuse a root list whose version is lower than the one it holds."
+    rationale: "Refusing a lower version stops a rollback to a list that still names a revoked root."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: ST-108, depth: Partial}
+    issues: [968]
+    verification:
+      - {kind: test-vectors, ref: "T-23: a validly signed root list with a lower version; refused and the anchors on disk are unchanged"}

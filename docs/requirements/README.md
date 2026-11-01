@@ -35,7 +35,7 @@ An id is `REQ-<AREA>-<nnn>`, for example `REQ-AUTHN-002`.
 - The area prefix equals the `area` field and the file it sits in.
 - A longer record that is cut into clauses keeps its id for the first clause. Each further clause gets the next free id in the same area
   and `split_from: <original id>`. Clauses sit next to their parent in the file, so ids are not always in order.
-- Records are not merged. A record that no longer applies gets `status: withdrawn` and `superseded_by: [ids]`.
+- Records are not merged. A record that no longer applies gets `status: withdrawn` and `superseded_by: [ids]`. A record about a subject that moved to another product (root custody moved to ritueel on 2026-11-01) gets `status: withdrawn` and `moved_to` instead.
 
 ## Record fields
 
@@ -55,7 +55,8 @@ An id is `REQ-<AREA>-<nnn>`, for example `REQ-AUTHN-002`.
 | `verification` | `{kind, ref}`; `kind` is `conformance-suite`, `test-vectors`, `integration-test` or `manual`. Every MUST needs at least one. |
 | `gap` | For an `open` or `partial` record that names no decision: a key of `gaps` in `index.yaml`. |
 | `manual_reason` | Required for a MUST verified by manual review only; forbidden otherwise. |
-| `superseded_by` | Required when `status` is `withdrawn`. |
+| `superseded_by` | A `withdrawn` record needs this or `moved_to`: the ids of the records that replace it. |
+| `moved_to` | A `withdrawn` record that moved to another product: the URL of the truvity/ritueel issue that carries it. |
 
 ## How a test names a requirement
 

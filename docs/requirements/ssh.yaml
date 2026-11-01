@@ -99,3 +99,15 @@ requirements:
     issues: [825]
     verification:
       - {kind: integration-test, ref: "opkssh integration test"}
+  - id: REQ-SSH-008
+    area: SSH
+    statement: "A host MUST refuse a list of SSH CA keys that is not signed by a root it trusts."
+    rationale: "An SSH CA key is an anchor with no chain, and the signed list is its provenance."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards: []
+    issues: [1072]
+    verification:
+      - {kind: test-vectors, ref: "T-23: a list of SSH CA keys signed by an unknown key, and one with a lower version; both refused"}
