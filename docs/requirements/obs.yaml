@@ -185,7 +185,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-99, section: "3", depth: Partial}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: integration-test, ref: "audit record correlation test"}
   - id: REQ-OBS-015

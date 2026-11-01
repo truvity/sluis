@@ -12,7 +12,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    issues: [833, 841]
+    issues: [833, 1120]
     verification:
       - {kind: integration-test, ref: "record-per-action test over the action table"}
   - id: REQ-AUDIT-021
@@ -26,7 +26,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    issues: [833, 841]
+    issues: [833, 1120]
     verification:
       - {kind: integration-test, ref: "refusal record test over the action table"}
   - id: REQ-AUDIT-002
@@ -39,7 +39,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Full}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: test-vectors, ref: "JSON-Schema-Test-Suite"}
   - id: REQ-AUDIT-022
@@ -53,7 +53,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Full}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: integration-test, ref: "unknown-action test"}
   - id: REQ-AUDIT-003
@@ -93,7 +93,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-78, section: "8785", depth: Full}
-    issues: [837]
+    issues: [1121]
     verification:
       - {kind: test-vectors, ref: "RFC 8785 test data"}
   - id: REQ-AUDIT-005
@@ -106,7 +106,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-77, section: "2.1", depth: Full}
-    issues: [837, 838]
+    issues: [1121, 838]
     verification:
       - {kind: test-vectors, ref: "RFC 6962 examples"}
       - {kind: test-vectors, ref: "shared Merkle vector file"}
@@ -121,7 +121,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-77, section: "2.1", depth: Full}
-    issues: [837, 838]
+    issues: [1121, 838]
     verification:
       - {kind: test-vectors, ref: "RFC 6962 examples"}
       - {kind: integration-test, ref: "offline verification test"}
@@ -179,7 +179,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-77, section: "2.1", depth: Partial}
-    issues: [837]
+    issues: [1121]
     verification:
       - {kind: integration-test, ref: "two-writer negative test"}
   - id: REQ-AUDIT-027
@@ -209,7 +209,7 @@ requirements:
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
       - {id: ST-103, section: "test plan", depth: Full}
-    issues: [837]
+    issues: [1121, 837]
     verification:
       - {kind: test-vectors, ref: "port suite blob"}
   - id: REQ-AUDIT-028
@@ -223,7 +223,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    issues: [837]
+    issues: [1121, 837]
     verification:
       - {kind: integration-test, ref: "config-check lock-mode report test"}
   - id: REQ-AUDIT-009
@@ -326,7 +326,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    issues: [802, 841]
+    issues: [802, 1120]
     manual_reason: "The rule constrains the architecture of the applications that embed the emitter."
     verification:
       - {kind: manual, ref: "architecture review"}
@@ -342,7 +342,7 @@ requirements:
     standards:
       - {id: ST-97, section: "1", depth: Partial}
       - {id: ST-103, section: "test plan", depth: Full}
-    issues: [802, 841]
+    issues: [802, 1120]
     verification:
       - {kind: test-vectors, ref: "port suite transport"}
   - id: REQ-AUDIT-013
@@ -383,7 +383,7 @@ requirements:
     standards:
       - {id: ST-97, section: "1", depth: Partial}
       - {id: ST-103, section: "test plan", depth: Full}
-    issues: [802, 837]
+    issues: [802, 1120, 1121]
     verification:
       - {kind: test-vectors, ref: "port suite transport"}
   - id: REQ-AUDIT-034
@@ -397,7 +397,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    issues: [802, 837]
+    issues: [802, 1121]
     verification:
       - {kind: integration-test, ref: "duplicate delivery test"}
   - id: REQ-AUDIT-015
@@ -410,7 +410,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    issues: [841, 802]
+    issues: [1120, 802]
     verification:
       - {kind: integration-test, ref: "blocked-write test"}
   - id: REQ-AUDIT-016
@@ -423,7 +423,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    issues: [839]
+    issues: [1122]
     verification:
       - {kind: integration-test, ref: "reindex test"}
   - id: REQ-AUDIT-035
@@ -506,7 +506,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: integration-test, ref: "secret scan of records"}
   - id: REQ-AUDIT-020
@@ -636,7 +636,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: integration-test, ref: "free-text bound test"}
   - id: REQ-AUDIT-047
@@ -692,7 +692,7 @@ requirements:
       - {id: ST-72, section: "1", depth: Partial}
       - {id: ST-75, section: "1", depth: Partial}
       - {id: ST-103, section: "test plan", depth: Full}
-    issues: [837]
+    issues: [1121]
     verification:
       - {kind: test-vectors, ref: "port suite blob create-if-absent fence"}
       - {kind: integration-test, ref: "checkpoint history test"}
@@ -706,7 +706,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-02, section: "5.7", depth: Partial}
-    issues: [802, 837]
+    issues: [802, 1120]
     verification:
       - {kind: integration-test, ref: "record id format test"}
   - id: REQ-AUDIT-052
@@ -719,7 +719,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    issues: [837]
+    issues: [1121]
     verification:
       - {kind: integration-test, ref: "late redelivery test"}
   - id: REQ-AUDIT-053
@@ -732,7 +732,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    issues: [837]
+    issues: [1121]
     verification:
       - {kind: integration-test, ref: "quarantine test"}
   - id: REQ-AUDIT-054
@@ -810,7 +810,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-74, section: "1", depth: Partial}
-    issues: [837]
+    issues: [1121]
     verification:
       - {kind: integration-test, ref: "config-check lock-mode warning test"}
   - id: REQ-AUDIT-060
@@ -1165,7 +1165,7 @@ requirements:
     standards:
       - {id: ST-78, section: "8785", depth: Partial}
       - {id: ST-114, section: "base event", depth: Partial}
-    issues: [837]
+    issues: [1121]
     verification:
       - {kind: integration-test, ref: "emit-to-read byte equality test"}
   - id: REQ-AUDIT-088
@@ -1178,7 +1178,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-114, section: "metadata", depth: Partial}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: integration-test, ref: "pinned OCSF version test"}
   - id: REQ-AUDIT-089
@@ -1191,7 +1191,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-114, section: "deprecation", depth: Partial}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: integration-test, ref: "deprecated OCSF item check in CI"}
   - id: REQ-AUDIT-090
@@ -1204,7 +1204,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-114, section: "actor", depth: Partial}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
   - id: REQ-AUDIT-091
@@ -1217,7 +1217,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-114, section: "base event", depth: Partial}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: integration-test, ref: "lean record test"}
   - id: REQ-AUDIT-092
@@ -1256,7 +1256,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-103, section: "test plan", depth: Full}
-    issues: [837]
+    issues: [1121, 837]
     verification:
       - {kind: integration-test, ref: "crash between seals test"}
   - id: REQ-AUDIT-095
@@ -1321,7 +1321,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Full}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: integration-test, ref: "emitter refuses an ill-formed record test"}
   - id: REQ-AUDIT-100
@@ -1334,7 +1334,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-114, section: "validation", depth: Partial}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: integration-test, ref: "OCSF toolkit check of the action table examples in CI"}
   - id: REQ-AUDIT-101
@@ -1348,7 +1348,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Full}
-    issues: [841]
+    issues: [1120, 841]
     verification:
       - {kind: test-vectors, ref: "action table vectors through every language's validator"}
   - id: REQ-AUDIT-102
@@ -1375,7 +1375,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-103, section: "blob port", depth: Full}
-    issues: [837, 851]
+    issues: [1121, 837, 851]
     verification:
       - {kind: conformance-suite, ref: "port conformance suite, blob create-if-absent"}
   - id: REQ-AUDIT-104
@@ -1415,7 +1415,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-78, section: "8785", depth: Full}
-    issues: [837]
+    issues: [1121]
     verification:
       - {kind: test-vectors, ref: "RFC 8785 test data and non-canonical records"}
   - id: REQ-AUDIT-107
@@ -1428,7 +1428,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-78, section: "8785", depth: Partial}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: test-vectors, ref: "action table vectors with numbers at and beyond the bound"}
   - id: REQ-AUDIT-108
@@ -1478,7 +1478,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-114, section: "base event and core classes", depth: Full}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
   - id: REQ-AUDIT-112
@@ -1491,7 +1491,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-114, section: "unmapped", depth: Partial}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
   - id: REQ-AUDIT-113
@@ -1503,7 +1503,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    issues: [837, 841]
+    issues: [1121, 1120]
     verification:
       - {kind: test-vectors, ref: "unmapped.sluis negative vectors through the writer"}
   - id: REQ-AUDIT-114
@@ -1515,7 +1515,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: integration-test, ref: "generated schema equals the committed schema check in CI"}
   - id: REQ-AUDIT-115
@@ -1527,7 +1527,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    issues: [837, 841]
+    issues: [1121, 1120]
     verification:
       - {kind: integration-test, ref: "log content test: no catalogue object and no schema entry"}
   - id: REQ-AUDIT-116
@@ -1540,7 +1540,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-114, section: "metadata", depth: Partial}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
   - id: REQ-AUDIT-117
@@ -1553,7 +1553,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-114, section: "metadata", depth: Partial}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
   - id: REQ-AUDIT-118
@@ -1566,7 +1566,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-114, section: "metadata", depth: Partial}
-    issues: [837]
+    issues: [1121]
     verification:
       - {kind: integration-test, ref: "boundary mismatch refusal test"}
   - id: REQ-AUDIT-119
@@ -1578,7 +1578,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: integration-test, ref: "unmapped.sluis compatibility check against the previous release in CI"}
   - id: REQ-AUDIT-120
@@ -1591,7 +1591,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-114, section: "profiles", depth: Partial}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
   - id: REQ-AUDIT-121
@@ -1617,7 +1617,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-114, section: "authentication", depth: Partial}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: integration-test, ref: "step-up record test"}
   - id: REQ-AUDIT-123
@@ -1630,7 +1630,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-114, section: "certificate", depth: Partial}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: integration-test, ref: "certificate issue record test"}
   - id: REQ-AUDIT-124
@@ -1643,7 +1643,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-114, section: "delegation", depth: Partial}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
   - id: REQ-AUDIT-125
@@ -1681,7 +1681,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-06, section: "HMAC", depth: Partial}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: integration-test, ref: "pseudonym test vectors"}
   - id: REQ-AUDIT-128
@@ -1694,7 +1694,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-06, section: "HMAC", depth: Partial}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: integration-test, ref: "spool and transport scan for raw subjects"}
   - id: REQ-AUDIT-129
@@ -1707,7 +1707,7 @@ requirements:
     runtimes: all
     standards:
       - {id: NC-06, section: "HMAC", depth: Partial}
-    issues: [841]
+    issues: [1120]
     verification:
       - {kind: integration-test, ref: "epoch change test with a moved clock"}
   - id: REQ-AUDIT-130
