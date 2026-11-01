@@ -62,5 +62,4 @@ export function decisionFacts(entry: Decision): DecisionFacts {
 }
 
 // The status family a record counts under on the status page.
-export const isAccepted = (status: string) => status.startsWith('Accepted');
-export const isProposed = (status: string) => status === 'Proposed';
+export { isAccepted, isProposed } from './lib/status-groups';

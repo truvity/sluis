@@ -4,7 +4,7 @@
 // The shape is public/data/repo.schema.json; site/scripts/check-repo-json.mjs validates
 // the built file against it. Bump `schema` when a field is removed or changes meaning.
 import { decisionFacts, listDecisions } from '../lib-decisions';
-import { catalogue, coverage } from './requirements';
+import { autoVerifiable, catalogue, coverage } from './requirements';
 
 export const REPO_SCHEMA = 1;
 
@@ -17,7 +17,7 @@ export async function repoFacts(builtAt: string) {
     builtAt,
     source: { decisions: 'docs/decisions/NNNN-*.md', requirements: 'docs/requirements/*.yaml' },
     decisions,
-    requirements: c.reqs.map((r) => ({ id: r.id, area: r.area, level: r.level, status: r.status, issues: r.issues ?? [] })),
+    requirements: c.reqs.map((r) => ({ id: r.id, area: r.area, level: r.level, status: r.status, issues: r.issues ?? [], auto: autoVerifiable(r) })),
     coverage: coverage(),
   };
 }
