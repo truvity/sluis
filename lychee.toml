@@ -13,7 +13,7 @@ accept = ["200..=204", "429"]
 user_agent = "Mozilla/5.0 (compatible; sluis-docs-link-check)"
 
 exclude = [
-  # The v1 documentation is built in by the Pages workflow (site/scripts/build-v1.sh)
+  # The v1 documentation is built in by the Site workflow (site/scripts/build-v1.sh)
   # and held by its own strict build; a build of this site alone has no /v1/, so
   # links into it (the features page) cannot be checked here.
   '/v1(/|$)',

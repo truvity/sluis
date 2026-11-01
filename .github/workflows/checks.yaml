@@ -42,7 +42,7 @@ jobs:
         with:
           lfs: true
           persist-credentials: false
-      # The tag the Pages workflow publishes under /v1/ (site/scripts/latest-v1-tag.sh).
+      # The tag the Site workflow publishes under /v1/ (site/scripts/latest-v1-tag.sh).
       - name: Find the newest stable v1 tag
         id: v1
         run: |
@@ -61,7 +61,7 @@ jobs:
       - run: devbox run -- site/scripts/build-v1.sh v1-src site/dist
       - run: devbox run -- site/scripts/check-built.sh site/dist
 
-  # The Cloudflare Workers build (ADR 0063): what the deploy job of site.yaml builds, minus
+  # The Cloudflare Workers build (ADR 0020): what the deploy job of site.yaml builds, minus
   # the deploy. The strict build for the Worker, v1 under /v1/, the headers and redirects
   # checks, and `wrangler deploy --dry-run` with a fake KV id. No Cloudflare credential.
   workers:
