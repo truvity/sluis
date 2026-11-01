@@ -11,7 +11,7 @@ A chain of trust has a few keys that almost never change, the roots, and many th
 
 Putting both in one product puts the rarest and most valuable keys beside the busiest code. The maintainer decided on 2026-11-01 to split them. A separate product, [ritueel](https://ritueel.id) (ADR 0001 in its repository), owns the roots, the ceremonies that certify an intermediate, and every transition of a root between key stores. sluis owns the intermediates and everything that signs with them. The two share no code and no hard dependency; they exchange standard formats.
 
-This record fixes sluis's side: which keys it holds, what it hands over, what it installs, how it warns, what it verifies, and what it signs. It rests on [0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/) (keys sign in place) and replaces the plan for a "two-root PKI hierarchy" record. Certificate profiles, leaf lifetimes and the revocation cadence for leaf certificates are not decided here; they are tracked in their own planned record, which also takes the profile of the token-signing key's certificate.
+This record fixes sluis's side: which keys it holds, what it hands over, what it installs, how it warns, what it verifies, and what it signs. It rests on [0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/) (keys sign in place) and replaces the plan for a "two-root PKI hierarchy" record. Certificate profiles, leaf lifetimes and the revocation cadence for leaf certificates are not decided here; they are tracked in their own planned record, ADR 0067 ([issue #1073](https://github.com/truvity/sluis/issues/1073)), which also takes the profile of the token-signing key's certificate.
 
 Measurements used below were taken on 2026-10-31 on a YubiKey 5 Nano with firmware 5.8.0, on one of the operator's boards.
 
@@ -83,7 +83,7 @@ OpenPGP has no intermediates, but it can delegate. A company root, kept by ritue
 
 ### Not decided here
 
-- Leaf certificate profiles and lifetimes, and the revocation cadence for leaf certificates. The profile of the non-CA token certificate belongs here and is planned.
+- Leaf certificate profiles and lifetimes, and the revocation cadence for leaf certificates. The profile of the non-CA token certificate belongs to ADR 0067 and is planned there.
 - Release signing and its channels (ADR 0030).
 - The detailed signing API (issue #890).
 
