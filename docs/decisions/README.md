@@ -74,7 +74,7 @@ On 2026-11-01, before any code was written, the maintainer had the 32 records ac
 | [0020](0020-the-site-is-static-on-cloudflare-workers.md) | The site is static on Cloudflare Workers, deployed by GitHub Actions, with a live status API | Accepted |
 | [0021](0021-leaf-certificate-profiles-lifetimes-and-revocation.md) | Every leaf certificate has a fixed profile and a short lifetime, intermediates are name-constrained per environment, and one static CRL per intermediate is re-signed daily | Accepted |
 | [0022](0022-telemetry-is-opentelemetry-with-fixed-conventions.md) | Telemetry is OpenTelemetry used directly, with one log format, W3C trace context, fixed span and metric names, and a generated attribute allowlist | Accepted |
-| [0023](0023-sessions-have-three-classes-with-limits-per-class.md) | Sessions have three classes: a person's sessions end at an absolute limit, an agent's end with its consent, and a machine client has no session | Proposed |
+| [0023](0023-sessions-have-three-classes-with-limits-per-class.md) | Sessions have three classes: a person's sessions end at an absolute limit, an agent's end with its consent, and a machine client has no session | Accepted |
 | [0024](0024-break-glass-recovery-uses-passkeys-only.md) | Break-glass recovery uses passkeys only: two attested hardware keys and one pinned synced passkey, a recovery scope, an alert on every use and a quarterly drill | Accepted |
 | [0025](0025-audit-pseudonyms-are-keyed-per-company-and-epoch.md) | Audit pseudonyms are HMAC-SHA384 of the subject under a data key per company and month, wrapped by the sealing key, and only the company's audit role reverses them | Accepted |
 
