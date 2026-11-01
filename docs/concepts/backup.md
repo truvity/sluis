@@ -29,7 +29,7 @@ Each record kind's origin, and for issued kinds its durability, is an annotation
 
 | Not backed up | Why |
 |---|---|
-| **Non-extractable keys** (a KMS key, a key on a YubiKey) | They cannot leave the device or the service. Their "backup" is the way they were provisioned: the key policy, the [ceremony](/concepts/keys/#the-roots-and-the-ceremony) and the second card. A restore checks that each key purpose can still `sign` and that the public key matches. |
+| **Non-extractable keys** (a KMS key, a key on a YubiKey) | They cannot leave the device or the service. Their "backup" is the way they were provisioned: the key policy and the [hand-off that certifies the new key](/concepts/keys/#roots-and-certification). A board that is lost is replaced by a new key, not restored. A restore checks that each key purpose can still `sign` and that the public key matches. |
 | **Derived keys** | They are recomputed from a key that is held elsewhere. |
 | **Declared configuration** | It lives in version control. The archive keeps the resolved document and its digest only as evidence, and the restore starts from `sluis config check` against it. |
 | **Secrets referenced from declared configuration** | The operator's own store holds them, and the configuration only names them. (A secret put at run time into sluis's store is operator-set, and *is* backed up, sealed.) |

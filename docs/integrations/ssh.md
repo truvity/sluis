@@ -13,7 +13,7 @@ SSH is a **client profile** like [PostgreSQL](/integrations/postgresql/): the **
 - **An engineer logs in to a host** with a certificate that expires the same day. `sshd` trusts the CA, and the host decides which account the person may use; there is no `authorized_keys` to edit, and a leaver's access ends when the certificate or the bundle does.
 - **A robot logs in to a host** from CI with a certificate for its job, valid for minutes.
 - **A client trusts a host without a first-connection prompt.** The host's key is signed by the host CA, and the client trusts the CA for a domain with one `known_hosts` line.
-- **Break-glass access** for administrators comes from an offline CA, and normal logins never depend on it.
+- **Break-glass access** for administrators comes from an offline CA that ritueel holds, and normal logins never depend on it.
 
 ## Integration actors
 
@@ -28,7 +28,7 @@ A user certificate says **who** is logging in, not **where** they may go (agreed
 | `u:<person-key>` | A person, by the same opaque person key as `sub` in a token | Every person |
 | `w:<workload>` | A machine identity | CI jobs and workloads |
 | `g:<account>@<group>` | A grant | Only for hosts without `sluis-host` (a BMC, a KVM over IP), for sluis's own hosts, and for elevation |
-| `bg:<scope>` | Break-glass | Signed by an offline CA in a root ceremony, written at install, never touched by the bundle |
+| `bg:<scope>` | Break-glass | Signed by an offline CA that ritueel holds, written at install from the list of SSH CA keys, never touched by the bundle |
 
 Each prefix is a kind, and each host trusts one sluis CA. The key id is `<install>/<subject>/<session>`, and `sshd` logs it.
 

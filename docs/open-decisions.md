@@ -31,7 +31,7 @@ Each row says what was decided. The anchors stay, so links to a decided point st
 | <a id="od-13"></a>OD-13 | Derived key for bursts on YubiKey installations | Closed by OD-3, no burst key |
 | <a id="od-14"></a>OD-14 | Rust for the AWS, GCP and Azure drivers | Rust for the cloud drivers |
 | <a id="od-15"></a>OD-15 | RS256 for specific audiences (verifiers that can't take EC) | (a) per-audience RS256 exception with its own RSA key |
-| <a id="od-16"></a>OD-16 | Name of the v2 command-line tool | (a) one `sluis` binary. The ceremonies are `sluis ceremony …` subcommands; their OpenPGP-card part is a Rust helper under `/usr/libexec/sluis/`, shipped inside the `sluis` package, so there is no second tool (decided 2026-10-30; [ADR 0060](/decisions/0060-the-language-follows-the-executable/)) |
+| <a id="od-16"></a>OD-16 | Name of the v2 command-line tool | (a) one `sluis` binary. The key commands are `sluis key request`, `install` and `status`; root ceremonies belong to ritueel, so there is no second tool (decided 2026-10-30, reworded 2026-11-01; [ADR 0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)) |
 | <a id="od-17"></a>OD-17 | Pod layout on Kubernetes | (c) a node pod plus a separate audit side; the audit side is a separate audit installation ([OD-31](#od-31), decided 2026-10-30) |
 | <a id="od-20"></a>OD-20 | Key custody on clusters outside AWS | Read as an installation default: for now the kubernetes runtime supports AWS KMS only (EKS) |
 | <a id="od-21"></a>OD-21 | State driver on Kubernetes | For now the kubernetes runtime supports DynamoDB only for state |

@@ -33,14 +33,14 @@ gpg --show-keys --fingerprint sluis-release.asc
 ```
 
 ```text
-# Example output (the first of the two primary keys)
+# Example output (the first of the release primary keys)
 pub   nistp384 2026-10-01 [SC]
       3F2A 91C4 7D0E 55B8 A6C1  0E49 7B2D 8E3F 14A0 C9D2
 uid           sluis release signing <release@sluis.example.org>
 sub   nistp384 2026-10-01 [S] [expires: 2027-04-01]
 ```
 
-The release identity is a dedicated sluis identity with two primary keys, one on each card of a pair of YubiKeys, kept offline. Each node holds one shared signing subkey, bound under both primaries, so every release gets one signature that verifies under either fingerprint. Until a signing installation exists, releases are signed offline with the root primaries. The subkey expires, and a new one is published under the same primary keys. Compare the primary key's fingerprint with the copy attached to the GitHub release, which is a different channel from the distribution site.
+The release identity is a dedicated sluis identity with two primary keys that ritueel holds. Releases are signed by a subkey that a primary bound; it expires after about 13 months, and a new one ships in a new keyring package. Verify with the keyring, which carries both primaries ([Release signing](/distribution/release-signing/#the-openpgp-release-key)). Compare the primary key's fingerprint with the copy attached to the GitHub release, which is a different channel from the distribution site.
 
 :::note[Proposed]
 The channels that publish the fingerprint (keys.openpgp.org, a Web Key Directory on sluis.id, DNS, `SECURITY.md`, the GitHub release and the site) are under research; see [Release signing](/distribution/release-signing/#the-openpgp-release-key). Compare on at least two of them.
@@ -65,7 +65,7 @@ apt update
 apt install sluis
 ```
 
-The package installs the actors, drivers and the node agent (`sluis-node`) under `/usr/libexec/sluis/{actors,drivers,integrations,node,helpers,vendor}/<short-name>`, creates one system user per actor, and installs one systemd unit per actor and driver. It enables nothing yet.
+The package installs the actors, drivers and the node agent (`sluis-node`) under `/usr/libexec/sluis/{actors,drivers,integrations,node,vendor}/<short-name>`, creates one system user per actor, and installs one systemd unit per actor and driver. It enables nothing yet.
 
 ```sh
 # Example

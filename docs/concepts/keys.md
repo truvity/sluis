@@ -1,6 +1,6 @@
 ---
 title: Keys
-description: "Which key backs which purpose: key modes, the two main topologies, the key rule, touch and PIN policy, algorithms, KMS and YubiKey layouts, the roots."
+description: "Which key backs which purpose: key modes, the two main topologies, the key rule, touch and PIN policy, algorithms, KMS and YubiKey layouts, and how an intermediate is certified."
 status: target
 sidebar:
   order: 4
@@ -30,18 +30,19 @@ Two topologies are the main patterns. The local installation is a third case: it
 | Topology | Root | Intermediates | Where it applies |
 |---|---|---|---|
 | **KMS root, KMS intermediate per environment** | One KMS root | One KMS intermediate for each environment (development, staging, production) | AWS installations: [lambda](/runtimes/installations/#lambda) and [kubernetes](/runtimes/installations/#kubernetes) on EKS |
-| **Two YubiKey roots, a YubiKey intermediate on each node** | Two roots, one on each of two offline YubiKeys (see [the roots](#the-roots-and-the-ceremony)) | One intermediate on each node's own YubiKey, **certified by both roots** and attested | [boards](/runtimes/installations/#boards), and other installations on single-board computers |
+| **A YubiKey intermediate on each node** | Held by [ritueel](https://ritueel.id), not by sluis (see [Roots and certification](#roots-and-certification)) | One intermediate on each node's own YubiKey, generated on it, attested, and **certified by a root card for about 13 months**, then renewed every year | [boards](/runtimes/installations/#boards), and other installations on single-board computers |
 
-YubiKey roots with KMS intermediates are allowed, but they are not a main pattern.
+Roots on YubiKeys with KMS intermediates are allowed, but they are not a main pattern.
 
-**An existing KMS root comes first.** An estate that already runs a KMS root keeps it, and its intermediates, keys and issuers are per environment. YubiKey roots join it later by **dual trust**: both roots are anchors in the trust bundles while the YubiKey roots take over, so no relying party has to switch on one day. Production's keys may start in the management account and move into the production account as a follow-up.
+**An existing KMS root comes first.** An estate that already runs a KMS root keeps it, and its intermediates, keys and issuers are per environment. Hardware roots, held by ritueel, join it later by **dual trust**: both are anchors in the trust products while the hardware roots take over, so no relying party has to switch on one day. Production's keys may start in the management account and move into the production account as a follow-up.
 
 ## The key rule
 
 Which keys are certified, and which are only published, depends on how a verifier learns to trust them:
 
-- **A key whose public half is trusted through the PKI chain is a hardware-held child key**, attested where possible, and certified by the roots. These are the CA intermediates, the SSH CA keys (`ssh-user` and `ssh-host`, held for the `ssh-ca` actor) and the OpenPGP release subkeys. Each is certified in its own format: an X.509 intermediate by a certificate from each root, an OpenPGP subkey by a binding under each primary (see [OpenPGP release signing](#openpgp-release-signing)). For each SSH CA public key the roots issue an X.509 certificate with a dedicated "SSH CA" usage, as provenance evidence; `sshd` never checks it.
-- **Token-signing and workload-identity issuer keys are hardware-held and published through JWKS.** They are not certified, and a token carries **no `x5c`** header. A verifier gets the public key from the JWKS and from nothing else.
+- **A key whose public half is trusted through the PKI chain is a hardware-held child key**, attested where possible, and certified through a root that ritueel holds. These are the CA intermediates and the OpenPGP signing subkeys. Each is certified in its own format: an X.509 intermediate by a certificate, an OpenPGP subkey by a binding signature from a primary (see [Roots and certification](#roots-and-certification)).
+- **The SSH CA keys are anchors, not a chain.** The `ssh-user` and `ssh-host` keys are held for the `ssh-ca` actor. Hosts trust a list of SSH CA keys that ritueel publishes, signed by a root. `sshd` never checks a certificate on a CA key.
+- **Token-signing and workload-identity issuer keys are hardware-held and published through JWKS.** They are the intermediates themselves, and each JWKS entry carries an **`x5c`** chain up to a root. A token carries no `x5c` header. A standard verifier ignores the member and gets the public key from the JWKS; a verifier that wants to can check the chain to a root it trusts.
 - **Ephemeral keys are outside the rule.** Session keys, ECDH keys, wrapped data keys and derived keys are made for one use and are not certified or published as authority keys.
 
 ## Direct signing
@@ -111,7 +112,7 @@ On the AWS installations there are six key purposes, in each environment. Aliase
 | Audit log | `ECC_NIST_P384`, `SIGN_VERIFY` | Audit batch heads, one key per log, used only by that log's writer |
 | Grant | `ECC_NIST_P384`, `SIGN_VERIFY` | Mint grants, held by `policy` |
 
-In the KMS topology, the X.509 CA row is a root and one intermediate for each environment. The SSH CA keys are separate keys of the `ssh-ca` actor, so one key never serves two purposes.
+In the KMS topology, the X.509 CA row is the intermediate of each environment. Its root is also a KMS key, held by ritueel. The SSH CA keys are separate keys of the `ssh-ca` actor, so one key never serves two purposes.
 
 The symmetric key wraps the data key of each (boundary, record kind) for the state encryption ([Data](/concepts/data/#every-value-is-encrypted)), the cookie-sealing key of `session` and the sealed secrets, each with its own encryption context; the key policy lets each actor decrypt only under the contexts its manifest names. The enrolment key, which opens the HPKE-sealed enrolment requests of [machine identity](/concepts/machine-identity/#enrolment-is-encrypted-end-to-end), is held by KMS or `key-holder`, and only `exchange` may use it.
 
@@ -127,17 +128,17 @@ A YubiKey in PIV mode has 24 slots and **no symmetric keys**. The slot plan for 
 | `9d` | ECDH sealing and ring wrap |
 | `82` | `ssh-user` CA, for `ssh-ca` |
 | `83` | `ssh-host` CA, for `ssh-ca` |
-| `84` | Release-signing subkey S<sub>i</sub>, through `key-holder` (see [OpenPGP release signing](#openpgp-release-signing)) |
+| `84` | OpenPGP signing subkey, through `key-holder` (see [Roots and certification](#roots-and-certification)) |
 | `85` to `95` | Retired sealing keys |
 | `9e` | Avoided |
 
 :::note[Proposed]
-The slots for the two SSH CA keys (`82` and `83`) and for the release subkey (`84`) are a proposal. They are the first three free retired slots, which moves the retired sealing keys to `85` to `95`. The release subkey is held in a PIV slot and reached through `key-holder`, like every other node key. The OpenPGP application is used only on the root cards, for the primaries.
+The slots for the two SSH CA keys (`82` and `83`) and for the release subkey (`84`) are a proposal. They are the first three free retired slots, which moves the retired sealing keys to `85` to `95`. The signing subkey is held in a PIV slot and reached through `key-holder`, like every other node key. The OpenPGP application is not used on a node.
 
-The slots are a map with one reservation per purpose, and ranges kept for rotation and future use. Defaults ship in code and an installation may override them in configuration. `sluis config check`, `sluis ceremony` and node initialisation refuse a collision or a purpose with no slot. The exact numbers are settled in ADR 0032.
+The slots are a map with one reservation per purpose, and ranges kept for rotation and future use. Defaults ship in code and an installation may override them in configuration. `sluis config check`, `sluis key request` and node initialisation refuse a collision or a purpose with no slot. The exact numbers are settled when `key-holder` is built.
 :::
 
-There is one YubiKey per node. EUCLEAK, a side-channel flaw in the older firmware, is fixed from firmware 5.7. The cards of the root pair (below) are separate from the node cards, and never sit in a node.
+There is one YubiKey per node. EUCLEAK, a side-channel flaw in the older firmware, is fixed from firmware 5.7. The root cards belong to ritueel, are kept apart, and never sit in a node.
 
 Every actor reaches a node card only through **`key-holder`**, the one process that opens the card, exclusively, through `piv-go` ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)): one socket per caller, a peer-uid check on each call, and signing that understands the content of each purpose, so the `ca` purpose signs only a certificate within its constraints and the `ssh-ca` purposes only an OpenSSH certificate body. See [The mediating driver](/concepts/drivers/#the-mediating-driver).
 
@@ -147,10 +148,11 @@ The policies are fixed when a key is generated, and they are visible in its atte
 
 | Card | Touch | PIN |
 |---|---|---|
-| Root cards | Always | Always |
 | Node cards | Never | Once, at unlock (see below) |
 
-A node card is touch never so that a node signs unattended. That includes the back-signatures that an OpenPGP subkey needs during a ceremony.
+A node card is touch never so that a node signs unattended. That includes the back-signature of the node's OpenPGP subkey, which `key-holder` makes on the card.
+
+**`key-holder` has exclusive access to its card.** It runs as a dedicated user, the card service accepts only that user, and no other software that talks to cards runs on the node. Measured on 2026-10-31 on a YubiKey 5 Nano (firmware 5.8.0): the PIN state belongs to the powered card, not to a connection, so while it is verified any local process can sign; a default disconnect by any client resets the card and wipes the PIN state; and three wrong PINs from any local user lock it. A Nano signs about 7 P-384 signatures a second, whatever the data size.
 
 ### Node PIN unlock
 
@@ -170,78 +172,18 @@ Because the device has no symmetric key, sealing uses ECDH and HKDF in the style
 
 The consequence is that sealing needs the YubiKey only when opening. Retired slots `85` to `95` keep older sealing keys alive after rotation, so what was sealed under them can still be opened.
 
-## The roots and the ceremony
+## Roots and certification
 
-The trust of an installation starts at two **roots**, held on ordinary YubiKeys in PIV mode (not an HSM).
+sluis holds **no root**. The roots, the ceremonies that use them and every transition from one root to another belong to the separate product [ritueel](https://ritueel.id). sluis holds intermediates and signs with them every day. The two meet at standard formats ([ADR 0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)):
 
-- **Two independent roots.** Each card of a pair generates **its own root** on the card, in a PIV slot, with the PIN policy *always* and the touch policy *always*. Neither root is a copy or a spare of the other.
-- **Both roots are authoritative, and both are in every trust bundle.** A verifier trusts either. Cross-signing between the roots is optional.
-- **No key is ever copied between cards.** A key that was imported into two cards has existed in software once and has lost its attestation; a key generated on the card keeps its PIV attestation, which proves that it was made on a genuine device with those policies.
-- **Two roots exist to survive hardware failure of a YubiKey.** Loss and theft are handled by the lost-card procedure below. Both cards may be held by one person and stored apart, or card B may be held by a second person, who also acts as the second person in a ceremony.
-- **Each intermediate is certified by both roots.** There is one intermediate key and two certificates, one from each card's root. Losing either card breaks no chain.
+1. **Request.** `sluis key request` creates the key if it does not exist, on the node's YubiKey or in the key service, and writes a PKCS#10 request with a **proof of where the key lives**: the YubiKey attestation chain, or the KMS key's identifier and public key. For an OpenPGP signing subkey it writes the public subkey and its back-signature, which `key-holder` makes on the card.
+2. **Certify.** At ritueel's ceremony the card of the year checks the proof, shows the fingerprint, and signs. This is the only step that touches a root.
+3. **Install.** `sluis key install` checks that the chain leads to a root in the root list and that the certificate matches the key, then starts using it.
+4. **Watch.** `sluis key status` shows each key and its expiry. An intermediate lasts about 13 months; sluis warns 60, 30 and 14 days before it ends, because the yearly renewal needs a person at ritueel's side.
 
-### Why two roots
+Hosts hold a signed **root list** that ritueel produces, pin the public keys of the roots, and refuse an older list. `sluis trust sync` verifies it.
 
-Having several roots, and several certificates for one intermediate, is ordinary practice. Checked on 2026-10-29:
-
-- **Public CAs run several roots at once.** [Let's Encrypt](https://letsencrypt.org/certificates/) operates ISRG Root X1 (RSA 4096) and ISRG Root X2 (ECDSA P-384), and X2 also has a certificate cross-signed by X1.
-- **One intermediate can have two certificates.** Several Let's Encrypt intermediates had one certificate from ISRG Root X1 and a second, cross-signed one from an older root, so clients that trusted either root could build a chain. sluis does the same: one intermediate key, two certificates.
-- **Roots are replaced with old and new trusted together.** [RFC 4210, section 4.4](https://datatracker.ietf.org/doc/html/rfc4210) describes a root key update in which the old key stays in use until relying parties have the new one.
-- **Purposes are kept apart.** The [Chrome Root Program policy](https://googlechrome.github.io/chromerootprogram/crp/policy), section 1.3.2, wants TLS server hierarchies dedicated to that one purpose. That rule is for the web PKI, but it is the reason the sluis roots certify only sluis intermediates and nothing else.
-
-What is less common is two roots that are **both permanently active and back each other up**. The conventional design keeps one root key and copies it between hardware security modules, with the wrapping key split among several custodians (an M-of-N scheme). For example, the [YubiHSM 2 backup](https://docs.yubico.com/hardware/yubihsm-2/hsm-2-user-guide/hsm2-backup-restore.html) exports a key under a wrap key and imports it into a second device, and the wrap key can be split into shares. That design has one anchor to publish, but the copy is a key that has left the device it was born in, so the second device cannot attest where the key came from.
-
-sluis takes the other branch for two reasons: no key is ever copied, so each card keeps its PIV attestation, and losing a card breaks no chain, because the other root already certifies every intermediate. The price is two anchors to publish, document and watch, and a few client effects:
-
-- **Both roots publish a CRL (proposed; revocation state is open in ADR 0031).** A client may build the path through either root, so it may ask for either list. A root that has no revocations would still publish an empty, current CRL.
-- **A server presents one chain.** The chain holds the leaf and one certificate of the intermediate, issued by one root. Do not put both certificates of the intermediate in the same chain.
-- **Path building differs between libraries.** The OpenSSL command line takes the first intermediate whose name matches and does not try the other one if that path fails; Go backtracks and tries both. The same family of bug is why OpenSSL 1.0.x broke when [a cross-signed root expired in 2021](https://openssl-library.org/post/2021-09-13-letsencryptrootcertexpire/): it preferred the chain it was sent over a valid path through its own trust store. A verifier that uses the OpenSSL command line should pass the chain it wants explicitly, or the root that matches it.
-
-### A lost root card
-
-If a root card is lost, the procedure is:
-
-1. **Remove that root from every trust bundle**, through the trust registry. Removing a root from the bundles is the only way to revoke it.
-2. **Generate a new root** on a fresh card.
-3. **Re-issue any intermediate that chained only to the lost root.** Because every intermediate is certified by both roots, none should exist.
-4. Until the first step is done, the lost card's PIN and touch policy limit the exposure.
-
-### OpenPGP release signing
-
-The same rule holds for releases, with one difference: the two roots share one signature.
-
-- **Two primaries, one on each root card.** Each primary is generated on its card. Neither is a copy of the other.
-- **Each node holds one signing subkey S<sub>i</sub>, bound under both primaries, in a PIV slot (`84`, proposed) that `key-holder` reaches.** The OpenPGP application is used only on the root cards, for the primaries. The subkey carries a binding signature and a back-signature under each primary. Every release gets **one signature**, and it verifies with certificate A, certificate B or both.
-- **Creating or rotating S<sub>i</sub> needs both root cards**, because each primary signs the binding and S<sub>i</sub> signs a back-signature to each.
-- **A subkey is revoked under both primaries.** `gpg` and `gpgv` ignore a revocation made under only one.
-- **Expiry.** The primaries expire in 2 years and are extended at each yearly drill. The subkeys last 2 years and are staggered, so they do not all expire together.
-- **Target.** sluis signs as a service. CI proves its GitHub OIDC identity, and a node card signs. Sigstore provenance is added alongside.
-- **Until a v2 signing installation exists**, releases are signed offline, directly with the root cards' primaries, using `sluis ceremony`, with a touch for each release. There is no dedicated release card.
-
-Tested on 2026-10-29 with `gpg` 2.4.8, `gpgv`, `sqv` 1.5.0, apt 2.6 and 3.0, and rpm 6.0 (rpm-sequoia), using keyrings A, B and A+B. See [Release signing](/distribution/release-signing/#why-two-primaries-and-one-shared-subkey) for the results and the reasons.
-
-Tested on two cards on 2026-10-31 (spike S8, [ADR 0060](/decisions/0060-the-language-follows-the-executable/)): an ECDSA P-384 primary generated on each of two YubiKey 5 test cards (firmware 5.8.0, OpenPGP applet 3.4), one P-384 signing subkey bound under both, and signatures by the subkey and by each primary. `gpg` and `gpgv` 2.2.27, 2.2.40 and 2.4.7, `sqv` 1.1.0 and 1.3.0, apt 2.4, 2.6 and 3.0, and rpm 6.0.2 with rpm-sequoia 1.10.2 accepted every signature with certificate A, B or both. The subkey in that run was a software stand-in for a node's PIV-held S<sub>i</sub>.
-
-### The ceremony
-
-Creating the roots, signing an intermediate and rotating a root are done in a **ceremony**: a scripted, reviewable procedure with a printed template and a hash that two people can compare, and a verification that is repeated on another machine. The `sluis pki` and `sluis ceremony` commands are a feature to plan. Their shape is not decided, apart from the card helper below. These are inputs to ADR 0032, which settles the ceremonies.
-
-The OpenPGP part of `sluis ceremony` is decided ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)): a Rust helper on `openpgp-card` and rPGP, run by the CLI from `/usr/libexec/sluis/`. Spike S8 ran it end to end on two cards on 2026-10-31. The ceremony is not built on `gpg`: neither `gpg` 2.2.27 nor 2.4.7 can bind an existing P-384 key as a signing subkey, and `gpg`'s card key generation adds encryption and authentication subkeys. The release certificate holds the primary, its user ID and the signing subkeys, and no encryption subkey.
-
-Decided on 2026-10-31 ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)):
-
-- **The helper's contract with `sluis ceremony` is arguments and files.** The helper prompts for the PIN itself on the terminal, and the PIN never travels in the environment or in arguments.
-- **A ceremony requires an OpenPGP attestation of each generated primary,** checked against Yubico's OpenPGP attestation CA, as the PIV path is. Decided; the implementation is pending, and the test with the two cards runs later, once the card is wired.
-
-Reopened, pending a redesign of the ceremony and root-card model (no answer is recorded):
-
-- **The ceremony tooling.**
-- **Where the back-signature comes from** when S<sub>i</sub> lives in a node's PIV slot. `key-holder` would have to sign a primary-key binding, and that purpose is not on its list.
-- **How the binding splits when card B is held by a second person elsewhere.** One process cannot hold both cards, so the back-signatures, the binding by each card and the merge become separate steps.
-
-Still open:
-
-- **A missed touch** comes back from the card after about 15 s as a generic security status, not as a touch timeout; whether the helper reports it as one.
+What sluis does not describe any more: how a root is made, why there are two roots, how the cards alternate, a lost root card, OpenPGP release keys and their keyring, and the ceremony. These are taught at [ritueel.id](https://ritueel.id). The accepted limit of the model is stated there too: whoever holds one root card and its PIN can sign until that root is revoked.
 
 ## TPM 2.0
 

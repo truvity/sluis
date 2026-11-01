@@ -6,6 +6,7 @@
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 Rewritten in place on 2026-10-30 (realignment pass), and again on 2026-10-30 (alignment with 0007, 0058 and 0012).
 Rewritten in place on 2026-10-31 (after spike S5, [issue #943](https://github.com/truvity/sluis/issues/943): rqlite's memory and write limit on a board).
+Rewritten in place on 2026-11-01 (a node's intermediate is certified through the hand-off of [0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)).
 
 ## Context
 
@@ -71,7 +72,7 @@ Two other facts shape the answer. Drivers are services on Unix sockets, and the 
 - **A new node joins by discovery.** It finds each cluster and joins it, with no operator step.
 - **An unreachable node is reaped.** After a timeout of minutes, a member that has not come back is removed from the cluster.
 - **A node leaves cleanly when it is scaled in.** Where the platform has a scale-in hook, such as an auto scaling lifecycle hook on AWS, the hook makes the node leave the cluster before it goes.
-- **A replacement node enrols the same way as any host**, through `exchange`, and that gives its node agent `sluis-node` its identity ([0012](/decisions/0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials/)). The ceremony that certifies a node's intermediate with the root cards stays a separate step (ADR 0032). The node then joins each cluster as a new member and not a returning one. (The last point is inferred.)
+- **A replacement node enrols the same way as any host**, through `exchange`, and that gives its node agent `sluis-node` its identity ([0012](/decisions/0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials/)). The certificate for a node's intermediate comes from a root held by [ritueel](https://ritueel.id), through the hand-off of [0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/), as a separate step. The node then joins each cluster as a new member and not a returning one. (The last point is inferred.)
 
 ### Encrypted and sealed values in state
 
