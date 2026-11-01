@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import mermaid from 'astro-mermaid';
@@ -77,6 +78,14 @@ const workersOptions = {
   session: false,
 };
 
+// The decision records were merged and renumbered on 2026-11-01. Every old record
+// address redirects to the record that took it over; the map is
+// docs/decisions/renumbered.json, which tools/checks/decisions.mjs checks.
+const renumbered = JSON.parse(readFileSync(new URL('../docs/decisions/renumbered.json', import.meta.url), 'utf8'));
+const decisionRedirects = Object.fromEntries(
+  renumbered.records.filter((r) => r.old !== r.new).map((r) => [`/decisions/${r.old}/`, `/decisions/${r.new}/`]),
+);
+
 // https://sluis.id. The custom domain and its DNS are managed outside this
 // repository; the site is served from the root, with the v1 documentation
 // copied in under /v1/ (site/scripts/build-v1.sh).
@@ -103,7 +112,7 @@ export default defineConfig({
     '/shapes/aws-lambda/': '/runtimes/serverless/',
     '/shapes/kubernetes/': '/runtimes/kubernetes/',
     '/concepts/roles/': '/concepts/actors/',
-    '/decisions/0003-environments-are-runtime-kinds/': '/decisions/0003-runtimes-are-runtime-kinds/',
+    ...decisionRedirects,
   },
   ...(workers ? workersOptions : {}),
   prefetch,
