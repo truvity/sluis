@@ -1,29 +1,25 @@
 # Builds the sluis.id website (Astro Starlight, site/ and docs/) together with the
-# v1 documentation of the newest stable v1 release tag (under /v1/). This workflow
-# publishes; checks.yaml judges pull requests.
+# v1 documentation of the newest stable v1 release tag (under /v1/), and deploys it
+# to Cloudflare Workers. This workflow publishes; checks.yaml judges pull requests.
 #
-# Two builds, two places:
-#
-# - `build` proves the site builds for GitHub Pages, and `deploy` publishes that build
-#   to GitHub Pages. THE PAGES DEPLOY IS OFF: it runs only on a manual run
-#   (workflow_dispatch) from `main`, and `published` only follows it. It stays as the
-#   fallback until the Cloudflare deploy has served the site for a week. To switch it
-#   on, see the pull request that added it (the github-pages environment must allow
-#   `main`, and the Pages workflow on `master` must stop publishing).
+# - `build` proves the site builds strictly (checks, v1 under /v1/, the built-site
+#   checks) and gates the deploy.
 # - `deploy-workers` builds the site for Cloudflare Workers and deploys it with
 #   Wrangler, on every push to `main` (and on a manual run from `main`) after `build`
-#   has passed, in the GitHub environment `cloudflare` (ADR 0063). That environment
+#   has passed, in the GitHub environment `cloudflare` (ADR 0020). That environment
 #   allows only `main` and holds the three secrets of the deploy. A pull request never
 #   runs it: this workflow has no pull_request trigger.
+#
+# GitHub Pages is off (2026-11-01): the site is served by the Worker alone, and this
+# workflow has no job that publishes to Pages.
 #
 # The v1 tag is looked up on every run (site/scripts/latest-v1-tag.sh), so a run
 # started after a new v1.X.Y tag is pushed picks it up. The tag and its commit are
 # stamped into build.json next to this branch's own commit. The build names no
 # branch of v1: when `master` is renamed `v1` at the cutover, nothing here changes.
 #
-# The Worker, its KV namespace and the routes of sluis.id are managed outside this
-# repository; this workflow only uploads a new version of the Worker. It does not
-# touch the Pages settings or the custom domain.
+# The Worker, its KV namespace and the custom domains of sluis.id are managed outside
+# this repository; this workflow only uploads a new version of the Worker.
 name: Site
 
 on:
@@ -43,16 +39,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: pages
+  group: site
   cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    outputs:
-      v1_tag: ${{ steps.v1.outputs.tag }}
-      v1_commit: ${{ steps.v1.outputs.commit }}
     steps:
       # Images and fonts are in Git LFS (.gitattributes), so lfs: true.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -106,42 +99,8 @@ jobs:
         run: devbox run -- site/scripts/build-v1.sh v1-src site/dist
       - name: Check the built site
         run: devbox run -- site/scripts/check-built.sh site/dist
-      - name: Stamp the build
-        # build.json is what `published` compares against the live site. The v1
-        # keys are distinct and flat, so "commit" is only ever this branch's commit.
-        env:
-          V1_TAG: ${{ steps.v1.outputs.tag }}
-          V1_COMMIT: ${{ steps.v1.outputs.commit }}
-        run: |
-          touch site/dist/.nojekyll
-          jq -nc --arg commit "$GITHUB_SHA" --arg run "$GITHUB_RUN_ID" --arg v1_tag "$V1_TAG" --arg v1_commit "$V1_COMMIT" \
-            '{commit: $commit, run: $run, v1_tag: $v1_tag, v1_commit: $v1_commit}' > site/dist/build.json
-          cat site/dist/build.json
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          path: site/dist
 
-  # Manual only, from main, until the owner switches Pages over. To switch,
-  # replace the event condition with `github.event_name != 'pull_request'`.
-  deploy:
-    needs: build
-    if: ${{ !cancelled() && needs.build.result == 'success' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    outputs:
-      page_url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
-
-  # The Cloudflare Workers build and deploy (ADR 0063). It repeats the build steps of
+  # The Cloudflare Workers build and deploy (ADR 0020). It repeats the build steps of
   # `build` with SLUIS_TARGET=workers instead of passing an artifact: the KV id of the
   # Worker's configuration is written by the build, from a secret that exists only in
   # this job's environment, and the generated Wrangler redirect lives in a hidden
@@ -233,7 +192,7 @@ jobs:
           jq -nc --arg commit "$GITHUB_SHA" --arg run "$GITHUB_RUN_ID" --arg v1_tag "$V1_TAG" --arg v1_commit "$V1_COMMIT" \
             '{commit: $commit, run: $run, v1_tag: $v1_tag, v1_commit: $v1_commit}' > site/dist/client/build.json
           cat site/dist/client/build.json
-      # Free plan: 20,000 asset files per Worker version (ADR 0063).
+      # Free plan: 20,000 asset files per Worker version (ADR 0020).
       - name: Fewer than 20,000 asset files
         run: |
           files=$(find site/dist/client -type f | wc -l)
@@ -246,41 +205,3 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: devbox run -- just site-deploy
-
-  # A green run is not a live site. Fetch the site and fail unless the build
-  # that was just deployed is the one being served.
-  published:
-    needs: [build, deploy]
-    if: ${{ !cancelled() && needs.build.result == 'success' && needs.deploy.result == 'success' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      PAGE_URL: ${{ needs.deploy.outputs.page_url }}
-      V1_TAG: ${{ needs.build.outputs.v1_tag }}
-    steps:
-      - name: The deployed build is live
-        run: |
-          set -euo pipefail
-          base="${PAGE_URL%/}"
-          [ -n "$base" ] || { echo "::error::the deploy reported no page_url"; exit 1; }
-          for i in $(seq 1 30); do
-            body=$(curl -fsS --max-time 20 "$base/build.json?run=$GITHUB_RUN_ID-$i" 2>/dev/null || true)
-            live=$(printf '%s' "$body" | jq -r '.commit // empty' 2>/dev/null || true)
-            live_v1=$(printf '%s' "$body" | jq -r '.v1_tag // empty' 2>/dev/null || true)
-            if [ "$live" = "$GITHUB_SHA" ] && [ "$live_v1" = "$V1_TAG" ]; then
-              echo "$base serves build $live with v1 $live_v1"
-              break
-            fi
-            echo "attempt $i: $base serves '${live:-nothing}' with v1 '${live_v1:-nothing}', want $GITHUB_SHA with v1 $V1_TAG"
-            [ "$i" -lt 30 ] || { echo "::error::$base does not serve the build that was deployed"; exit 1; }
-            sleep 10
-          done
-          landing=$(curl -fsS --max-time 20 "$base/")
-          case "$landing" in
-            *"a pluggable identity and access broker"*) ;;
-            *) echo "::error::the landing page is not the expected one"; exit 1 ;;
-          esac
-          curl -fsS --max-time 20 -o /dev/null "$base/v1/" \
-            || { echo "::error::the v1 documentation is not served at $base/v1/"; exit 1; }
-          curl -fsS --max-time 20 -o /dev/null "$base/pagefind/pagefind.js" \
-            || { echo "::error::the search index is not served"; exit 1; }
