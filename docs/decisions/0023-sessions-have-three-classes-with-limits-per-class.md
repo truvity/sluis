@@ -1,0 +1,84 @@
+# 0023 — Sessions have three classes: a person's sessions end at an absolute limit, an agent's end with its consent, and a machine client has no session
+
+**Status:** Proposed
+**Date:** 2026-11-01
+
+Proposal: [issue #998](https://github.com/truvity/sluis/issues/998).
+
+## Context
+
+`session@<boundary>` keeps the session records, the session cookie and each person's freshness per boundary ([0003](/decisions/0003-core-actors-with-one-responsibility-each/#the-actors)). The requirements say that a refresh token ends at sign-out, at an idle limit and at an absolute limit (REQ-SESS-015), with one idle and one absolute limit for every refresh token.
+
+Three kinds of caller hold tokens, and they differ in what a limit can measure and in who may end them:
+
+- **A person at a browser, the console or the CLI.** The person is present now and then, signs out, and can be asked to authenticate again. v1 ended every chain at an absolute limit of 24 hours from `auth_time`, never reset by use, with an idle limit of 12 hours on the refresh token (v1 ADR 0001 on `master`, and v1's `lifetimes.refresh`).
+- **An agent acting on a person's behalf,** such as an MCP client, after the person consented. It runs in the background, often for weeks, with no person to answer a prompt. Its client is identified by a Client ID Metadata Document URL ([#792](https://github.com/truvity/sluis/issues/792)) and its tokens are bound to a resource with RFC 8707 ([#822](https://github.com/truvity/sluis/issues/822)). v1 gave such clients their own class: 14 days idle, 30 days from `auth_time` with a ceiling of 90 days, and access tokens of at most 30 minutes (v1 ADR 0040), and a person's browser sign-out did not end them.
+- **A machine or workload** with client credentials or a workload proof ([0007](/decisions/0007-workload-identity-and-host-enrolment/#proofs-and-the-exchange)). Nobody is present; there is nothing to sign out of.
+
+Principle 3 keeps things apart where their audience, lifetime and revocation differ. A boundary's session is seeded from the front's sign-in through token exchange ([0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#step-up)), so a limit at one boundary is worthless if another can extend it. CIMD (#792), MCP authorization (#822) and agent-class sessions (#794) are in the parity milestone; this record fixes the classes now so that parity adds them without retrofitting the session model.
+
+## Decision
+
+### The classes
+
+- **Every session has a class, fixed when it is created and never changed:** `human` or `agent`. Policy chooses the class from the client's declaration; a client never declares its own class, and a fetched client document cannot. A policy change can shorten a session, never lengthen it or change its class.
+- **A machine or workload client has no session.** Client credentials and workload exchanges get short-lived tokens and no refresh token, no session record and no `sid`. A caller that needs a fresh token presents its credential or proof again.
+
+### Human sessions
+
+- **An absolute limit from `auth_time`, never reset by use:** default 24 hours, as in v1. A token's `exp` is capped at the limit, a refresh past it is refused, and a silent authorization past it ends the browser session.
+- **An idle limit on each refresh token, under the absolute limit:** default 12 hours, as in v1, and never above the absolute limit. A per-client session ends at the earlier of the last refresh plus the idle limit and `auth_time` plus the absolute limit, recomputed at every rotation.
+- **Step-up re-authentication** follows [0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#step-up). A step-up refreshes the freshness of the authentication, not `auth_time`, so it does not extend the absolute limit.
+- **The person's sign-out ends the browser session and every human session under it,** at every client, with back-channel logout to the clients that registered for it.
+- **The limits bind the browser session and its refresh tokens alike.** The console's session is a human session.
+
+### Agent sessions
+
+- **An agent session starts only from a consent the person gave interactively.** The consent names the client, the resources and their scopes; an agent authorization never completes silently.
+- **No interactive idle timer.** An agent session has an inactivity expiry on its refresh token (default 14 days) and an absolute lifetime from the consent (default 30 days, maximum 90 days). Its access tokens last at most 30 minutes (maximum 1 hour).
+- **It never outlives the person or the consent.** Revoking the consent, the directory disabling the person, an operator's revoke, and refresh-token reuse each end it at once. Every refresh re-checks the consent and the person's state.
+- **Refresh tokens rotate** at every use, as for every class (REQ-SESS-001).
+- **Tokens are narrow:** one resource per token (RFC 8707), with the scopes the consent names for that resource. They are sender-constrained by DPoP where the client supports it, when DPoP arrives ([0003](/decisions/0003-core-actors-with-one-responsibility-each/#the-actors)).
+- **The person's sign-out does not end agent sessions,** and the sign-out page says so.
+- **Each agent session is listed and revocable by the person,** in the console, and recorded in audit as a record kind of its own, separate from human sessions.
+- **Concurrent agent sessions are capped per person and client.** A new consent past the cap is refused; the person revokes one first.
+
+### Open part
+
+Two numbers have no basis in v1 or in a standard, and the maintainer chooses them before this record is accepted ([#998](https://github.com/truvity/sluis/issues/998)):
+
+- **The cap on concurrent agent sessions per person and client.** Options: (a) a default of 5 and a maximum of 20, enough for one client on a few devices; (b) a default of 1, so a second device replaces the first, which is simplest to explain but surprises a person with two laptops; (c) no default, so each installation must declare one. Recommendation: (a).
+- **The maximum of the human absolute limit.** v1 had a default of 24 hours and no maximum for interactive sessions. Options: (a) 24 hours, the default is the ceiling; (b) 7 days, the ceiling v1 once allowed for read-only resources; (c) no maximum below the agent class's. Recommendation: (a), because a longer human session is what the agent class is for.
+
+### Across boundaries
+
+- **A boundary's session never outlives the session that seeded it.** The exchange into a boundary carries the original `auth_time` and class, and the boundary applies its own limits under them, so it can shorten and never lengthen.
+
+### Configuration
+
+- **The limits are installation configuration per class,** with the defaults above and the maxima in code ([0012](/decisions/0012-cryptography-and-authority-keys/#floors-in-code)). `sluis config check` refuses a value above a maximum, an idle limit above its absolute limit, and an agent class on a client that exchanges a person's token for other credentials.
+
+## Consequences
+
+- A person signs in at most once a working day on each device. An abandoned browser or laptop stops refreshing after 12 hours.
+- An agent keeps working for weeks without the person present, yet it stops at once when the person leaves, is disabled or withdraws the consent. The cost is a second set of limits, a consent record and a session listing the person must be able to read.
+- Agents are not ended by sign-out, which surprises some people; the sign-out page and the listing make it visible, and an operator revoke ends them.
+- Machine clients have nothing to revoke but their credential; a revocation reaches them when their last token expires, so their tokens stay short.
+- A cap on agent sessions bounds the damage of a client that registers a new session on every start.
+- Requirements: REQ-SESS-015 is narrowed to human sessions; [REQ-SESS-025](/requirements/sess/#REQ-SESS-025) to [REQ-SESS-034](/requirements/sess/#REQ-SESS-034) are added.
+
+## Roads not taken
+
+- **One idle and one absolute limit for every refresh token.** An agent would either stop every day or a person's browser would stay signed in for a month.
+- **An idle timeout measured at the issuer for agents.** An agent refreshes on its own schedule, so the issuer has no signal of a person's attention to measure.
+- **Agent sessions ended by the person's sign-out.** Signing out of a browser would silently break every background agent; v1 made the same choice for the same reason.
+- **Sessions for machine clients.** A session needs someone who signs in and out; a machine has a credential, and a session record would only be state to keep and revoke.
+- **The class declared by the client or its metadata document.** Anyone who publishes a document could give their client a month-long session.
+- **A boundary that sets its own limits from scratch.** A boundary could then extend a session the front had already ended.
+
+## Follow-ups
+
+- The two numbers of the open part (the agent session cap, the maximum of the human absolute limit), then this record becomes Accepted: [#998](https://github.com/truvity/sluis/issues/998).
+- Sessions, sign-in, listing and revocation for people: [#793](https://github.com/truvity/sluis/issues/793).
+- Agent-class sessions and consent: [#794](https://github.com/truvity/sluis/issues/794); MCP authorization: [#822](https://github.com/truvity/sluis/issues/822); Client ID Metadata Documents: [#792](https://github.com/truvity/sluis/issues/792).
+- Sender-constrained tokens with DPoP: [#912](https://github.com/truvity/sluis/issues/912).

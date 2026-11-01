@@ -75,7 +75,7 @@ Facts about the backends, checked on the dates given: rqlite authorises per endp
 How the rqlite clusters are run:
 
 - **Each cluster runs beside sluis as its own service**, from the systemd template `sluis-rqlite@<boundary>-<actor>`, with a port scheme for its HTTP and Raft ports. A cluster is 1, 3 or 5 nodes: an even number adds a node without adding fault tolerance.
-- **The Raft port is the only TCP port a cluster opens between nodes.** Node-to-node and client traffic use mutual TLS with a certificate per cluster, so a node of one cluster cannot join another, and the firewall limits the Raft ports to the other nodes' addresses.
+- **A cluster opens two TCP ports on each node, its Raft port and its HTTP port, and nothing else.** Both are among the named flows between nodes of [0004](/decisions/0004-drivers-listeners-and-boundary-enforcement/#listeners). Node-to-node and client traffic use mutual TLS with a certificate per cluster, so a node of one cluster cannot join another; the firewall admits the Raft port from the cluster's other nodes only, and the HTTP port from the cluster's nodes, where its own drivers run, only.
 - **Each rqlite unit is sandboxed by systemd** so that it can write only its own data directory. That contains `ATTACH`.
 - **Compare-and-set is a conditional update** that checks the revision and the number of rows changed; writes go through the Raft log as atomic batches.
 - **Timestamps come from the application**, because rqlite does not rewrite non-deterministic defaults or triggers and a replica would compute its own.
