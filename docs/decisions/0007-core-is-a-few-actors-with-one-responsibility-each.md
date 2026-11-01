@@ -5,6 +5,7 @@
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 Rewritten in place on 2026-10-30 (slim `entry`; new actors `session`, `console`, `exchange` and `ssh-ca`; the naming rule; mediators only where a backend cannot tell callers apart).
+Rewritten in place on 2026-11-01 (root ceremonies moved to the separate product [ritueel](https://ritueel.id); `key-holder` makes the back-signature of a node's OpenPGP subkey).
 
 ## Context
 
@@ -93,7 +94,7 @@ Some processes must also run exactly once. Two audit writers on one log cannot k
   2. **The peer uid,** checked on every connection as a second factor.
   3. **Content-aware signing per purpose.** The `ca` purpose signs only a parseable TBSCertificate within its constraints. The `ssh-ca` purpose signs only an OpenSSH certificate body. A token purpose signs only a JWS signing input.
 
-  `key-holder` has no network and runs under seccomp. It keeps the card's PIN in locked memory, unlocked by a peer node or by `sluis node unlock`, and it rate-limits and audits every signature. More than one card per node is a later option. The ceremony tool uses the OpenPGP card directly, with no mediator.
+  `key-holder` has no network and runs under seccomp. It keeps the card's PIN in locked memory, unlocked by a peer node or by `sluis node unlock`, and it rate-limits and audits every signature. More than one card per node is a later option. It has exclusive access to the card, and it also makes the OpenPGP back-signature of a node's subkey on the card ([0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)).
 - **With a cloud key service there is no `key-holder`.** The key policy, with an encryption-context condition where it applies, is the access list.
 
 ### The fusion rule

@@ -5,6 +5,7 @@
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 Rewritten in place on 2026-10-30 (alignment with 0007, 0058).
+Rewritten in place on 2026-11-01 (ceremony outputs are now the certificates that the hand-off with [ritueel](https://ritueel.id) returns; the escrow ceremony for the backup sealing key is a different ceremony and stays).
 
 **In short:**
 - Every record kind has one origin (declared, operator-set, learned, derived, issued) and every field one sensitivity (public, internal, personal, secret, plus free text), written in the schema.
@@ -16,7 +17,7 @@ Rewritten in place on 2026-10-30 (alignment with 0007, 0058).
 **Words used here:**
 - *Generation*: a number that a tighten-only switch records; undoing the tightening needs a declared change that names a newer generation.
 - *Pin*: an issued record that fixes an identity on first contact, such as the workspace an App was first installed into; a later contradiction is refused, not learned.
-- *Trust registry* and *trust log*: the published list of trusted roots, certificates and attestations, and the append-only log that records changes to it.
+- *Trust registry* and *trust log*: the published list of the certificates and attestations sluis relies on, with the root list that ritueel produces, and the append-only log that records changes to it.
 - *Deny matrix*: the generated tests that prove each actor is refused every record, secret, key and socket its manifest does not grant ([0005](/decisions/0005-three-zoom-levels-contracts-and-a-permission-manifest/)).
 - *Identity treatment*: the handling of personal data in audit records, such as pseudonymisation (ADR 0040).
 
@@ -51,7 +52,7 @@ Ask in order. The first "yes" is the origin.
 3. **learned**: observed in an external system and rebuildable from it without a person. It reaches sluis by **pull** or by **push**. Examples: directory users and groups, group memberships, the members of a workspace, discovered channels, the installed-Apps list, the client metadata document cache, the membership that a customer identity product pushes.
 4. **derived**: rebuilt from sluis's own records or log. Verification never trusts it. Examples: the search index and its cursor, quota meters and hourly aggregates, desired-state projections.
 5. **issued**: sluis created it, or a vendor or a person handed it over once. It is **durable** or **ephemeral**.
-   - Durable: generated client secret versions and their rotation metadata, revocations, grants, the certificate issuance ledger and revocation state, ceremony outputs in the trust registry, vendor-issued secrets (an App private key, a bot token), pins (the workspace at first install, the first subject, an App id and installation id), account links, approvals and consents, quota balances and top-ups.
+   - Durable: generated client secret versions and their rotation metadata, revocations, grants, the certificate issuance ledger and revocation state, the certificates that the hand-off returns, in the trust registry ([0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)), vendor-issued secrets (an App private key, a bot token), pins (the workspace at first install, the first subject, an App id and installation id), account links, approvals and consents, quota balances and top-ups.
    - Ephemeral: sessions, refresh tokens and their spent markers, authorization and device codes, pending sign-in state, short-lived minted credentials, leases, dedupe records, the maintenance flag.
 
 An act is not configuration. An approval, the confirmation of a held removal, a consent or an account link is an issued record of that act. A lasting choice is operator-set.
@@ -79,7 +80,7 @@ A secret that an operator supplies is not an origin of its own. A secret **refer
 | operator-set | `state`, in a namespace of its own per kind, revisioned, written with compare-and-set; secret parts behind `secrets` | The **owning actor** of the kind, on a request through the console API |
 | learned | `state`, in the namespace of the integration that observed it, with the time it was observed and a maximum age; or memory | The integration actor that observed it |
 | derived | `index`; `state` for meters and projections; caches | The actor that derives it (the indexer; `quota` for meters) |
-| issued, durable | `state` records; `secrets` for values; the trust registry and trust log for ceremony outputs; `blob` for published revocation lists | The issuing actor, one per kind |
+| issued, durable | `state` records; `secrets` for values; the trust registry and trust log for the certificates the hand-off returns; `blob` for published revocation lists | The issuing actor, one per kind |
 | issued, ephemeral | `state` with a short lifetime; memory | The owner of the protocol (`session` for sessions and codes, `exchange` for enrolments, the lease holder) |
 
 - **Operator-set writes are done by the owning actor**, which validates them with its own logic. The console API is the `console` actor, behind `entry` ([0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/)). It checks the operator's delegation and routes each write to the actor that owns the kind. The permission manifest declares which kinds accept operator-set writes, and the state backend's own per-caller check refuses any other writer.
