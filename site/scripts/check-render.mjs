@@ -54,10 +54,11 @@ const shots = process.argv[3] ? resolve(process.argv[3]) : null;
 // script must have run on them.
 const EXPLORERS = ['/architecture/explorer/', '/architecture/audit-explorer/'];
 // Pages that must be in the sweep whatever else is found (a diagram on each).
-const REQUIRED = ['/concepts/', '/concepts/identity/', '/architecture/context/', '/runtimes/installations/',
+const REQUIRED = ['/concepts/boundaries/', '/concepts/identity/', '/architecture/context/', '/runtimes/installations/',
   '/runtimes/kubernetes/', '/integrations/connecting/'];
-// The fewest pages with a diagram the sweep may find (18 when this was written).
-const MIN_DIAGRAM_PAGES = 12;
+// The fewest pages with a diagram the sweep may find (18 when this was written, 11
+// after the pages were merged on 2026-11-01).
+const MIN_DIAGRAM_PAGES = 10;
 // Generated pages with no diagram that must still render cleanly.
 const GENERATED = ['/status/', '/decisions/'];
 const NO_MILESTONE = 'Not in a milestone';

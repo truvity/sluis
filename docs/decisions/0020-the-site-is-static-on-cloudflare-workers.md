@@ -11,7 +11,7 @@ The site at sluis.id is built from `docs/` and `site/` with Astro Starlight, wit
 
 GitHub Pages sets no custom headers, has no server-side redirects (only meta-refresh pages), and gives a status page no place to hold a token for live data; unauthenticated browser calls to the GitHub API are limited per visitor address. Cloudflare's documentation tells new projects to start on Workers, and the Astro Cloudflare adapter targets Workers only.
 
-The project board has a single-select field, `Product milestone`, whose options are the product milestones in order. Requirements link the issues that deliver them through `issues:` ([Requirements](/contributing/requirements/)).
+The project board has a single-select field, `Product milestone`, whose options are the product milestones in order. Requirements link the issues that deliver them through `issues:` ([Requirements](/contributing/decisions/#requirements)).
 
 ## Decision
 
