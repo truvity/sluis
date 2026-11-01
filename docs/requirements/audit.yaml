@@ -179,7 +179,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-77, section: "2.1", depth: Partial}
-    decisions: ["OD-31"]
     issues: [837]
     verification:
       - {kind: integration-test, ref: "two-writer negative test"}
@@ -195,7 +194,6 @@ requirements:
     standards:
       - {id: ST-77, section: "2.1", depth: Partial}
       - {id: ST-103, section: "test plan", depth: Full}
-    decisions: ["OD-31"]
     issues: [837]
     verification:
       - {kind: test-vectors, ref: "port suite lease"}
@@ -211,7 +209,6 @@ requirements:
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
       - {id: ST-103, section: "test plan", depth: Full}
-    decisions: ["OD-37"]
     issues: [837]
     verification:
       - {kind: test-vectors, ref: "port suite blob"}
@@ -226,7 +223,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    decisions: ["OD-37"]
     issues: [837]
     verification:
       - {kind: integration-test, ref: "config-check lock-mode report test"}
@@ -242,7 +238,6 @@ requirements:
       - {id: ST-73, section: "1", depth: Partial}
       - {id: ST-74, section: "1", depth: Partial}
       - {id: ST-76, section: "1", depth: Partial}
-    decisions: ["OD-36"]
     issues: [955]
     verification:
       - {kind: integration-test, ref: "per-node log test"}
@@ -259,7 +254,6 @@ requirements:
       - {id: ST-73, section: "1", depth: Partial}
       - {id: ST-74, section: "1", depth: Partial}
       - {id: ST-76, section: "1", depth: Partial}
-    decisions: ["OD-36"]
     issues: [955]
     verification:
       - {kind: integration-test, ref: "co-signing and failure tests"}
@@ -273,7 +267,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-74, section: "1", depth: Partial}
-    decisions: ["OD-36"]
     issues: [838]
     verification:
       - {kind: integration-test, ref: "config-check warning test"}
@@ -288,7 +281,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-74, section: "1", depth: Partial}
-    decisions: ["OD-36"]
     issues: [838]
     manual_reason: "A statement in the documentation is checked by reading it."
     verification:
@@ -334,7 +326,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    decisions: ["OD-37"]
     issues: [802, 841]
     manual_reason: "The rule constrains the architecture of the applications that embed the emitter."
     verification:
@@ -351,7 +342,6 @@ requirements:
     standards:
       - {id: ST-97, section: "1", depth: Partial}
       - {id: ST-103, section: "test plan", depth: Full}
-    decisions: ["OD-37"]
     issues: [802, 841]
     verification:
       - {kind: test-vectors, ref: "port suite transport"}
@@ -365,7 +355,6 @@ requirements:
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    decisions: ["OD-35"]
     issues: [802]
     verification:
       - {kind: integration-test, ref: "writer-down fallback test"}
@@ -380,7 +369,6 @@ requirements:
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    decisions: ["OD-35"]
     issues: [802]
     verification:
       - {kind: integration-test, ref: "writer-down no-loss test"}
@@ -435,7 +423,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    decisions: ["OD-32"]
     issues: [839]
     verification:
       - {kind: integration-test, ref: "reindex test"}
@@ -451,7 +438,6 @@ requirements:
     standards:
       - {id: ST-97, section: "1", depth: Partial}
       - {id: ST-103, section: "test plan", depth: Full}
-    decisions: ["OD-32"]
     issues: [839]
     verification:
       - {kind: test-vectors, ref: "port suite index"}
@@ -560,7 +546,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-74, section: "1", depth: Partial}
-    decisions: ["OD-36"]
     issues: [838, 955]
     verification:
       - {kind: integration-test, ref: "no-witness installation test"}
@@ -574,7 +559,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-49, section: "7515", depth: Partial}
-    decisions: ["OD-39"]
     issues: [838]
     verification:
       - {kind: integration-test, ref: "checkpoint signing test"}
@@ -588,7 +572,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-88, section: "1", depth: Partial}
-    decisions: ["OD-39"]
     issues: [838, 951]
     verification:
       - {kind: integration-test, ref: "key access denial test"}
@@ -602,7 +585,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-49, section: "7515", depth: Partial}
-    decisions: ["OD-39"]
     issues: [838]
     verification:
       - {kind: integration-test, ref: "actor inventory test"}
@@ -616,21 +598,19 @@ requirements:
     runtimes: ["serverless"]
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    decisions: ["OD-35"]
     issues: [802]
     verification:
       - {kind: integration-test, ref: "config-check refusal test"}
   - id: REQ-AUDIT-044
     area: AUDIT
-    statement: "The default audit transport driver MUST be spool on bare-metal and SQS on serverless and kubernetes."
-    rationale: "Direct and JetStream are supported but are not defaults."
+    statement: "The default audit transport driver MUST be spool on bare-metal, SQS on serverless and NATS JetStream on kubernetes."
+    rationale: "Each default is proved by the reference installation of its runtime, and direct has no default."
     level: MUST
     source: design-decision
     status: planned
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    decisions: ["OD-34"]
     issues: [802]
     verification:
       - {kind: integration-test, ref: "default driver test"}
@@ -644,7 +624,6 @@ requirements:
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-77, section: "2.1", depth: Partial}
-    decisions: ["OD-36"]
     issues: [837, 838]
     verification:
       - {kind: integration-test, ref: "per-node writer test"}

@@ -69,7 +69,7 @@ A key is shared between two uses only when all of these are equal: **the audienc
 
 - **The yearly cycle re-signs.** An X.509 intermediate gets a new certificate over the same key at the yearly ceremony; an OpenPGP subkey gets a new binding that extends its expiry. A renewal makes no new key.
 - **Key material rotates on an event, or at most every three years.** The events are a suspected compromise, a change of algorithm or store, and a change of custody. With no event, a signing key is replaced no later than three years after it was made, within the one to three years that NIST SP 800-57 gives for a signing key; the forced rotation keeps the path exercised.
-- **The log key is the one exception to the three-year limit: it rotates only on compromise.** A log is one continuous history, and its signatures must verify for the life of the log.
+- **Log keys are the one exception to the three-year limit: they rotate only on compromise.** This covers the log key of the audit writer and the issuance-log key of `ca`. A log is one continuous history, and its signatures must verify for the life of the log.
 - **Symmetric KMS keys use KMS automatic rotation.**
 - **A rotation makes the new key first and retires the old one after.** On a card the new key goes into a free spare slot while the old one finishes; in KMS it is a new key under the same alias. A new intermediate is requested like the first one ([0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/#the-hand-off)).
 
@@ -100,7 +100,7 @@ A documented, versioned map says which card slot serves which purpose: one slot 
 | `9e` | Not used: the card-authentication slot signs without a PIN by default |
 
 - **The spare range holds the new key of an event rotation** while the old one finishes, and older sealing keys until their data keys are re-wrapped.
-- **Purposes outside the default map take a spare slot when enabled.** The issuance-log key of `ca`, the keys of the named exceptions (PS256, RS256, cloud federation, NATS), the HPKE enrolment key and the trust-bundle signing key ([0007](/decisions/0007-workload-identity-and-host-enrolment/#the-trust-bundle)) are each a key of their own. On KMS each is a separate key; on a card an installation that enables one names its slot from the spare range in its declared map.
+- **Purposes outside the default map take a spare slot when enabled.** The issuance-log key of `ca`, the keys of the named exceptions (PS256, RS256, cloud federation, NATS) and the HPKE enrolment key ([0007](/decisions/0007-workload-identity-and-host-enrolment/#host-enrolment)) are each a key of their own. The trust bundle has no signing key: its certificates verify themselves ([0007](/decisions/0007-workload-identity-and-host-enrolment/#the-trust-bundle)). On KMS each is a separate key; on a card an installation that enables one names its slot from the spare range in its declared map.
 - **A purpose an installation does not enable gets no slot and no key.** `sluis config check`, `sluis key request` and node initialisation refuse a collision, and an enabled purpose with no slot.
 - **Keys are per environment boundary, not per tenant.** A card belongs to one boundary.
 - **The map ships as a default in code; an installation may override it in declared configuration.** The map records each slot's attestation in the registry. The slot map of root cards is ritueel's. The keys page shows the map.

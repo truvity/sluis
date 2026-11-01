@@ -3,7 +3,7 @@ name: new-requirement
 description: Use when adding, splitting, withdrawing or editing a requirement (REQ-<AREA>-NNN) in docs/requirements/*.yaml, or when a decision creates an obligation that needs one.
 ---
 
-Read `docs/contributing/requirements.md` and follow it. It points to `docs/requirements/README.md` for the fields, the ids and the steps; read that file too.
+Read "Requirements" in `docs/contributing/decisions.md` and follow it. It points to `docs/requirements/README.md` for the fields, the ids and the steps; read that file too.
 
 Checklist, each step as the pages describe it:
 

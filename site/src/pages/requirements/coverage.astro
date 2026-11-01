@@ -1,6 +1,6 @@
 ---
 import ReqLayout from '../../components/requirements/ReqLayout.astro';
-import { areaPath, catalogue, count, hasKind, KIND_LABEL, odPath, reqPath, type Req } from '../../lib/requirements';
+import { areaPath, catalogue, count, hasKind, KIND_LABEL, reqPath, type Req } from '../../lib/requirements';
 
 const c = catalogue();
 const musts = c.reqs.filter((r) => r.level === 'MUST');
@@ -15,7 +15,7 @@ const designOnly = c.reqs.filter((r) => live(r) && !r.issues?.length && r.featur
 const waiting = c.reqs.filter((r) => r.status === 'open' || r.status === 'partial');
 const byGap = new Map<string, Req[]>();
 for (const r of waiting) {
-  const keys = [...(r.decisions ?? []), ...(r.gap ? [r.gap] : [])];
+  const keys = r.gap ? [r.gap] : [];
   for (const k of keys.length ? keys : ['(none)']) byGap.set(k, [...(byGap.get(k) ?? []), r]);
 }
 const gapKeys = [...byGap.keys()].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
@@ -129,7 +129,7 @@ const noSuiteByArea = c.areas.map((a) => [a, noSuite.filter((r) => r.area === a.
   </details>
 
   <h2 id="waiting">Open and partial requirements</h2>
-  <p>{waiting.length} requirements wait for a decision or a plan, grouped by the open decision or the gap key they name. A record that names several appears under each.</p>
+  <p>{waiting.length} requirements wait for a decision or a plan, grouped by the gap key they name.</p>
   <div class="rq-table-wrap">
     <table class="rq-table rq-stats">
       <thead><tr><th>Waiting for</th><th>Requirements</th><th>Ids</th></tr></thead>
@@ -137,7 +137,7 @@ const noSuiteByArea = c.areas.map((a) => [a, noSuite.filter((r) => r.area === a.
         {gapKeys.map((k) => (
           <tr>
             <td data-label="Waiting for">
-              {/^OD-\d+$/.test(k) ? <a href={odPath(k)}>{k}</a> : <code>{k}</code>}
+              <code>{k}</code>
               {c.gaps[k] && <div class="rq-note">{c.gaps[k]}</div>}
             </td>
             <td data-label="Requirements">{byGap.get(k)!.length}</td>

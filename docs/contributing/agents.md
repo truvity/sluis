@@ -3,7 +3,7 @@ title: AI agents
 description: How AI agents contribute to sluis, who answers for their work, how a team of agents splits its roles, and what an agent reports back.
 status: shipped
 sidebar:
-  order: 9
+  order: 6
 ---
 
 AI agents may write issues, code, tests and docs for sluis. Their work is reviewed like any other, and they follow the same pages as people. `AGENTS.md` at the repository root is the short form of these pages for an agent, with the page to read before each kind of change; `CLAUDE.md` loads it for Claude Code.

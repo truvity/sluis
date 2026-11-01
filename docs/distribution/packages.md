@@ -1,60 +1,73 @@
 ---
-title: Packages
-description: The sluis release artifacts and where they live. The R2 layout, apt and dnf setup for amd64 and arm64, binaries, Lambda zips, OCI images and Helm charts.
+title: Packages and platforms
+description: The sluis release artifacts and where they live, the supported platforms and systemd floor, apt and dnf setup, binaries, Lambda zips, images and charts.
 status: target
 sidebar:
   order: 1
 ---
 
-A sluis release publishes every artifact from `https://distribution.sluis.id/`, a Cloudflare R2 bucket. GitHub Releases holds the same files as the immutable record. For how to check what you downloaded, see [Release signing](/distribution/release-signing/).
+A sluis release publishes every artifact from `https://distribution.sluis.id/`, a Cloudflare R2 bucket, with no redirects. GitHub Releases holds the same files as the immutable record. Every artifact of a release carries the same version and ships together. The design is [ADR 0019](/decisions/0019-release-train-packaging-and-distribution/); how to check what you downloaded is [Release signing](/distribution/release-signing/).
+
+## Supported platforms
+
+| Distribution | Version | systemd | Packages from |
+|---|---|---|---|
+| Ubuntu | 26.04 LTS | 259 | the apt repository |
+| Rocky Linux | the latest stable, 10.x | 257 (10.2) | the dnf repository |
+| Amazon Linux | 2023 | 252 | the dnf repository |
+
+- **All of them on amd64 and arm64.**
+- **The systemd floor is 252,** the version in Amazon Linux 2023. Generated units may rely on what 252 provides, such as `LoadCredentialEncrypted=` and `ExecPaths=`.
+- **Serverless and Kubernetes have no host distribution.** An executable that needs cgo is built against the oldest supported glibc, so the same binary runs in a package and in an image.
+- **A board image older than the floor is a declared exception,** not a supported platform: its units use plain `LoadCredential=` where `LoadCredentialEncrypted=` is missing, and `sluis doctor` warns where its kernel fails the randomness checklist. The exception ends when board images for the supported distributions exist ([#881](https://github.com/truvity/sluis/issues/881)). Key material is never affected: it stays in the card.
+- **No FIPS build in v2.0.** Every platform gets the same build, and the algorithms stay in the FIPS-approved set so that a variant can be added when a customer needs it ([ADR 0012](/decisions/0012-cryptography-and-authority-keys/#algorithms), [Keys](/concepts/keys/)).
 
 ## Packaging per runtime
 
-What you download depends on the [runtime](/runtimes/) you install on. There are no build profiles: the packaging is the build, and `dev` is not a build.
+There are no build profiles: the runtime decides the packaging, and every artifact is built for amd64 and arm64. `dev` is not a build; it is the local installation, which runs the published images under Docker Compose.
 
 | Runtime | Packaging |
 |---|---|
-| [bare-metal](/runtimes/bare-metal/) | `.deb` and `.rpm` packages split by function, a package per driver executable, meta-packages per installation, and a tarball |
-| [serverless](/runtimes/serverless/) | One function per actor and one zip per executable, with at most three layers of sluis's own |
-| [kubernetes](/runtimes/kubernetes/) | One OCI image per process and one Helm chart with presets |
+| [bare-metal](/runtimes/bare-metal/) | `.deb` and `.rpm` packages split by function, in apt and dnf repositories, and a tarball |
+| [serverless](/runtimes/serverless/) | A zip per executable, a function per actor instance, at most three sluis layers per function |
+| [kubernetes](/runtimes/kubernetes/) | One multi-arch OCI image per process, and one Helm chart with the images pinned by digest |
 
-The local installation runs the same OCI images as Kubernetes, under Docker Compose. The images carry the packages' binaries, byte for byte, and a hash test checks it ([ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/)). The packaging is agreed ([ADR 0019](/decisions/0019-release-train-packaging-and-distribution/)).
+The install directory is the same in a package, a tarball and an image:
+
+```text
+/usr/libexec/sluis/{actors,drivers,integrations,node,vendor}/<short-name>
+```
 
 ## Packages by function
 
-The `.deb` and `.rpm` packages are split by function, and every driver executable is a package of its own, so that a host installs only what it runs (decided 2026-10-30):
+Every driver executable is a package of its own, so a host installs only what it runs.
 
 | Package | Holds |
 |---|---|
-| `sluis` | The CLI, `sluis agent`, `sluis trust sync` with its timer ([Machine identity](/concepts/machine-identity/#trust-sync)), and the `sluis key` subcommands (`request`, `install`, `status`) |
+| `sluis` | The CLI, `sluis agent`, `sluis trust sync` with its timer ([Identity](/concepts/identity/)), and `sluis key request`, `install` and `status` |
 | `sluis-node` | The node agent |
 | `sluis-server` | The core actors and the first-party integrations |
 | `sluis-driver-<name>` | One driver executable, with the system packages it needs |
 | `sluis-audit-writer` | The audit writer and the witness |
 | `sluis-audit-search` | The indexer and the reader |
 | `sluis-quota` | The quota engine |
-| `sluis-host` | The SSH host service ([SSH](/integrations/ssh/)) |
-| `sluis-console` | The console's single-page application, as a static bundle |
-| `sluis-install-<installation>` | A meta-package per bare-metal installation, such as `sluis-install-boards`, which pulls in what that installation runs |
+| `sluis-host` | The root host service, mainly for [SSH](/integrations/ssh/); it never listens on the network |
+| `sluis-console` | The console's static bundle |
+| `sluis-install-boards` | The meta-package of the boards installation |
 
-Examples of driver packages and what they bring:
+Examples of driver packages:
 
 | Package | Dependencies and contents |
 |---|---|
-| `sluis-driver-yubikey-piv` | Depends on pcscd and pcsc-lite |
-| `sluis-driver-pkcs11` | Depends on p11-kit |
+| `sluis-driver-yubikey-piv` | Depends on pcscd and pcsc-lite. On a node the card service serves `key-holder` only ([ADR 0012](/decisions/0012-cryptography-and-authority-keys/#exclusive-card-access)) |
 | `sluis-driver-rqlite` | Ships `rqlited` under `vendor/` and the `sluis-rqlite@.service` template |
 | `sluis-driver-aws` | The one Rust `aws` driver executable |
 
-No package depends on a driver package except the meta-packages. The lambda and kubernetes installations have no `.deb` or `.rpm`, so they have no meta-package, and the local installation runs the images under Docker, so there is no `sluis-install-local` until a native local mode exists (decided 2026-10-31, [ADR 0019](/decisions/0019-release-train-packaging-and-distribution/)).
-
-Root ceremonies are not part of sluis: they belong to [ritueel](https://ritueel.id), which publishes its own packages. The keyring package that apt and dnf use to verify sluis releases is built with ritueel's tools and published with the release ([Release signing](/distribution/release-signing/#the-openpgp-release-key)).
-
-The packages ship systemd **template units** only, `sluis-<actor>@.service` and `sluis-<actor>@.socket`, and a systemd generator that reads `/etc/sluis/install.yaml` and creates the instances ([Bare-metal](/runtimes/bare-metal/#what-runs-where)). sluis does not generate packages per installation.
-
-The **console's single-page application** is a separate artifact: a bundle of static files with the release's version, deployable on its own. Each runtime's static host serves it on the same origin as `entry`'s API: a directory that `entry` serves on bare-metal, the bucket behind the API gateway on serverless, a static container behind the ingress on Kubernetes ([ADR 0019](/decisions/0019-release-train-packaging-and-distribution/)).
-
-The **audit console** is a bundle of its own, built from the same source tree on the same release train, and served by the audit installation's static host on the audit front's origin ([ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/)). Its package and image are named with the build ([#985](https://github.com/truvity/sluis/issues/985)).
+- **`sluis-server`, the audit packages and `sluis-quota` depend on no driver package,** so a host that runs only the audit log or only Quota installs neither the core actors nor an unused driver.
+- **Meta-packages exist only for the bare-metal installations that install from packages.** The local installation runs images and uses software keys by default, so it needs no package and no driver package.
+- **Template units only.** The packages ship `sluis-<actor>@.service` and `sluis-<actor>@.socket` and a systemd generator that reads `/etc/sluis/install.yaml` and creates the instances ([Bare-metal](/runtimes/bare-metal/)). sluis generates no per-installation packages.
+- **The console is a separate artifact,** a bundle of static files built once per release and served on the same origin as the API: a directory from `sluis-console` on bare-metal, the bucket behind the API gateway on serverless, its own Deployment on Kubernetes. The audit console is a bundle of its own on the same train, served on the audit front's origin ([ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/), [#985](https://github.com/truvity/sluis/issues/985)).
+- **Root ceremonies are not part of sluis.** They belong to [ritueel](https://ritueel.id). The release keyring package that apt and dnf verify with is built with ritueel's tools and published in sluis's own repositories, once the roots exist ([Release signing](/distribution/release-signing/#the-openpgp-release-key)).
 
 ## The R2 layout
 
@@ -66,42 +79,30 @@ dnf/       {x86_64,aarch64}/{repodata/, packages}
            sluis.repo
 bin/       <version>/<component>_linux_{amd64,arm64}.tar.gz
 lambda/    <version>/{functions,layers,extensions}/sluis-<kind>-<name>_<version>_{arm64,x86_64}.zip
-checksums/ <version>/SHA256SUMS, .sig (cosign), .asc (OpenPGP)
-keys/      the release OpenPGP public key, the cosign public key
+checksums/ <version>/SHA256SUMS, and SHA256SUMS.asc once releases are signed
+keys/      the release keyring, once the roots exist
 oidc/      nodes/<node>/.well-known/openid-configuration, jwks.json
 latest     pointer to the newest version
 ```
 
-- Everything is served directly from R2. There are no redirects.
-- `oidc/` is not a release artifact. It holds workload-identity discovery documents and JWKS, public keys only. By default an installation's workload tokens come from its boundary's issuer, so `oidc/nodes/<node>/` is used only by a fleet that chooses per-node issuers. See [Identity](/concepts/identity/).
-- `latest` is a pointer to the newest version. Pin a version in anything you automate.
+- The repository metadata files (`InRelease`, `Release.gpg`, `repomd.xml.asc`) are signed from the parity milestone on; until then a repository cannot be verified by its signature.
+- `oidc/` is not a release artifact. It holds workload-identity discovery documents and key sets, public keys only, for a fleet that chooses per-node issuers; by default workload tokens come from the boundary's issuer ([Identity](/concepts/identity/)).
+- `latest` points to the newest version. Pin a version in anything you automate.
 
 ## apt (Debian and Ubuntu)
 
-The repository has one suite, `stable`, and one component, `main`, for `amd64` and `arm64`.
+Until releases are signed, download the `.deb` files and `SHA256SUMS` from the GitHub release and check them, as the [tutorial](/tutorials/single-node-install/) does. Once the apt metadata is signed, add the repository with the release keyring:
 
 ```sh
 # Example
-curl -fsSLo sluis-release.asc https://distribution.sluis.id/keys/sluis-release.asc
-gpg --show-keys --fingerprint sluis-release.asc    # compare the fingerprint before you continue
-gpg --dearmor < sluis-release.asc | sudo tee /usr/share/keyrings/sluis.gpg > /dev/null
-
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/sluis.gpg] https://distribution.sluis.id/apt stable main" \
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/sluis-release.gpg] https://distribution.sluis.id/apt stable main" \
   | sudo tee /etc/apt/sources.list.d/sluis.list
 sudo apt update && sudo apt install sluis
 ```
 
-`$(dpkg --print-architecture)` prints `amd64` or `arm64`. The key is scoped to this one repository by `signed-by`.
+The repository has one suite, `stable`, and one component, `main`. `signed-by` scopes the keyring to this one repository. How you get the keyring and check it is in [Release signing](/distribution/release-signing/#the-openpgp-release-key).
 
 ## dnf (Rocky Linux and Amazon Linux)
-
-```sh
-# Example
-sudo curl -fsSLo /etc/yum.repos.d/sluis.repo https://distribution.sluis.id/dnf/sluis.repo
-sudo dnf install sluis
-```
-
-The repo file points at the architecture directory with `$basearch`, which is `x86_64` or `aarch64`:
 
 ```ini
 # Example: /etc/yum.repos.d/sluis.repo
@@ -109,38 +110,34 @@ The repo file points at the architecture directory with `$basearch`, which is `x
 name=sluis
 baseurl=https://distribution.sluis.id/dnf/$basearch
 enabled=1
-gpgcheck=1
 repo_gpgcheck=1
-gpgkey=https://distribution.sluis.id/keys/sluis-release.asc
+gpgcheck=0
+gpgkey=file:///etc/pki/rpm-gpg/sluis-release.asc
 ```
 
-`gpgcheck=1` verifies each package and `repo_gpgcheck=1` verifies the repository metadata. The metadata is OpenPGP-signed; see [Release signing](/distribution/release-signing/).
+`$basearch` is `x86_64` or `aarch64`. `repo_gpgcheck=1` verifies the signed `repomd.xml`, which carries each package's checksum. Header signatures on each rpm come later ([ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/#the-signing-api)); then the file sets `gpgcheck=1` as well. Before the metadata is signed, verify downloaded `.rpm` files against `SHA256SUMS`.
 
 ## Binaries
 
-Each component is a tarball for each architecture at `bin/<version>/<component>_linux_{amd64,arm64}.tar.gz`, with its `.sha256` beside it. Use a tarball when you manage the units yourself. The layout inside a package or tarball is the same, and the directory that held the actors was renamed from `roles` to `actors`:
-
-```text
-/usr/libexec/sluis/{actors,drivers,integrations,node,vendor}/<short-name>
-```
+Each component is a tarball per architecture at `bin/<version>/<component>_linux_{amd64,arm64}.tar.gz`, with its `.sha256` beside it, laid out like a package. Use a tarball when you manage the units yourself.
 
 ## Lambda zips
 
-Lambda is zip only, so layers and extensions combine. The zips are published under `lambda/<version>/` for `arm64`, the default, and `x86_64`. Each file is named `sluis-<kind>-<name>_<version>_<arch>.zip`, the same on R2 and in the GitHub release, so no two files collide:
+The zips are under `lambda/<version>/` for `arm64`, the default, and `x86_64`, named `sluis-<kind>-<name>_<version>_<arch>.zip` on R2 and in the GitHub release alike.
 
-- `functions/`: **one zip per executable**, and one function per actor. The function's handler is the `.deb`'s binary, renamed `bootstrap`;
-- `layers/`: at most three layers of sluis's own: the edge layer, with the vendored Lambda Web Adapter (pinned v1.1.0) that only `entry` uses; the drivers layer; and the configuration layer. There is no OpenTelemetry layer, and AppConfig is read through its API;
-- `extensions/`: the drivers, as **one Rust `aws` executable** that implements every AWS port for its function.
+- `functions/`: one zip per executable; the handler is the package's binary, renamed `bootstrap`.
+- `layers/`: at most three sluis layers: the edge layer (with the vendored Lambda Web Adapter that only `entry` uses), the drivers layer and the configuration layer, so two of Lambda's five stay free for the operator.
+- `extensions/`: one Rust `aws` driver executable per function, implementing every AWS port it needs.
 
-A function has at most five layers and 250 MB unzipped, including layers and extensions, so two layers are left to the operator. The zips are verified and published into the installation's own account by its infrastructure code; sluis publishes no public layer ARNs. See [Serverless](/runtimes/serverless/).
+An installation verifies the zips and publishes the layers into its own account; sluis publishes no public layer ARNs. The YubiKey driver, `key-holder`, `sluis-node`, rqlite and every driver that needs a disk or a long-running process are not published for Lambda ([Serverless](/runtimes/serverless/)).
 
 ## OCI images
 
-There is **one image per process**: each actor, driver and integration, and the edge relay and the console, is an image of its own, so a container can run its one executable only. Multi-arch images (amd64 and arm64) are published to GHCR as `ghcr.io/truvity/sluis/<kind>/<name>`. Pull by digest.
+One image per process, so a container can run its one executable only. Multi-arch images are on GHCR as `ghcr.io/truvity/sluis/<kind>/<name>` (if GHCR refuses three-segment names, `ghcr.io/truvity/sluis/<kind>-<name>`, [#876](https://github.com/truvity/sluis/issues/876)). The tag is the release version; pull by digest.
 
-- The base is distroless `static`, or distroless with glibc and a pinned `pcsc-lite` for an executable that needs cgo, built against the oldest supported glibc.
-- The executable sits at the same path as in the `.deb` (for example `/usr/libexec/sluis/actors/entry`), byte for byte, and an OCI label names the package it comes from.
-- The same images run the local installation and Kubernetes.
+- The base is distroless `static`, or distroless with glibc and a pinned `pcsc-lite` for a cgo executable.
+- The executable sits at the package's path, byte for byte, and a label names its source package. A release test compares the images' binaries with the packages' files by hash.
+- One image set serves the local installation and Kubernetes.
 
 ```sh
 # Example
@@ -149,10 +146,10 @@ docker pull ghcr.io/truvity/sluis/actors/entry@sha256:<digest>
 
 ## Helm charts
 
-Charts are OCI artifacts. A chart pins every image it deploys by digest, and the digests come from the GoReleaser output through `ocictl helmctl`, so a chart installs exactly the images that were released with it. A chart's version is the release version.
+Charts are OCI artifacts under `ghcr.io/truvity/sluis/charts/`, and a chart's version is the release version. A chart pins every image by digest, so it installs exactly the images released with it.
 
-- **One `sluis` chart** with a piece selector and presets, `install`, `audit-install`, `quota-install` and `kubernetes-dev`, and no subcharts ([OD-30](/open-decisions/#od-30), decided). The console runs as its own Deployment.
-- **The cert-manager issuer** has a chart of its own, with its CRDs and RBAC. The certificate sidecar is an image plus a snippet.
+- **One `sluis` chart** with a piece selector and the presets `install`, `audit-install`, `quota-install` and `kubernetes-dev`, and no subcharts, so a writer and a reader always come from one release. The console runs as its own Deployment behind the same route as `entry`.
+- **The cert-manager issuer** has a chart of its own, with its CRDs and RBAC. The certificate sidecar is an image plus a documented container snippet.
 
 ```sh
 # Example
@@ -161,4 +158,8 @@ helm pull oci://ghcr.io/truvity/sluis/charts/sluis --version <version>
 
 ## GitHub Releases
 
-GitHub Releases is the immutable record. Each release holds the same files as the R2 version directory (tarballs, zips, checksums, signatures) and the GitHub build provenance attestations. If a file on R2 and a file on the release differ, trust the release.
+GitHub Releases is the immutable record. Each release holds the same files as the R2 version directory, with the GitHub build provenance attestations. If a file on R2 and a file on the release differ, the release is right.
+
+## Compatibility
+
+All artifacts of one version are compatible with each other, and only with each other. Between releases, compatibility follows semantic versioning ([ADR 0019](/decisions/0019-release-train-packaging-and-distribution/#compatibility-between-releases), [#1022](https://github.com/truvity/sluis/issues/1022)).

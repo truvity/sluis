@@ -82,8 +82,8 @@ A node's YubiKey, or a key file in development, is the one backend left that can
 | transport | `direct-unix` | The peer uid, checked by the receiver | |
 | transport | `direct-mtls` | The SPIFFE ID in the client certificate | |
 | transport | `spool` | A directory per producer uid | |
-| transport | `sqs` | Queue policy per sender role | A queue per boundary |
-| transport | `nats-jetstream` | NATS accounts plus permission templates | An operator per environment, an account per tenant |
+| transport | `sqs` | Queue policy per sender role | A queue per boundary. Proved by the workforce installation on serverless |
+| transport | `nats-jetstream` | NATS accounts plus permission templates | An operator per environment, an account per tenant. Proved by the customer-identity installation on Kubernetes |
 | index | `sqlite` | A file per indexer uid; the reader opens it read-only | |
 | index | `rqlite` | As for state | |
 | index | `postgres` | Grants and row-level security (below) | |
@@ -96,7 +96,7 @@ A node's YubiKey, or a key file in development, is the one backend left that can
 | cloud | GCP and Azure federation | – | |
 | cloud | `cloud-cloudflare` | R2 temporary credentials | |
 
-A dash means no layer-2 check is named for that driver yet.
+A dash means no layer-2 check is named for that driver yet. Each driver is proved by a real installation, as the design principles ask ("One product, many shapes"); where the notes name one, it is that driver's reference installation.
 
 - **Blob has one driver for object stores, `s3-compatible`,** with credentials from the `cloud` port: STS through web identity on AWS, and on Cloudflare a `cloud-cloudflare@<boundary>` driver that mints R2 temporary credentials scoped to one bucket and prefix, locally, as an HS256 token signed with the parent token's secret. The parent token is per boundary and stored sealed. `cloud-cloudflare@<boundary>` is separate from the company integration `cloudflare@<company>`: they share a library, not a credential. Garage is backlog ([#982](https://github.com/truvity/sluis/issues/982)): it ignores conditional writes.
 
@@ -131,7 +131,7 @@ A dash means no layer-2 check is named for that driver yet.
 - The bare-metal, serverless and Kubernetes edges differ (a Unix-socket origin, a loopback port, a relay container), and `entry`'s tests cover each listener.
 - ConnectRPC over Unix sockets costs a hop and a serialisation where a library call would be free, and every driver needs its port's Protobuf contract. The cost is accepted for the isolation.
 - PostgreSQL needs more set-up: a migration role, a group role per boundary, a pool per role and version 15 or newer.
-- Threats addressed: T-8, T-9, T-10, T-11, T-12, T-13, T-14, T-24 and T-25, see the [threat model](/security/threat-model/). The [Listeners](/architecture/listeners/) and [Ports and drivers](/concepts/drivers/) pages describe this record.
+- Threats addressed: T-8, T-9, T-10, T-11, T-12, T-13, T-14, T-24 and T-25, see the [threat model](/security/threat-model/). The [Listeners](/architecture/deployment/#listeners) and [Ports and drivers](/concepts/drivers/) pages describe this record.
 
 ## Roads not taken
 

@@ -7,14 +7,14 @@
 // code is an actor. The identifiers keep their old names; the text shown to
 // the reader uses the new.
 import { parse } from 'yaml';
-import { assertOpenDecision } from './od';
 import raw from '../data/explorer/architecture.yaml?raw';
 
-import { H, W, place, size, routeEdges, fill, label, type Detail, type MapEdge, type MapModel, type MapNode, type Row } from './explorer-layout';
+import { H, W, assertStatuses, place, size, routeEdges, fill, label, type Detail, type MapEdge, type MapModel, type MapNode, type Row } from './explorer-layout';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export const data: any = parse(raw);
-for (const m of raw.matchAll(/\bOD-\d+\b/g)) assertOpenDecision(m[0]);
+export const statuses: Record<string, string> = data.statuses;
+assertStatuses(data, statuses, 'architecture.yaml');
 export { W, H };
 
 export type ShapeModel = MapModel & {
@@ -56,7 +56,7 @@ function build(shape: any): ShapeModel {
     id: 'edge', lane: 0, row: 1.2, cls: 'edge', shared: false,
     title: edgeKind.title, l2: edgeKind.line2, l3: edgeKind.line3,
     detail: {
-      title: `Edge connector: ${edgeKind.sub}`, kind: 'edge connector', cls: 'edge', status: edgeKind.status,
+      title: `Edge connector: ${edgeKind.sub}`, kind: 'edge connector', cls: 'edge', status: edgeKind.status, issue: edgeKind.issue,
       does: edgeKind.does,
       rows: [
         { k: 'Listens', v: edgeKind.listen },
@@ -77,7 +77,7 @@ function build(shape: any): ShapeModel {
       id: 'sluis-node', lane: 0, row: 4.4, cls: 'node', shared: false,
       title: na.title, l2: fill(rt.role.id_short, { id: 'node' }), l3: fill(rt.role.sock_short, { id: 'node' }),
       detail: {
-        title: 'sluis-node', kind: 'node service, workload identity', cls: 'node', status: na.status, od: na.od,
+        title: 'sluis-node', kind: 'node service, workload identity', cls: 'node', status: na.status, issue: na.issue,
         does: na.does,
         rows: [
           { k: 'Unit', v: fill(rt.role.unit, { id: 'node' }), code: true },
@@ -127,7 +127,7 @@ function build(shape: any): ShapeModel {
     if (d.mode) rows.push({ k: 'Transport mode', v: d.mode });
     rows.push({ k: 'Backed by', v: d.backing });
     rows.push({ k: 'Holds', v: d.holds });
-    if (d.slots) rows.push({ k: 'Slot plan', v: d.slots });
+    if (d.slots) rows.push({ k: 'Slots', v: d.slots, href: '/concepts/keys/#the-card-slot-map' });
     if (d.peer_port) rows.push({ k: 'Peer traffic', v: "The driver's own TCP port, over mTLS (the port is set in configuration; 4002 is an example). It is the only TCP port between nodes." });
     const lists = [
       { title: 'Used by', items: users },
@@ -135,7 +135,6 @@ function build(shape: any): ShapeModel {
     ];
     const notes: Detail['notes'] = [];
     if (port === 'transport' && driverId === 'spool') notes.push({ text: 'On a cluster each node has its own spool.' });
-    if (d.od) notes.push({ id: d.od, text: 'See the open decisions page.' });
     add({
       id: p.node, lane: 2, row: PORT_ROW[port], cls: perRole ? 'driver-role' : 'driver-shared', shared: !perRole,
       title: `${port} · ${d.title}`,
@@ -145,7 +144,7 @@ function build(shape: any): ShapeModel {
         title: `${label(port)} driver: ${d.title}`,
         kind: perRole ? 'driver service, per-actor' : `driver service, shared${d.shared_name ? ` (${d.shared_name})` : ''}`,
         cls: perRole ? 'driver-role' : 'driver-shared',
-        status: d.status, od: d.od, does: d.does, rows, lists, notes,
+        status: d.status, issue: d.issue, does: d.does, rows, lists, notes,
       },
     });
     const bl = data.backing_lines[`${port}.${driverId}`] ?? [d.backing, ''];
@@ -154,7 +153,7 @@ function build(shape: any): ShapeModel {
       title: bl[0], l2: bl[1], l3: p.store_title,
       detail: {
         title: `${label(p.store_title)}: ${d.backing}`, kind: 'backing store', cls: 'store', does: `The ${port} port's backing store in this installation: ${d.backing}.`,
-        rows: [], lists: [], notes: port === 'keys' && shape.id === 'local' ? [{ text: "A YubiKey on the host is reached through the host's pcscd socket, which lets several programs share the card." }] : [],
+        rows: [], lists: [], notes: port === 'keys' && shape.keys_note ? [{ text: shape.keys_note }] : [],
       },
     });
   }
@@ -166,9 +165,9 @@ function build(shape: any): ShapeModel {
       id: 'store-index', lane: 3, row: 10.2, cls: 'store', shared: false,
       title: bl[0], l2: bl[1], l3: 'index',
       detail: {
-        title: `Index: ${d.title}`, kind: 'backing store', cls: 'store', status: d.status, od: d.od,
+        title: `Index: ${d.title}`, kind: 'backing store', cls: 'store', status: d.status, issue: d.issue,
         does: d.does, rows: d.binary ? [{ k: 'Binary', v: `/usr/libexec/sluis/${d.binary}`, code: true }] : [], lists: [],
-        notes: d.od ? [{ id: d.od, text: 'See the open decisions page.' }] : [],
+        notes: [],
       },
     });
   }
@@ -181,7 +180,7 @@ function build(shape: any): ShapeModel {
       id, lane: 4, row: i * 1.06, cls: 'integration', shared: false,
       title: `${it.kind}`, l2: fill(rt.role.id_short, { id: it.example }), l3: fill(rt.role.sock_short, { id: it.example }),
       detail: {
-        title: `${it.kind} integration`, kind: 'integration', cls: 'integration', status: 'agreed',
+        title: `${it.kind} integration`, kind: 'integration', cls: 'integration', status: 'decided',
         does: it.does,
         rows: [
           { k: 'Example', v: `${it.example}, as the install names it (illustrative)` },
@@ -266,9 +265,8 @@ function build(shape: any): ShapeModel {
     ];
     const notes: Detail['notes'] = [];
     if (r.listener_note) notes.push({ text: r.listener_note });
-    for (const o of r.od_note ?? []) notes.push({ id: o.id, text: o.text });
     return {
-      title: r.name, kind: 'actor', cls: 'role', status: r.status, od: r.od, does: r.does, rows,
+      title: r.name, kind: 'actor', cls: 'role', status: r.status, issue: r.issue, does: r.does, rows,
       lists: [
         { title: 'Drivers it uses in this installation', items: usedPorts },
         { title: 'Manifest summary (illustrative)', items: r.resources },

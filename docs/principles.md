@@ -2,11 +2,9 @@
 title: Design principles
 description: "Eleven principles that shape sluis, marked shared with ritueel or sluis-only, and what sluis is and is not: no users, no roots, no Kubernetes objects."
 status: target
-sidebar:
-  order: 12
 ---
 
-These are the principles that the decision records follow. Each one is short, and each links to the records that apply it. They were set by the maintainer on 2026-11-01. A record that seems to break a principle should say why. Each principle is marked **shared** with the sister product [ritueel](https://ritueel.id), which keeps the roots, or **sluis-only**.
+These are the principles that the decision records follow. Each one is short, and each links to the records that apply it. A record that seems to break a principle should say why. Each principle is marked **shared** with the sister product [ritueel](https://ritueel.id), which keeps the roots, or **sluis-only**.
 
 ## 1. A key is born in its store and never leaves it
 
@@ -18,15 +16,15 @@ An authority key is made inside its key service or its card, signs in place, and
 
 **Shared with ritueel.**
 
-Roots are offline, intermediates are re-signed every year, and leaf certificates are short. Redundancy protects against losing a key, not against its compromise: use two cards where a key cannot be copied, and a replica where the store can replicate. A compromise is answered by revocation and a transition. See [ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/) and [Roots and certification](/concepts/keys/#roots-and-certification).
+Roots are offline, intermediates are re-signed every year, and leaf certificates are short. Redundancy protects against losing a key, not against its compromise: use two cards where a key cannot be copied, and a replica where the store can replicate. A compromise is answered by revocation and a transition. See [ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/) and [Keys](/concepts/keys/).
 
 ## 3. Keys are shared, rotated and given to tenants by rule
 
-**Sharing and rotation are shared with ritueel. The tenant rule is sluis-only.**
+**Sharing and rotation are shared with ritueel. The log-key exception and the tenant rule are sluis-only.**
 
 - **Sharing.** A key is shared only when the audience, the lifetime, the revocation coupling and the callers are equal, and the store itself separates the uses. Symmetric KMS keys are shared with an encryption context; asymmetric signing keys never are; environments never share keys. See [When keys are shared and when separate](/decisions/0012-cryptography-and-authority-keys/#when-keys-are-shared-and-when-separate).
-- **Rotation.** The yearly cycle re-signs. Key material rotates on an event, or at most every three years. The log key is the one exception: it rotates only on compromise, because a log's signatures must verify for the life of the log. See [Rotation](/decisions/0012-cryptography-and-authority-keys/#rotation).
-- **Tenants.** A tenant has no key of its own: its data keys are wrapped under the sealing key, and shredding a tenant deletes its data key. See [Keys](/concepts/keys/#when-keys-are-shared-and-when-separate).
+- **Rotation.** The yearly cycle re-signs. Key material rotates on an event, or at most every three years. The log keys, the audit log key and the issuance-log key of `ca`, are the exception: they rotate only on compromise, because a log's signatures must verify for the life of the log. See [Rotation](/decisions/0012-cryptography-and-authority-keys/#rotation).
+- **Tenants.** A tenant has no key of its own: its data keys are wrapped under the sealing key, and shredding a tenant deletes its data key. See [When keys are shared and when separate](/decisions/0012-cryptography-and-authority-keys/#when-keys-are-shared-and-when-separate).
 
 ## 4. Verify; never trust a claim
 
@@ -80,8 +78,8 @@ The design, the code and the reasons are public. What stays private is what prot
 
 These product decisions follow from the principles above.
 
-- **sluis has no users of its own.** It hosts no end-user accounts and stores no passwords. People come from upstream directories, and customer identity is broker-only too. The one exception is break-glass recovery with passkeys only: two attested hardware keys and one pinned synced passkey, used only for recovery, with every use audited and alerted, and drilled every quarter. See [REQ-CIAM-017](/requirements/ciam/#REQ-CIAM-017) and the recovery records [REQ-AUTHN-066](/requirements/authn/#REQ-AUTHN-066) to [REQ-AUTHN-073](/requirements/authn/#REQ-AUTHN-073).
+- **sluis has no users of its own.** It hosts no end-user accounts and stores no passwords. People come from upstream directories, and customer identity is broker-only too ([REQ-CIAM-017](/requirements/ciam/#REQ-CIAM-017)). The one exception is the operator's break-glass recovery, with passkeys only: see [Break-glass recovery](/security/break-glass/).
 - **sluis never generates roots.** It holds intermediates only. Roots, root ceremonies and root transitions belong to ritueel, and the two are joined through the hand-off contract. See [ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/#sluis-holds-no-root).
-- **sluis never writes Kubernetes objects.** Cluster tools such as cert-manager, trust-manager and External Secrets stay its clients and distributors; sluis serves APIs and exports. See [Kubernetes](/runtimes/kubernetes/) and [Secrets and export](/concepts/secrets/).
-- **A development or test installation differs by configuration only.** There is no test-only code in the product: "dev is not a build". Conformance tests use a fake upstream provider, not accounts in sluis. See [ADR 0019](/decisions/0019-release-train-packaging-and-distribution/) and [ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/).
-- **One product, many installations.** Tenants live inside an installation and share its keys; environments never share keys. See [ADR 0005](/decisions/0005-boundaries-and-the-isolation-ladder/) and [Keys](/concepts/keys/#when-keys-are-shared-and-when-separate).
+- **sluis never writes Kubernetes objects.** Cluster tools such as cert-manager, trust-manager and External Secrets stay its clients and distributors; sluis serves APIs and exports. See [ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/#kubernetes) and [Data and secrets](/concepts/data/).
+- **A development or test installation differs by configuration only.** There is no test-only code in the product: "dev is not a build". Conformance tests use a fake upstream provider, not accounts in sluis. See [ADR 0019](/decisions/0019-release-train-packaging-and-distribution/) and [ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/#the-local-installation).
+- **One product, many installations.** Tenants live inside an installation and share its keys; environments never share keys. See [ADR 0005](/decisions/0005-boundaries-and-the-isolation-ladder/) and [When keys are shared and when separate](/decisions/0012-cryptography-and-authority-keys/#when-keys-are-shared-and-when-separate).

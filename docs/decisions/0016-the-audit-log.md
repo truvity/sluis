@@ -109,7 +109,7 @@ The volume used for sizing on 2026-10-31 is about 2.4 records a second at peak a
 - The envelope leaks metadata by design: who did what kind of thing, when, and with what outcome. A shredded company's ciphertext stays in a locked log for the rest of the retention, still verifiable.
 - Pseudonymised records of one person stay linkable to each other after the mapping is deleted, so a contract that demands per-subject shredding cannot be met in 2.0.
 - A legal hold works only where the store has one and as far as the operator's procedure goes. A spool that was down for more than 14 days needs an operator to release its quarantine.
-- The log key, as the one key that does not rotate on a schedule, needs the principles page to name it as the exception to the rotation bound.
+- The log key does not rotate on a schedule; it is the exception to the three-year bound of [0012](/decisions/0012-cryptography-and-authority-keys/#rotation), and the design principles name it.
 
 ## Roads not taken
 

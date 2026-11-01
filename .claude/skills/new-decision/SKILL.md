@@ -3,7 +3,7 @@ name: new-decision
 description: Use when creating, rewriting or changing the status of an architecture decision record (ADR) in docs/decisions/, or turning a decision proposal issue into a record.
 ---
 
-Read `docs/contributing/decisions.md` and follow it. It points to `docs/decisions/README.md` for the format and to `docs/contributing/writing.md` for the prose; read both.
+Read `docs/contributing/decisions.md` and follow it. It points to `docs/decisions/README.md` for the format and to the writing style in `docs/contributing/pages.md` for the prose; read both.
 
 Checklist, each step as the pages describe it:
 

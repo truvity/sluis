@@ -3,23 +3,23 @@ title: Applications and gateways
 description: Client profiles for consoles, applications, gateways, MCP servers, cert-manager and infrastructure-as-code programs that trust sluis as their issuer.
 status: target
 sidebar:
-  order: 12
+  order: 10
 ---
 
-These are **client profiles**: things that sign in to sluis or ask it for a token, and that sluis never calls. They have no process, no credential and no manifest. Each is an OIDC client entry (and sometimes a resource entry) in the configuration, checked by `sluis config check` like the rest.
+These are **client profiles**: things that sign in to sluis or ask it for a token, and that sluis never calls. They have no process, no credential and no manifest. Each is a client entry (and sometimes a resource entry) in the configuration, checked by `sluis config check` like the rest.
 
 ## What it's for
 
-- **A deployment console signs people in** (a GitOps UI, a promotion tool). It is configured with sluis's issuer URL and a client; the groups claim decides who is an admin and who only views.
-- **An application has its own sign-in.** It speaks OpenID Connect to sluis directly, or sits behind a gateway that does, and reads the `groups` claim from the token.
-- **A console that runs no sign-in of its own** is put behind a gateway with OIDC support or a reverse proxy that handles the flow and forwards a bearer token.
-- **An MCP server asks who is calling it.** An AI agent discovers sluis as the authorization server for a resource, signs in on a person's behalf with a consent page that is never silent, and presents a token whose audience is that resource. A stock server sits behind a sidecar that verifies tokens and serves the protected-resource metadata.
-- **cert-manager obtains certificates** for workloads in a cluster from the `ca` actor, as an external issuer, so the cluster needs no CA key of its own.
-- **An infrastructure-as-code program gets provider tokens** (a GitHub token, a Cloudflare token) by token exchange, with the identity of its CI job, instead of a stored credential.
+- **A deployment console signs people in** (a GitOps UI, a promotion tool). It is configured with sluis's issuer URL and a client; the `groups` claim decides who administers and who only views.
+- **An application has its own sign-in.** It speaks OpenID Connect to sluis directly and reads the `groups` claim from the token.
+- **A console with no sign-in of its own** sits behind a gateway with OIDC support, or a reverse proxy that runs the flow and forwards a bearer token.
+- **An MCP server asks who is calling it.** An AI agent discovers sluis as the authorization server for a resource, signs in on a person's behalf through a consent page that is never silent, and presents a token for that resource. A stock server sits behind a sidecar that verifies tokens and serves the protected-resource metadata.
+- **cert-manager obtains certificates** for workloads from the `ca` actor through an external issuer, so the cluster needs no CA key of its own ([ADR 0008](/decisions/0008-certificate-authorities-for-x509-ssh-and-databases/#x509)).
+- **An infrastructure-as-code program gets provider tokens** (a GitHub token, a Cloudflare token) by token exchange with the identity of its CI job, instead of a stored credential.
 
-## Integration actors
+## Integration kinds
 
-None. These are client profiles. What they use is core's: the OIDC endpoints, token exchange, resources, and the [`ca`](/concepts/actors/) actor.
+None. What these clients use is core's: the OIDC endpoints, token exchange, resources, and the [`ca`](/concepts/actors/) actor.
 
 ## What sluis asks the vendor for
 
@@ -27,20 +27,20 @@ Nothing. The vendor, if there is one, is the client, and it is configured to tru
 
 | Client | What the operator configures on its side |
 |---|---|
-| A GitOps console | The issuer URL, a client id, and the secret for a confidential client. The client's signing algorithm must be one it accepts: some consoles take only RS256, which the per-audience exception covers. |
-| An application | The issuer URL and client id; a redirect URI that sluis has on the client's list. |
+| A GitOps console | The issuer URL, a client id, and the secret of a confidential client. Some consoles accept only RS256, which the per-audience exception covers ([ADR 0012](/decisions/0012-cryptography-and-authority-keys/#named-exceptions)). |
+| An application | The issuer URL, the client id, and a redirect URI that is on the client's list in sluis. |
 | A gateway | The same, in the gateway's own OIDC policy; the gateway forwards the bearer. |
-| An MCP server | Its resource URL as the audience, and its protected-resource metadata. |
-| cert-manager | An external issuer pointing at sluis's certificate endpoint, with an identity that the policy admits. |
+| An MCP server | Its resource URL, and its protected-resource metadata. |
+| cert-manager | The external issuer, pointing at `ca`, with an identity the policy admits. Its CSR may have an empty subject: the identity comes from the requester. |
 
-A confidential client's secret is generated by sluis, kept as a credential, delivered once and rotated with an overlap; an operator does not make one up.
+Every token's `aud` is exactly one registered client id, never a URL; a resource indicator selects a registered client ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#audiences)). A confidential client's secret is generated by sluis, kept as a credential, delivered once and rotated with an overlap; an operator does not make one up.
 
 ## What policy controls
 
 - **Which groups may sign in to the client** (`requires`; an empty list is refused), and the token lifetime cap.
-- **Redirect URIs and sign-out pages**, per client. A loopback redirect may differ in its port (native apps).
-- **Resources.** A resource is a declared URL with its own `requires` and lifetime cap, matched exactly. An undeclared or unentitled resource is refused. Clients that describe themselves with an HTTPS URL (a client identity document) are admitted only from allow-listed origins, and only to the groups that the document gate names.
-- **Long-running agents.** A session class for agents has a longer chain, shorter tokens and a consent page that is never silent.
+- **Redirect URIs and sign-out pages**, per client. A loopback redirect may differ in its port, for native apps.
+- **Resources.** A resource is a declared URL with its own `requires` and lifetime cap, matched exactly; an undeclared or unentitled resource is refused. Clients that describe themselves with an HTTPS URL (a client identity document) are admitted only from allow-listed origins, and only to the groups the document gate names.
+- **Long-running agents** get a session class with a longer chain, shorter tokens and a consent page that is never silent.
 - **Groups in the token** are narrowed to the groups the audience requires.
 
 ## What is audited
@@ -49,7 +49,7 @@ Every sign-in and its client, every token exchange and its audience, every conse
 
 ## Setup
 
-An example.
+Names and keys are [illustrative](/integrations/#examples-are-illustrative).
 
 ```yaml
 # /etc/sluis/install.yaml (example)
@@ -67,16 +67,6 @@ resources:
 ```
 
 1. Declare the client and its groups.
-2. Read the secret reference from `sluis clients show gitops-ui` and give it to the console as a secret of its own.
-3. For an MCP server, put the resource in the policy and serve the metadata, or put the sidecar in front of a stock server.
+2. Read the secret reference from `sluis clients show gitops-ui`, and give the secret to the console as a secret of its own.
+3. For an MCP server, declare the resource and serve its metadata, or put the sidecar in front of a stock server.
 4. Check the sign-in with an allowed and a disallowed account.
-
-## v1 → v2 notes
-
-- v1 does all of this: [Argo CD](/v1/guides/sluis/connect/argocd/), [Kargo](/v1/guides/sluis/connect/kargo/), [a console with its own sign-in](/v1/guides/sluis/connect/console-app/), [gateway OIDC](/v1/guides/sluis/connect/choosing-native-or-gateway-oidc/), [MCP](/v1/guides/sluis/connect/mcp/), and [infrastructure as code](/v1/guides/sluis/connect/infrastructure-as-code/). v1's separate proxy chart was removed; a console with no flow of its own uses a gateway or an upstream proxy.
-- cert-manager as a client of the `ca` actor is new: v1 gets certificates from OpenBao.
-- Parity issues: [#820](https://github.com/truvity/sluis/issues/820) Argo CD and Kargo, [#821](https://github.com/truvity/sluis/issues/821) console applications and gateway OIDC, [#822](https://github.com/truvity/sluis/issues/822) MCP authorization, [#823](https://github.com/truvity/sluis/issues/823) the MCP resource proxy, [#790](https://github.com/truvity/sluis/issues/790) generated client secrets, [#791](https://github.com/truvity/sluis/issues/791) resources, [#792](https://github.com/truvity/sluis/issues/792) client identity documents.
-
-:::note[Proposed]
-`sluis clients show` and the certificate endpoint that cert-manager is pointed at are example names. The client and resource keys above are illustrative; the policy language is Cedar, and how a client row is written in it is not yet decided.
-:::

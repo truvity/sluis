@@ -35,7 +35,7 @@ SPIFFE is the published standard for workload identity: the ID format, the trust
 
 ### SPIFFE identities
 
-- **Followed now:** the SPIFFE ID, the trust domain and its bundle, the X.509-SVID and the JWT-SVID. **Later:** SPIFFE Federation, the Workload Endpoint and the Workload API. **SPIRE is not deployed**; sluis plays its parts (the mapping is on [Machine identity](/concepts/machine-identity/)).
+- **Followed now:** the SPIFFE ID, the trust domain and its bundle, the X.509-SVID and the JWT-SVID. **Later:** SPIFFE Federation, the Workload Endpoint and the Workload API. **SPIRE is not deployed**; sluis plays its parts (the mapping is on [Machine identity](/concepts/identity/)).
 - **ID paths:**
 
   | Subject | SPIFFE ID |
@@ -76,16 +76,16 @@ A host enrols with the same mechanism and receives a host X.509-SVID from `ca` u
 
 - **The enrolment token never travels.** The client sends the token's ID and an HMAC, keyed with the token's secret, over its CSR and a nonce from the server.
 - **The server keeps the HKDF-derived HMAC key, not the secret**, for single-use and reusable tokens alike. Like every state value it is encrypted under the sealing key's data keys ([0011](/decisions/0011-state-is-one-port-with-compare-and-set/#every-value-is-encrypted)), so a copy of the store alone cannot enrol a host.
-- **Enrolment is encrypted end to end through the edge.** The signed trust bundle carries the boundary's enrolment public key. The host encrypts its proof and CSR to it with HPKE (RFC 9180). The private key is its own purpose in `key-holder` or KMS ([0012](/decisions/0012-cryptography-and-authority-keys/#the-card-slot-map)), and `exchange` opens the request through the keys port. The edge sees only ciphertext.
+- **Enrolment is encrypted end to end through the edge.** The trust bundle carries the boundary's enrolment public key in a certificate that the boundary's intermediate issues. The host encrypts its proof and CSR to it with HPKE (RFC 9180). The private key is its own purpose in `key-holder` or KMS ([0012](/decisions/0012-cryptography-and-authority-keys/#the-card-slot-map)), and `exchange` opens the request through the keys port. The edge sees only ciphertext.
 - **The host pins the roots' public keys.** An SPKI-hash pin is mandatory at enrolment, except in manual approval, where the person compares the pin the host shows. Web PKI is kept for reachability and as an extra layer; it is not the trust.
 - **The enrolment API** has start, poll, renew over mutual TLS, leave, and bundle. `entry` routes it and `exchange` carries it out.
 - **Policy has four actions:** `host.enrol`, `host.renew`, `enrol-token.create` and `enrolment.approve`. Every enrolment, renewal, approval and refusal is audited, and a pending request notifies the people who may approve it.
 
 ### The trust bundle
 
-- **The bundle is a static document in SPIFFE format, signed online by the boundary's bundle-signing key**, whose certificate the boundary's intermediate issues. A root never signs a bundle: roots are offline and used about once a year. A root signs the root list, which ritueel publishes ([0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/#root-pins-and-the-root-list)).
-- **The `sluis` package ships `sluis trust sync`**, a timer and a oneshot service ([0019](/decisions/0019-release-train-packaging-and-distribution/#packaging-per-runtime)). They do nothing until `sluis trust enroll --url <url> --pin <spki-hash>` configures them. sluis generates no per-installation packages.
-- **The sync checks the chain and refuses rollback.** The bundle's signature must chain through the intermediate to a root in the pinned root list; a root list with a lower version, or a bundle with a lower `spiffe_sequence` than the last one, is refused.
+- **The bundle is a static document of certificates in SPIFFE format, with no signature of its own.** Each certificate in it verifies itself: it chains through the boundary's intermediate to a root in the root list. The root list is signed by a root and published by ritueel ([0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/#root-pins-and-the-root-list)), so an online signature over the bundle would add no trust.
+- **The `sluis` package ships `sluis trust sync`**, a timer and a oneshot service ([0019](/decisions/0019-release-train-packaging-and-distribution/#packaging-per-runtime)). They do nothing until `sluis trust enroll --url <url> --root-pin <spki-hash>` configures them, with `--root-pin` given once per root. sluis generates no per-installation packages.
+- **The sync checks every certificate and refuses rollback.** Each certificate in the bundle must chain through the intermediate to a root in the pinned root list, and one that does not is dropped; a root list with a lower version, or a bundle with a lower `spiffe_sequence` than the last one, is refused.
 - **It writes the anchors and runs the system's tool** (`update-ca-trust` or `update-ca-certificates`). The unit is hardened and may write only the anchors directory and the extracted store.
 - **On Kubernetes, trust-manager reads the bundle as a source.** sluis writes no Kubernetes object.
 
@@ -94,7 +94,7 @@ A host enrols with the same mechanism and receives a host X.509-SVID from `ca` u
 - One flow covers sluis's own nodes, hosts, CI and pods. A new kind of proof is a verifier driver with its own conformance tests, not a new flow.
 - A replaced node needs no secret copied to it; on EC2 it needs nothing, and a copied identity document cannot enrol a second host.
 - sluis runs no SPIRE server or agent and no second CA. The cost is implementing the SPIFFE formats itself, and workloads that want the Workload API wait for it.
-- A host keeps working with its last good bundle when sluis is down, and a network attacker cannot roll it back. Rotating the enrolment key or the bundle-signing key is a bundle change.
+- A host keeps working with its last good bundle when sluis is down, and a network attacker cannot roll it back. Rotating the enrolment key is a bundle change: a new certificate in the next bundle.
 - One issuer per boundary keeps the cloud side small: one OIDC provider per boundary and one key per node, well inside AWS's limits of 100 providers per account and 100 keys per key set. The cost is that a compromised node can sign a token for any actor of its boundary until its key leaves the key set.
 - The standards register lists the SPIFFE ID, trust domain and bundle, X.509-SVID and JWT-SVID as Full, Federation and the Workload API as Planned, and RFC 9180 for enrolment.
 - Threats addressed: T-20, T-21, T-22, T-23 and T-24, see the [threat model](/security/threat-model/).
@@ -110,6 +110,7 @@ A host enrols with the same mechanism and receives a host X.509-SVID from `ca` u
 - **The enrolment token sent in the request, or TLS to the edge as the only protection.** Anything on the path, including the edge connector, could replay or read the proof.
 - **Web PKI as the trust at enrolment.** Any public CA that issues for the sluis host name could stand in for sluis.
 - **The trust bundle signed by a root.** A root would have to be online for every bundle change.
+- **The trust bundle signed by an online bundle-signing key.** A bundle of certificates already verifies itself against the root-signed root list, so the signature adds no trust, and the key would be one more purpose, slot and policy.
 
 ## Follow-ups
 
