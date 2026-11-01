@@ -5,7 +5,7 @@
 //   - its decisions are exactly the records in docs/decisions (NNNN-*.md, not the
 //     template), each with the status and date of its own header lines;
 //   - its requirements are exactly the records of /requirements.json, with the same
-//     area, level, status and issues;
+//     area, level, status and issues, and `auto` true exactly when a verification is not manual;
 //   - its coverage equals the generated block on docs/standards/conformance.md.
 // Fails closed: no file, no record or no requirement is a failure.
 //
@@ -104,7 +104,8 @@ else {
   full.forEach((r, i) => {
     const m = mine[i];
     const same = m && m.id === r.id && m.area === r.area && m.level === r.level && m.status === r.status &&
-      JSON.stringify(m.issues) === JSON.stringify(r.issues ?? []);
+      JSON.stringify(m.issues) === JSON.stringify(r.issues ?? []) &&
+      m.auto === (r.verification ?? []).some((v) => v.kind !== 'manual');
     if (!same) E(`requirements: entry ${i} (${r.id}) differs from requirements.json`);
   });
 }

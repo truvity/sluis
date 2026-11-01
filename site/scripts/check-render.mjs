@@ -20,6 +20,11 @@
 //
 // The status page and the decisions index are in the sweep too (no exception, no
 // console error), and their HTML is checked first, without the browser:
+//   - /status/ swaps in its live block (src/scripts/status-live.ts). This server stands in
+//     for the Worker at /api/status/live/: in light mode it answers with a live block drawn
+//     by the Worker's renderer (src/lib/status-html.ts), which must replace the snapshot;
+//     in dark mode it answers 503, and the snapshot must stay with its note shown. The one
+//     failed-load line Chrome logs for that 503 is expected and not counted.
 //   - /status/ has one group per option of the project's `Product milestone` field, in
 //     the field's order, then "Not in a milestone", each with its open-work section.
 //     The options are read here as well, with GH_TOKEN or GITHUB_TOKEN; when this check
@@ -45,6 +50,9 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { dirname, extname, join, normalize, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+const { groupStatus } = await import('../src/lib/status-groups.ts');
+const { statusBodyHtml } = await import('../src/lib/status-html.ts');
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const dist = resolve(root, process.argv[2] ?? 'site/dist');
@@ -169,8 +177,22 @@ function findChrome() {
   throw new Error('no Chrome or Chromium found: set CHROME, or put google-chrome or chromium on PATH');
 }
 
+// What the stand-in for the Worker's /api/status/live/ answers: 'live' or 'down'.
+let liveRoute = 'live';
+const LIVE = '/api/status/live/';
+function liveBlock() {
+  const repo = JSON.parse(readFileSync(join(dist, 'data', 'repo.json'), 'utf8'));
+  const board = { options: ['Check one'], issues: [{ number: 1, title: 'A live issue', open: true, labels: [], milestone: 'Check one' }] };
+  return statusBodyHtml({ groups: groupStatus(board, repo), mode: 'live', asOf: '2026-01-01T00:00:00Z', available: true });
+}
+
 function serve() {
   const server = createServer((req, res) => {
+    if (new URL(req.url, 'http://x').pathname === LIVE) {
+      if (liveRoute === 'live') res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(liveBlock());
+      else res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8' }).end('not available');
+      return;
+    }
     let p = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname));
     let file = join(dist, p);
     if (!file.startsWith(dist)) { res.writeHead(403).end(); return; }
@@ -265,6 +287,9 @@ const STATE = `(() => ({
     return { scale, labels: labels.length, min: px.length ? Math.min(...px) : null };
   }),
   explorer: document.documentElement.classList.contains('ex-js'),
+  live: document.querySelector('[data-live-src]')?.dataset.live ?? null,
+  liveBody: document.querySelector('[data-live-body] .ps-body')?.dataset.mode ?? null,
+  liveNote: document.querySelector('[data-live-note]') ? !document.querySelector('[data-live-note]').hidden : null,
 }))()`;
 
 // Click Expand on the first diagram: a <dialog> opens with an svg in it. Then
@@ -298,6 +323,7 @@ async function checkPage(cdp, base, page, scheme) {
     } else if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') {
       problems.push(`console.error: ${m.params.args.map((a) => a.value ?? a.description).join(' ')}`);
     } else if (m.method === 'Log.entryAdded' && m.params.entry.level === 'error') {
+      if (page.live === 'down' && (m.params.entry.url ?? '').endsWith(LIVE)) return;
       problems.push(`log: ${m.params.entry.text} ${m.params.entry.url ?? ''}`);
     }
   });
@@ -313,7 +339,7 @@ async function checkPage(cdp, base, page, scheme) {
     const r = await cdp.send('Runtime.evaluate', { expression: STATE, returnByValue: true });
     st = r.result.value;
     const drawn = st && st.pres.length >= (page.mermaid ?? 0) && st.pres.every(Boolean) && st.buttons.every(Boolean);
-    const ready = page.explorer ? st?.explorer : drawn;
+    const ready = page.explorer ? st?.explorer : page.live ? drawn && st?.live : drawn;
     if (ready) break;
     if (Date.now() - t0 > WAIT_MS) break;
   }
@@ -321,6 +347,12 @@ async function checkPage(cdp, base, page, scheme) {
   if (page.mermaid && (!st || st.pres.length < page.mermaid)) problems.push(`expected ${page.mermaid} pre.mermaid, found ${st ? st.pres.length : 'none'}`);
   if (st && st.pres.some((d) => !d)) problems.push(`${st.pres.filter((d) => !d).length} of ${st.pres.length} pre.mermaid hold no <svg>: the diagram is raw text`);
   if (page.explorer && !st?.explorer) problems.push('the explorer script did not run (no ex-js class on <html>)');
+  if (page.live === 'live' && (st?.live !== 'live' || st?.liveBody !== 'live' || st?.liveNote !== false)) {
+    problems.push(`live block: expected the Worker's block swapped in, found state ${st?.live}, body ${st?.liveBody}, note shown ${st?.liveNote}`);
+  }
+  if (page.live === 'down' && (st?.live !== 'snapshot' || st?.liveBody !== 'snapshot' || st?.liveNote !== true)) {
+    problems.push(`live block: expected the snapshot kept with its note, found state ${st?.live}, body ${st?.liveBody}, note shown ${st?.liveNote}`);
+  }
   if (st && st.buttons.some((b) => !b)) problems.push(`${st.buttons.filter((b) => !b).length} of ${st.buttons.length} pre.mermaid have no Expand button`);
   if (st) {
     st.sizes.forEach((z, i) => {
@@ -385,12 +417,13 @@ try {
   await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
   for (const page of PAGES) {
     for (const scheme of SCHEMES) {
+      if (page.path === '/status/') liveRoute = page.live = scheme === 'light' ? 'live' : 'down';
       const problems = await checkPage(cdp, base, page, scheme);
       if (problems.length) {
         failed++;
         console.error(`check-render: FAIL ${page.path} (${scheme})`);
         for (const p of problems) console.error(`  ${p}`);
-      } else console.log(`check-render: ok   ${page.path} (${scheme})`);
+      } else console.log(`check-render: ok   ${page.path} (${scheme}${page.live ? `, live block ${page.live}` : ''})`);
     }
   }
   cdp.close();

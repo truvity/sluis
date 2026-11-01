@@ -33,10 +33,17 @@ site/scripts/check-csp.mjs "$dist" || bad "the Content-Security-Policy does not 
 
 # On the Workers target: the redirects of astro.config.mjs are a _redirects file, and
 # the Worker configuration is there; and neither workers.dev nor preview URLs may be on.
+# The Worker's code is named, runs first for /api/* only (so static pages never invoke
+# it), and has its cron (ADR 0020).
 if [ -f "$dist/wrangler.json" ]; then
   grep -q '^/shapes/ ' "$dist/_redirects" 2>/dev/null || bad "the Workers build has no _redirects with the renamed pages"
   grep -q '"workers_dev":false' "$dist/wrangler.json" || bad "wrangler.json does not set workers_dev false"
   grep -q '"preview_urls":false' "$dist/wrangler.json" || bad "wrangler.json does not set preview_urls false"
+  jq -e '.main == "../../src/worker/index.ts"' "$dist/wrangler.json" >/dev/null || bad "wrangler.json does not name src/worker/index.ts as main"
+  jq -e '.assets.run_worker_first == ["/api/*"]' "$dist/wrangler.json" >/dev/null || bad "wrangler.json must run the Worker first for /api/* and nothing else"
+  jq -e '.assets.binding == "ASSETS"' "$dist/wrangler.json" >/dev/null || bad "wrangler.json has no ASSETS binding"
+  jq -e '(.triggers.crons | length) == 1' "$dist/wrangler.json" >/dev/null || bad "wrangler.json has no cron trigger"
+  jq -e '(.cache.enabled // false) == false' "$dist/wrangler.json" >/dev/null || bad "wrangler.json turns on Workers Cache, which bills static requests"
 fi
 
 # Mermaid: the diagram must be a <pre class="mermaid"> that the browser script

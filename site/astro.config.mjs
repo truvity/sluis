@@ -6,6 +6,7 @@ import starlightLinksValidator from 'starlight-links-validator';
 import starlightLlmsTxt from 'starlight-llms-txt';
 import cloudflare from '@astrojs/cloudflare';
 import cloudflareKvId from './src/cloudflare-kv-id.mjs';
+import cloudflareWorkerMain from './src/cloudflare-worker-main.mjs';
 import { satteri } from '@astrojs/markdown-satteri';
 import { statusPlugin } from './src/remark-status.mjs';
 
@@ -69,8 +70,9 @@ const workersOptions = {
   //
   // prerenderEnvironment 'node': the default, workerd, resolves the browser build of
   // the Markdown processor (Sätteri), which cannot be bundled. Pages are rendered by
-  // Node at build time either way; only /api/* and one server island will run in
-  // workerd, and `astro dev` runs those there.
+  // Node at build time either way. The Worker's own code (/api/* and the cron) is not
+  // built by Astro: src/cloudflare-worker-main.mjs names it in the generated configuration
+  // and `wrangler deploy` bundles it.
   // imageService 'compile': images are optimised at build time, so the build holds no
   // Images binding that the Worker would need an account feature for.
   adapter: cloudflare({ prerenderEnvironment: 'node', imageService: 'compile' }),
@@ -146,7 +148,7 @@ export default defineConfig({
   // plugins (asides, heading links) to the same processor.
   markdown: { processor: satteri({ mdastPlugins: [statusPlugin] }) },
   integrations: [
-    ...(workers ? [cloudflareKvId()] : []),
+    ...(workers ? [cloudflareKvId(), cloudflareWorkerMain()] : []),
     // Must come before Starlight so the ```mermaid fences are claimed first.
     mermaid({
       theme: 'neutral',

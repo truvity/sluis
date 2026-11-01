@@ -1,34 +1,29 @@
 ---
-// The project status page (ADR 0020), built at build time. Groups and their order come
-// from the project's `Product milestone` field (src/lib/project.ts); requirement and
-// decision facts from the repository; issue figures from the board as read at build
-// time. Conformance, tests and CI wait for the live status API (#1037) and have no data
-// yet. Everything on the page is a snapshot of the build. The page needs no JavaScript.
+// The project status page (ADR 0020). Groups and their order come from the project's
+// `Product milestone` field (src/lib/project.ts); requirement and decision facts from the
+// repository. The data part (src/lib/status-html.ts) is drawn here from the board as read at
+// build time, and the page's one script (src/scripts/status-live.ts) swaps in the same part
+// drawn by the Worker from the live board, /api/status/live/. Without JavaScript, or when
+// the Worker cannot answer, the snapshot stays, labelled with its time.
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import { Aside, Badge } from '@astrojs/starlight/components';
 import '../styles/project-status.css';
 import { BUILT_AT } from '../lib/repo';
-import { areaPath } from '../lib/requirements';
 import { FIELD, ORG, PROJECT_NUMBER } from '../lib/project';
-import { statusGroups, type Group, type ReqCounts } from '../lib/project-status';
+import { statusGroups } from '../lib/project-status';
+import { statusBodyHtml } from '../lib/status-html';
 
 const { board, groups } = await statusGroups();
 const asOf = BUILT_AT.replace('T', ' ').replace(/:\d{2}Z$/, ' UTC');
 const boardUrl = `https://github.com/orgs/${ORG}/projects/${PROJECT_NUMBER}`;
-const issueUrl = (n: number) => `https://github.com/truvity/sluis/issues/${n}`;
 const ADR = '/decisions/0020-the-site-is-static-on-cloudflare-workers/';
-const COLS = 1 + 6 + 3 + 4 + 1 + 1 + 1;
-const reqCells = (c: ReqCounts) => [c.total, c.open, c.planned, c.partial, c.done, c.auto];
-const frac = (a: number, b: number) => (b ? Math.round((100 * a) / b) : 0);
-const milestones = groups.filter((g) => g.milestone);
-const label = (g: Group, i: number) => (g.milestone ? `${i + 1}. ${g.name}` : g.name);
 ---
 
 <StarlightPage
   frontmatter={{
     title: 'Project status',
     description:
-      'Where sluis v2 stands, by product milestone: requirements, decision records and issues per milestone and area, as of the last build.',
+      'Where sluis v2 stands, by product milestone: requirements, decision records and live issue figures per milestone and area.',
     status: 'shipped',
     badge: false,
     tableOfContents: false,
@@ -41,9 +36,9 @@ const label = (g: Group, i: number) => (g.milestone ? `${i + 1}. ${g.name}` : g.
       its proposal issue. <a href="#how-this-page-is-built">How this page is built</a> is at the end.
     </p>
     <p class="ps-legend">
-      Every figure is a <Badge text="snapshot" variant="note" /> of the repository and the board, taken when the site was built
-      (as of {asOf}); the page changes when the site is rebuilt. Conformance, tests and CI have no data until the
-      <a href="https://github.com/truvity/sluis/issues/1037">live status API</a> exists.
+      <Badge text="build-time" variant="note" /> from the repository, as of the build at {asOf}.{' '}
+      <Badge text="live" variant="tip" /> read from the board and CI by the site's Worker, kept current by GitHub webhooks and a check
+      every 15 minutes; each block says the time its data is as of. Without JavaScript the page shows the snapshot taken at the build.
     </p>
 
     {
@@ -55,178 +50,29 @@ const label = (g: Group, i: number) => (g.milestone ? `${i + 1}. ${g.name}` : g.
       )
     }
 
-    {
-      milestones.length > 0 && (
-        <section class="ps-cards" aria-label="Milestones at a glance">
-          {milestones.map((g, i) => {
-            const decided = g.reqs.total - g.reqs.open;
-            const adrTotal = g.adrs.accepted + g.adrs.proposed + (g.adrs.toWrite ?? 0);
-            const iss = g.issues!;
-            const bars: [string, number, number][] = [
-              ['ADRs accepted', g.adrs.accepted, adrTotal],
-              ['Requirements decided', decided, g.reqs.total],
-              ['Issues closed', iss.closed, iss.open + iss.closed],
-            ];
-            return (
-              <article class:list={['ps-card', { 'ps-current': g.current }]} aria-labelledby={`card-${g.slug}`}>
-                <p class="ps-card-k">Milestone {i + 1}{g.current && <> · <strong>current</strong></>}</p>
-                <p class="ps-card-n" id={`card-${g.slug}`}><a href={`#${g.slug}`}>{g.name}</a></p>
-                <dl class="ps-bars">
-                  {bars.map(([k, a, b]) => (
-                    <div>
-                      <dt>{k}</dt>
-                      <dd>
-                        <meter class="ps-meter" min="0" max={b || 1} value={a} aria-hidden="true">{frac(a, b)}%</meter>
-                        <span class="ps-v">{a} of {b}</span>
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </article>
-            );
-          })}
-        </section>
-      )
-    }
-
-    <div class="ps-wrap" tabindex="0" role="region" aria-labelledby="ps-caption">
-      <table class="ps-table">
-        <caption id="ps-caption">Status by milestone and requirement area, as of {asOf}</caption>
-        <colgroup><col class="ps-col-name" /></colgroup>
-        <colgroup span="6" class="ps-cg" />
-        <colgroup span="3" class="ps-cg" />
-        <colgroup span="4" class="ps-cg" />
-        <colgroup span="1" class="ps-cg" />
-        <colgroup span="1" class="ps-cg" />
-        <colgroup span="1" class="ps-cg" />
-        <thead>
-          <tr class="ps-groups">
-            <th scope="col" rowspan="2">Milestone / area</th>
-            <th scope="colgroup" colspan="6">Requirements <span class="ps-asof">as of {asOf}</span></th>
-            <th scope="colgroup" colspan="3">ADRs <span class="ps-asof">as of {asOf}</span></th>
-            <th scope="colgroup" colspan="4">Issues <span class="ps-asof">as of {asOf}</span></th>
-            <th scope="colgroup">Conformance <span class="ps-asof">no data yet</span></th>
-            <th scope="colgroup">Tests <span class="ps-asof">no data yet</span></th>
-            <th scope="colgroup">CI on main <span class="ps-asof">no data yet</span></th>
-          </tr>
-          <tr>
-            <th scope="col" class="ps-first" title="Not withdrawn and not out of scope">Total</th>
-            <th scope="col" title="status: open, not decided yet">Undecided</th>
-            <th scope="col" title="status: planned">Planned</th>
-            <th scope="col" title="status: partial">Partial</th>
-            <th scope="col" title="status: done, set by hand in the pull request that adds the passing tests">Done</th>
-            <th scope="col" title="Has a verification other than manual review">Auto-verifiable</th>
-            <th scope="col" class="ps-first">Accepted</th>
-            <th scope="col">Proposed</th>
-            <th scope="col" title="An open type:decision issue with no record yet">To write</th>
-            <th scope="col" class="ps-first">Open</th>
-            <th scope="col">Closed</th>
-            <th scope="col" title="Open, labelled status:blocked">Blocked</th>
-            <th scope="col" title="Open, labelled status:needs-decision">Needs decision</th>
-            <th scope="col" class="ps-first">Suites passing</th>
-            <th scope="col" class="ps-first">Coverage</th>
-            <th scope="col" class="ps-first">Latest run</th>
-          </tr>
-        </thead>
-        {
-          groups.map((g, i) => (
-            <tbody class:list={['ps-group', { 'ps-current': g.current, 'ps-none-group': !g.milestone }]} data-group={g.name}>
-              <tr class="ps-group-row">
-                <th scope="rowgroup" id={g.slug}>
-                  {label(g, i)}
-                  {g.current && <> <Badge text="current milestone" variant="success" size="small" /></>}
-                </th>
-                {reqCells(g.reqs).map((v, k) => <td class:list={['ps-num', { 'ps-first': k === 0, 'ps-zero': v === 0 }]}>{v}</td>)}
-                {[g.adrs.accepted, g.adrs.proposed, g.adrs.toWrite].map((v, k) =>
-                  v === null ? <td class="ps-num ps-zero" title="project data not available at build time">—</td>
-                    : <td class:list={['ps-num', { 'ps-first': k === 0, 'ps-zero': v === 0 }]}>{v}</td>,
-                )}
-                {g.issues
-                  ? [g.issues.open, g.issues.closed, g.issues.blocked, g.issues.needsDecision].map((v, k) => (
-                      <td class:list={['ps-num', { 'ps-first': k === 0, 'ps-zero': v === 0 }]}>{v}</td>
-                    ))
-                  : [0, 1, 2, 3].map((k) => <td class:list={['ps-num', 'ps-zero', { 'ps-first': k === 0 }]} title="project data not available at build time">—</td>)}
-                {[0, 1, 2].map(() => <td class="ps-num ps-zero ps-first">—<span class="ps-sr"> no data yet</span></td>)}
-              </tr>
-              {g.areas.map((a) => (
-                <tr class="ps-area-row">
-                  <th scope="row">
-                    <a href={areaPath(a.area.code)}>{a.area.code}</a>
-                  </th>
-                  {reqCells(a.counts).map((v, k) => <td class:list={['ps-num', { 'ps-first': k === 0, 'ps-zero': v === 0 }]}>{v}</td>)}
-                  {Array.from({ length: COLS - 7 }, (_, k) => <td class:list={['ps-num', 'ps-zero', { 'ps-first': [0, 3, 7, 8, 9].includes(k) }]}>—</td>)}
-                </tr>
-              ))}
-            </tbody>
-          ))
-        }
-      </table>
+    <div class="ps-live" data-live-src="/api/status/live/">
+      <p class="ps-live-note" data-live-note hidden>
+        The live data could not be read just now, so this is the build-time snapshot as of {asOf}.
+      </p>
+      <div data-live-body>
+        <Fragment set:html={statusBodyHtml({ groups, mode: 'snapshot', asOf: BUILT_AT, available: board.available })} />
+      </div>
     </div>
-    <p class="ps-note">
-      Area rows count requirements only; decision records and issues are counted per milestone.
-    </p>
-
-    <h2 id="open-work">Open work by milestone</h2>
-    {
-      groups.map((g, i) => (
-        <details class:list={['ps-detail', { 'ps-current': g.current }]} open={g.current || undefined} data-group={g.name}>
-          <summary>
-            <strong>{label(g, i)}</strong>
-            {g.current && <> <Badge text="current milestone" variant="success" size="small" /></>}
-            <span class="ps-asof">
-              {g.issues ? `${g.openDecisionIssues.length} open ADR issues, ${g.otherOpenIssues.length} other open issues` : 'issues not available'} · as of {asOf}
-            </span>
-          </summary>
-          {!g.issues ? (
-            <p>Project data not available at build time.</p>
-          ) : (
-            <>
-              <p class="ps-chips-k">Open ADR issues ({g.openDecisionIssues.length})</p>
-              {g.openDecisionIssues.length ? (
-                <ul class="ps-chips">
-                  {g.openDecisionIssues.map((x) => (
-                    <li><a class="ps-chip" href={issueUrl(x.number)}><span class="ps-no">#{x.number}</span> {x.title} <span class="ps-state">open</span></a></li>
-                  ))}
-                </ul>
-              ) : <p class="ps-none">None.</p>}
-              <p class="ps-chips-k">Other open issues ({g.otherOpenIssues.length})</p>
-              {g.otherOpenIssues.length ? (
-                <ul class="ps-chips">
-                  {g.otherOpenIssues.map((x) => (
-                    <li>
-                      <a class:list={['ps-chip', { 'ps-blocked': x.labels.includes('status:blocked') }]} href={issueUrl(x.number)}>
-                        <span class="ps-no">#{x.number}</span> {x.title}{' '}
-                        <span class="ps-state">{x.labels.includes('status:blocked') ? 'open, blocked' : x.labels.includes('status:needs-decision') ? 'open, needs decision' : 'open'}</span>
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              ) : <p class="ps-none">None.</p>}
-            </>
-          )}
-          {g.adrs.records.length > 0 && (
-            <>
-              <p class="ps-chips-k">Decision records ({g.adrs.records.length})</p>
-              <ul class="ps-chips">
-                {g.adrs.records.map((d) => (
-                  <li><a class="ps-chip" href={`/decisions/${d.id}/`}><span class="ps-no">{d.number}</span> {d.title} <span class="ps-state">{d.status}</span></a></li>
-                ))}
-              </ul>
-            </>
-          )}
-        </details>
-      ))
-    }
 
     <h2 id="how-this-page-is-built">How this page is built</h2>
     <p>
       The page is built with the site, as decided in <a href={ADR}>ADR 0020</a>. The groups and their order are the options of the
-      project's <code>{FIELD}</code> field, read from GitHub during the build; adding or reordering an option changes the page at the next
-      build. Requirement and decision status come from the repository (<code>docs/requirements/</code> and <code>docs/decisions/</code>)
+      project's <code>{FIELD}</code> field, read from GitHub during the build and again by the live block; adding or reordering an option
+      changes the page with no code change. Requirement and decision status come from the repository (<code>docs/requirements/</code> and <code>docs/decisions/</code>)
       and are published as <a href="/data/repo.json"><code>/data/repo.json</code></a>. A requirement is <code>done</code> only when a pull request set it together with the passing test. A requirement is placed under the earliest
       milestone of the issues it links, a decision record under the milestone of its proposal issue, and the current milestone is the
-      first one that still has open issues. The issue figures are a snapshot of the board at build time. The live status API
-      (<a href="https://github.com/truvity/sluis/issues/1037">#1037</a>) will refresh them and add conformance, tests and CI.
+      first one that still has open issues. The build places them with the board as it was then; the live block places them with the
+      board as it is now. The live data comes from the site's status API, <a href="https://sluis.id/api/status"><code>/api/status</code></a>: GitHub
+      webhooks and a check every 15 minutes keep it current, and CI runs on <code>main</code> post coverage and conformance to it.
     </p>
   </div>
 </StarlightPage>
+
+<script>
+  import '../scripts/status-live.ts';
+</script>
