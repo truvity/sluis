@@ -12,7 +12,7 @@ sluis writes a tamper-evident audit trail. This page explains the ideas. The act
 
 **Every success is audited.** When an actor does something for a caller, such as issuing a token, minting a credential or changing a record, it appends an audit record. Every actor is therefore a producer.
 
-**What was used goes to a usage log beside it.** An action that uses something, such as a metered call or a quota top-up, sends one message with an audit part and a usage part, and the writer puts each part into its own log. See [Records](#records-ocsf-events-and-a-usage-log).
+**What was used goes to a usage log beside it.** An action that uses something, such as a metered call or a quota top-up, sends one message with an audit part and a usage part, and the writer puts each part into its own log. See [Records](#records-ocsf-events-with-a-sluis-extension-and-a-usage-stream).
 
 ## The four pieces
 
@@ -131,41 +131,39 @@ The rows are in the [standards register](/standards/#transparency-and-audit). A 
 
 **The layout.** Each log has one prefix, `<kind>/<boundary>/<log>/` with `<kind>` either `audit` or `usage`, and the `tlog-tiles` paths below it; the usage log may also have a bucket of its own. Every checkpoint is also written once to `checkpoints/<size>`, create-if-absent, so the full checkpoint history survives on a store with no versioning; the `checkpoint` object that the format rewrites is a convenience pointer. Catalogues and schemas are written once below `<kind>/<boundary>/catalogue/`, and a schema entry in the log names the ones in force, so witnesses cosign them. A checkpoint's origin line is `<installation host>/<kind>/<boundary>/<log>` ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)).
 
-## Records: OCSF events and a usage log
+## Records: OCSF events with a sluis extension, and a usage stream
 
-The record formats follow published standards too ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/), decided 2026-10-31).
+The record formats follow published standards too ([ADR 0064](/decisions/0064-audit-records-are-ocsf-events-with-a-sluis-extension-and-usage-is-a-separate-stream/), decided 2026-11-01; the log itself is [ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)).
 
-**An audit record is a plain OCSF 1.x event, with no sluis extension.** It uses OCSF's core classes, such as Authentication for a sign-in, a token grant or an issued certificate, Authorize Session for a grant of scopes, User Management for an issued credential, Entity Management for a console write, and API Activity for a quota call, a key use or an audit search or export. The first release pins OCSF 1.9.0. Where OCSF has no activity for an action, the record uses activity 99 (`Other`), and `metadata.event_code` names the action. The sluis action is `metadata.event_code`, the company `metadata.tenant_uid`, the record id `metadata.uid`, and the actor `actor.user.uid = <actor>@<boundary>`. Everything else sluis needs comes from where it already is:
+**An audit record is an OCSF event of a pinned version, with a sluis extension.** It uses OCSF's core classes, such as Authentication for a sign-in, a token grant or an issued certificate, Authorize Session for a grant of scopes, User Management for an issued credential, Entity Management for a console write or a key's life, and API Activity for a quota call, a key use or an audit search or export. The first release pins OCSF 1.9.0. Where OCSF has no activity for an action, the record uses activity 99 (`Other`), and `metadata.event_code` names the action. The sluis action is `metadata.event_code`, the company `metadata.tenant_uid`, the record id `metadata.uid`, and the actor `actor.user.uid = <actor>@<boundary>`.
+
+**The extension is named `sluis` and is a profile, `sluis/audit`,** that adds one attribute, `sluis`, to the classes the catalogue uses. Every record declares the profile in `metadata.profiles` and the extension in `metadata.extensions`. It holds only what OCSF lacks:
 
 | What | Where |
 |---|---|
-| The boundary | The log: each log belongs to one boundary. An export writes it into `metadata.log_name` |
-| Data origin and sensitivity | The catalogue entry that `metadata.event_code` names |
-| The catalogue version | The schema entry written in the log |
-| The grant | OCSF's `policy` and `authorizations` objects, with the grant id |
-| The OAuth scopes granted | The grant record's `privileges[]`; a token record carries only the grant id |
-| The sender binding (DPoP or mTLS) | `policy.data`, typed by the catalogue |
+| The boundary and the catalogue version | `sluis.boundary` and `sluis.catalogue` |
+| The sender binding of a token (DPoP or mTLS) | `sluis.sender_binding` |
+| The kind and algorithm of a key | `sluis.key` (the key's id is a core resource or entity) |
+| A configuration digest and revision | `sluis.config` |
+| The proof given at enrolment | `sluis.enrolment` |
+| The grant and the scopes | OCSF's `policy` and `authorizations` objects, with the grant id; the grant record's `privileges[]` |
 | Certificate details | OCSF's `certificate` object, on Authentication |
-| A key that was used | Core resource objects, with the key's id |
-| The pseudonym key epoch | Encoded in the pseudonym |
 | The trace id | `metadata.correlation_uid` |
+| Data origin and sensitivity | The catalogue entry that `metadata.event_code` names |
 
-- **The same bytes end to end.** The emitter writes the record as RFC 8785 canonical JSON; the transport carries those bytes, the writer stores them unchanged, and the reader returns them as they are. Nothing re-encodes a record.
-- **The OCSF version is pinned per release** and named in every record (`metadata.version`); its compiled schema is stored in the log.
+- **The same bytes end to end.** The emitter writes the record as RFC 8785 canonical JSON; the transport carries those bytes, the writer checks they are canonical and stores them unchanged, and the reader returns them as they are. Nothing re-encodes a record. Numbers are integers within ±(2^53−1), and a larger identifier is a string.
+- **The OCSF version is pinned per release** and named in every record (`metadata.version`); its compiled schema, with the extension, is stored in the log. An upgrade moves one OCSF minor release at a time, as a checked pull request, and old records are never rewritten.
 - **The stored form is lean,** ids only. An export adds the enum captions, the `observables` and an integrity attestation that points back to the log entry, and is written as NDJSON.
-- **Profiles are declared** in `metadata.profiles`: `security_control` for a policy decision, `ai_operation` for the actor chain of a token exchange.
-- **Facts with no typed OCSF field** (such as the sender binding, a key's algorithm, a quota effect or a roll-forward value) go into OCSF's own `*.data` slots, typed per event code by the catalogue. A generic OCSF tool sees them as opaque JSON.
-- **No extension.** The check of 2026-10-31 wrote every catalogue action as plain OCSF 1.9.0, and the OCSF toolkit found no error. A minimal extension comes only if a SIEM later needs one of those facts typed.
 - **Validation in three places.** The writer enforces the catalogue's JSON Schema, generated from the compiled OCSF schema, and stays authoritative. Go and Rust emitters validate their own entries before they emit. The OCSF toolkit, still pre-1.0, runs in CI only, with the validators of all three languages on the same test vectors.
 - **sluis generates its own types** for Go, Rust and TypeScript from the compiled OCSF schema, for the classes the catalogue uses.
 
-**The usage log holds what was used,** as CloudEvents 1.0 events in structured JSON, canonical by RFC 8785, shaped like OpenMeter's usage events: the `type` selects a meter, the `subject` is the account, and `data` holds the account, the meter, the unit, an integer amount with its sign, the request id and the subject's pseudonym.
+**The usage stream holds what was used,** as CloudEvents 1.0 events in structured JSON, canonical by RFC 8785, shaped like OpenMeter's usage events: the `type` selects a meter, the `subject` is the account, and `data` holds the unit, an integer amount with its sign, the request id and the subject's pseudonym. Its `id` is the audit record's id with the position of the event in the message.
 
-- **One writer, two log kinds.** The emitter sends one message, with an audit part and an optional usage part. The writer splits it, and registers both logs' sealed batches in one atomic state batch with the duplicate ids, so the two logs never disagree. There is no dual write and no second writer.
+- **One call, one message, two logs.** The emitter builds the audit record and the usage events from one call, and sends one message. The writer splits it, and registers both logs' sealed batches in one atomic state batch with the duplicate ids, so the two logs never disagree. There is no dual write, no second writer, and no way to emit a usage event without its audit record.
 - **Each kind is a log of its own:** its own prefix or bucket, log key, checkpoints, retention, lock mode, readers and off-site copy. Every rule on this page holds for each kind. Witnesses cosign both, and usage entries are encrypted per company like audit entries.
-- **Quota reads the usage log,** and only quota writes balance effects into it. The usage log has no search index. The finance export is a table derived from it, in the style of FinOps FOCUS.
+- **Quota and finance read it,** and only quota writes balance effects into it. The usage log has no search index. The finance export is a table derived from it, in the style of FinOps FOCUS.
 
-The standards are on the [register](/standards/#transparency-and-audit). The class of each action is listed in [ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/#how-sluis-actions-map-to-ocsf-classes).
+The standards are on the [register](/standards/#transparency-and-audit). The class of each action is listed in [ADR 0064](/decisions/0064-audit-records-are-ocsf-events-with-a-sluis-extension-and-usage-is-a-separate-stream/#the-class-mapping).
 
 ## The witness is optional
 

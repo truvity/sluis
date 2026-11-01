@@ -4,6 +4,7 @@
 **Date:** 2026-10-31
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909). Build: [issue #985](https://github.com/truvity/sluis/issues/985). The question was [OD-26](/open-decisions/#od-26).
+Rewritten in place on 2026-11-01 (a read returns the canonical record bytes, decoded by the OCSF version and extension version the record names, as [0064](/decisions/0064-audit-records-are-ocsf-events-with-a-sluis-extension-and-usage-is-a-separate-stream/) decides).
 
 ## Context
 
@@ -40,7 +41,7 @@ The threats this record answers are T-1 to T-7 and T-21 of the [threat model](/s
 ### The console
 
 - **The audit console is a static bundle of its own,** built from the same source tree on the same release train as the sluis console ([0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)). It is served on the same origin as the audit `entry`, by the runtime's static host. It carries only audit pages, so its content security policy is tighter.
-- **Reads go straight to the `reader`:** search with facets, a record with its inclusion proof and its verification status, and exports, which are reader jobs ([0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)).
+- **Reads go straight to the `reader`:** search with facets, a record with its inclusion proof and its verification status (the record comes back as the canonical bytes the emitter produced, and the console decodes it by the OCSF version and the sluis extension version the record names, [0064](/decisions/0064-audit-records-are-ocsf-events-with-a-sluis-extension-and-usage-is-a-separate-stream/)), and exports, which are reader jobs ([0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)).
 - **Writes go through the audit installation's own `console` actor,** the same executable as sluis's, which checks the operator's delegation and routes each write to the actor that owns its record kind: a rebuild of the index to the indexer. The reader stays read-only. Legal holds are not console writes, because they stay outside sluis, and a company's shred follows the promotion runbook ([0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/), [0009](/decisions/0009-one-installation-per-boundary/)).
 - **The console shows the log's health:** the age of the latest checkpoint, the witness cosignatures, the index lag and the lag of the off-site copy.
 - **Who sees what follows the reader's grants:** a company sees its own records in full, an operator sees the envelope (the class, the outcome and rotating pseudonyms, REQ-AUDIT-038), and a security reviewer sees what a declared grant names.

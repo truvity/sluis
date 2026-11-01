@@ -434,3 +434,28 @@ requirements:
     issues: [915]
     verification:
       - {kind: integration-test, ref: "finance export columns test"}
+  - id: REQ-QUOTA-034
+    area: QUOTA
+    statement: "A retried call that carries a remembered request identifier MUST send the message of its first attempt again, not a new one."
+    rationale: "The writer removes the duplicate by message id, so a retried call has one usage event and changes a balance once."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-15, section: "Idempotency-Key", depth: Partial}
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "retried call reuses its message test"}
+  - id: REQ-QUOTA-035
+    area: QUOTA
+    statement: "Quota MUST store the message of a call in its state in the same atomic batch as the change the call makes."
+    rationale: "A crash between the change and the send then leaves the message to be sent, not a balance change with no usage event."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "crash between change and send test"}

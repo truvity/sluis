@@ -6,6 +6,7 @@
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909). Build: [issue #915](https://github.com/truvity/sluis/issues/915).
 Rewritten in place on 2026-10-31 (balance effects, meters and request ids live in the usage log of [0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/), a parallel log in CloudEvents 1.0 JSON that the same writer writes; quota rolls forward from it, and the finance export is derived from it).
 Rewritten in place on 2026-10-31 (the points that the previous rewrite marked as inferred are confirmed by the maintainer, and their markers are removed).
+Rewritten in place on 2026-11-01 (the usage stream is decided in [0064](/decisions/0064-audit-records-are-ocsf-events-with-a-sluis-extension-and-usage-is-a-separate-stream/): a usage event's id is the message id with a position, and a retried call reuses its stored message so that it counts once; strict enforcement is unchanged).
 
 ## Context
 
@@ -17,7 +18,7 @@ What 0004 did not decide is what an application calls and what quota keeps. Appl
 
 [0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/#quota-by-origin) already placed quota's data: limits, enforcement rules and the exhaustion and unavailability behaviour are declared, and an operator may lower a limit on the console, tighten-only; balances and top-ups are issued, durable, backed up and rolled forward; meters and hourly aggregates are derived from the log.
 
-[0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/) gives each writer two log kinds. The audit log holds OCSF events for security readers. The usage log holds CloudEvents usage events (an account, a meter, a unit, an integer amount with its sign, the request id and the subject's pseudonym) for quota and for billing, with its own key, retention and readers. The emitter sends one message with an audit part and an optional usage part, and the writer registers both logs' batches in one atomic state batch.
+[0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/) gives each writer two log kinds, and [0064](/decisions/0064-audit-records-are-ocsf-events-with-a-sluis-extension-and-usage-is-a-separate-stream/) decides their records. The audit log holds OCSF events, with the sluis extension, for security readers. The usage log holds CloudEvents usage events (an account, a meter, a unit, an integer amount with its sign, the request id and the subject's pseudonym) for quota and for billing, with its own key, retention and readers. The emitter sends one message with an audit part and an optional usage part, and the writer registers both logs' batches in one atomic state batch.
 
 The threats this record bears on are T-13 and T-25 of the [threat model](/security/threat-model/): a sender that floods its own queue is bounded by quotas and limits, and an operator's change of a limit or a balance is audited under the operator's name.
 
@@ -29,7 +30,7 @@ The threats this record bears on are T-13 and T-25 of the [threat model](/securi
 - **The TypeScript deliverable is a Connect client library built on connect-es.** Other languages use their Connect clients.
 - **Every call that changes something carries a `request_id` field, and the field is canonical.** It is in the schema, so it survives every transport, including Unix sockets, Lambda invocations and in-memory calls.
 - **`entry` also accepts the `Idempotency-Key` header** of the IETF draft and copies it into the field. A request that carries both with different values is refused.
-- **A request id is scoped to the calling client and the method, and quota remembers it for 24 hours** as ephemeral state. After a restore, the remembered ids of the last 24 hours are rebuilt from the usage log, because every usage event of quota's calls carries its request id.
+- **A request id is scoped to the calling client and the method, and quota remembers it for 24 hours** as ephemeral state, with the id of the message the call produced. A retry sends that same message again, so it has one usage event ([0064](/decisions/0064-audit-records-are-ocsf-events-with-a-sluis-extension-and-usage-is-a-separate-stream/#usage-is-derived-from-the-same-event-once)). After a restore, the remembered ids of the last 24 hours are rebuilt from the usage log, because every usage event of quota's calls carries its request id.
 - **Conflicts follow the draft.** A request id reused with a different payload is refused, and a duplicate that arrives while the first is still running is refused as a conflict (HTTP 409, Connect `aborted`). A refusal for an exhausted balance is `resource_exhausted` (HTTP 429) with `Retry-After`. (The Connect codes are inferred from the research of 2026-10-30.)
 
 ### Reservations
@@ -50,8 +51,9 @@ The threats this record bears on are T-13 and T-25 of the [threat model](/securi
 
 - **Amounts are signed 64-bit integers in a unit declared per meter and per balance,** for example `requests` or `cents`. There are no decimals anywhere in quota.
 - **A balance belongs to a declared account in a boundary and a company.** Declared rules map subjects, clients or a whole company to an account. A balance's key is (boundary, company, account, meter), so record keys carry no personal data.
+- **Quota writes the message of a call into its state in the same atomic batch as the change it makes,** and a relay sends it and clears it. A call that crashes after the change therefore still has its message, and a retried call never makes a second one (inferred). Strict enforcement is as below: the compare-and-set on the balance is the gate, and the usage log is the record the balance rolls forward from.
 - **Balance effects live in the usage log, and only quota writes them.** The messages of `Admit`, `Confirm`, `Cancel`, `TopUp` and `Adjust` carry a usage part with a signed effect on a named balance. An application's usage part carries meters only, and its audit record never carries a balance effect. An application that wants to change a balance calls quota; it does not just emit (REQ-QUOTA-004, REQ-QUOTA-010).
-- **A usage event is a CloudEvents 1.0 event, structured JSON in RFC 8785 form,** shaped like OpenMeter's usage events: its `type` selects the meter, its `subject` is the account, and its `data` holds the typed usage fields ([0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/#the-usage-event)).
+- **A usage event is a CloudEvents 1.0 event, structured JSON in RFC 8785 form,** shaped like OpenMeter's usage events: its `type` selects the meter, its `subject` is the account, and its `data` holds the typed usage fields ([0064](/decisions/0064-audit-records-are-ocsf-events-with-a-sluis-extension-and-usage-is-a-separate-stream/#the-usage-stream)).
 
 ### The finance export
 
@@ -92,6 +94,7 @@ The threats this record bears on are T-13 and T-25 of the [threat model](/securi
 - A retried call never counts twice, on any transport, within 24 hours. HTTP-native clients can use the standard header, and sluis's own callers set the field. A retry after 24 hours counts again.
 - Following a draft means following its changes. The field stays canonical whatever the draft does, so a change to the header touches only `entry`'s mapping.
 - Balances are money-like records with one writer, a backup and a roll-forward. A restore loses no top-up or adjustment that reached the log. Integers make the arithmetic exact on every store, but a unit finer than the integer must be chosen up front.
+- Quota keeps an outbox in its state: a message waits there from the change until the relay has sent it. That is more state and one relay on the quota path, and a restore treats a stored message as unsent; the writer removes the duplicate if it was in fact sent.
 - A client that never confirms gets its work without paying, within the reservation's time to live; the expired count makes that visible.
 - Top-ups cannot drain a balance, and corrections and refunds are rare, explained and visible. That is two calls to build and test, and a refund needs its original event within the retention.
 - An application changes a balance only through quota, so roll-forward reads quota's own events in the usage log and balances change only under quota's compare-and-set. Quota never reads the audit log, and billing never parses security records.
@@ -146,11 +149,11 @@ The threats this record bears on are T-13 and T-25 of the [threat model](/securi
 - Cons: Cancel would mean two things, and a late cancel would change settled meters. Without refunds, refunds and credits are indistinguishable in the records.
 - Why not: a refund is an `Adjust` bounded by the event it names.
 
-### Balance effects in the audit log, through an OCSF extension
+### Balance effects in the audit log, in a field or class of the OCSF extension
 
 - Pros: one log, and one record per quota call.
-- Cons: billing data in a security schema, which needs an extension, and a retention that ties finance and security together; quota would decrypt and parse security records to roll forward.
-- Why not: the maintainer chose a parallel usage log written by the same writer ([0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)).
+- Cons: billing data in a security schema, which needs more than the sluis extension's context fields, and a retention that ties finance and security together; quota would decrypt and parse security records to roll forward.
+- Why not: the maintainer chose a separate usage stream, written by the same writer ([0064](/decisions/0064-audit-records-are-ocsf-events-with-a-sluis-extension-and-usage-is-a-separate-stream/)).
 
 ### Effects from any record, or computed from a price table
 
