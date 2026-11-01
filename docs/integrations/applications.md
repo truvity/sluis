@@ -37,7 +37,7 @@ Every token's `aud` is exactly one registered client id, never a URL; a resource
 
 ## What policy controls
 
-- **Which groups may sign in to the client** (`requires`; an empty list is refused), and the token lifetime cap.
+- **Which groups may sign in to the client** (`requires`; an empty list is refused), and the token lifetime cap. A client is a `Client` in Cedar, named `<boundary>/<client id>`, and a group is a `Group`: the schema, the standard rule and a worked example are on [Policy](/reference/policy/).
 - **Redirect URIs and sign-out pages**, per client. A loopback redirect may differ in its port, for native apps.
 - **Resources.** A resource is a declared URL with its own `requires` and lifetime cap, matched exactly; an undeclared or unentitled resource is refused. Clients that describe themselves with an HTTPS URL (a client identity document) are admitted only from allow-listed origins, and only to the groups the document gate names.
 - **Long-running agents** get a session class with a longer chain, shorter tokens and a consent page that is never silent.

@@ -52,6 +52,6 @@ Forces: the actor decides whether a mint is allowed, so it must be small, memory
 
 ## Follow-ups
 
-- Cedar schema, entity model and the template-link record: [#1008](https://github.com/truvity/sluis/issues/1008).
+- Cedar schema, entity model and the template-link record: [#1008](https://github.com/truvity/sluis/issues/1008); the reference page is [Policy](/reference/policy/).
 - Claim and grant vocabulary per audience: [#999](https://github.com/truvity/sluis/issues/999).
 - Cutover and migration from v1, including policy: [#1017](https://github.com/truvity/sluis/issues/1017).

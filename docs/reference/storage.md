@@ -87,6 +87,7 @@ The kinds that the actors of the first working version write. Each has one write
 | `signing-ring` | `signer` | issued, durable | none | yes | The token keys the key set publishes, each with its `x5c` chain |
 | `issued-certificate` | `ca` | issued, durable | the certificate's expiry | yes | The serial, profile, requester, validity and public-key hash of a certificate |
 | `data-key` | the writer of the kind it serves | issued, durable | none | yes | A data key of one (boundary, kind), wrapped under the sealing key, with its encryption count |
+| `policy-link-set` | `session` | operator-set, durable | none | no | The template links of the boundary, as one set under the fixed id `links`, changed by compare-and-set; `exchange` reads it ([Policy](/reference/policy/#template-links)) |
 
 The short lifetimes are defaults in code, written with the actor that owns the kind; token lifetimes are policy's ([#999](https://github.com/truvity/sluis/issues/999)), and session limits are per class ([ADR 0023](/decisions/0023-sessions-have-three-classes-with-limits-per-class/)). `entry`, `console` and `policy` write no record.
 
@@ -163,11 +164,11 @@ CREATE TABLE meta (name TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;  -- schem
 ### `spool` and `sqlite`
 
 :::note[Proposed]
-**These two drivers serve the audit log only, and whether audit is in the first working version is open.** Options: (a) the emitter, the writer and Search, so every flow is audited from the first build and tests can read the trail (recommended); (b) the emitter and the writer, with Search at parity; (c) no audit in the first working version. With (a) or (b), the spool is a directory per producer of append-only segment files: each record is a 4-byte big-endian length, the sealed record and a CRC-32C, a segment is fsynced after each record and closed at 4 MiB or one minute, and the writer's cursor per producer moves in its atomic batch ([ADR 0016](/decisions/0016-the-audit-log/#sealing)). The `sqlite` index schema follows the query contract with the audit decisions. Tracked in [#837](https://github.com/truvity/sluis/issues/837).
+**The spool's segment format.** These two drivers serve the audit log, which is in the first working version: the emitter in every actor, the writer, and Search with the indexer, the reader and the `sqlite` index ([ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/#the-local-installation)). The spool is proposed as a directory per producer of append-only segment files: each record is a 4-byte big-endian length, the sealed record and a CRC-32C, a segment is fsynced after each record and closed at 4 MiB or one minute, and the writer's cursor per producer moves in its atomic batch ([ADR 0016](/decisions/0016-the-audit-log/#sealing)). The `sqlite` index schema follows the query contract with the audit decisions. Tracked in [#837](https://github.com/truvity/sluis/issues/837).
 :::
 
 ## Open items
 
 :::note[Proposed]
-**People's records.** Subjects are assigned when sluis first sees a person from a directory, before the first sign-in ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#subjects)). The kinds that hold a person, their subject and the directory facts, and their writer, wait for the decision on the first working version's upstream ([Install file](/reference/install-file/#open-items)). Tracked in [#1081](https://github.com/truvity/sluis/issues/1081).
+**People's records.** Subjects are assigned when sluis first sees a person from a directory, before the first sign-in ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#subjects)). The first working version signs people in through the generic OpenID Connect upstream and assigns the subject at the first sign-in; the kinds that hold a person, their subject and the directory facts, and their writer, wait for the people records. Tracked in [#1081](https://github.com/truvity/sluis/issues/1081).
 :::

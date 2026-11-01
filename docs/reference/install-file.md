@@ -20,12 +20,36 @@ A path inside the file (a policy file, the root list) is relative to the directo
 
 ## Format
 
-- **YAML 1.2 that is plain JSON data:** mappings, sequences, strings, numbers, booleans. Tags, anchors, aliases and merge keys are refused, and so is a duplicate key, so every YAML reader sees the same document.
+- **YAML that is plain JSON data, read by one strict profile.** Go and Rust read the file with different parsers ([Approved libraries](/reference/approved-libraries/#yaml-reader)), and a YAML parser as it comes does not give the same document in both: `010` is the number 8 in one and 10 in another, `yes` is a string or a boolean, an alias is expanded or kept. The profile removes the choice, and the readers give the same verdict on every document below:
+  1. **One document.** A second document is refused.
+  2. **No anchors, aliases, merge keys (`<<`), explicit tags or duplicate keys.**
+  3. **Every mapping key is a string,** written plain or quoted; a key that is a mapping or a sequence is refused.
+  4. **A plain scalar is `null` (`null`, `~` or empty), a boolean (`true`, `false`) or a number that matches the JSON grammar, and any other plain scalar is a string.** So `yes`, `y`, `010`, `0x1F`, `+1`, `.inf`, `1_000` and `2026-11-01` are strings, and a field that wants a number refuses them with a type error. A quoted or block scalar is always a string.
+  5. **An error names the path or the line and column, never the value.** The reader's own messages are not shown, because some print the source line.
 - **The schema is JSON Schema draft 2020-12** with the `$id` `https://sluis.id/schema/install/v1/install.schema.json`, generated from the Pkl sources in `schema/` and embedded in every binary that reads the file ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/#pkl-and-json-schema)).
 - **Strict:** `unevaluatedProperties: false` on every object, so an unknown key is an error that names its path; format assertions are on. An error never shows the value.
 - **`$schema`** may name the `$id` above, for editors. A file that names another `$id` is refused.
 - **Names** of boundaries, upstreams and clients are lower-case kebab-case, 1 to 32 characters, starting with a letter: they appear in unit names, sockets and record keys (`<actor>@<boundary>`).
 - **Durations** are strings such as `90s`, `15m`, `12h` or `30d`.
+- **The profile's vectors** (measured 2026-11-01 with `go.yaml.in/yaml/v3` v3.0.6 and `saphyr-parser` 0.3.3; the conformance kit starts from them):
+
+  | Document | Verdict |
+  |---|---|
+  | `a: 1`, `b: [x, y]`, `c: {d: true}` | read: `{"a":1,"b":["x","y"],"c":{"d":true}}` |
+  | `a: 1` twice | refused: duplicate key |
+  | `a: &x [1,2]` and `b: *x` | refused: anchor |
+  | a key `<<` | refused: merge key |
+  | `a: !foo bar`, `a: !!str 12` | refused: tag |
+  | `a: yes`, `b: 0o17`, `c: 010`, `d: y` | read, all four strings |
+  | `a: ~`, `c: 0x1F`, `d:` | read: `null`, the string `"0x1F"`, `null` |
+  | `a: 1.5e3`, `b: .inf`, `c: +1`, `d: -0`, `e: 1_000` | read: the numbers `1.5e3` and `-0`, the strings `".inf"`, `"+1"` and `"1_000"` |
+  | `a: "12"`, `b: 'true'`, `c: "null"` | read: three strings |
+  | `1: a` | read: the key is the string `"1"` |
+  | `a: 2026-11-01` | read: the string `"2026-11-01"` |
+  | two documents separated by `---` | refused: more than one document |
+  | `? [a, b]` as a key | refused: key is not a scalar |
+  | `a: [1,` | refused: syntax error |
+
 - **A secret is a reference, never a value:** `{ credential: NAME }` names a read-only source. On bare-metal it is the systemd credential `NAME` of the unit; in Compose it is the file `/run/secrets/NAME`. The writable secret stores and the other sources come with the `secrets` port ([#1014](https://github.com/truvity/sluis/issues/1014)).
 
 ## Top-level keys
@@ -115,13 +139,17 @@ A mapping from a client ID to its declaration, for the group issuer; `boundaries
 
 | Field | Required | Meaning |
 |---|---|---|
-| `files` | yes | The Cedar policy files, validated against the Cedar schema at load ([ADR 0009](/decisions/0009-policy-is-cedar-in-a-rust-actor/)) |
+| `files` | yes | The Cedar policy files, validated against the Cedar schema at load ([ADR 0009](/decisions/0009-policy-is-cedar-in-a-rust-actor/)). The schema is fixed by sluis and embedded in `policy`; an operator writes policy against it and adds no type, action or attribute. The entity types, the actions and a worked example are on [Policy](/reference/policy/) |
 
 ### `trust`
 
 | Field | Required | Meaning |
 |---|---|---|
 | `root_list` | yes | The signed root list that ritueel produced, `root-list.json` with its `.jws` beside it. sluis takes its anchors from it, and `sluis key request` reads the active primaries from it ([ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/#root-pins-and-the-root-list)). At parity `sluis trust sync` keeps it current |
+
+### Audit
+
+The audit log is in the first working version ([ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/#the-local-installation)), and schema v1 has no `audit` key. The drivers already name its transport (`spool` or `direct`), its blob (`fs`) and its index (`sqlite`). A declared retention, the lock mode and the witnesses are settings of a production log ([ADR 0016](/decisions/0016-the-audit-log/#retention)): a local installation runs with none, `sluis config check` warns that it has no witness, and the key arrives with the first installation that reads it.
 
 ## Which keys a file enables
 
@@ -134,7 +162,7 @@ Beyond the schema:
 - every boundary host and the front host are siblings under `rp_id`, each host is one origin, and no two issuers share a host;
 - a boundary of kind `company` has no `host`, and every `environment` boundary has one;
 - every `credential` reference names a source that exists (offline: the file is present; the value is never read by `check`);
-- every client's `requires` names grants that the policy declares, and every policy file parses and validates against the Cedar schema;
+- every client's `requires` is not empty, and every policy file parses and validates against the Cedar schema ([Policy](/reference/policy/#what-sluis-config-check-checks));
 - the drivers fit the runtime and the node count, every enabled key purpose has a key, and the root list verifies and is not older than the one sluis holds.
 
 ## The example file for local
@@ -189,22 +217,8 @@ clients:
     kind: exchange
 
 policy:
-  files: [policy/local.cedar]   # written with the Cedar schema (#1008)
+  files: [policy/local.cedar]   # the Cedar schema is embedded; see https://sluis.id/reference/policy/
 
 trust:
   root_list: trust/root-list.json   # from ritueel's software root, at first start
 ```
-
-## Open items
-
-:::note[Proposed]
-**The hosts and the TLS of the local installation.** The example uses `local.test` names, outside the sluis host names, as a test installation must be ([ADR 0005](/decisions/0005-boundaries-and-the-isolation-ladder/#shared-parts-and-accepted-risks)). The forwarder that publishes `entry`'s socket, the certificate it serves, and whether a browser's virtual authenticator accepts `local.test` as the relying-party ID are measured with the local topology before these names are final. Tracked in [#877](https://github.com/truvity/sluis/issues/877).
-:::
-
-:::note[Proposed]
-**Audit keys.** Whether the audit log is in the first working version decides whether schema v1 has an `audit` key (retention, a witness). The drivers above already name the local transport, blob and index. Tracked in [#837](https://github.com/truvity/sluis/issues/837).
-:::
-
-:::note[Proposed]
-**The Cedar files' shape.** `policy.files` names Cedar files; the Cedar schema, the entity model and how a client and a grant are written in Cedar are the planned record of [#1008](https://github.com/truvity/sluis/issues/1008).
-:::

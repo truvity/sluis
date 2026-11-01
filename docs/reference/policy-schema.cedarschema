@@ -1,0 +1,62 @@
+// The Cedar schema of sluis policy, schema version 1 (the first working version).
+// It is fixed by sluis and embedded in the `policy` actor; an operator writes policy against it
+// and cannot add types, actions or attributes. Every request is validated against it.
+
+// A group of a directory. A grant, in this version, is membership of a group.
+// `org` is the company the group belongs to (the claim `org`).
+entity Group = {
+  org: String,
+};
+
+// A person, known by the opaque `sub` of the issuer, and a member of the groups the sign-in
+// brought. `org` is the company claim.
+entity Person in [Group] = {
+  org: String,
+};
+
+// An environment boundary, such as `dev`.
+entity Boundary;
+
+// A client of an issuer. The token's `aud` is exactly one client id, so a client is also the
+// resource of a token request. `requires` is the client's declared list of groups, and `kind`
+// is `public`, `confidential` or `exchange`.
+entity Client in [Boundary] = {
+  kind: String,
+  requires: Set<Group>,
+};
+
+// What the asking actor knows about how the person signed in. A name that the upstream did not
+// send is absent, which a policy reads as unknown.
+type Authentication = {
+  acr?: String,
+  amr?: Set<String>,
+  // Seconds since the person last authenticated for this boundary, counted by the asking actor.
+  auth_age?: Long,
+};
+
+// A person asks for a token for a client, at a code exchange or a refresh.
+action "token.issue" appliesTo {
+  principal: Person,
+  resource: Client,
+  context: Authentication,
+};
+
+// A person's token is exchanged for a token for a client of a boundary (RFC 8693).
+action "token.exchange" appliesTo {
+  principal: Person,
+  resource: Client,
+  context: Authentication,
+};
+
+// An operator asks to link a template in a boundary. The context names the template and the
+// values of its slots, for the delegation policy to judge.
+action "policy.link" appliesTo {
+  principal: Person,
+  resource: Boundary,
+  context: {
+    template: String,
+    principal_group?: Group,
+    principal_person?: Person,
+    resource_client?: Client,
+  },
+};

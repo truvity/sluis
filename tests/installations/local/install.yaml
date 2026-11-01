@@ -44,7 +44,7 @@ clients:
     kind: exchange
 
 policy:
-  files: [policy/local.cedar]   # written with the Cedar schema (#1008)
+  files: [policy/local.cedar]   # the Cedar schema is embedded; see https://sluis.id/reference/policy/
 
 trust:
   root_list: trust/root-list.json   # from ritueel's software root, at first start

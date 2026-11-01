@@ -1,0 +1,4 @@
+[
+{"template_id": "grant-group-to-client", "link_id": "grant-acme-staff-example-app", "args": {"?principal": "Group::\"acme-staff\"", "?resource": "Client::\"dev/example-app\""}},
+{"template_id": "suspend-person", "link_id": "suspend-p-suspended", "args": {"?principal": "Person::\"p-suspended\""}}
+]
