@@ -240,7 +240,7 @@ Every audit installation has a front of its own, also when the audit pieces are 
 
 ## Recovery does not block on audit
 
-Recovery is the emergency way back in when normal sign-in cannot work. Its proof needs no Kubernetes: a hardware-token challenge or SRP.
+Recovery is the emergency way back in when normal sign-in cannot work. Its proof needs no Kubernetes: a passkey assertion from one of two attested hardware keys or from a pinned synced passkey. There is no password.
 
 Recovery also leaves an audit record, but it **spools that record locally and delivers it later instead of blocking** on the audit path. A down audit install cannot shut the emergency door. The record still exists and is delivered when the audit path is back.
 

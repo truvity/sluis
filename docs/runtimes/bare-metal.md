@@ -40,7 +40,7 @@ A single node is one failure domain. Losing it stops sign-in until the node is r
 - **State:** an embedded single-node store behind the state port, no Raft, or DynamoDB on an AWS VM.
 - **Audit:** every success is audited. Records go to a local spool, the writer seals batches into the blob store and asks the `key-holder` to sign checkpoints; there is no notary actor. Records still in the spool when a node dies are lost, so keep the spool small and drained. Keep the blob store off the node if the audit trail has to outlive it.
 - **Index:** `sqlite`. It lags the chain, and verification never trusts it or the state, so a damaged index cannot hide a missing record.
-- Recovery needs no Kubernetes and no cloud: a hardware-token challenge or SRP. A recovery spools its audit record locally and delivers it later.
+- Recovery needs no Kubernetes and no cloud: a passkey assertion, with no password. A recovery spools its audit record locally and delivers it later.
 
 ## N nodes
 

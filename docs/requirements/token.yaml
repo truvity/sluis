@@ -195,13 +195,13 @@ requirements:
     rationale: "Some integrators separate person tokens from machine tokens by claim presence."
     level: MAY
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-13, section: "2.2", depth: Partial}
       - {id: ST-52, section: "4", depth: Full}
     issues: [776]
-    gap: stakeholder-only
+    superseded_by: [REQ-TOKEN-023]
     verification:
       - {kind: integration-test, ref: "configured-variant test"}
   - id: REQ-TOKEN-023
@@ -211,13 +211,12 @@ requirements:
     rationale: "A default that follows the profile keeps ordinary verifiers working."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-13, section: "2.2", depth: Partial}
       - {id: ST-52, section: "4", depth: Full}
     issues: [776]
-    gap: stakeholder-only
     verification:
       - {kind: integration-test, ref: "default-profile conformance test"}
   - id: REQ-TOKEN-008

@@ -191,7 +191,7 @@ nodes:
     title: recovery
     l2: break-glass
     l3: sluis recovery
-    does: The break-glass tool. Its proof needs no Kubernetes (a hardware-token challenge or SRP). It spools its audit record locally and delivers it later, instead of blocking.
+    does: The break-glass tool. Its proof needs no Kubernetes (a passkey assertion, with no password). It spools its audit record locally and delivers it later, instead of blocking.
     holds: A local spool on the machine it runs on
     never: A dependency on entry, the state store or the writer
   transport:

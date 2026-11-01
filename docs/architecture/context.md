@@ -83,7 +83,7 @@ Served on the origin root of the public host (for example `https://sluis.example
 | UserInfo | `GET\|POST /userinfo` | A bearer of a live sign-in |
 | Revocation | `POST /revoke` (RFC 7009) | The client the token was issued to |
 | Sign-out | `GET\|POST /end_session`, `GET /signed-out`; back-channel logout to relying parties | A browser; the relying party |
-| Recovery | `POST /login/recovery`, and the SRP-6a password flow under `/login/srp/` | An operator, when no upstream can vouch. The proof needs no Kubernetes |
+| Recovery | `POST /login/recovery`, a passkey assertion with no password | An operator, when no upstream can vouch. The proof needs no Kubernetes |
 | Agent consent | `POST /login/agent-consent` | A signed-in person authorizing an agent-class session |
 
 ### Token exchange and mint
