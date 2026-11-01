@@ -1,0 +1,42 @@
+---
+// The honest status of v2, on the home page. The words are fixed: v2 is designed, not
+// built. The figures are the build-time ones (decision records counted
+// from the repository), and a bundled script (home-status.ts) replaces them with the live
+// ones from the site's status API (/api/status, ADR 0020). When the API cannot answer, the
+// build-time figures stay and the note says they are from the build.
+import { listDecisions, decisionFacts, isAccepted } from '../../lib-decisions';
+import { BUILT_AT } from '../../lib/repo';
+
+const accepted = (await listDecisions()).map(decisionFacts).filter((d) => isAccepted(d.status)).length;
+const builtOn = BUILT_AT.slice(0, 10);
+---
+
+<section class="pain status" aria-labelledby="where-it-stands" data-home-status>
+  <h2 id="where-it-stands">Where it stands</h2>
+  <p class="verdict">v2 is designed, not built. There is no v2 code yet.</p>
+  <p class="lead">
+    This site documents the target state of sluis v2: the design is recorded, the first working version is the
+    current milestone, and every page says how far its content has got. v2 is a rewrite of the sluis that runs
+    today; v1 docs are at <a href="/v1/">/v1/</a>.
+  </p>
+  <dl class="figures">
+    <div><dt>Current milestone</dt><dd data-f="milestone">First working version</dd></div>
+    <div><dt>Issues closed</dt><dd data-f="closed">–</dd></div>
+    <div><dt>Issues open</dt><dd data-f="open">–</dd></div>
+    <div><dt>Decision records accepted</dt><dd data-f="accepted">{accepted}</dd></div>
+  </dl>
+  <p class="status-note" data-f="note">
+    Decision records are counted at the build of {builtOn}; the issue figures appear when the live status loads.
+  </p>
+  <ul class="answer-links">
+    <li><a href="/status/">Project status</a></li>
+    <li><a href="/roadmap/">Roadmap</a></li>
+    <li><a href="/decisions/">Decision records</a></li>
+    <li><a href="/features/">v1 parity checklist</a></li>
+    <li><a href="/contributing/">Take part</a></li>
+  </ul>
+</section>
+
+<script>
+  import '../../scripts/home-status.ts';
+</script>

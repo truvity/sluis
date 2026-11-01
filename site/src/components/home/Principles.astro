@@ -1,0 +1,22 @@
+---
+import { principles } from './data';
+
+const who = { shared: 'with ritueel', part: 'partly with ritueel', sluis: 'sluis only' };
+---
+
+<section class="pain principles" aria-labelledby="principles">
+  <h2 id="principles">The principles every decision follows</h2>
+  <p class="lead">
+    Eleven short rules settle the design questions. Ten are shared with ritueel, two of them in part; one belongs to
+    sluis alone. A decision record that seems to break a rule has to say why.
+  </p>
+  <ol class="principle-list">
+    {principles.map((p) => (
+      <li>
+        <a href={`/principles/${p.href}`}>{p.name}</a>
+        <span class="who" data-who={p.who}>{who[p.who]}</span>
+      </li>
+    ))}
+  </ol>
+  <p class="lead"><a href="/principles/">Read the principles</a>, or the <a href="/decisions/">decision records</a> that apply them.</p>
+</section>

@@ -1,0 +1,6 @@
+---
+// One mark or glyph from the sprite (Marks.astro). Decorative: the chip's text names it.
+const { name } = Astro.props as { name: string };
+---
+
+<svg class="mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href={`#m-${name}`} /></svg>

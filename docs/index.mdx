@@ -1,0 +1,57 @@
+---
+title: "sluis: a pluggable identity and access broker"
+description: sluis is an open-source identity and access broker for people, robots and external systems. v2 is being designed in the open.
+status: target
+template: splash
+hero:
+  title: Every system keeps its own idea of who you are.
+  tagline: A pluggable identity and access broker for people, robots and external systems.
+  actions:
+    - text: Start here
+      link: /overview/
+      icon: right-arrow
+    - text: Try the local installation
+      link: /runtimes/local/
+      variant: secondary
+    - text: View on GitHub
+      link: https://github.com/truvity/sluis
+      icon: external
+      variant: minimal
+---
+import '../site/src/styles/home.css';
+import Marks from '../site/src/components/home/Marks.astro';
+import PainCloud from '../site/src/components/home/PainCloud.astro';
+import Chain from '../site/src/components/home/Chain.astro';
+import Principles from '../site/src/components/home/Principles.astro';
+import HomeStatus from '../site/src/components/home/HomeStatus.astro';
+import { fragmented, ceremonies, answers } from '../site/src/components/home/data';
+
+<div class="home not-content">
+  <Marks />
+
+  <PainCloud
+    id="fragmented"
+    heading="Single sign-on stops at the edge of each product"
+    size="small"
+    chips={fragmented}
+    caption={`${fragmented.length} systems, ${fragmented.length} places to say who is allowed in.`}
+    lead="You set up who may come in for the cloud console, then again for git hosting, chat, CI, databases, Kubernetes and SSH. Each system has its own settings, its own gaps and its own idea of a group, and no single product gives clear SSO across all of them."
+    answer={answers.sso}
+  />
+
+  <PainCloud
+    id="as-code"
+    heading="A traditional identity provider is hard to run as code"
+    size="wide"
+    chips={ceremonies}
+    caption="Examples as of 2026-11-01. The mechanism is the point, not the vendor."
+    lead="The basics cost extra, the setup is fragile and easy to get wrong, and every integration is a small project of its own. Many of them are a click-through ceremony in a web console, which is hard to review, repeat or roll back."
+    answer={answers.code}
+  />
+
+  <Chain />
+
+  <Principles />
+
+  <HomeStatus />
+</div>

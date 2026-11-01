@@ -1,0 +1,41 @@
+---
+// A pain shown as a cloud, then what sluis does about it: chips scattered over a soft shape, each with a short caption.
+// Wide screens scatter the chips (a small offset and tilt per chip, set below); narrow
+// screens drop the offsets and lay them out as a grid. The list is a real <ul>, so a screen
+// reader hears one item at a time, in the order of the data.
+import Mark from './Mark.astro';
+import Answer from './Answer.astro';
+import type { Chip, Link } from './data';
+
+interface Props {
+  id: string;
+  heading: string;
+  /** The tone of the cloud: its chips are small (one line of caption) or wide (the mechanism). */
+  size: 'small' | 'wide';
+  chips: Chip[];
+  caption: string;
+  lead: string;
+  answer: { heading: string; text: string; links: Link[] };
+}
+const { id, heading, size, chips, caption, lead, answer } = Astro.props;
+
+// Offsets, tilts and widths that repeat every ten chips; fixed numbers, so the build is stable.
+const dy = ['0.2rem', '1.6rem', '-0.7rem', '0.9rem', '-1rem', '1.8rem', '0.4rem', '-0.5rem', '1.3rem', '-0.9rem'];
+const widths = size === 'small' ? [13, 16.5, 12, 15, 14, 17.5, 12.5, 15.5, 13.5, 16] : [19, 22, 17.5, 21, 18, 23, 19.5, 17, 21.5, 18.5];
+const rot = ['-1.4deg', '1deg', '0.5deg', '-0.8deg', '1.5deg', '-0.4deg', '0.9deg', '-1.1deg', '0.3deg', '-0.6deg'];
+---
+
+<section class="pain" aria-labelledby={id}>
+  <h2 id={id}>{heading}</h2>
+  <p class="lead">{lead}</p>
+  <ul class={`cloud cloud-${size}`}>
+    {chips.map((c, i) => (
+      <li class="chip" style={`--dy:${dy[i % dy.length]};--r:${rot[i % rot.length]};--w:${widths[i % widths.length]}rem`}>
+        <span class="chip-head"><Mark name={c.mark} /><strong>{c.name}</strong></span>
+        <span class="chip-note">{c.note}</span>
+      </li>
+    ))}
+  </ul>
+  <p class="cloud-caption">{caption}</p>
+  <Answer {...answer} />
+</section>
