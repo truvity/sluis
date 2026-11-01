@@ -39,8 +39,23 @@ site-coverage: site-install
     site/scripts/check-requirements.mjs --write-coverage
 
 # Every link in the built site, internal and external (lychee.toml). Needs `just site-build`.
+#
+# lychee has been seen to run for ever without a line of output (2026-11-01, every run of
+# the job for 20 minutes until its timeout), and `--no-progress` left nothing to say on
+# which link. Each try is bounded to 4 minutes (a normal run takes well under one), is
+# verbose so that the log names the link it stopped at, and a try that hit the bound is
+# repeated, twice. A run that ends in lychee's own failure (a dead link) is not repeated.
 site-links:
-    lychee --config lychee.toml --root-dir "$PWD/site/dist" --no-progress 'site/dist/**/*.html'
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for attempt in 1 2 3; do
+      rc=0
+      timeout --foreground 240 lychee --config lychee.toml --root-dir "$PWD/site/dist" --no-progress -v 'site/dist/**/*.html' || rc=$?
+      [ "$rc" -eq 124 ] || exit "$rc"
+      echo "site-links: lychee did not finish in 240 s (try $attempt of 3)" >&2
+    done
+    echo "site-links: lychee did not finish in 3 tries" >&2
+    exit 1
 
 # Open the built site in headless Chrome and assert that every Mermaid diagram is
 # drawn (an <svg> in each pre.mermaid), the explorers' script ran and the console
