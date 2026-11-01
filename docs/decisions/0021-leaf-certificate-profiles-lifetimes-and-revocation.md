@@ -13,7 +13,7 @@ Forces:
 
 - **Relying parties read certificates as they implement the standards.** An X.509-SVID has exactly one URI SAN, the SPIFFE ID ([SPIFFE X509-SVID](https://github.com/spiffe/spiffe/blob/main/standards/X509-SVID.md)). PostgreSQL maps the whole subject with `clientname=DN`. TLS clients check a DNS or IP SAN. A certificate with no extended key usage is accepted for any use by many clients.
 - **Revocation reaches few relying parties.** Most TLS and SPIFFE clients never fetch a CRL, and sluis runs no OCSP responder (REQ-PKI-008). A short lifetime is the control that works everywhere; a CRL helps only the relying parties that configure it, such as a database.
-- **Name constraints are checked by verifiers, not by the issuer.** RFC 5280 constrains each name type separately: a type with no permitted subtree is unconstrained. ritueel's hand-off contract requires at least one permitted subtree, marked critical, in an intermediate request, and its certifier checks them against its policy. That policy lists URI hosts today; the DNS subtrees below are checked by ritueel when its policy lists them (waiting on a change in ritueel, [#877](https://github.com/truvity/sluis/issues/877)), and verifiers enforce them from the first certificate either way.
+- **Name constraints are checked by verifiers, not by the issuer.** RFC 5280 constrains each name type separately: a type with no permitted subtree is unconstrained. ritueel's hand-off contract requires at least one permitted subtree, marked critical, in an intermediate request, and its certifier checks them against its policy. That policy lists URI hosts today; the DNS subtrees below are checked by ritueel when its policy lists them (waiting on a change in ritueel, [truvity/ritueel#70](https://github.com/truvity/ritueel/issues/70)), and verifiers enforce them from the first certificate either way.
 - **Principle 2** asks for short leaves; **principle 5** for profiles that the consumers implement.
 
 ## Decision
@@ -82,4 +82,4 @@ Every leaf has a random 128-bit serial, `basicConstraints` critical with CA fals
 
 - The X.509 CA actor that implements the profiles: [#913](https://github.com/truvity/sluis/issues/913).
 - ACME for host certificates, after the first release: [#978](https://github.com/truvity/sluis/issues/978).
-- DNS name constraints in ritueel's policy, so that ritueel checks the DNS part of an intermediate's constraints: [#877](https://github.com/truvity/sluis/issues/877).
+- DNS name constraints in ritueel's policy, so that ritueel checks the DNS part of an intermediate's constraints: [truvity/ritueel#70](https://github.com/truvity/ritueel/issues/70).
