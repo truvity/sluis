@@ -8,7 +8,7 @@ sidebar:
 
 ## Languages
 
-**One executable, one language.** The language of each executable follows a set of rules, agreed on 2026-10-30 ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)):
+**One executable, one language.** The language of each executable follows a set of rules, agreed on 2026-10-30 ([ADR 0014](/decisions/0014-the-language-follows-the-executable/)):
 
 | Rule | Reading |
 |---|---|
@@ -19,10 +19,10 @@ sidebar:
 | R5 | A driver follows its backend's best SDK: AWS, GCP and Azure are Rust |
 | R6 | Go by default, except on the smallest board tier (R11) |
 | R7 | No Rust where the only library for a security function is experimental or unaudited |
-| R8 | No FIPS build in v2.0; when a FIPS variant is added, Rust uses `aws-lc-rs` in FIPS mode, mirroring [ADR 0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/) |
+| R8 | No FIPS build in v2.0; when a FIPS variant is added, Rust uses `aws-lc-rs` in FIPS mode, mirroring [ADR 0012](/decisions/0012-cryptography-and-authority-keys/) |
 | R9 | The kits of both languages pass one conformance suite |
 | R10 | Contracts are on the wire, so a choice can be reversed |
-| R11 | On the smallest board tier an actor prefers Rust, unless a serious trade-off is named; the list per actor is in ADR 0060 |
+| R11 | On the smallest board tier an actor prefers Rust, unless a serious trade-off is named; the list per actor is in ADR 0014 |
 
 | Executable | Language |
 |---|---|
@@ -33,14 +33,15 @@ sidebar:
 | `policy` and its Cedar engine (the `cedar-policy` crate) | Rust |
 | `key-holder`, with `piv-go` for YubiKey PIV | Go (an exception to R3, after spike S4); PKCS#11 only for the later YubiHSM 2 and Nitrokey drivers |
 | `cloud-cloudflare` | Go, sharing the library of the `cloudflare@<company>` integration (an exception to R5) |
-| `session`, `exchange`, `console`, `quota`, `signer`, `ca`, `ssh-ca` | Go |
-| The audit actors (`writer`, `witness`, `indexer`, `reader`) | Go |
+| `session`, `exchange`, `ca` | Go |
+| `signer`, `ssh-ca`, `quota`, `console` (the actor), `indexer`, `reader`, the local drivers, `sluis agent` | Rust unless the component's design names a serious trade-off (R11 of [ADR 0014](/decisions/0014-the-language-follows-the-executable/#per-actor-table)) |
+| The audit actors `writer` and `witness` | Go |
 | Integrations | Go |
-| The `sluis` CLI and `sluis agent` | Go |
+| The `sluis` CLI | Go |
 | The cert-manager issuer | Go |
 | Console | TypeScript |
 
-Every Rust choice is **gated by its spike**, and the languages are fixed from the spikes before the first code of step 1 ([Roadmap](/roadmap/#spikes-before-code)): Connect for Rust over Unix sockets and a slim `entry` built in both languages decide `entry`; Spike S4 is done for YubiKey PIV (2026-10-31): `piv-go` holds the card exclusively, which is what one `key-holder` per node needs, while `ykcs11` reset the card when a second client appeared and cached the PIN in its own library, so `key-holder` is Go. Spike S5 is done (2026-10-31): the boards' memory fits with Go or with Rust actors. The FIPS spike with `aws-lc-rs` is done; with no FIPS build in v2.0 it no longer gates the AWS drivers, which stay Rust, and its result is kept for a later FIPS variant. When a Rust choice fails its spike, its fallback is chosen then from the written-down candidates ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)).
+Every Rust choice is **gated by its spike**, and the languages are fixed from the spikes before the first code of step 1 ([Roadmap](/roadmap/#spikes-before-code)): Connect for Rust over Unix sockets and a slim `entry` built in both languages decide `entry`; Spike S4 is done for YubiKey PIV (2026-10-31): `piv-go` holds the card exclusively, which is what one `key-holder` per node needs, while `ykcs11` reset the card when a second client appeared and cached the PIN in its own library, so `key-holder` is Go. Spike S5 is done (2026-10-31): the boards' memory fits with Go or with Rust actors. The FIPS spike with `aws-lc-rs` is done; with no FIPS build in v2.0 it no longer gates the AWS drivers, which stay Rust, and its result is kept for a later FIPS variant. When a Rust choice fails its spike, its fallback is chosen then from the written-down candidates ([ADR 0014](/decisions/0014-the-language-follows-the-executable/)).
 
 There is no Rust JOSE driver; tokens are standard JWS/JWT, so any language verifies them against the published key set.
 

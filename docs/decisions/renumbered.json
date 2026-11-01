@@ -1,0 +1,141 @@
+{
+  "$comment": "The records renumbered on 2026-11-01 (docs/decisions/README.md, 'Design phase'). Each old slug, its record number and where it went. site/astro.config.mjs turns every row into a 301; tools/checks/decisions.mjs checks that no old slug is a file and every new one is. A part of a record that went elsewhere is in anchors.",
+  "date": "2026-11-01",
+  "records": [
+    {
+      "old": "0001-v1-and-v2-lines",
+      "new": "0001-v1-and-v2-lines"
+    },
+    {
+      "old": "0002-actors-declare-ports-placement-is-derived",
+      "new": "0002-the-design-model-actors-ports-drivers-and-contracts"
+    },
+    {
+      "old": "0003-environments-are-runtime-kinds",
+      "new": "0018-runtimes-installations-and-delivery-order"
+    },
+    {
+      "old": "0003-runtimes-are-runtime-kinds",
+      "new": "0018-runtimes-installations-and-delivery-order"
+    },
+    {
+      "old": "0004-audit-is-four-pieces-joined-by-a-transport-port",
+      "new": "0015-audit-pieces-transport-search-and-front"
+    },
+    {
+      "old": "0005-three-zoom-levels-contracts-and-a-permission-manifest",
+      "new": "0002-the-design-model-actors-ports-drivers-and-contracts"
+    },
+    {
+      "old": "0007-core-is-a-few-actors-with-one-responsibility-each",
+      "new": "0003-core-actors-with-one-responsibility-each"
+    },
+    {
+      "old": "0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp",
+      "new": "0004-drivers-listeners-and-boundary-enforcement"
+    },
+    {
+      "old": "0009-one-installation-per-boundary",
+      "new": "0005-boundaries-and-the-isolation-ladder"
+    },
+    {
+      "old": "0010-cryptography-uses-p384-by-default-with-named-exceptions",
+      "new": "0012-cryptography-and-authority-keys"
+    },
+    {
+      "old": "0011-authority-keys-sign-in-place-and-never-leave-their-store",
+      "new": "0012-cryptography-and-authority-keys"
+    },
+    {
+      "old": "0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials",
+      "new": "0007-workload-identity-and-host-enrolment"
+    },
+    {
+      "old": "0013-ca-and-ssh-ca-are-the-certificate-authorities-and-ssh-uses-only-sluis-own-ca",
+      "new": "0008-certificate-authorities-for-x509-ssh-and-databases"
+    },
+    {
+      "old": "0014-policy-is-written-in-cedar-and-evaluated-by-a-rust-actor",
+      "new": "0009-policy-is-cedar-in-a-rust-actor"
+    },
+    {
+      "old": "0015-configuration-is-defined-once-in-pkl-and-shipped-as-json-schema",
+      "new": "0010-configuration-and-data-pkl-schema-origins-and-sensitivities"
+    },
+    {
+      "old": "0016-data-has-an-origin-and-a-sensitivity",
+      "new": "0010-configuration-and-data-pkl-schema-origins-and-sensitivities"
+    },
+    {
+      "old": "0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite",
+      "new": "0011-state-is-one-port-with-compare-and-set"
+    },
+    {
+      "old": "0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode",
+      "new": "0016-the-audit-log"
+    },
+    {
+      "old": "0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes",
+      "new": "0015-audit-pieces-transport-search-and-front"
+    },
+    {
+      "old": "0023-quotas-api-is-idempotent-and-its-data-follows-the-origin-model",
+      "new": "0017-audit-records-the-usage-stream-and-quota"
+    },
+    {
+      "old": "0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime",
+      "new": "0019-release-train-packaging-and-distribution"
+    },
+    {
+      "old": "0031-intermediates-and-the-hand-off-to-root-custody",
+      "new": "0013-the-hand-off-to-root-custody-and-the-signing-api"
+    },
+    {
+      "old": "0033-database-access-uses-short-lived-credentials",
+      "new": "0008-certificate-authorities-for-x509-ssh-and-databases"
+    },
+    {
+      "old": "0038-the-local-installation-is-docker-compose-with-one-container-per-actor",
+      "new": "0018-runtimes-installations-and-delivery-order"
+    },
+    {
+      "old": "0039-delivery-goes-local-first-then-boards-lambda-and-kubernetes-in-parallel",
+      "new": "0018-runtimes-installations-and-delivery-order"
+    },
+    {
+      "old": "0048-passkeys-step-up-and-device-login",
+      "new": "0006-identity-issuers-audiences-and-sign-in"
+    },
+    {
+      "old": "0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted",
+      "new": "0004-drivers-listeners-and-boundary-enforcement"
+    },
+    {
+      "old": "0059-each-boundary-has-its-own-issuer-and-tokens-carry-one-audience",
+      "new": "0006-identity-issuers-audiences-and-sign-in"
+    },
+    {
+      "old": "0060-the-language-follows-the-executable",
+      "new": "0014-the-language-follows-the-executable"
+    },
+    {
+      "old": "0061-optional-openid-plans-form-post-is-supported-ciba-comes-later",
+      "new": "0006-identity-issuers-audiences-and-sign-in"
+    },
+    {
+      "old": "0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own",
+      "new": "0015-audit-pieces-transport-search-and-front"
+    },
+    {
+      "old": "0063-the-site-is-static-on-cloudflare-workers-with-a-live-status-api",
+      "new": "0020-the-site-is-static-on-cloudflare-workers"
+    },
+    {
+      "old": "0064-audit-records-are-ocsf-events-with-one-unmapped-sluis-object-and-usage-is-a-separate-stream",
+      "new": "0017-audit-records-the-usage-stream-and-quota"
+    }
+  ],
+  "anchors": {
+    "0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp#how-a-per-actor-rqlite-driver-reaches-its-cluster": "0011-state-is-one-port-with-compare-and-set#how-a-per-actor-rqlite-driver-reaches-its-cluster"
+  }
+}

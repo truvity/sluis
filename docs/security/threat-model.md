@@ -8,7 +8,7 @@ sidebar:
 
 This page lists the threats that sluis v2 is designed against. Each threat names the asset, the attacker's position, the control that stops it, what is left after the control, and the requirements whose test vectors prove the control. The requirements are in the [isolation area](/requirements/iso/) of the catalogue. Each test vector names the threat it proves (`T-n`).
 
-The model follows the decisions of 2026-10-30: boundaries and their isolation levels ([ADR 0009](/decisions/0009-one-installation-per-boundary/)), defence in depth per port ([ADR 0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/)), issuers and tokens ([ADR 0059](/decisions/0059-each-boundary-has-its-own-issuer-and-tokens-carry-one-audience/)), workload identity ([ADR 0012](/decisions/0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials/)), SSH ([ADR 0013](/decisions/0013-ca-and-ssh-ca-are-the-certificate-authorities-and-ssh-uses-only-sluis-own-ca/)) and passkeys with step-up ([ADR 0048](/decisions/0048-passkeys-step-up-and-device-login/)). Nothing here is built yet.
+The model follows the decisions of 2026-10-30: boundaries and their isolation levels ([ADR 0005](/decisions/0005-boundaries-and-the-isolation-ladder/)), defence in depth per port ([ADR 0004](/decisions/0004-drivers-listeners-and-boundary-enforcement/)), issuers and tokens ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/)), workload identity ([ADR 0007](/decisions/0007-workload-identity-and-host-enrolment/)), SSH ([ADR 0008](/decisions/0008-certificate-authorities-for-x509-ssh-and-databases/)) and passkeys with step-up ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/)). Nothing here is built yet.
 
 :::note[Proposed]
 This page is the first version of the threat model required by [REQ-SEC-009](/requirements/sec/#REQ-SEC-009). A threat is added here before its control is designed, and a control is accepted only with a vector that fails at its own layer.
@@ -29,7 +29,7 @@ How much a boundary has of its own is its **isolation level**:
 | Level | What the boundary has of its own |
 |---|---|
 | L0 tenant | Nothing but code: rows kept apart by sluis's own logic. |
-| L1 keys | Its own key-encryption key (which also seals grants), CA and signing keys. |
+| L1 keys | Its own sealing key (which also seals grants), CA and signing keys. |
 | L2 process | Its own actor instances, Unix user or cloud role, and state prefix. |
 | L3 store | Its own state store (an rqlite cluster or a DynamoDB table), bucket and queue. |
 | L4 runtime | Its own Kubernetes cluster, cloud account or hosts, and its own install file. |
@@ -40,7 +40,7 @@ The assets, in the order an attacker wants them:
 
 | Asset | Where it lives |
 |---|---|
-| Authority keys: each environment's CA, SSH CA and token-signing keys, and the sealing key that seals its grants | The keys port: a YubiKey behind the `key-holder`, or KMS. Never exported ([ADR 0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/)). |
+| Authority keys: each environment's CA, SSH CA and token-signing keys, and the sealing key that seals its grants | The keys port: a YubiKey behind the `key-holder`, or KMS. Never exported ([ADR 0012](/decisions/0012-cryptography-and-authority-keys/)). |
 | Issued credentials: tokens, X.509 and SSH certificates, SVIDs | With the clients and workloads; short-lived and, where possible, sender-constrained. |
 | Records: sessions, people, grants, hosts, enrolments, secrets of integrations | The state port, encrypted value by value. |
 | Vendor credentials: OAuth client secrets, API tokens of each company's tenants | The secrets of one integration process each. |

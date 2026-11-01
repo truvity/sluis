@@ -54,7 +54,7 @@ The state store sits on the write path of every batch. This is acceptable given 
 
 <AuditExplorer part="lag" />
 
-The default index of each tested installation is decided in [ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/): `sqlite` on local, a replicated `rqlite` index on boards, so the reader can run on any node, `postgres` on Aurora on lambda, reached through RDS Proxy ([OD-12](/open-decisions/#od-12), revised), and `postgres` on `cnpg` on Kubernetes. The indexer follows each log's signed checkpoints, so the index lags the log by the seal interval, a few seconds, plus its own pass. Where Search runs is derived from the port and driver rules ([OD-32](/open-decisions/#od-32)): with a `sqlite` index on a cluster, for example, the reader runs on the indexer's node. The search index is a rebuildable cache; the chain in the blob is the record.
+The default index of each tested installation is decided in [ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/): `sqlite` on local, a replicated `rqlite` index on boards, so the reader can run on any node, `postgres` on Aurora on lambda, reached through RDS Proxy ([OD-12](/open-decisions/#od-12), revised), and `postgres` on `cnpg` on Kubernetes. The indexer follows each log's signed checkpoints, so the index lags the log by the seal interval, a few seconds, plus its own pass. Where Search runs is derived from the port and driver rules ([OD-32](/open-decisions/#od-32)): with a `sqlite` index on a cluster, for example, the reader runs on the indexer's node. The search index is a rebuildable cache; the chain in the blob is the record.
 
 ## When the writer is down for an hour
 

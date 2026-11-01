@@ -51,7 +51,7 @@ An example; see [the setup patterns](/integrations/connecting/). Neither vendor 
 
 ## v1 → v2 notes
 
-- v1 accepted the design as [ADR 0074](/v1/decisions/0074-goalert-identity-and-a-telegram-module/). The parity list taken from release 1.79.3 does not include a GoAlert or Telegram item, so these two integrations have no parity issue yet.
+- v1 accepted the design as [v1 ADR 0074](/v1/decisions/0074-goalert-identity-and-a-telegram-module/). The parity list taken from release 1.79.3 does not include a GoAlert or Telegram item, so these two integrations have no parity issue yet.
 - The rotation update keeps the active participant: the update call is positional, so the integration computes the active index itself.
 
 :::note[Proposed]

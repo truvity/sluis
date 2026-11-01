@@ -19,7 +19,7 @@ Distribution describes what a release contains, where it is served from, and how
 - **Two homes.** `distribution.sluis.id` is a Cloudflare R2 bucket in the same account as the sluis.id zone. Everything is served from R2 with no redirects. GitHub Releases keeps the same files as the immutable record, with GitHub build provenance attestations.
 - **Signed every way a user checks it.** A `.sha256` per file, a signed `SHA256SUMS`, cosign keyless signatures, OpenPGP-signed apt and dnf metadata, and provenance attestations.
 - **No static upload key.** CI exchanges its GitHub OIDC token with sluis, which mints a short-lived R2 token.
-- **The website is separate.** `sluis.id` is served as static assets on Cloudflare Workers, deployed by GitHub Actions, with a small live status API beside it ([ADR 0063](/decisions/0063-the-site-is-static-on-cloudflare-workers-with-a-live-status-api/)). Only distribution is on R2.
+- **The website is separate.** `sluis.id` is served as static assets on Cloudflare Workers, deployed by GitHub Actions, with a small live status API beside it ([ADR 0020](/decisions/0020-the-site-is-static-on-cloudflare-workers/)). Only distribution is on R2.
 
 ## Pages
 

@@ -4,8 +4,7 @@
 // The format is read from the repository, not written down here:
 //   - the header fields (`**Status:**`, `**Date:**`) and the sections (`## Context` ...) are the
 //     ones 0000-template.md has, in its order;
-//   - the labels each road not taken carries (`Pros:`, `Cons:`, `Why not:`) are the ones the
-//     template's first option has;
+//   - a road not taken is one bullet, `- **Option.** why it lost`, as in the template;
 //   - the allowed statuses are the backticked values of the README's "Status." bullet, and the
 //     template's comment must list the same set; NNNN in a status is a record number that must exist;
 //   - the parts the README's "Format" list names must be the template's fields and sections.
@@ -16,18 +15,26 @@
 //   - each header field appears once, before the first section, in the template's order;
 //     the status is an allowed value and the date a real YYYY-MM-DD day;
 //   - each section appears exactly once, in the template's order, and is not empty;
-//   - "Roads not taken" has at least one `###` option, and each option has a bullet for every label
-//     (`- Pros: ...`, `- **Pros:** ...` or `- **Pros**: ...`) with text after the colon or on an
-//     indented next line. Before the colon a label may carry a qualifier in parentheses
-//     ("Why not (inferred):") or one from QUALIFIERS ("Why not first:");
-//   - no line of the template's instructions comment (<!-- ... -->) is left;
+//   - "Roads not taken" holds only road bullets (`- **Option.** reason` or `- **Option:** reason`),
+//     at least one, and no `###` option;
+//   - one `Proposal: [issue #N](https://github.com/truvity/sluis/issues/N)` line comes before the first section;
+//   - no line of the template's instructions comment (<!-- ... -->) is left, no "(inferred" marker and no
+//     "Rewritten in place" history line; an Accepted record says nothing is "not decided" or "will be decided";
 //   - the README index has exactly one row for it, linking the file, with the same status.
 // And the index has no row without a file.
+//
+// Then the citations, in docs/ (Markdown and YAML), site/src/, the root Markdown files and .claude/:
+//   - every "ADR NNNN" (and "ADRs NNNN and NNNN") names a record that exists; "v1 ADR NNNN" and a
+//     ritueel record ("ritueel's ADR NNNN", "ADR NNNN in its repository") are someone else's numbers;
+//   - every link to a record, `/decisions/NNNN-slug/` or `decisions/NNNN-slug.md`, names a record file,
+//     and its `#anchor`, if any, is a heading of that record (GitHub's slug rules, as the site uses);
+//   - docs/decisions/renumbered.json, the map of the 2026-11-01 renumbering, names as `new` only records
+//     that exist and as `old` only slugs that are not files, and site/astro.config.mjs reads it (the redirects).
 //
 // usage: tools/checks/decisions.mjs [repo-root]
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { reporter, repoRoot } from './lib.mjs';
+import { reporter, repoRoot, trackedFiles } from './lib.mjs';
 
 const root = repoRoot();
 const dir = join(root, 'docs', 'decisions');
@@ -63,9 +70,11 @@ function sections(text) {
 }
 
 const FIELD = /^\*\*([A-Z][A-Za-z ]*):\*\*\s*(.*?)\s*$/;
-const LABEL = /^\s*-\s+(?:\*\*)?([A-Z][A-Za-z ]*?)(?:\*\*)?:(?:\*\*)?(?:\s|$)/;
-// Words a label may carry before its colon, besides a parenthesised note.
-const QUALIFIERS = ['first'];
+// A road not taken: the option in bold, ending in a full stop or a colon, then why it lost.
+const ROAD = /^- \*\*(.+?)[.:]\*\*\s+\S/;
+const PROPOSAL = /^Proposal: \[issue #(\d+)\]\(https:\/\/github\.com\/truvity\/sluis\/issues\/(\d+)\)/;
+// Words an Accepted record does not use about its own content.
+const OPEN_PART = /\bnot (?:yet )?decided\b|\bwill be decided\b|\bto be decided\b|\bundecided\b|\bdecided later\b/i;
 
 // ---- the format, from the template
 if (!existsSync(join(dir, TEMPLATE))) {
@@ -78,18 +87,13 @@ const FIELDS = tpl.head.map((l) => FIELD.exec(l.line)?.[1]).filter(Boolean);
 const SECTIONS = tpl.secs.map((s) => s.title);
 const ROADS = 'Roads not taken';
 const tplRoads = tpl.secs.find((s) => s.title === ROADS);
-const LABELS = [];
-for (const l of tplRoads?.body ?? []) {
-  if (/^### /.test(l.line)) { if (LABELS.length) break; continue; }
-  const m = LABEL.exec(l.line);
-  if (m) LABELS.push(m[1]);
-}
+const tplRoadLines = (tplRoads?.body ?? []).filter((l) => l.line.trim());
 // The lines of the template's instructions comment; a record keeps none of them.
 const tplComment = (/<!--([\s\S]*?)-->/.exec(template)?.[1] ?? '').split('\n').map((l) => l.trim()).filter((l) => l.length >= 12);
 if (!FIELDS.includes('Status') || !FIELDS.includes('Date')) E(`${TEMPLATE}: no **Status:** and **Date:** fields found`);
 if (!SECTIONS.length) E(`${TEMPLATE}: no ## sections found`);
 if (!SECTIONS.includes(ROADS)) E(`${TEMPLATE}: no "## ${ROADS}" section`);
-if (!LABELS.length) E(`${TEMPLATE}: no option labels (- Pros:, ...) under "## ${ROADS}"`);
+if (!tplRoadLines.length || !tplRoadLines.every((l) => ROAD.test(l.line))) E(`${TEMPLATE}: "## ${ROADS}" must hold only road bullets, "- **Option.** why it lost"`);
 
 // ---- the allowed statuses, from the README, cross-checked with the template comment
 const readme = existsSync(join(dir, 'README.md')) ? read('README.md') : '';
@@ -117,7 +121,7 @@ if (r.errors.length) r.finish(0, 'records');
 const names = readdirSync(dir).sort();
 const records = new Map();
 for (const name of names) {
-  if (name === 'README.md' || name === TEMPLATE) continue;
+  if (name === 'README.md' || name === TEMPLATE || name === 'renumbered.json') continue;
   const m = FILE.exec(name);
   if (!m) { E(`docs/decisions/${name}: not NNNN-kebab-case.md (or README.md, ${TEMPLATE})`); continue; }
   if (m[1] === '0000') { E(`docs/decisions/${name}: 0000 is the template's number`); continue; }
@@ -173,24 +177,25 @@ for (const rec of records.values()) {
 
   const roads = secs.find((x) => x.title === ROADS);
   if (roads) {
-    const options = [];
-    for (const l of roads.body) {
-      const h = /^### (.+)$/.exec(l.line);
-      if (h) options.push({ title: h[1], n: l.n, text: '' });
-      else if (options.length) options[options.length - 1].text += `${l.line}\n`;
+    const body = roads.body.filter((l) => l.line.trim() && !/^<!--.*-->$/.test(l.line.trim()));
+    if (!body.some((l) => ROAD.test(l.line))) E(`${where}:${roads.n}: "## ${ROADS}" has no road; every other option weighed is one bullet, "- **Option.** why it lost"`);
+    for (const l of body) {
+      if (/^### /.test(l.line)) E(`${where}:${l.n}: "## ${ROADS}" has a "###" option; a road is one bullet, "- **Option.** why it lost"`);
+      else if (!ROAD.test(l.line)) E(`${where}:${l.n}: "## ${ROADS}" holds a line that is not a road bullet ("- **Option.** why it lost")`);
     }
-    if (!options.length) E(`${where}:${roads.n}: "## ${ROADS}" has no "### <option>"; every other option weighed is listed`);
-    const qual = `(?:\\s+\\([^()\\n]{1,40}\\)|${QUALIFIERS.map((q) => `\\s+${esc(q)}`).join('|')})?`;
-    for (const o of options) {
-      const body = o.text.split('\n');
-      for (const label of LABELS) {
-        const rx = new RegExp(`^\\s*-\\s+(?:\\*\\*)?${esc(label)}${qual}(?:\\*\\*)?:(?:\\*\\*)?(.*)$`);
-        const at = body.findIndex((l) => rx.test(l));
-        if (at < 0) { E(`${where}:${o.n}: option "${o.title}" has no "- ${label}:" bullet`); continue; }
-        const value = rx.exec(body[at])[1].trim();
-        if (!value && !/^\s+\S/.test(body[at + 1] ?? '')) E(`${where}:${o.n}: option "${o.title}" has an empty "${label}:"`);
-      }
-    }
+  }
+
+  const proposals = head.filter((l) => /^Proposal:/.test(l.line));
+  if (proposals.length !== 1) E(`${where}: ${proposals.length} "Proposal: [issue #N](https://github.com/truvity/sluis/issues/N)" lines before the first section, expected one`);
+  else {
+    const p = PROPOSAL.exec(proposals[0].line);
+    if (!p || p[1] !== p[2]) E(`${where}:${proposals[0].n}: the proposal line is "Proposal: [issue #N](https://github.com/truvity/sluis/issues/N)" with one number`);
+  }
+
+  for (const l of lines(text)) {
+    if (/\(inferred\b/i.test(l.line)) E(`${where}:${l.n}: an "(inferred ...)" marker; state the point or drop it`);
+    if (/\bRewritten in place\b/i.test(l.line)) E(`${where}:${l.n}: a history line; git keeps the history`);
+    if (rec.Status === 'Accepted' && OPEN_PART.test(l.line)) E(`${where}:${l.n}: an Accepted record has no open part ("${OPEN_PART.exec(l.line)[0]}"); settle it, or name it under Follow-ups with its issue`);
   }
 
   if (tplComment.some((l) => text.includes(l))) E(`${where}: still has a line of the template's instructions comment`);
@@ -219,4 +224,80 @@ for (const rec of records.values()) {
   if (!rows.has(rec.num)) E(`docs/decisions/${rec.name}: no row in the README index`);
 }
 
-r.finish(records.size, `records (${SECTIONS.length} sections, ${STATUSES.length} statuses from the template and README)`);
+// ---- citations: "ADR NNNN" and links to a record, across the docs and the site
+// GitHub's heading slugs (github-slugger), which the site's Markdown uses: lower case, markup and
+// punctuation dropped, spaces to hyphens, a repeated slug numbered.
+function headingSlugs(text) {
+  const seen = new Map();
+  const out = new Set();
+  for (const l of lines(text)) {
+    const h = /^#{1,6}\s+(.+?)\s*#*\s*$/.exec(l.line);
+    if (!h) continue;
+    const plain = h[1].replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/<[^>]+>/g, '').replace(/[`*_]/g, (c) => (c === '_' ? '_' : ''));
+    let s = plain.toLowerCase().replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, '').replace(/ /g, '-');
+    const n = seen.get(s) ?? 0;
+    seen.set(s, n + 1);
+    if (n) s = `${s}-${n}`;
+    out.add(s);
+  }
+  return out;
+}
+const slugs = new Map([...records.values()].map((rec) => [rec.name.replace(/\.md$/, ''), rec]));
+const anchorsOf = (slug) => {
+  const rec = slugs.get(slug);
+  rec.anchors ??= headingSlugs(read(rec.name));
+  return rec.anchors;
+};
+const CITE_FILE = /^(?:docs\/.+\.(?:md|mdx|yaml)|site\/src\/.+|[^/]+\.md|\.claude\/.+\.md)$/;
+const ADR_RX = /\bADRs? (\d{4})((?:(?:,? and |, | or |\/)\d{4})*)/g;
+const LINK_RX = /\/?decisions\/(\d{4}-[a-z0-9]+(?:-[a-z0-9]+)*)(\/|\.md)?(#[\w-]+)?/g;
+let cited = 0;
+let files = [];
+try { files = trackedFiles(root).filter((f) => CITE_FILE.test(f)); } catch { /* not a git checkout */ }
+for (const f of files) {
+  let text;
+  try { text = readFileSync(join(root, f), 'utf8'); } catch { continue; }
+  if (!/ADR|decisions\/|\]\(\d{4}-/.test(text)) continue;
+  text.split('\n').forEach((line, i) => {
+    const at = `${f}:${i + 1}`;
+    for (const m of line.matchAll(ADR_RX)) {
+      const before = line.slice(Math.max(0, m.index - 40), m.index);
+      const after = line.slice(m.index + m[0].length, m.index + m[0].length + 30);
+      if (/\bv1\s*$|ritueel/i.test(before) || /^\s*(?:in its repository|of ritueel|in ritueel)/.test(after)) continue;
+      for (const n of [m[1], ...[...m[2].matchAll(/\d{4}/g)].map((x) => x[0])]) {
+        cited++;
+        if (n !== '0000' && !records.has(n)) E(`${at}: "${m[0]}" names record ${n}, which does not exist; a planned decision is named by its issue`);
+      }
+    }
+    for (const m of line.matchAll(LINK_RX)) {
+      const [, slug, , anchor] = m;
+      const ctx = line.slice(Math.max(0, m.index - 80), m.index);
+      // v1's records (/v1/decisions/, master) and ritueel's are someone else's numbers.
+      if (/\/v1$|\/master(?:\/docs)?$|ritueel\S*$/.test(ctx)) continue;
+      if (slug === TEMPLATE.replace(/\.md$/, '')) continue;
+      cited++;
+      if (!slugs.has(slug)) { E(`${at}: a link to the record "${slug}", which is not a file in docs/decisions/`); continue; }
+      if (anchor && !anchorsOf(slug).has(anchor.slice(1))) E(`${at}: the link to ${slug} has the anchor ${anchor}, which is no heading of that record`);
+    }
+  });
+}
+
+// ---- the renumbering map and the redirects made from it
+const mapFile = join(dir, 'renumbered.json');
+if (existsSync(mapFile)) {
+  let map;
+  try { map = JSON.parse(readFileSync(mapFile, 'utf8')); } catch (e) { E(`docs/decisions/renumbered.json: not JSON (${e.message})`); }
+  for (const [k, row] of (map?.records ?? []).entries()) {
+    if (!slugs.has(row.new)) E(`docs/decisions/renumbered.json: records[${k}] points "${row.old}" at "${row.new}", which is not a record`);
+    if (row.old !== row.new && existsSync(join(dir, `${row.old}.md`))) E(`docs/decisions/renumbered.json: records[${k}]: "${row.old}" is still a file, so it cannot be redirected`);
+  }
+  for (const [from, to] of Object.entries(map?.anchors ?? {})) {
+    const [slug, anchor] = to.split('#');
+    if (!slugs.has(slug)) E(`docs/decisions/renumbered.json: anchors["${from}"] points at "${slug}", which is not a record`);
+    else if (anchor && !anchorsOf(slug).has(anchor)) E(`docs/decisions/renumbered.json: anchors["${from}"] points at #${anchor}, which is no heading of ${slug}`);
+  }
+  const astro = join(root, 'site', 'astro.config.mjs');
+  if (existsSync(astro) && !readFileSync(astro, 'utf8').includes('renumbered.json')) E('site/astro.config.mjs does not read docs/decisions/renumbered.json, so the old record addresses would not redirect');
+}
+
+r.finish(records.size, `records (${SECTIONS.length} sections, ${STATUSES.length} statuses from the template and README; ${cited} citations in ${files.length} files)`);

@@ -204,8 +204,8 @@ requirements:
       - {kind: integration-test, ref: "roll-forward restore test"}
   - id: REQ-BACKUP-015
     area: BACKUP
-    statement: "Roll-forward after a restore MUST cover revocations, the issued parts of clients and grants."
-    rationale: "These kinds change between backups and must not revert."
+    statement: "Roll-forward after a restore MUST cover revocations, approvals, consents and the issued parts of clients."
+    rationale: "These kinds change between backups and must not revert, while a grant is a sealed, short-lived output of policy and not a durable record (ADR 0012)."
     level: MUST
     source: design-decision
     status: planned
@@ -214,7 +214,7 @@ requirements:
       - {id: ST-78, section: "8785", depth: Partial}
     issues: [835, 841]
     verification:
-      - {kind: integration-test, ref: "revocation, registration and grant roll-forward test"}
+      - {kind: integration-test, ref: "revocation, registration and approval roll-forward test"}
   - id: REQ-BACKUP-027
     area: BACKUP
     split_from: REQ-BACKUP-015
@@ -257,7 +257,7 @@ requirements:
   - id: REQ-BACKUP-030
     area: BACKUP
     split_from: REQ-BACKUP-015
-    statement: "Roll-forward after a restore MUST cover the certificate issuance ledger and revocation state."
+    statement: "Roll-forward after a restore MUST cover revocation state and the certificate issuance log."
     rationale: "A revocation made after the archive must survive a restore."
     level: MUST
     source: design-decision
@@ -266,7 +266,7 @@ requirements:
     standards: []
     issues: [835]
     verification:
-      - {kind: integration-test, ref: "issuance ledger roll-forward test"}
+      - {kind: integration-test, ref: "issuance log roll-forward test"}
   - id: REQ-BACKUP-016
     area: BACKUP
     statement: "A restore MUST NOT depend on a certificate serial-number ledger."
@@ -454,16 +454,15 @@ requirements:
       - {kind: integration-test, ref: "archive scan for unsealed secrets"}
   - id: REQ-BACKUP-033
     area: BACKUP
-    statement: "An escrow ceremony MUST give a restore a way to open archived sealed secrets when the sealing key is lost."
-    rationale: "A sealed archive is only as recoverable as its sealing key; the escrow is agreed and only its mechanism is open (ADR 0035)."
+    statement: "Sealing a secret MUST encrypt an escrow copy of its data key to the archive recipients, so that a restore can open archived sealed secrets when the sealing key is lost."
+    rationale: "A sealed archive is only as recoverable as its sealing key, and with recipients held apart, one of them an offline hardware token (REQ-BACKUP-001, REQ-BACKUP-020), a lost sealing key is a restore and not a root ceremony (ADR 0011)."
     level: MUST
     source: design-decision
-    status: partial
+    status: planned
     runtimes: all
     standards:
       - {id: ST-95, section: "age", depth: Partial}
-    issues: [914, 835]
-    gap: proposed-design
+    issues: [835, 1015]
     verification:
       - {kind: integration-test, ref: "escrow restore rehearsal"}
   - id: REQ-BACKUP-034

@@ -9,7 +9,7 @@ Checklist, each step as the pages describe it:
 
 - [ ] The proposal issue exists and is linked.
 - [ ] The record is a copy of `docs/decisions/0000-template.md` with the next free number.
-- [ ] Every section is filled, including the roads not taken.
+- [ ] Every section is filled, including the roads not taken (one line each) and the follow-ups.
 - [ ] The status is right for what is decided; open parts are listed with their issue.
 - [ ] The index in `docs/decisions/README.md` has the row.
 - [ ] Requirements and target-state pages that follow are added or named.

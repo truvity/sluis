@@ -6,7 +6,7 @@
 #   checks) and gates the deploy.
 # - `deploy-workers` builds the site for Cloudflare Workers and deploys it with
 #   Wrangler, on every push to `main` (and on a manual run from `main`) after `build`
-#   has passed, in the GitHub environment `cloudflare` (ADR 0063). That environment
+#   has passed, in the GitHub environment `cloudflare` (ADR 0020). That environment
 #   allows only `main` and holds the three secrets of the deploy. A pull request never
 #   runs it: this workflow has no pull_request trigger.
 #
@@ -100,7 +100,7 @@ jobs:
       - name: Check the built site
         run: devbox run -- site/scripts/check-built.sh site/dist
 
-  # The Cloudflare Workers build and deploy (ADR 0063). It repeats the build steps of
+  # The Cloudflare Workers build and deploy (ADR 0020). It repeats the build steps of
   # `build` with SLUIS_TARGET=workers instead of passing an artifact: the KV id of the
   # Worker's configuration is written by the build, from a secret that exists only in
   # this job's environment, and the generated Wrangler redirect lives in a hidden
@@ -192,7 +192,7 @@ jobs:
           jq -nc --arg commit "$GITHUB_SHA" --arg run "$GITHUB_RUN_ID" --arg v1_tag "$V1_TAG" --arg v1_commit "$V1_COMMIT" \
             '{commit: $commit, run: $run, v1_tag: $v1_tag, v1_commit: $v1_commit}' > site/dist/client/build.json
           cat site/dist/client/build.json
-      # Free plan: 20,000 asset files per Worker version (ADR 0063).
+      # Free plan: 20,000 asset files per Worker version (ADR 0020).
       - name: Fewer than 20,000 asset files
         run: |
           files=$(find site/dist/client -type f | wc -l)

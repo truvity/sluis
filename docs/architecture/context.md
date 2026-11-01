@@ -77,7 +77,7 @@ Served on the origin root of the public host (for example `https://sluis.example
 | -------- | --------------- | ------ |
 | Discovery | `GET /.well-known/openid-configuration`, `GET /.well-known/oauth-authorization-server` | Anyone. Public, CORS-open, no credentials |
 | Key set | `GET /keys` | Anyone. Public |
-| Authorization | `GET /authorize` (PKCE `S256` only, `response_mode=query` or `form_post` ([ADR 0061](/decisions/0061-optional-openid-plans-form-post-is-supported-ciba-comes-later/)), `resource`, `prompt`) | A browser |
+| Authorization | `GET /authorize` (PKCE `S256` only, `response_mode=query` or `form_post` ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/)), `resource`, `prompt`) | A browser |
 | Sign-in | `GET /login`, `GET /login/<provider>/start`, `GET /authorize/callback` | A browser, bound to the request by a `__Host-` cookie |
 | Token | `POST /token` with `authorization_code` or `refresh_token` | A client, public with PKCE or confidential with a secret. Refresh tokens are single use |
 | UserInfo | `GET\|POST /userinfo` | A bearer of a live sign-in |
@@ -103,7 +103,7 @@ Both are `POST /token` with `grant_type=urn:ietf:params:oauth:grant-type:token-e
 
 Connect services (JSON or protobuf over HTTP) under the console mount, package `sluis.v1`. The console API lives in `entry`, which is the browser's backend: console calls use the same-origin session cookie, an HttpOnly cookie, and the browser holds no token. A workload may call them with its own platform token; some services also accept a CLI bearer. Roles are viewer and operator, optionally scoped to one directory.
 
-The console's single-page application is a separate artifact, served on the same origin as the API by each runtime's static host: a directory that `entry` serves on bare-metal, the bucket behind the API gateway on serverless, a static container behind the ingress on Kubernetes. An operator-set write that arrives on the console API is carried out by the actor that owns the record kind, which validates it, and it is audited under the signed-in person's name ([ADR 0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
+The console's single-page application is a separate artifact, served on the same origin as the API by each runtime's static host: a directory that `entry` serves on bare-metal, the bucket behind the API gateway on serverless, a static container behind the ingress on Kubernetes. An operator-set write that arrives on the console API is carried out by the actor that owns the record kind, which validates it, and it is audited under the signed-in person's name ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/)).
 
 | Service | What it manages |
 | ------- | --------------- |
@@ -141,7 +141,7 @@ The operations below are new in v2. Their paths and RPC names are proposed and m
 
 | Operation | Shape |
 | --------- | ----- |
-| Device login (RFC 8628), postponed ([ADR 0048](/decisions/0048-passkeys-step-up-and-device-login/)) | `POST /device_authorization`, `GET /device`, approve and deny calls, and `grant_type=urn:ietf:params:oauth:grant-type:device_code` on `/token`. The verification page requires a session that the upstream provider authenticated with MFA, and shows the client, host, IP address and location |
+| Device login (RFC 8628), postponed ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/)) | `POST /device_authorization`, `GET /device`, approve and deny calls, and `grant_type=urn:ietf:params:oauth:grant-type:device_code` on `/token`. The verification page requires a session that the upstream provider authenticated with MFA, and shows the client, host, IP address and location |
 | Certificates for workloads, people and hosts | A Connect call for cert-manager's external-issuer library, and `sluis pki` and `sluis ssh` for people and robots |
 | Static publication | `GET` of CA certificates, CRLs, bundles, SSH CA keys and the key revocation list, public |
 | Audit receiver | `SinkService.Send` served by sluis, so other installs can send records |

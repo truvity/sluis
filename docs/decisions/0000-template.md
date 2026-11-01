@@ -8,13 +8,16 @@ Copy this file to NNNN-short-title.md and fill it in. Delete these comments.
 Status: Proposed, Accepted, Rejected, Superseded by NNNN, or Accepted; amended by NNNN.
 Keep the text public and generic: no private deployment, account, hostname, ticket
 or person other than the maintainer. Use example.com, acme and globex.
+Each road not taken is one bullet: the option in bold, then why it lost.
+A follow-up is a named task or a planned record, with its issue; write "None." if there is none.
 -->
+
+Proposal: [issue #N](https://github.com/truvity/sluis/issues/N).
 
 ## Context
 
 What is the problem? What forces and constraints apply? What must a reader know
-to judge the decision? Link the proposal issue and any v1 ADR it replaces
-("v1 ADR NNNN", on `master`).
+to judge the decision? Name any v1 ADR it replaces ("v1 ADR NNNN", on `master`).
 
 ## Decision
 
@@ -27,16 +30,9 @@ standards register)? Say what it costs.
 
 ## Roads not taken
 
-One entry for each other option that was weighed.
+- **Option A.** Why it lost, in one sentence.
+- **Option B.** Why it lost, in one sentence.
 
-### Option A
+## Follow-ups
 
-- Pros:
-- Cons:
-- Why not:
-
-### Option B
-
-- Pros:
-- Cons:
-- Why not:
+- A named task or a planned record ([#N](https://github.com/truvity/sluis/issues/N)).
