@@ -18,7 +18,7 @@ The research of 2026-10-30 found:
 - **The libraries decide many components.** Go clearly leads for an embeddable OpenID Connect provider, the X.509 CA and the static-ct-api issuance log, the C2SP transparency-log tools, PIV attestation, HPKE, Kubernetes controllers and the vendor SDKs.
 - **The YubiKey path (spike S4, 2026-10-31, firmware 5.8.0, `cryptoki` 0.12.1 over `ykcs11` 2.7.3 against `piv-go` v2.6.0).** Both worked within 1 to 3 ms of each other; the card is the cost, about 146 ms per P-384 signature. `ykcs11` does not hold the card for itself: when a second client touched it, the holder failed in 3 of 5 runs, once without recovering, because libykpiv reconnects with `SCARD_RESET_CARD`; libykpiv also caches the PIN in its own heap, out of reach of `zeroize`. `piv-go` connects exclusively, queues callers fairly and reaches its first signature in 0.17 s. Its own `piv.Verify` rejects attestations from firmware 5.7 and newer, so sluis supplies Yubico Attestation Root 1 and its intermediates.
 - **The small boards (spike S5, 2026-10-31, arm64, 4 cores, 2 GB RAM, eMMC).** The memory fits with Go or with Rust actors; a Go actor costs about 10 MiB of private memory more than a Rust one, about 300 MiB at 30 actors, the largest single difference in the budget. The budget and the write figures are on [Bare metal](/runtimes/bare-metal/).
-- **The Rust side has known gaps.** Connect for Rust (`connectrpc` 0.9.1) is official but before 1.0, with one named maintainer; OpenTelemetry traces in Rust are Beta; GoReleaser's Rust builder warns that workspaces might not work.
+- **The Rust side has known gaps.** Connect for Rust (`connectrpc` 0.9.1) is official but before 1.0, with one named maintainer; OpenTelemetry traces in Rust are Beta; GoReleaser's Rust builder warns that workspaces might not work; spike S10 answered it on 2026-11-01: workspaces work, with one build entry per binary using `--package` and `--bin`.
 
 ## Decision
 
@@ -39,7 +39,7 @@ The research of 2026-10-30 found:
 
 ### Per-actor table
 
-A Rust row holds once its spikes pass ([The spikes are gates](/decisions/0014-the-language-follows-the-executable/#the-spikes-are-gates)). A gate does not stop work: the component is built against its contract and the conformance suite meanwhile, and a failed gate moves it to the fallback candidate. Go rows have no gate.
+A Rust row holds once its spikes pass; S1 and S10 passed on 2026-11-01, and S3 holds the row for `entry` with two checks left (Follow-ups) ([The spikes are gates](/decisions/0014-the-language-follows-the-executable/#the-spikes-are-gates)). A gate does not stop work: the component is built against its contract and the conformance suite meanwhile, and a failed gate moves it to the fallback candidate. Go rows have no gate.
 
 | Component | Language | Rule | Gate | First working version |
 |---|---|---|---|---|
@@ -121,4 +121,4 @@ A fallback is not chosen in advance. When a spike fails, the maintainer picks th
 ## Follow-ups
 
 - The zeroisation review of the `key-holder` PIN paths, and the release-subkey slot on a real card: [#942](https://github.com/truvity/sluis/issues/942).
-- Spikes S1 ([#939](https://github.com/truvity/sluis/issues/939)), S3 ([#941](https://github.com/truvity/sluis/issues/941)) and S10 ([#947](https://github.com/truvity/sluis/issues/947)), before the first release of the components they gate.
+- Spikes S1 ([#939](https://github.com/truvity/sluis/issues/939)) and S10 ([#947](https://github.com/truvity/sluis/issues/947)) pass (2026-11-01); results are on the issues. S3 ([#941](https://github.com/truvity/sluis/issues/941)) holds the Rust row for the slim `entry` on memory, size and threads (latency is parity); two checks remain: the real tunnel client (edge relay tests) and 24-hour fuzz campaigns (CI, [#796](https://github.com/truvity/sluis/issues/796)).
