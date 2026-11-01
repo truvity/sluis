@@ -27,7 +27,9 @@ The **generic OpenID Connect upstream** is the same kind of integration as Googl
 
 Only to be a registered client. sluis asks for `openid email profile` and holds one client id and one client secret (or a `private_key_jwt` signing key) per connection, as credentials. It reads the provider's discovery document and key set from public URLs.
 
-Every returned ID token is checked strictly: issuer and audience match, `nonce` matches the one sent, the signature verifies against the provider's keys, the e-mail is verified, and the provider's `sub` is the one first recorded for that person. Anything else is refused.
+Every returned ID token is checked strictly: issuer and audience match, `nonce` matches the one sent, the signature verifies against the provider's keys, the e-mail is verified, and the value of the connection's subject claim is the one first recorded for that person. Anything else is refused.
+
+The subject claim is `sub` unless the connection says otherwise (`subject_claim`). Microsoft Entra needs `oid`, because its `sub` is different for each application. A person is found by the pair of the issuer and that claim's value, never by e-mail address ([ADR 0027](/decisions/0027-a-person-is-tied-to-an-upstream-account-by-issuer-and-subject-claim/)). The tests sign in through Keycloak on every pull request, and through Google Cloud Identity Free and Microsoft Entra ID Free every night.
 
 ## What a connection can do
 
@@ -39,7 +41,7 @@ Beyond sign-in, a connection supports what a CIAM product or any strict provider
 - **Back-channel logout**: the upstream can end the session at sluis with a back-channel logout token.
 - **Rate limits** per connection.
 
-The generic connector is [#916](https://github.com/truvity/sluis/issues/916), in the CIAM upstream milestone ([Roadmap](/roadmap/)). End-user subjects follow the subject-lifecycle decision record (planned, [#1024](https://github.com/truvity/sluis/issues/1024)). A SAML identity provider and SCIM provisioning for AWS IAM Identity Center are Later ([#918](https://github.com/truvity/sluis/issues/918)).
+The sign-in-only slice of the generic connector is in the first working version ([#1106](https://github.com/truvity/sluis/issues/1106)); the rest of it, [#916](https://github.com/truvity/sluis/issues/916), is in the CIAM upstream milestone ([Roadmap](/roadmap/)). End-user subjects follow the subject-lifecycle decision record (planned, [#1024](https://github.com/truvity/sluis/issues/1024)). A SAML identity provider and SCIM provisioning for AWS IAM Identity Center are Later ([#918](https://github.com/truvity/sluis/issues/918)).
 
 :::note[Proposed]
 A connection proves each domain it serves with a DNS TXT record, and carries a `trust` level that limits what a sign-in through it may reach, so a partner's sign-in does not reach a role meant for employees. Both are designed with the CIAM upstream ([#1023](https://github.com/truvity/sluis/issues/1023)).

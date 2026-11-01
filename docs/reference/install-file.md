@@ -51,6 +51,7 @@ A path inside the file (a policy file, the root list) is relative to the directo
 |---|---|---|
 | `host` | yes | The host of the group issuer. The issuer URL is `https://<host>`, with no path ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#issuers)) |
 | `rp_id` | yes | The passkey relying-party ID: the registrable parent domain of the front host and every boundary host ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#passkeys)) |
+| `token_ttl` | no | The default lifetime of the access and ID tokens of the group issuer. Default and maximum `1h`; it can only be shortened ([ADR 0028](/decisions/0028-grants-come-from-a-declared-vocabulary-and-a-token-carries-fixed-claims-for-one-audience/#lifetimes)) |
 
 ### `boundaries`
 
@@ -61,6 +62,8 @@ A mapping from the boundary's name to its declaration. Every boundary below L4 i
 | `kind` | yes | `environment` or `company` ([ADR 0005](/decisions/0005-boundaries-and-the-isolation-ladder/#boundary-kinds)). The product kind comes with the CIAM upstream milestone |
 | `level` | yes | `L0` to `L3`; L4 is a separate install file ([The isolation ladder](/decisions/0005-boundaries-and-the-isolation-ladder/#the-isolation-ladder)) |
 | `host` | environment boundaries only | The host of the boundary's issuer, a sibling of the front host under `rp_id`. A company boundary has no issuer |
+| `uid_block` | yes | An integer from 0 to 54, unique in the file. In containers the uid of `<actor>@<boundary>` is the actor's pinned base uid plus 1000 times this number ([The uid table](/architecture/manifest/#the-uid-table)). Never reused after a boundary is removed |
+| `token_ttl` | no | The default lifetime of the access and ID tokens of this boundary's issuer, as for [`front`](#front) |
 | `clients` | no | The clients of this boundary's issuer, in the shape of the top-level [`clients`](#clients) |
 
 ### `drivers`
@@ -76,7 +79,7 @@ One driver per port. The values the first working version accepts are the local 
 | `transport` | `spool`, `direct` |
 | `index` | `sqlite` |
 
-`sluis config check` refuses a driver that does not fit the runtime or the node count, and the `software` keys driver refuses to start when `environment` is `production` ([Ports and drivers](/concepts/drivers/#how-sluis-config-check-validates-an-installation)). The on-disk layout of these drivers is on [Storage](/reference/storage/#the-local-drivers-on-disk).
+`sluis config check` refuses a driver that does not fit the runtime or the node count, and the `software` keys driver refuses to start when `environment` is `production` ([Ports and drivers](/concepts/drivers/#how-sluis-config-check-validates-an-installation)). The on-disk layout of these drivers is on [Storage](/reference/storage/#the-local-drivers-on-disk). The audit log is in the first working version ([ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/#the-local-installation)), so the `transport`, `blob` and `index` drivers serve it; the keys for its retention and its witness join schema v1 with the pull request that reads them.
 
 ### `actors`
 
@@ -96,6 +99,7 @@ A mapping from an upstream's name to its declaration. Each upstream is one integ
 |---|---|---|
 | `kind` | yes | The integration that serves it. The first working version has `oidc`, the generic OpenID Connect upstream, sign-in only, with subjects assigned at the first sign-in ([#1106](https://github.com/truvity/sluis/issues/1106), [ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#subjects)) |
 | `issuer` | yes | The upstream's issuer URL |
+| `subject_claim` | no | The ID-token claim whose value, with the issuer, identifies the person: default `sub`. Microsoft Entra needs `oid`, because its `sub` differs per application. A mutable claim (`email`, `preferred_username`, `upn`, `name`) is refused, and so is a change while the upstream has links ([ADR 0027](/decisions/0027-a-person-is-tied-to-an-upstream-account-by-issuer-and-subject-claim/#linking-an-upstream-account)) |
 | `client_id` | yes | sluis's client ID at the upstream |
 | `client_secret` | yes | A reference: `{ credential: NAME }` |
 
@@ -116,6 +120,7 @@ A mapping from a client ID to its declaration, for the group issuer; `boundaries
 | Field | Required | Meaning |
 |---|---|---|
 | `files` | yes | The Cedar policy files, validated against the Cedar schema at load ([ADR 0009](/decisions/0009-policy-is-cedar-in-a-rust-actor/)) |
+| `vocabulary` | yes | The grant vocabulary: the scopes, the things with their roles and what each role implies. Every grant name in a policy file, a client's `requires` and a binding is checked against it ([ADR 0028](/decisions/0028-grants-come-from-a-declared-vocabulary-and-a-token-carries-fixed-claims-for-one-audience/#grant-names-and-the-vocabulary)) |
 
 ### `trust`
 
@@ -134,7 +139,8 @@ Beyond the schema:
 - every boundary host and the front host are siblings under `rp_id`, each host is one origin, and no two issuers share a host;
 - a boundary of kind `company` has no `host`, and every `environment` boundary has one;
 - every `credential` reference names a source that exists (offline: the file is present; the value is never read by `check`);
-- every client's `requires` names grants that the policy declares, and every policy file parses and validates against the Cedar schema;
+- every client's `requires` names grants that the vocabulary declares, no grant name outside the vocabulary appears in a policy file, and every policy file parses and validates against the Cedar schema;
+- every `uid_block` is unique, and every `subject_claim` is a claim that does not change for a person;
 - the drivers fit the runtime and the node count, every enabled key purpose has a key, and the root list verifies and is not older than the one sluis holds.
 
 ## The example file for local
@@ -159,12 +165,13 @@ boundaries:
     kind: environment
     level: L2
     host: sluis.dev.local.test
+    uid_block: 0
     clients:
       example-app:
         kind: confidential
         redirects: [https://app.local.test/callback]
         secret: { credential: client-example-app }
-        requires: [example-users]
+        requires: [dev:example-app:user]
 
 drivers:
   keys: software
@@ -179,6 +186,7 @@ upstreams:
     kind: oidc
     issuer: https://idp.local.test
     client_id: sluis-local
+    subject_claim: sub              # the default; Microsoft Entra needs oid
     client_secret: { credential: upstream-workforce }
 
 clients:
@@ -190,6 +198,7 @@ clients:
 
 policy:
   files: [policy/local.cedar]   # written with the Cedar schema (#1008)
+  vocabulary: policy/vocabulary.yaml
 
 trust:
   root_list: trust/root-list.json   # from ritueel's software root, at first start
@@ -199,10 +208,6 @@ trust:
 
 :::note[Proposed]
 **The hosts and the TLS of the local installation.** The example uses `local.test` names, outside the sluis host names, as a test installation must be ([ADR 0005](/decisions/0005-boundaries-and-the-isolation-ladder/#shared-parts-and-accepted-risks)). The forwarder that publishes `entry`'s socket, the certificate it serves, and whether a browser's virtual authenticator accepts `local.test` as the relying-party ID are measured with the local topology before these names are final. Tracked in [#877](https://github.com/truvity/sluis/issues/877).
-:::
-
-:::note[Proposed]
-**Audit keys.** Whether the audit log is in the first working version decides whether schema v1 has an `audit` key (retention, a witness). The drivers above already name the local transport, blob and index. Tracked in [#837](https://github.com/truvity/sluis/issues/837).
 :::
 
 :::note[Proposed]

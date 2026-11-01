@@ -69,7 +69,7 @@ A record key is `<boundary>/<kind>/<id>`, in the clear, so the store can index i
 
 - **`<boundary>` and `<kind>` come from the library**, from the actor's own identity and the kinds its manifest names; the caller passes only `<id>`.
 - **Each segment is ASCII:** lower-case letters, digits, `-`, `_` and `.`, at most 128 characters, and the whole key at most 300.
-- **`<id>` never holds personal data:** no e-mail address, name or directory account. It is a random id (128 bits, base32 without padding) or a keyed hash of a natural key. A person's record is found by the opaque subject, never by the address.
+- **`<id>` never holds personal data:** no e-mail address, name or directory account. It is a random id (128 bits, base32 without padding) or a keyed hash of a natural key. A person's record is found by the opaque subject, never by the address, and an upstream account's link by a keyed hash of the issuer and the subject claim ([ADR 0027](/decisions/0027-a-person-is-tied-to-an-upstream-account-by-issuer-and-subject-claim/#the-records)).
 - **A kind name is singular kebab-case** (`auth-code`, not `auth_codes`) and unique within a boundary across all actors; the manifest generator refuses a kind two actors write ([One writer per kind](/decisions/0011-state-is-one-port-with-compare-and-set/#one-writer-per-kind)).
 
 ## Record kinds of the first working version
@@ -84,11 +84,17 @@ The kinds that the actors of the first working version write. Each has one write
 | `refresh-token` | `session` | issued, ephemeral | the refresh token's lifetime | no | The hash of a refresh token, its chain and its spent marker |
 | `webauthn-challenge` | `session` | issued, ephemeral | the ceremony's timeout | no | A passkey challenge; spent once |
 | `passkey` | `session` | issued, durable | none | yes | A person's passkey: its public key, credential id hash and sign count |
+| `person` | `session` | issued, durable | none | yes | The subject (128 random bits, lower-case base32, also the key), the WebAuthn user handle (32 random bytes) and the time created ([ADR 0027](/decisions/0027-a-person-is-tied-to-an-upstream-account-by-issuer-and-subject-claim/#the-records)) |
+| `upstream-link` | `session` | issued, durable | none | yes | The subject of the person, the issuer and the subject-claim name; the key is the keyed hash of the issuer and the claim value |
+| `upstream-pin` | `session` | issued, durable | none | yes | The subject claim first used for an issuer; a later contradiction is refused |
+| `link-key` | `session` | issued, durable | none | no | The 32 random bytes that key the two hashes; a sealed secret, made once by a create-only `Put`, never rotated, held by every archive after the first start |
+| `person-hold` | `session` | operator-set | none | yes | That an operator holds a person: who, when and why; set and lifted on the console |
 | `signing-ring` | `signer` | issued, durable | none | yes | The token keys the key set publishes, each with its `x5c` chain |
 | `issued-certificate` | `ca` | issued, durable | the certificate's expiry | yes | The serial, profile, requester, validity and public-key hash of a certificate |
+| `openpgp-binding` | `signer` | issued, durable | none | yes | The primary's certification of the release subkey that `sluis key install` stored, with its expiry; the signing API refuses when it is absent or expired ([ADR 0029](/decisions/0029-the-signing-api-signs-sent-content-for-an-authorised-proof-and-returns-an-armoured-detached-signature/#when-the-api-refuses-to-sign)) |
 | `data-key` | the writer of the kind it serves | issued, durable | none | yes | A data key of one (boundary, kind), wrapped under the sealing key, with its encryption count |
 
-The short lifetimes are defaults in code, written with the actor that owns the kind; token lifetimes are policy's ([#999](https://github.com/truvity/sluis/issues/999)), and session limits are per class ([ADR 0023](/decisions/0023-sessions-have-three-classes-with-limits-per-class/)). `entry`, `console` and `policy` write no record.
+The short lifetimes are defaults in code, written with the actor that owns the kind; token lifetimes have the defaults and caps of [ADR 0028](/decisions/0028-grants-come-from-a-declared-vocabulary-and-a-token-carries-fixed-claims-for-one-audience/#lifetimes), and session limits are per class ([ADR 0023](/decisions/0023-sessions-have-three-classes-with-limits-per-class/)). `entry`, `console` and `policy` write no record.
 
 ## The state envelope
 
@@ -162,12 +168,14 @@ CREATE TABLE meta (name TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;  -- schem
 
 ### `spool` and `sqlite`
 
+**These two drivers serve the audit log,** which is in the first working version ([ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/#the-local-installation)).
+
+- **The spool is a directory per producer of append-only segment files.** Each record is a 4-byte big-endian length, the sealed record and a CRC-32C. A segment is fsynced after each record and closed at 4 MiB or one minute. The writer's cursor per producer moves in its atomic batch ([ADR 0016](/decisions/0016-the-audit-log/#sealing)).
+
 :::note[Proposed]
-**These two drivers serve the audit log only, and whether audit is in the first working version is open.** Options: (a) the emitter, the writer and Search, so every flow is audited from the first build and tests can read the trail (recommended); (b) the emitter and the writer, with Search at parity; (c) no audit in the first working version. With (a) or (b), the spool is a directory per producer of append-only segment files: each record is a 4-byte big-endian length, the sealed record and a CRC-32C, a segment is fsynced after each record and closed at 4 MiB or one minute, and the writer's cursor per producer moves in its atomic batch ([ADR 0016](/decisions/0016-the-audit-log/#sealing)). The `sqlite` index schema follows the query contract with the audit decisions. Tracked in [#837](https://github.com/truvity/sluis/issues/837).
+**The `sqlite` index schema** follows the query contract of Search and is written with it. Tracked in [#839](https://github.com/truvity/sluis/issues/839).
 :::
 
 ## Open items
 
-:::note[Proposed]
-**People's records.** Subjects are assigned when sluis first sees a person from a directory, before the first sign-in ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#subjects)). The kinds that hold a person, their subject and the directory facts, and their writer, wait for the decision on the first working version's upstream ([Install file](/reference/install-file/#open-items)). Tracked in [#1081](https://github.com/truvity/sluis/issues/1081).
-:::
+None on this page that is not marked above. People's records are [ADR 0027](/decisions/0027-a-person-is-tied-to-an-upstream-account-by-issuer-and-subject-claim/#the-records); what a directory adds at the parity milestone is in the same record.

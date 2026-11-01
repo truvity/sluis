@@ -14,12 +14,13 @@ boundaries:
     kind: environment
     level: L2
     host: sluis.dev.local.test
+    uid_block: 0
     clients:
       example-app:
         kind: confidential
         redirects: [https://app.local.test/callback]
         secret: { credential: client-example-app }
-        requires: [example-users]
+        requires: [dev:example-app:user]
 
 drivers:
   keys: software
@@ -34,6 +35,7 @@ upstreams:
     kind: oidc
     issuer: https://idp.local.test
     client_id: sluis-local
+    subject_claim: sub              # the default; Microsoft Entra needs oid
     client_secret: { credential: upstream-workforce }
 
 clients:
@@ -45,6 +47,7 @@ clients:
 
 policy:
   files: [policy/local.cedar]   # written with the Cedar schema (#1008)
+  vocabulary: policy/vocabulary.yaml
 
 trust:
   root_list: trust/root-list.json   # from ritueel's software root, at first start
