@@ -453,10 +453,49 @@ requirements:
     rationale: "A verifier that wants to can then check custody down to the root, and a standard client ignores the member."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-62, section: "4", depth: Partial}
     issues: [774]
+    superseded_by: [REQ-PKI-034, REQ-PKI-035, REQ-PKI-036]
     verification:
       - {kind: integration-test, ref: "the key set of a test installation: every entry has an x5c chain that verifies against the root list"}
+  - id: REQ-PKI-034
+    area: PKI
+    statement: "Each entry of a published key set MUST carry an x5c chain that starts with the entry's own certificate, leads through the node's intermediate and ends at a root."
+    rationale: "A verifier that wants to can then check custody down to the root, and a standard client ignores the member."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "4", depth: Partial}
+    issues: [774, 914]
+    verification:
+      - {kind: integration-test, ref: "the key set of a test installation: every entry has an x5c chain of token certificate, node intermediate and root that verifies against the root list"}
+  - id: REQ-PKI-035
+    area: PKI
+    statement: "The token-signing key MUST be a different key from the key of the intermediate that certifies it."
+    rationale: "A key that signs tokens must not be able to issue certificates, and the CA key must not be used for every token."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [869, 914]
+    verification:
+      - {kind: integration-test, ref: "a scan of the key purposes and the card slot map: the token-signing and ca purposes never resolve to one key or one slot, and a configuration that maps them to one is refused"}
+  - id: REQ-PKI-036
+    area: PKI
+    statement: "The node's intermediate MUST certify the token-signing key with a non-CA certificate that allows signing only."
+    rationale: "A certificate that is not a CA and allows only signatures cannot be used to issue other certificates, even if the token key were misused."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "4.2.1.9", depth: Partial}
+    issues: [913, 914]
+    verification:
+      - {kind: test-vectors, ref: "a token certificate from a test installation: basic constraints say not a CA, and key usage allows digital signature only"}

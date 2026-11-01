@@ -42,7 +42,7 @@ Which keys are certified, and which are only published, depends on how a verifie
 
 - **A key whose public half is trusted through the PKI chain is a hardware-held child key**, attested where possible, and certified through a root that ritueel holds. These are the CA intermediates and the OpenPGP signing subkeys. Each is certified in its own format: an X.509 intermediate by a certificate, an OpenPGP subkey by a binding signature from a primary (see [Roots and certification](#roots-and-certification)).
 - **The SSH CA keys are anchors, not a chain.** The `ssh-user` and `ssh-host` keys are held for the `ssh-ca` actor. Hosts trust a list of SSH CA keys that ritueel publishes, signed by a root. `sshd` never checks a certificate on a CA key.
-- **Token-signing and workload-identity issuer keys are hardware-held and published through JWKS.** They are the intermediates themselves, and each JWKS entry carries an **`x5c`** chain up to a root. A token carries no `x5c` header. A standard verifier ignores the member and gets the public key from the JWKS; a verifier that wants to can check the chain to a root it trusts.
+- **Token-signing and workload-identity issuer keys are hardware-held, separate from the CA key, and published through JWKS.** A token key is not the intermediate and never issues a certificate. It is its own key, and the node's own intermediate certifies it with a **non-CA certificate that allows signing only**. Each JWKS entry carries an **`x5c`** chain: the token certificate, then the node intermediate, then up to a root. A token carries no `x5c` header. A standard verifier ignores the member and gets the public key from the JWKS; a verifier that wants to can check the chain to a root it trusts. The intermediate issues the token certificate itself, so no ceremony is involved; its profile is part of the leaf profiles that [ADR 0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/) leaves to a planned record.
 - **Ephemeral keys are outside the rule.** Session keys, ECDH keys, wrapped data keys and derived keys are made for one use and are not certified or published as authority keys.
 
 ## Direct signing
@@ -112,7 +112,7 @@ On the AWS installations there are six key purposes, in each environment. Aliase
 | Audit log | `ECC_NIST_P384`, `SIGN_VERIFY` | Audit batch heads, one key per log, used only by that log's writer |
 | Grant | `ECC_NIST_P384`, `SIGN_VERIFY` | Mint grants, held by `policy` |
 
-In the KMS topology, the X.509 CA row is the intermediate of each environment. Its root is also a KMS key, held by ritueel. The SSH CA keys are separate keys of the `ssh-ca` actor, so one key never serves two purposes.
+In the KMS topology, the X.509 CA row is the intermediate of each environment. Its root is also a KMS key, held by ritueel. The token-signing key is a key of its own, certified by that intermediate with a non-CA certificate for signing only, and the SSH CA keys are separate keys of the `ssh-ca` actor, so one key never serves two purposes.
 
 The symmetric key wraps the data key of each (boundary, record kind) for the state encryption ([Data](/concepts/data/#every-value-is-encrypted)), the cookie-sealing key of `session` and the sealed secrets, each with its own encryption context; the key policy lets each actor decrypt only under the contexts its manifest names. The enrolment key, which opens the HPKE-sealed enrolment requests of [machine identity](/concepts/machine-identity/#enrolment-is-encrypted-end-to-end), is held by KMS or `key-holder`, and only `exchange` may use it.
 
@@ -120,22 +120,31 @@ The reason for one key per authority purpose is how KMS works. A KMS key has one
 
 ## YubiKey layout
 
-A YubiKey in PIV mode has 24 slots and **no symmetric keys**. The slot plan for a node card:
+A YubiKey in PIV mode has 24 slots and **no symmetric keys**. A node card uses a **static slot map with one slot per purpose**, and a rotation slot for each signing purpose. The yearly renewal makes the new key while the old one is still valid, so a signing purpose holds two keys for a while and needs two slots. The default map is version 1:
 
-| Slot | Use |
-|---|---|
-| `9c` | Node intermediate and signing |
-| `9d` | ECDH sealing and ring wrap |
-| `82` | `ssh-user` CA, for `ssh-ca` |
-| `83` | `ssh-host` CA, for `ssh-ca` |
-| `84` | OpenPGP signing subkey, through `key-holder` (see [Roots and certification](#roots-and-certification)) |
-| `85` to `95` | Retired sealing keys |
-| `9e` | Avoided |
+| Purpose | Slot | Rotation slot |
+|---|---|---|
+| X.509 CA (the node intermediate) | `9c` | `82` |
+| Token signing | `9a` | `83` |
+| `ssh-user` CA, for `ssh-ca` | `84` | `85` |
+| `ssh-host` CA, for `ssh-ca` | `86` | `87` |
+| OpenPGP release signing subkey, through `key-holder` (see [Roots and certification](#roots-and-certification)) | `88` | `89` |
+| Audit log key | `8a` | `8b` |
+| Usage log key | `8c` | `8d` |
+| Mint grant | `8e` | `8f` |
+| Sealing (ECDH, ring wrap) | `9d` | `90` to `95` hold older sealing keys until their data keys are re-wrapped |
+| None | `9e` | Not used: the card-authentication slot signs without a PIN by default |
+
+The 24 slots are the four named PIV slots (`9a`, `9c`, `9d`, `9e`) and the 20 retired slots, `82` to `95` in hex. The map uses 23 of them and leaves `9e` empty. The two slots of a signing purpose are used in turn: the renewal generates the new key in the purpose's free slot while the old key still signs, and the old slot is cleared once its certificate has expired and is the free slot of the next renewal. Slots `90` to `95` bound the number of older sealing keys a node keeps at six.
+
+**Keys are per environment boundary, not per tenant.** A card belongs to one boundary. The data keys of tenants and companies are wrapped by the sealing key, so they need no slots of their own.
+
+The token key sits in its own slot, apart from the CA key, so that a key that signs tokens can never issue a certificate. Its certificate is a non-CA certificate issued by the key in `9c` (see [The key rule](#the-key-rule)).
 
 :::note[Proposed]
-The slots for the two SSH CA keys (`82` and `83`) and for the release subkey (`84`) are a proposal. They are the first three free retired slots, which moves the retired sealing keys to `85` to `95`. The signing subkey is held in a PIV slot and reached through `key-holder`, like every other node key. The OpenPGP application is not used on a node.
+The signing subkey is held in a PIV slot and reached through `key-holder`, like every other node key. The OpenPGP application is not used on a node.
 
-The slots are a map with one reservation per purpose, and ranges kept for rotation and future use. Defaults ship in code and an installation may override them in configuration. `sluis config check`, `sluis key request` and node initialisation refuse a collision or a purpose with no slot. The exact numbers are settled when `key-holder` is built.
+The slots are a map that is documented and versioned, and the table above is its default (version 1). Defaults ship in code and an installation may override them in declared configuration. `sluis config check`, `sluis key request` and node initialisation refuse a collision or a purpose with no slot. The exact numbers are settled when `key-holder` is built ([issue #914](https://github.com/truvity/sluis/issues/914)).
 :::
 
 There is one YubiKey per node. EUCLEAK, a side-channel flaw in the older firmware, is fixed from firmware 5.7. The root cards belong to ritueel, are kept apart, and never sit in a node.
@@ -170,7 +179,7 @@ Because the device has no symmetric key, sealing uses ECDH and HKDF in the style
 1. To seal, the sealer generates an ephemeral P-384 key and performs ECDH against the slot's **public** key. It runs HKDF over the shared secret to derive an AEAD key, encrypts, and stores the ephemeral public key beside the ciphertext. No hardware is needed to seal.
 2. To open, the device performs ECDH between slot `9d`'s private key and the stored ephemeral public key, and the same HKDF yields the same AEAD key.
 
-The consequence is that sealing needs the YubiKey only when opening. Retired slots `85` to `95` keep older sealing keys alive after rotation, so what was sealed under them can still be opened.
+The consequence is that sealing needs the YubiKey only when opening. Slots `90` to `95` keep older sealing keys alive after rotation, so what was sealed under them can still be opened.
 
 ## Roots and certification
 
@@ -180,6 +189,8 @@ sluis holds **no root**. The roots, the ceremonies that use them and every trans
 2. **Certify.** At ritueel's ceremony the card of the year checks the proof, shows the fingerprint, and signs. This is the only step that touches a root.
 3. **Install.** `sluis key install` checks that the chain leads to a root in the root list and that the certificate matches the key, then starts using it.
 4. **Watch.** `sluis key status` shows each key and its expiry. An intermediate lasts about 13 months; sluis warns 60, 30 and 14 days before it ends, because the yearly renewal needs a person at ritueel's side.
+
+The token key's certificate is not part of this exchange. The node's own intermediate issues it, as a non-CA certificate for signing only, and a new one is issued under each new intermediate.
 
 Hosts hold a signed **root list** that ritueel produces, pin the public keys of the roots, and refuse an older list. `sluis trust sync` verifies it.
 

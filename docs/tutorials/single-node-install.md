@@ -101,18 +101,21 @@ The two lines about systemd 249 and kernel 5.10 are the board exception, and a w
 
 ## 5. Prepare the YubiKey slots
 
-The YubiKey holds the node's keys in PIV slots. It has no symmetric keys, so sealing uses ECDH plus HKDF with a P-384 key in a slot. The plan is:
+The YubiKey holds the node's keys in PIV slots. It has no symmetric keys, so sealing uses ECDH plus HKDF with a P-384 key in a slot. Each purpose has its own slot, and each signing purpose has a rotation slot that stays empty until the first yearly renewal. The default map is:
 
-| Slot | Purpose |
-|---|---|
-| `9c` | Node intermediate and signing |
-| `9d` | ECDH sealing and ring wrap |
-| `82` | SSH user CA |
-| `83` | SSH host CA |
-| `84` | Release subkey |
-| `85` to `95` | Retired sealing keys |
+| Purpose | Slot | Rotation slot |
+|---|---|---|
+| Node intermediate (X.509 CA) | `9c` | `82` |
+| Token signing | `9a` | `83` |
+| SSH user CA | `84` | `85` |
+| SSH host CA | `86` | `87` |
+| Release subkey | `88` | `89` |
+| Audit log key | `8a` | `8b` |
+| Usage log key | `8c` | `8d` |
+| Mint grant | `8e` | `8f` |
+| ECDH sealing and ring wrap | `9d` | `90` to `95` hold older sealing keys |
 
-This slot plan is proposed until ADR 0032 settles it. Slot `9e` is avoided. All keys are EC P-384. Change the default PIN and management key first, then let sluis generate the keys on the device so that they never leave it.
+The token-signing key is not the intermediate: it has a slot of its own, and the intermediate issues its certificate. This slot map is proposed until `key-holder` is built ([ADR 0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/#the-card-slot-map)). Slot `9e` is not used. All keys are EC P-384. Change the default PIN and management key first, then let sluis generate the keys on the device so that they never leave it.
 
 ```sh
 # Example
@@ -123,14 +126,19 @@ sluis keys init --device yubikey
 # Example output
 PIN: ********
 slot 9c   generated   ECC P-384   on device
+slot 9a   generated   ECC P-384   on device
+slot 84   generated   ECC P-384   on device
+slot 86   generated   ECC P-384   on device
+slot 88   generated   ECC P-384   on device
+slot 8a   generated   ECC P-384   on device
+slot 8c   generated   ECC P-384   on device
+slot 8e   generated   ECC P-384   on device
 slot 9d   generated   ECC P-384   on device
-slot 82   generated   ECC P-384   on device
-slot 83   generated   ECC P-384   on device
 node public keys written to /var/lib/sluis/node/public/
 ```
 
 :::note[Proposed]
-The command that provisions the slots is not yet decided. What is fixed is the slot plan and that the keys are generated on the device.
+The command that provisions the slots is not yet decided. What is fixed is the slot map and that the keys are generated on the device.
 :::
 
 Store the PIN where only the `key-holder` can read it.
