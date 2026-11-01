@@ -66,7 +66,7 @@ flowchart TB
 | [Actors](/concepts/actors/) | Which processes make up sluis, what does each hold and need, and why are the signer and the policy separate? |
 | [Ports and drivers](/concepts/drivers/) | How does an actor reach keys, state and storage without knowing the technology, which driver fits which runtime, and who may use which driver? |
 | [Integrations](/concepts/integrations/) | How do vendors plug in, and why can they never decide? |
-| [Keys](/concepts/keys/) | Which key backs which purpose in each installation, which algorithms are supported, and how are the roots kept? |
+| [Keys](/concepts/keys/) | Which key backs which purpose in each installation, which algorithms are supported, and how is an intermediate certified? |
 | [Identity](/concepts/identity/) | How does a process on a node prove who it is to a cloud? |
 | [Machine identity](/concepts/machine-identity/) | How do hosts, pods and CI jobs get a SPIFFE identity from sluis, and how does a host join? |
 | [Configuration](/concepts/configuration/) | How is an installation configured, validated and explained? |

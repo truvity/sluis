@@ -56,7 +56,7 @@ SPIRE solves the same problem, and sluis maps onto it. The table is for readers 
 | Node attestors | **Verifier drivers**, one per proof kind, in `exchange` |
 | Workload attestors | The caller's uid on a node (peer credentials on a Unix socket), the projected ServiceAccount token on Kubernetes |
 | Registration entries | Declared rules plus Cedar policy |
-| The SPIRE server's CA | `ca`, with an intermediate certified by both roots ([Keys](/concepts/keys/#the-roots-and-the-ceremony)) |
+| The SPIRE server's CA | `ca`, with an intermediate that a root held by ritueel certifies ([Keys](/concepts/keys/#roots-and-certification)) |
 | The trust bundle | A signed SPIFFE-format bundle, delivered by `sluis trust sync` (below) |
 
 ## Proof kinds are verifier drivers
@@ -74,7 +74,7 @@ Each kind of proof is a **verifier driver** in `exchange`. A verifier holds publ
 | `tailscale-whois` | The Tailscale node behind the connection | Next |
 | TPM | A TPM quote | Later |
 
-**Renewal is by possession**: a machine renews with the credential it already holds, over mutual TLS, and is asked to attest again at a fixed interval. The same flow enrols a **replacement sluis node**. The node's intermediate, which the root cards certify, stays a separate ceremony step ([Keys](/concepts/keys/#the-ceremony)).
+**Renewal is by possession**: a machine renews with the credential it already holds, over mutual TLS, and is asked to attest again at a fixed interval. The same flow enrols a **replacement sluis node**. The node's intermediate is certified through the hand-off to ritueel, as a separate step ([Keys](/concepts/keys/#roots-and-certification)).
 
 ## Joining a host
 
@@ -119,14 +119,14 @@ The signed trust bundle carries an **enrolment public key**. The host encrypts i
 
 ### The root fingerprint is pinned
 
-A host that joins must be given the **fingerprint of the roots**, and it refuses a bundle that does not chain to them. The pin covers both roots and updates itself through bundles signed by the current roots. Web PKI is kept so that the host can reach sluis, not as the reason to trust it. The one exception is manual approval, where the person compares the fingerprint shown on both sides.
+A host that joins must be given the **pin of the roots**, the hashes of their public keys, and it refuses a bundle that does not chain to them. The pin updates itself through the signed root list, which only grows in version. Web PKI is kept so that the host can reach sluis, not as the reason to trust it. The one exception is manual approval, where the person compares the fingerprint shown on both sides.
 
 ## Trust sync
 
 The trust bundle reaches a host through a **generic package**, not through a package that sluis generates for each estate.
 
 - The `sluis` package ships `sluis trust sync`, with a `sluis-trust-sync.timer` and a oneshot service. They stay off until `sluis trust enroll --url <bundle-url> --fingerprint <root-fingerprint>` configures them.
-- Each run fetches the SPIFFE-format bundle, checks its signature by a key **certified by both roots**, refuses a bundle whose `spiffe_sequence` is lower than the one it has, writes the trust anchors and runs `update-ca-trust` or `update-ca-certificates`.
+- Each run fetches the SPIFFE-format bundle, checks the bundle and the root list against the pinned roots (the signature must be by a root in the list the host holds), refuses a bundle whose `spiffe_sequence` or a root list whose version is lower than the one it has, writes the trust anchors and runs `update-ca-trust` or `update-ca-certificates`.
 - The unit is hardened: it may write only the anchor directory and the extracted store.
 - On Kubernetes the same bundle feeds a trust-manager `Bundle` source or a `ClusterTrustBundle`.
 

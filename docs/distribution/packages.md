@@ -26,7 +26,7 @@ The `.deb` and `.rpm` packages are split by function, and every driver executabl
 
 | Package | Holds |
 |---|---|
-| `sluis` | The CLI, `sluis agent`, `sluis trust sync` with its timer ([Machine identity](/concepts/machine-identity/#trust-sync)), and the `sluis ceremony` subcommands with their OpenPGP-card helper |
+| `sluis` | The CLI, `sluis agent`, `sluis trust sync` with its timer ([Machine identity](/concepts/machine-identity/#trust-sync)), and the `sluis key` subcommands (`request`, `install`, `status`) |
 | `sluis-node` | The node agent |
 | `sluis-server` | The core actors and the first-party integrations |
 | `sluis-driver-<name>` | One driver executable, with the system packages it needs |
@@ -48,7 +48,7 @@ Examples of driver packages and what they bring:
 
 No package depends on a driver package except the meta-packages. The lambda and kubernetes installations have no `.deb` or `.rpm`, so they have no meta-package, and the local installation runs the images under Docker, so there is no `sluis-install-local` until a native local mode exists (decided 2026-10-31, [ADR 0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)).
 
-The ceremonies need no package of their own. `sluis ceremony …` runs a Rust helper that drives the OpenPGP cards, shipped in the `sluis` package under `/usr/libexec/sluis/helpers/`. On the offline live USB system the same `sluis` runs with the same configuration: a ceremony is prepared online, run offline, and completed and published online ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)).
+Root ceremonies are not part of sluis: they belong to [ritueel](https://ritueel.id), which publishes its own packages. The keyring package that apt and dnf use to verify sluis releases is built with ritueel's tools and published with the release ([Release signing](/distribution/release-signing/#the-openpgp-release-key)).
 
 The packages ship systemd **template units** only, `sluis-<actor>@.service` and `sluis-<actor>@.socket`, and a systemd generator that reads `/etc/sluis/install.yaml` and creates the instances ([Bare-metal](/runtimes/bare-metal/#what-runs-where)). sluis does not generate packages per installation.
 
@@ -121,7 +121,7 @@ gpgkey=https://distribution.sluis.id/keys/sluis-release.asc
 Each component is a tarball for each architecture at `bin/<version>/<component>_linux_{amd64,arm64}.tar.gz`, with its `.sha256` beside it. Use a tarball when you manage the units yourself. The layout inside a package or tarball is the same, and the directory that held the actors was renamed from `roles` to `actors`:
 
 ```text
-/usr/libexec/sluis/{actors,drivers,integrations,node,helpers,vendor}/<short-name>
+/usr/libexec/sluis/{actors,drivers,integrations,node,vendor}/<short-name>
 ```
 
 ## Lambda zips

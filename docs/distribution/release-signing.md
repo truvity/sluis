@@ -12,9 +12,9 @@ Every sluis artifact can be checked against more than one signature, made by dif
 
 - **One version per repository.** The whole repository has one version, and every artifact of a release carries it.
 - **GoReleaser v2**, open-source edition, builds the release. Rust builds are included. The YubiKey driver builds in a native per-architecture CI job because it needs cgo against pcsc-lite.
-- **A `.sha256` per file**, and a **`SHA256SUMS`** file for the release, signed once with cosign (`.sig`) and once with OpenPGP (`.asc`). The one OpenPGP signature verifies with either of the two release certificates (see [why](#why-two-primaries-and-one-shared-subkey)).
+- **A `.sha256` per file**, and a **`SHA256SUMS`** file for the release, signed once with cosign (`.sig`) and once with OpenPGP (`.asc`). The OpenPGP signature verifies against the release keyring (see [The OpenPGP release key](#the-openpgp-release-key)).
 - **cosign keyless signing** through GitHub OIDC. There is no long-lived cosign private key; the signature is tied to the workflow identity that ran in the repository.
-- **OpenPGP-signed apt and dnf metadata.** There are two primary keys, offline, one on each card of a pair of YubiKeys. Once a signing installation exists, the release is signed with an **expiring signing subkey** that both primaries certify, so one signature verifies under either. See [The OpenPGP release key](#the-openpgp-release-key).
+- **OpenPGP-signed apt and dnf metadata.** The release is signed by sluis's signing API with an **expiring signing subkey** that a primary bound; the primaries are held by ritueel. See [The OpenPGP release key](#the-openpgp-release-key).
 - **Build provenance attestations**, made by GitHub, for every artifact.
 - **Two copies.** R2 serves the files; GitHub Releases is the immutable record.
 
@@ -44,13 +44,13 @@ cosign verify-blob \
   --certificate SHA256SUMS.pem \
   SHA256SUMS
 
-# Example: OpenPGP, with the certificate of either release primary
-gpgv --keyring ./release-a.gpg SHA256SUMS.asc SHA256SUMS
+# Example: OpenPGP, with the release keyring
+gpgv --keyring ./sluis-release-keyring.gpg SHA256SUMS.asc SHA256SUMS
 
 sha256sum -c SHA256SUMS --ignore-missing
 ```
 
-The certificate identity pins the repository, so a signature made by any other repository's workflow fails. The release OpenPGP public keys and the cosign public key are in `keys/`.
+The certificate identity pins the repository, so a signature made by any other repository's workflow fails. The release keyring and the cosign public key are in `keys/`.
 
 :::note[Proposed]
 Where the cosign certificate is stored (a `.pem` beside the `.sig`, or inside a bundle) is not yet decided. The commands show the first form. The OpenPGP signature file is named `SHA256SUMS.asc` here, and that name is a proposal too.
@@ -63,9 +63,9 @@ The package manager verifies the repository for you.
 - **apt** verifies `InRelease` (or `Release` with `Release.gpg`) against the key named by `signed-by`. A `NO_PUBKEY` or `BADSIG` error means the key or the metadata is not the one you set up.
 - **dnf** verifies the metadata with `repo_gpgcheck=1` and each package with `gpgcheck=1`.
 
-Verify the key itself when you add it: a primary key's fingerprint is stable across subkey changes, so compare it with the copy attached to the GitHub release. See [Packages](/distribution/packages/) for the setup.
+Verify the key itself when you add it: a primary key's fingerprint is stable across subkey changes, so compare it with the copy attached to the GitHub release. The keyring package carries every active primary and every current subkey binding; use it, not one primary's certificate. See [Packages](/distribution/packages/) for the setup.
 
-When a signing subkey is rotated, the public key files in `keys/` are updated with the new subkey, under the same primary keys. Refresh your copy of the public key when a repository starts failing after the old subkey's expiry date.
+A signing subkey lasts about 13 months and is renewed every year, and each renewal ships in a new keyring package. Refresh your keyring when a repository starts failing after the old subkey's expiry date.
 
 ### Binaries and Lambda zips
 
@@ -95,61 +95,44 @@ A Helm chart pins its images by digest, so verifying the chart and installing it
 
 The OpenPGP key is a **dedicated sluis release identity**, not anyone's personal key.
 
-- **Two primary keys, one per root card.** Each card of a pair of YubiKeys generates its own primary key on the card, so no primary key ever exists outside hardware. No key is ever copied between the cards, so each card keeps its attestation. Both primaries are authoritative; the second card is not a spare. The same two cards hold the two [roots](/concepts/keys/#the-roots-and-the-ceremony).
-- **Each node holds one signing subkey S<sub>i</sub>, bound under both primaries.** The subkey carries a binding signature and a back-signature under each primary. Every release gets **one signature**, and it verifies with certificate A or certificate B.
-- **Creating or rotating S<sub>i</sub> needs both cards**, because each primary signs the binding and S<sub>i</sub> signs a back-signature to each.
-- **Expiry.** The primaries expire in 2 years and are extended at each yearly drill. The subkeys last 2 years, staggered so that they do not all expire together.
-- **Revocation.** Revoke a subkey under **both** primaries. `gpg` and `gpgv` ignore a revocation made under only one, so a verifier that holds a single certificate would still accept the subkey.
-- **The maintainer's personal key certifies each release key**, so a user who already trusts the maintainer's key has a path to the release identity.
-- **Nothing is signed before phase 2** of the [roadmap](/roadmap/). The guides and tests show how to generate each primary key on its own YubiKey, as a key ceremony, so the ceremony is something anyone can read and rehearse. The ceremony is also planned as a feature of sluis itself (`sluis ceremony`) for the keys on the cards.
+- **The primaries are ritueel's.** There are two primary keys, one on each root card, held and used only at ritueel's yearly ceremony. They are redundancy, not two-person control. How they are made, why there are two, how the cards alternate and what to do when one is lost are taught at [ritueel.id](https://ritueel.id/concepts/openpgp-release-keys/). sluis does not hold a primary and does not run that ceremony.
+- **A signing subkey does the work.** It is generated on the signing key store (a node's YubiKey, or a cloud key service), bound by the primary of the year, and carries a back-signature that `key-holder` makes on the card ([ADR 0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)). It lasts about 13 months and is renewed every year, so years overlap. sluis warns 60, 30 and 14 days before it expires.
+- **Users verify with the keyring package,** which carries both primaries and every current subkey binding. A verifier that holds only one primary's certificate cannot check a signature from a subkey that the other primary bound.
+- **A subkey is revoked by the primary of the year.** The revocation reaches users through a new keyring package.
+- **The maintainer's personal key certifies each release key** is an open question, tracked with the publication research (ritueel issue 28).
 
 ### How releases are signed
 
-- **Target.** sluis signs as a service. CI proves its GitHub OIDC identity to sluis, and a node card signs with S<sub>i</sub>. Sigstore provenance is published alongside. CI holds no release signing key of its own.
-- **Until a v2 signing installation exists**, releases are signed offline, directly with the root cards' primaries, using `sluis ceremony`, with a touch for each release. There is no dedicated release card.
+sluis signs as a service. CI proves its GitHub OIDC identity to the signing API, policy decides which repository, branch or workflow may use which key, sluis signs in place and records the signature in the audit log, and the key is never shown. CI holds no release signing key of its own. The project's own releases are the first user, signed with a subkey held in a cloud key service. Sigstore provenance is published alongside.
 
-### Why two primaries and one shared subkey
+The output is an ASCII-armoured detached signature, delivered in stages:
 
-Several signing keys are ordinary in OpenPGP practice. Checked on 2026-10-29:
+| Stage | What is signed |
+|---|---|
+| First version | A detached `.asc` signature over a file or a digest, such as `SHA256SUMS` |
+| v1 parity | The `Release.gpg` and `InRelease` files of an apt repository, and the `repomd.xml.asc` of an rpm repository |
+| Later | The header signature of each rpm package, and a stand-in for `gpg` that git can call, for CI |
 
-- **Debian** signs a stable release's `Release` file with two keys, the archive key of the time and a per-release key, and the keyring package ships every active key. See the [archive keyring package](https://packages.debian.org/sid/debian-archive-keyring), and the [SecureApt history](https://wiki.debian.org/SecureApt), where a transition signed with both the old and the new key was meant to work for clients that knew either one. These are background precedents for several active keys, not a design that sluis copies.
-- **Arch Linux** has five master keys, and a packager key is valid when at least three of them have signed it. See the [master keys](https://archlinux.org/master-keys/).
-- **Key transitions** keep the old and the new key valid together for a while, and the old key signs the new one. See the [Apache guide](https://infra.apache.org/key-transition.html) and the [Riseup template](https://help.riseup.net/en/security/message-security/openpgp/key-transition).
+The design is in [ADR 0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/).
 
-sluis uses two primary keys, one on each card, because a second card that is a spare is a copy, and a copy has lost its attestation. Two primaries exist so that a YubiKey hardware failure removes neither the ability to verify a release nor the ability to sign one. Loss and theft of a card fall to the lost-card procedure in [Keys](/concepts/keys/#a-lost-root-card).
+### Packaging notes
 
-Both primaries certify the same signing subkeys: each node holds **one subkey, bound under both primaries**, instead of each primary having its own subkey and every release being signed twice. The reason is that one signature then verifies under either root. A verifier that holds only certificate A, only certificate B, or both gets a clean success from the same file. With two signatures in separate files, a verifier would have to know which file matches the certificate it holds, and with two signatures in one file `gpg` and `gpgv` exit with status 2 when one of them comes from a key the verifier does not have.
-
-The choice was tested on 2026-10-29, with software keys, on these verifiers: `gpg` 2.4.8, `gpgv` 2.4.8, `sqv` 1.5.0, apt 2.6 (which verifies with `gpgv`), apt 3.0 (which verifies with `sqv`) and rpm 6.0 (which verifies with rpm-sequoia). Each was given certificate A, certificate B, and A and B together, in both import orders. All accepted the one signature every time, with no warning and no merge of the two certificates.
-
-It was tested again on 2026-10-31 with hardware (spike S8, [ADR 0060](/decisions/0060-the-language-follows-the-executable/)): each primary generated as ECDSA P-384 on its own YubiKey 5 test card (firmware 5.8.0), and one P-384 signing subkey bound under both. `gpg` and `gpgv` 2.2.27, 2.2.40 and 2.4.7, `sqv` 1.1.0 and 1.3.0, apt 2.4.14, 2.6.1 and 3.0.3, and rpm 6.0.2 with rpm-sequoia 1.10.2 accepted the subkey's signature and each primary's direct signature with certificate A, B or both, and rejected a changed file and a certificate that did not match. apt, through `gpgv` or `sqv`, and rpm-sequoia therefore accept ECDSA P-384 release signatures.
-
-What the shared subkey costs, and what to do about it:
-
-- **No threshold.** One signature counts once, not once per primary. A rule such as "both A and B must have endorsed this release" cannot be expressed with a shared subkey.
-- **A compromise is shared.** Compromise of the subkey is compromise of both identities at signing time. The subkey sits on a node card that signs without a touch, so the controls that limit it are that card's PIN, its attestation, the staggered 2-year expiry and revocation.
-- **Revoke under both primaries.** Sequoia-based verifiers (`sqv`, apt 3, rpm 6) enforce a revocation made under either primary. `gpg` and `gpgv` do not enforce one that is made under a single primary, and `gpgv` prints a plain "Good signature". A revocation published under only one primary can leave a verifier that holds only the other one trusting the subkey.
-- **Both cards at creation and rotation**, as above.
-
-Packaging notes, from the same tests:
+Measured on 2026-10-29 and 2026-10-31 with `gpg` and `gpgv` 2.2.27 to 2.4.8, `sqv` 1.1.0 to 1.5.0, apt 2.4 to 3.0 and rpm 6.0 (rpm-sequoia): every verifier accepts ECDSA P-384 release signatures. The details of what was tested are at [ritueel.id](https://ritueel.id/concepts/openpgp-release-keys/).
 
 - **`gpgv` needs a binary keyring.** It cannot read an armored file. apt takes either a binary `.gpg` or an armored `.asc` in `Signed-By`.
 - **rpm imports armored keys only.**
 - **apt's `Release.gpg` must be armored**, whatever the key structure. A binary detached signature fails with `NODATA` (apt 2.4, checked again on 2026-10-31).
-- **No encryption subkey in the release certificate.** `gpg`'s card key generation adds an ECDH subkey with an AES-192 key wrap, and rpm-sequoia prints a policy warning about it on every install, although the signature verifies. The ceremony's helper writes only the primary, its user ID and the signing subkeys (spike S8, 2026-10-31).
+- **No encryption subkey in the release certificate.** `gpg`'s card key generation adds an ECDH subkey with an AES-192 key wrap, and rpm-sequoia prints a policy warning about it on every install, although the signature verifies.
 
-To check a release, a verifier needs the signature file and the certificate of either primary:
+To check a release, a verifier needs the signature file and the release keyring:
 
 ```sh
-# Example: the verifier holds certificate A
-gpgv --keyring ./release-a.gpg SHA256SUMS.asc SHA256SUMS
-
-# Example: the verifier holds certificate B
-gpgv --keyring ./release-b.gpg SHA256SUMS.asc SHA256SUMS
+# Example
+gpgv --keyring ./sluis-release-keyring.gpg SHA256SUMS.asc SHA256SUMS
 ```
 
 :::note[Proposed]
-The name of the signature file is not decided. The commands use `SHA256SUMS.asc` as a stand-in. The same file is published for both primaries; there is no second signature file.
+The name of the signature file is not decided. The commands use `SHA256SUMS.asc` as a stand-in. There is one signature file, and it verifies against the keyring.
 :::
 
 :::note[Proposed]
@@ -179,5 +162,5 @@ Only the workflow identity that the policy names can obtain the token, so a fork
 ## What a signature does not prove
 
 - A signature shows who published the file and that it wasn't changed. It doesn't show that the code is free of bugs.
-- The OpenPGP signing subkey is on a node card that signs without a touch. If a node is compromised during the subkey's validity, a bad repository can be signed. The offline primary keys limit that to the subkey's life, and revoking the subkey under both primaries ends it. The cosign identity, the GitHub attestation and the immutable release are independent checks that don't depend on that subkey.
+- The OpenPGP signing subkey is on a card or in a key service that signs without a touch. If the signer is compromised during the subkey's validity, a bad repository can be signed. The primary keys limit that to the subkey's life, and revoking the subkey with the primary of the year ends it. The cosign identity, the GitHub attestation and the immutable release are independent checks that don't depend on that subkey.
 - A new install trusts the key it first sees. Compare the fingerprint on a different channel, for example the copy in the repository's `SECURITY.md`.

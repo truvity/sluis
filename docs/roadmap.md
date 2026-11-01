@@ -74,7 +74,7 @@ The language of each executable is fixed from a set of **spikes**, run before th
 | [S5](https://github.com/truvity/sluis/issues/943) | The memory budget on the boards: each actor and driver under load, in each language, against the 2 GB budget. **Done** (2026-10-31): the memory fits with Go or with Rust actors (about 985 or 680 MiB of a 1380 MiB ceiling on a tier-0 board), rqlite costs about 9 MiB per cluster, and the CPU, not the eMMC, limits writes first, at about 400 commits/s per board. The maintainer decided its open points on 2026-10-31: no thermal action, the write rate estimated from the actor design (about 7 commits/s needed at the measured peak), the estimated rows kept, `GOMEMLIMIT` as a ceiling, and Rust on tier-0 boards unless a serious trade-off |
 | [S6](https://github.com/truvity/sluis/issues/944) | OpenTelemetry from Rust: one trace across a Go and Rust hop. **Done** (2026-10-31): passed with conditions |
 | [S7](https://github.com/truvity/sluis/issues/945) | Configuration in Rust: the same conformance vectors as the Go structs. **Done** (2026-10-31): passed with conditions |
-| [S8](https://github.com/truvity/sluis/issues/946) | The ceremony with OpenPGP cards: two primaries and a shared subkey, verified with the tools tested on 2026-10-29. It decides the Rust card helper that `sluis ceremony` runs. **Done** (2026-10-31): the Rust helper (`openpgp-card` and rPGP) did every step on two cards, `gpg` cannot bind the shared subkey, and every verifier accepted ECDSA P-384. The helper contract (arguments and files, the PIN prompted on the terminal) and a required OpenPGP attestation are decided; the ceremony tooling, the back-signature source and a remote second card holder are reopened for a redesign of the ceremony and root-card model ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)) |
+| [S8](https://github.com/truvity/ritueel/issues/26) | The ceremony with OpenPGP cards. **Moved to ritueel** on 2026-11-01 with the rest of the root ceremonies; the 2026-10-31 result stays in that issue. sluis keeps only the back-signature that `key-holder` makes on the card ([ADR 0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)) |
 | [S10](https://github.com/truvity/sluis/issues/947) | One release train: GoReleaser with a Cargo workspace, for two architectures, with SBOM, signing and provenance, and Lambda zips within their limits |
 
 One more spike was run for the boards' blob store, not before step 1: **Garage on the boards** ([#982](https://github.com/truvity/sluis/issues/982)). **Done** (2026-10-31): Garage v2.5.0 has no conditional writes and no prefix-scoped keys, both open upstream, so the boards use R2 for blobs in the first release and Garage moves to Later.
@@ -109,7 +109,6 @@ The shape of the repository, the build, the patterns every component follows, an
 | [#943](https://github.com/truvity/sluis/issues/943) | Spike S5: board memory budget |
 | [#944](https://github.com/truvity/sluis/issues/944) | Spike S6: OpenTelemetry from Rust |
 | [#945](https://github.com/truvity/sluis/issues/945) | Spike S7: configuration in Rust |
-| [#946](https://github.com/truvity/sluis/issues/946) | Spike S8: ceremony with OpenPGP cards in Rust |
 | [#947](https://github.com/truvity/sluis/issues/947) | Spike S10: GoReleaser and a Cargo workspace |
 
 ### Phase 1: keys, identity, the core actors and boundaries
@@ -121,10 +120,14 @@ Key custody, the port library and its generator, the slim `entry` and the other 
 | [#865](https://github.com/truvity/sluis/issues/865) | Pkl to JSON Schema generator as a separate open-source tool |
 | [#867](https://github.com/truvity/sluis/issues/867) | `sluis doctor` platform checks |
 | [#869](https://github.com/truvity/sluis/issues/869) | JOSE package and per-language verification demos |
-| [#888](https://github.com/truvity/sluis/issues/888) | Release OpenPGP key ceremony on two YubiKeys (guide and tests) |
 | [#892](https://github.com/truvity/sluis/issues/892) | Policy actor in Rust with Cedar (cedar-policy crate) |
 | [#913](https://github.com/truvity/sluis/issues/913) | The ca actor: the X.509 certificate authority |
-| [#914](https://github.com/truvity/sluis/issues/914) | Sluis ceremony: semi-automatic key ceremonies, card slot map and node PIN unlock |
+| [#914](https://github.com/truvity/sluis/issues/914) | `sluis key`: the card slot map and node PIN unlock; the ceremony commands moved to ritueel |
+| [#1066](https://github.com/truvity/sluis/issues/1066) | Hand-off to root custody: `sluis key request`, `install` and `status` |
+| [#1067](https://github.com/truvity/sluis/issues/1067) | `key-holder`: the OpenPGP back-signature for a node subkey |
+| [#1068](https://github.com/truvity/sluis/issues/1068) | Expiry warning for intermediates |
+| [#1070](https://github.com/truvity/sluis/issues/1070) | Hand-off conformance fixtures shared with ritueel |
+| [#1071](https://github.com/truvity/sluis/issues/1071) | Tracker: the first version needs ritueel's software-root mode |
 | [#948](https://github.com/truvity/sluis/issues/948) | Port library: every state value encrypted, scope from the actor's own identity |
 | [#949](https://github.com/truvity/sluis/issues/949) | Generator and drift test: scopes, ACLs, cloud policies, units, sockets and service accounts from one manifest |
 | [#950](https://github.com/truvity/sluis/issues/950) | Isolation test vectors per layer, with the other layers switched off |
@@ -148,6 +151,9 @@ The board drivers, federation, host enrolment and SSH, the conformance pipeline 
 | [#866](https://github.com/truvity/sluis/issues/866) | Systemd unit hardening baseline |
 | [#870](https://github.com/truvity/sluis/issues/870) | Workload identity with the boundary issuer and AWS exchange |
 | [#873](https://github.com/truvity/sluis/issues/873) | Distribution site on R2 |
+| [#1069](https://github.com/truvity/sluis/issues/1069) | KMS proof of key location for the hand-off |
+| [#1072](https://github.com/truvity/sluis/issues/1072) | SSH CA keys as anchors: the signed list of SSH CA keys on hosts |
+| [#1074](https://github.com/truvity/sluis/issues/1074) | Signing API: apt `Release.gpg` and `InRelease`, and rpm `repomd.xml.asc` |
 | [#874](https://github.com/truvity/sluis/issues/874) | Release signing and CI upload credentials |
 | [#875](https://github.com/truvity/sluis/issues/875) | Lambda packaging as zip per actor |
 | [#876](https://github.com/truvity/sluis/issues/876) | OCI images and Helm charts with digest-pinned images |
@@ -155,7 +161,6 @@ The board drivers, federation, host enrolment and SSH, the conformance pipeline 
 | [#879](https://github.com/truvity/sluis/issues/879) | Benchmark YubiKey firmware 5.8 P-384 sign and ECDH on an arm64 board |
 | [#881](https://github.com/truvity/sluis/issues/881) | Board OS images for Ubuntu 26.04 and Rocky Linux 10.2 |
 | [#885](https://github.com/truvity/sluis/issues/885) | Passkeys and step-up for high-privilege grants |
-| [#889](https://github.com/truvity/sluis/issues/889) | Research: publishing and verifying release keys (keyservers, WKD, DNS OPENPGPKEY, verifier tools) |
 | [#890](https://github.com/truvity/sluis/issues/890) | Artifact signing service (OpenPGP subkeys and short-lived X.509 signing certificates behind federated identity) |
 | [#891](https://github.com/truvity/sluis/issues/891) | CI: integration tests on a private runner group (boards and AWS test installations) |
 | [#915](https://github.com/truvity/sluis/issues/915) | Quota: engine, quota state, metering and enforcement, Idempotency-Key |
@@ -195,6 +200,8 @@ After the first release or after v2 parity: FAPI 2.0, CIBA, ACME, device login (
 | [#872](https://github.com/truvity/sluis/issues/872) | Azure Entra federated credential exchange |
 | [#882](https://github.com/truvity/sluis/issues/882) | Site explorers read the permission manifest |
 | [#884](https://github.com/truvity/sluis/issues/884) | Optional TPM 2.0 key support (sealing and node identity) |
+| [#1075](https://github.com/truvity/sluis/issues/1075) | Signing API, later: per-package rpm signatures and a `gpg.program` stand-in for git |
+| [#1076](https://github.com/truvity/sluis/issues/1076) | Planned later: online OpenPGP certification of directory people |
 | [#912](https://github.com/truvity/sluis/issues/912) | FAPI 2.0 security profile: PAR, DPoP and private_key_jwt client authentication |
 | [#918](https://github.com/truvity/sluis/issues/918) | SAML 2.0 identity provider and SCIM provisioning for AWS IAM Identity Center |
 | [#927](https://github.com/truvity/sluis/issues/927) | CIAM backlog: customer sign-in features not yet scheduled |

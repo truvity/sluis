@@ -349,7 +349,7 @@ Every record kind has exactly one component that writes it. Others read through 
 | Per-target tick reports | the ticked integration |
 | Operator-set records of a kind (console channels, runtime switches, console-connected tenants) | the one component that owns the kind, on a request routed by the console. An integration may own an operator-set kind of its own (the chat integration's console channels) and is then its only writer; it never writes learned and operator-set data of the same object |
 | Issued-certificate and SSH-certificate ledgers, CRL and KRL state | PKI, in `ca`; SSH CA, in `ssh-ca`. The ledger exists for revocation and roll-forward, not for serial uniqueness: serials are random 128-bit values |
-| Trust log tiles | trust log, the only appender; ceremony tools submit through it |
+| Trust log tiles | trust log, the only appender; `sluis key install` submits through it |
 | Audit batch objects, the `audit_batches` sequence, dedupe records | audit writer. Erasure and purge commands are appended by the writer on request, never by their requesters |
 | The last signed head | audit writer, through `key-holder`; the witness stores its co-signatures in the blob |
 | The audit index and its cursor | audit indexer |

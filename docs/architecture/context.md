@@ -59,7 +59,7 @@ What each box stands for:
 | **Person** | Signs in through an upstream identity provider, from a browser or from a CLI on a machine with a browser; signs in on a headless machine with device login once it ships (postponed, [#855](https://github.com/truvity/sluis/issues/855)); refreshes, lists and revokes their sessions; signs out |
 | **Robot** | A CI job or a workload presents a platform token (a GitHub Actions token, a Kubernetes ServiceAccount token, an AWS web-identity token) and exchanges it for an access token, a downstream credential, or a certificate |
 | **Relying party** | Reads discovery and the key set, then verifies tokens offline with any standard JOSE library. sluis needs no client library |
-| **Operator** | Connects and reconnects integrations, manages clients and secrets, reads the console, runs backup, restore and migration, and holds the key ceremonies |
+| **Operator** | Connects and reconnects integrations, manages clients and secrets, reads the console, runs backup, restore and migration, and requests and installs the certificates of its intermediates |
 | **Auditor** | Queries the audit trail and verifies it independently, without trusting sluis's index or state |
 | **Upstream provider** | Authenticates people. sluis federates sign-in and never stores a password for a person |
 | **Directory and team systems** | The source of facts: who is in which group or team. Policy maps those facts to grants |
@@ -176,7 +176,7 @@ Operations: `sign` and `verify` (public key only), `wrap` and `unwrap`, `read`, 
 | Query and verify the audit trail | | read r | read r | | put b | | read r | |
 | Console reads and actions | | cas, read r | read r | | put b | | read r | |
 | Back up, restore, migrate | | cas, create, list, put b | list, put, read b | receive b | call, put b | cas, list, put, read b | | |
-| Rotate signing keys, key ceremonies | sign, wrap, unwrap b | create, list b | | | | | | |
+| Rotate signing keys, request intermediates | sign, wrap, unwrap b | create, list b | | | | | | |
 | Discovery and offline verification | | list r | | | | | read r | |
 | Install, bootstrap, health | | create, read b | | | call b | read b | read b | call b |
 | Admit a metered operation | | cas r | | | put b | | | |
