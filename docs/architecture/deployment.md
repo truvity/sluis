@@ -161,7 +161,7 @@ The listener is public by design, and the actor each request is routed to authen
 
 | Runtime and installation | Listener | Who connects |
 | ------------------------ | -------- | ------------ |
-| bare-metal: local | A Unix socket on a shared volume; `entry`'s container has no network | A Compose service (the edge-connector image or a forwarder) that mounts the socket and publishes a port for the developer's browser or the test harness. Production installations never publish one ([ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/#the-local-installation)) |
+| bare-metal: local | A Unix socket on a shared volume; `entry`'s container has no network | The forwarder, a Compose service (a generic reverse proxy that ends TLS) that mounts the socket and publishes a port for the developer's browser or the test harness ([The local installation](/runtimes/local/)). Production installations never publish one ([ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/#the-local-installation)) |
 | bare-metal: boards, or a virtual machine | A Unix socket | `cloudflared` on the same host, a tunnel to the public hostname |
 | serverless: lambda | `127.0.0.1:<port>` inside the function's sandbox, a micro-VM that holds only sluis's own processes | The Lambda Web Adapter, pinned and vendored into sluis's own layer; API Gateway in front |
 | kubernetes | A Unix socket in the pod | The edge relay in the same pod (the default), or a `cloudflared` sidecar |

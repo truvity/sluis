@@ -1,6 +1,6 @@
 ---
 title: Reference
-description: "The specs the first working version is built against: the command tree, the install file, contracts and errors, storage, approved libraries, the actor registry."
+description: "The specs the first working version is built against: commands, install file, contracts, storage, policy, approved libraries and the actor registry."
 status: target
 sidebar:
   order: 0
@@ -15,7 +15,8 @@ These pages fix the shapes a developer needs before writing code for the [first 
 | [Install file](/reference/install-file/) | The install-file schema v1, and the example file of the local installation |
 | [Contracts and errors](/reference/contracts/) | How `proto/` is written and versioned, which services are public, and the error model |
 | [Storage](/reference/storage/) | The port contracts, the record kinds of the first working version, the state envelope and the on-disk layout of the local drivers |
-| [Approved libraries](/reference/approved-libraries/) | The cryptography and parser libraries each language may use |
+| [Policy](/reference/policy/) | The Cedar schema, its entity types and actions, template links, and a worked example with test vectors |
+| [Approved libraries](/reference/approved-libraries/) | The cryptography and parser libraries each language may use, and the choices made for each |
 
 The permission manifest, which generates the enforcement, is on [Architecture](/architecture/manifest/).
 

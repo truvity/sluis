@@ -1,0 +1,4 @@
+[
+{"template_id": "bind-account-to-grant", "link_id": "bind-acme-s-01-acme-example-app-user", "args": {"?principal": "Account::\"acme/s-01\"", "?resource": "Grant::\"acme:example-app:user\""}},
+{"template_id": "revoke-grant-from-account", "link_id": "revoke-u-1002-dev-example-app-user", "args": {"?principal": "Account::\"workforce/u-1002\"", "?resource": "Grant::\"dev:example-app:user\""}}
+]
