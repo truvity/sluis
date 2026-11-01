@@ -3,24 +3,11 @@ title: "sluis: a pluggable identity and access broker"
 description: sluis is an open-source identity and access broker for people, robots and external systems. v2 is being designed in the open.
 status: target
 template: splash
-hero:
-  title: Every system keeps its own idea of who you are.
-  tagline: A pluggable identity and access broker for people, robots and external systems.
-  actions:
-    - text: Start here
-      link: /overview/
-      icon: right-arrow
-    - text: Try the local installation
-      link: /runtimes/local/
-      variant: secondary
-    - text: View on GitHub
-      link: https://github.com/truvity/sluis
-      icon: external
-      variant: minimal
 ---
 import '../site/src/styles/home.css';
 import Marks from '../site/src/components/home/Marks.astro';
 import PainCloud from '../site/src/components/home/PainCloud.astro';
+import PainBand from '../site/src/components/home/PainBand.astro';
 import Chain from '../site/src/components/home/Chain.astro';
 import Principles from '../site/src/components/home/Principles.astro';
 import HomeStatus from '../site/src/components/home/HomeStatus.astro';
@@ -28,6 +15,8 @@ import { fragmented, ceremonies, answers } from '../site/src/components/home/dat
 
 <div class="home not-content">
   <Marks />
+
+  <PainBand />
 
   <PainCloud
     id="fragmented"

@@ -1,0 +1,45 @@
+---
+// The first screen of the home page: the three pains side by side, so a reader sees theirs
+// before anything else. Each column links to the full section below it. The third shows the
+// chain in miniature. The call to action comes straight after, with the honest status.
+import Mark from './Mark.astro';
+import { band, fragmented, ceremonies } from './data';
+
+const shown = band.sso.chips.map((n) => fragmented.find((c) => c.name === n)!);
+const more = fragmented.length - shown.length;
+const heavy = ceremonies.filter((c) => c.band);
+---
+
+<section class="band" aria-label="The three pains">
+  <div class="band-col band-sso">
+    <h2><a href={band.sso.target}>{band.sso.headline}</a></h2>
+    <p>{band.sso.text}</p>
+    <ul class="band-chips">
+      {shown.map((c) => <li><span class="band-chip">{c.mark && <Mark name={c.mark} />}<b>{c.name}</b></span></li>)}
+      <li><span class="band-more">and {more} more</span></li>
+    </ul>
+  </div>
+
+  <div class="band-col band-code">
+    <h2><a href={band.code.target}>{band.code.headline}</a></h2>
+    <p>{band.code.text}</p>
+    <ul class="band-chips">
+      {heavy.map((c) => <li><span class="band-chip">{c.mark && <Mark name={c.mark} />}<b>{c.name}</b><span>{c.band}</span></span></li>)}
+    </ul>
+  </div>
+
+  <div class="band-col band-root">
+    <h2><a href={band.root.target}>{band.root.headline}</a></h2>
+    <p>{band.root.text}</p>
+    <ol class="band-chain">
+      {band.root.chain.map((l) => <li><b>{l.name}</b><span>{l.role}</span></li>)}
+    </ol>
+  </div>
+</section>
+
+<div class="cta">
+  <a class="btn btn-primary" href="/overview/">Start here</a>
+  <a class="btn" href="/runtimes/local/">Try the local installation</a>
+  <a class="btn btn-quiet" href="https://github.com/truvity/sluis">View on GitHub</a>
+  <p>v2 is designed, not built: <a href="#where-it-stands">where it stands</a>.</p>
+</div>
