@@ -141,6 +141,7 @@ policy:
 
 trust:
   root_list: trust/root-list.json
+  ca_bundle: trust/ca-bundle.pem
 ```
 
 This file enables neither SSH certificates nor release signing, so `ssh-ca` does not run and the node gets no `ssh-user`, `ssh-host` or release-signing key. Only an enabled purpose gets a slot ([the card slot map](/concepts/keys/#the-card-slot-map)).
@@ -177,15 +178,15 @@ token signing   9a    yubikey-piv   generated on device, P-384; certificate afte
 sealing         9d    yubikey-piv   generated on device, P-384
 log key         84    yubikey-piv   generated on device, P-384
 intermediate fingerprint  SHA256:5mQ1…Xk4
-request  /var/lib/sluis/keys/request/intermediate.csr
-proof    /var/lib/sluis/keys/request/intermediate.attestation.pem
+request  /var/lib/sluis/keys/request/prod-x509-intermediate.csr.pem
+proof    /var/lib/sluis/keys/request/prod-x509-intermediate.proof.json
 ```
 
-The keys are generated on the card and never leave it. The request is a PKCS#10 certificate request; the proof is the card's attestation chain, which sluis has already checked against Yubico's attestation root ([ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/#the-hand-off)).
+The keys are generated on the card and never leave it. The request is a PKCS#10 certificate request; the proof file says the key lives in a PIV slot and carries the card's attestation chain, which sluis has already checked against Yubico's attestation root. The files are those of ritueel's [hand-off contract](https://ritueel.id/reference/hand-off-contract/) ([ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/#the-hand-off)).
 
 ## 9. Get the intermediate certified
 
-sluis holds no root and never makes one. The roots are [ritueel](https://ritueel.id)'s. For a first installation, ritueel's software-root mode stands in for the root cards: a setup script runs one ritueel command that checks the request and its attestation, certifies the intermediate under a software root, and writes the certificate chain and a signed root list.
+sluis holds no root and never makes one. The roots are [ritueel](https://ritueel.id)'s. For a first installation, ritueel's software-root mode stands in for the root cards: a setup script runs the ritueel commands that check the request and its attestation, certify the intermediate under a software root, and write the certificate, a result file and a signed root list.
 
 ```sh
 # Example, on the workstation
@@ -196,18 +197,18 @@ scp -r ./response root@board:/var/lib/sluis/keys/response
 
 A production installation gets the same files from a ritueel ceremony with the root cards instead.
 
-Back on the board, put the root list where the install file names it (`trust.root_list`), then install the chain:
+Back on the board, put the root list and the CA bundle where the install file names them (`trust.root_list` and `trust.ca_bundle`), then install the answer:
 
 ```sh
 # Example
-install -D -m 0644 -t /etc/sluis/trust /var/lib/sluis/keys/response/root-list.json /var/lib/sluis/keys/response/root-list.json.jws
+install -D -m 0644 -t /etc/sluis/trust /var/lib/sluis/keys/response/root-list.json /var/lib/sluis/keys/response/root-list.jws /var/lib/sluis/keys/response/ca-bundle.pem
 sluis key install /var/lib/sluis/keys/response
 sluis key status
 ```
 
 ```text
 # Example output
-installed  intermediate  chain leads to a root in the root list (version 1); matches slot 9c
+installed  intermediate  certificate verifies to a root in the root list (trust sequence 1); matches slot 9c
 issued     token signing certificate (non-CA, digital signature only) by the node intermediate
 
 purpose         slot  expires       warning
@@ -217,7 +218,7 @@ sealing         9d    -             none
 log key         84    -             none
 ```
 
-`sluis key install` uses the certificate only after it has checked the chain, the key match, the validity and the constraints. The intermediate lasts about 13 months; ritueel re-signs the same key in month 12, and sluis warns 60, 30 and 14 days before expiry.
+`sluis key install` uses the certificate only after it has checked the issuer against the root list, the key match, the validity and the constraints. The intermediate lasts 13 months; ritueel re-signs the same key in month 12, and sluis warns 60, 30 and 14 days before expiry.
 
 ## 10. Check the config and start the units
 
@@ -230,7 +231,7 @@ sluis config check /etc/sluis/install.yaml
 ok    /etc/sluis/install.yaml validates against the schema (unevaluatedProperties: false)
 ok    drivers satisfy the runtime and the node count (bare-metal, 1 node)
 ok    every enabled purpose has a slot and a key; no collision
-ok    intermediate certified; root list version 1
+ok    intermediate certified; root list trust sequence 1
 warn  audit.witness: none; with no witness a compromised writer can get a rewritten checkpoint signed
 ```
 

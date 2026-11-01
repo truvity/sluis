@@ -233,6 +233,32 @@ expect('an example of a missing file', 'examples', { 'docs/a.md': exPage('a: 1\n
 expect('a mark with no block', 'examples', { 'docs/a.md': '<!-- example: tests/x/install.yaml -->\nText.\n', 'tests/x/install.yaml': 'a: 1\n' }, 'fail', { has: ['not followed by a fenced block'] });
 expect('no examples', 'examples', { 'docs/a.md': 'Text.\n' }, 'fail', { has: ['empty sweep'] });
 
+// ---- C9 installations: the org of an upstream and the vocabulary file of an example installation
+const instFiles = (install, vocab, extra = {}) => ({
+  'tests/installations/x/install.yaml': install,
+  'tests/installations/x/policy/vocabulary.yaml': vocab,
+  'tests/installations/x/policy/x.cedar': 'permit (principal, action, resource == Grant::"dev:app:user");\n',
+  ...extra,
+});
+const instYaml = (upstream = '    org: acme\n', requires = '[dev:app:user]') =>
+  `boundaries:\n  dev:\n    kind: environment\n    clients:\n      app:\n        requires: ${requires}\n  acme:\n    kind: company\nupstreams:\n  u:\n    kind: oidc\n${upstream}policy:\n  files: [policy/x.cedar]\n  vocabulary: policy/vocabulary.yaml\n`;
+const vocabYaml = (roles = '      user: []\n      admin: [user]\n', scopes = '  dev: {}\n  prod: { sensitive: true }\n') => `scopes:\n${scopes}things:\n  app:\n    roles:\n${roles}`;
+expect('a good installation', 'installations', instFiles(instYaml(), vocabYaml()), 'pass', { has: ['1 example installations'] });
+expect('an upstream with no org', 'installations', instFiles(instYaml(''), vocabYaml()), 'fail', { has: ['upstreams.u.org is missing'] });
+expect('an org that is an environment', 'installations', instFiles(instYaml('    org: dev\n'), vocabYaml()), 'fail', { has: ['names no boundary of kind company'] });
+expect('an org that is no boundary', 'installations', instFiles(instYaml('    org: nobody\n'), vocabYaml()), 'fail', { has: ['names no boundary of kind company'], lacks: ['nobody'] });
+expect('a role in the long form with scopes', 'installations', instFiles(instYaml(), vocabYaml('      user: []\n      admin: { implies: [user], scopes: [dev] }\n')), 'pass');
+expect('an implied role that is missing', 'installations', instFiles(instYaml(), vocabYaml('      user: []\n      admin: [owner]\n')), 'fail', { has: ['an implied role is not a role of the thing'] });
+expect('a role that implies itself', 'installations', instFiles(instYaml(), vocabYaml('      user: [user]\n')), 'fail', { has: ['implies itself'] });
+expect('a cycle in the ladder', 'installations', instFiles(instYaml(), vocabYaml('      user: [admin]\n      admin: [user]\n')), 'fail', { has: ['has a cycle'] });
+expect('a role scope that is not declared', 'installations', instFiles(instYaml(), vocabYaml('      user: []\n      admin: { implies: [user], scopes: [staging] }\n')), 'fail', { has: ['a scope is not declared'], lacks: ['staging'] });
+expect('a role in more scopes than the role it implies', 'installations', instFiles(instYaml(), vocabYaml('      user: { scopes: [dev] }\n      admin: [user]\n')), 'fail', { has: ['exists in a scope that an implied role does not'] });
+expect('an unknown key in a scope', 'installations', instFiles(instYaml(), vocabYaml(undefined, '  dev: { secret: true }\n')), 'fail', { has: ['scopes.dev.secret: unknown key'] });
+expect('a scope name with a colon', 'installations', instFiles(instYaml(), vocabYaml(undefined, '  "dev:x": {}\n')), 'fail', { has: ['a scope name is outside the allowed set'], lacks: ['dev:x'] });
+expect('a client requiring an undeclared grant', 'installations', instFiles(instYaml(undefined, '[dev:app:owner]'), vocabYaml()), 'fail', { has: ['requires[0] is not a grant the vocabulary declares'], lacks: ['owner'] });
+expect('a policy file naming an undeclared grant', 'installations', instFiles(instYaml(), vocabYaml(), { 'tests/installations/x/policy/x.cedar': 'permit (principal, action, resource == Grant::"prod:app:root");\n' }), 'fail', { has: ['grant name number 1 is not a grant'], lacks: ['root'] });
+expect('no installations', 'installations', { 'README.md': 'x\n' }, 'fail', { has: ['empty sweep'] });
+
 rmSync(scratch, { recursive: true, force: true });
 if (failures) {
   console.error(`selftest: ${failures} of ${cases} cases failed`);

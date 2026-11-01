@@ -141,14 +141,10 @@ The types follow the [actor registry](/reference/actors/) and the [record kinds]
 | `Workload` | A workload that proved its identity: in the first version a GitHub Actions job, checked by the `github-oidc` verifier | `exchange`, from the verified proof | `<verifier>/<proof subject>` |
 | `SigningKey` | A signing key of a boundary | `exchange` | The key's purpose, `release-signing` ([ADR 0029](/decisions/0029-the-signing-api-signs-sent-content-for-an-authorised-proof-and-returns-an-armoured-detached-signature/#who-does-what)) |
 
-- **A person is named by an account, because an operator cannot know a subject.** The subject is 128 random bits assigned at the first sign-in, so a binding or a link written before it names the account that will be linked. A binding never names an e-mail address, which does not identify ([ADR 0027](/decisions/0027-a-person-is-tied-to-an-upstream-account-by-issuer-and-subject-claim/#what-policy-sees)). `Person.org` is the company claim of [ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#issuers), and `Account.org` the company that owns the upstream.
+- **A person is named by an account, because an operator cannot know a subject.** The subject is 128 random bits assigned at the first sign-in, so a binding or a link written before it names the account that will be linked. A binding never names an e-mail address, which does not identify ([ADR 0027](/decisions/0027-a-person-is-tied-to-an-upstream-account-by-issuer-and-subject-claim/#what-policy-sees)). `Account.org` is the `org` key of the account's upstream in the install file, the company that owns it ([Install file](/reference/install-file/#upstreams)), and `Person.org` is the `org` of the account the person is linked by, so it is the company claim of [ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#issuers). The asker reads it from the install file and never from the upstream's answer, and no policy file sets it.
 - **`state` is `live` or `held`.** An operator's `person-hold` is a tighten-only action that takes effect at once; `session` sends the state, and the first `forbid` of the example refuses a person who is not live. Lifting a hold gives back only what the policy grants.
 - **A client's id carries its issuer.** Client ids are unique per issuer, not across issuers ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#audiences)), and a Cedar entity id must be unique, so `dev/example-app` and `prod/example-app` are two entities. A `Client` is `in` its `Boundary`, so a policy can say "any client of `dev`". `Client.requires` is the install file's `requires`, a set of `Grant`.
 - **`Workload` attributes are the verified claims of the proof.** For a GitHub Actions job they are the repository, the ref, the workflow and the environment ([ADR 0029](/decisions/0029-the-signing-api-signs-sent-content-for-an-authorised-proof-and-returns-an-armoured-detached-signature/#who-does-what)); a name the proof does not carry is absent, and a policy tests `has` before it reads.
-
-:::note[Proposed]
-**Where a person's `org` comes from.** A company boundary owns its upstreams ([ADR 0005](/decisions/0005-boundaries-and-the-isolation-ladder/#boundary-kinds)), but schema v1 of the install file has no key that says which company owns an upstream. The tenant examples below take `org` from the asker. Tracked in [#1081](https://github.com/truvity/sluis/issues/1081).
-:::
 
 ### What comes with parity
 
@@ -199,11 +195,7 @@ The context of `token.issue` and `token.exchange` is the same record, `Authentic
 - **The answer carries the full set** of held grants, so that the asker narrows the `groups` claim to the audience's `<scope>:<thing>` pairs ([ADR 0028](/decisions/0028-grants-come-from-a-declared-vocabulary-and-a-token-carries-fixed-claims-for-one-audience/#the-claims-of-a-token)); admission was decided on the full set.
 - **A sensitive grant is held only by a binding that names it in full.** A grant of a sensitive scope counts as held only when a determining policy has that grant as its resource, `resource == Grant::"prod:example-app:admin"`; `policy` reads the scope of the determining policies for this ([REQ-POLICY-011](/requirements/policy/#REQ-POLICY-011)). A wildcard written as a condition on `resource.scope` or `resource.role` can give any other grant, and Cedar alone would give it a sensitive one too.
 - **The loader tries each binding.** It evaluates every static policy on `grant.hold` for a probe person of the account the policy names against every grant of the vocabulary, and refuses a policy that no grant satisfies ("a wildcard that expands to nothing", [REQ-POLICY-012](/requirements/policy/#REQ-POLICY-012)) and one that satisfies several roles of one scope and thing at once (a wildcard in the role position). A grant name that is not in the vocabulary, as a `Grant::"…"` in a policy file, is refused at load with the path ([REQ-POLICY-010](/requirements/policy/#REQ-POLICY-010)).
-- **The vocabulary is a file beside the policy,** [`policy/vocabulary.yaml`](https://github.com/truvity/sluis/blob/main/tests/installations/local/policy/vocabulary.yaml) in the example, named by `policy.vocabulary`. `policy` builds the `Grant` entities from it.
-
-:::note[Proposed]
-**The vocabulary file's own schema.** [ADR 0028](/decisions/0028-grants-come-from-a-declared-vocabulary-and-a-token-carries-fixed-claims-for-one-audience/#grant-names-and-the-vocabulary) says what it holds (scopes, things with roles, what each role implies) and the example below is one reading of it; the schema, the `sensitive` flag and the narrowing of a role to some scopes are written with the claims record. Tracked in [#999](https://github.com/truvity/sluis/issues/999).
-:::
+- **The vocabulary is a file beside the policy,** [`policy/vocabulary.yaml`](https://github.com/truvity/sluis/blob/main/tests/installations/local/policy/vocabulary.yaml) in the example, named by `policy.vocabulary`. Its shape is on [Vocabulary](/reference/vocabulary/). `policy` builds the `Grant` entities from it: one for every scope, thing and role the file declares, with `sensitive` taken from the scope.
 
 ## What a decision holds
 
@@ -270,11 +262,16 @@ The local installation's [example install file](/reference/install-file/#the-exa
 
 <!-- example: tests/installations/local/policy/vocabulary.yaml -->
 ```yaml
-# The grant vocabulary of the local installation (ADR 0028): the scopes, the things with their
-# roles, and what each role implies. A grant is <scope>:<thing>:<role>, and every scope has every
-# thing. A role implies the roles listed under it, on the same scope and thing.
+# The grant vocabulary of the local installation (ADR 0028). Schema v1:
+# https://sluis.id/reference/vocabulary/
+#
+# A grant is <scope>:<thing>:<role>. Every scope has every thing, and every role of a thing exists
+# in every scope unless the role names its `scopes`. A role implies the roles listed under it, on
+# the same scope and thing.
+$schema: https://sluis.id/schema/vocabulary/v1/vocabulary.schema.json
+
 scopes:
-  dev: {}
+  dev: {}                   # an environment
   acme: {}                  # a company
   prod: { sensitive: true } # named in full or not granted; a wildcard never reaches it
 

@@ -174,7 +174,7 @@ CREATE TABLE meta (name TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;  -- schem
 - **The spool is a directory per producer of append-only segment files.** Each record is a 4-byte big-endian length, the sealed record and a CRC-32C. A segment is fsynced after each record and closed at 4 MiB or one minute. The writer's cursor per producer moves in its atomic batch ([ADR 0016](/decisions/0016-the-audit-log/#sealing)).
 
 :::note[Proposed]
-**The `sqlite` index schema** follows the query contract of Search and is written with it. Tracked in [#839](https://github.com/truvity/sluis/issues/839).
+**The `sqlite` index schema** follows the query contract of Search and is written with it. Tracked in [#1122](https://github.com/truvity/sluis/issues/1122).
 :::
 
 ## Open items

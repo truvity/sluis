@@ -29,7 +29,7 @@ Forces: the actor decides whether a mint is allowed, so it must be small, memory
 - **Template-linked policies are the one exception to declared policy.** Policy logic stays declared: Cedar templates, and a declared delegation policy that says who may link which template to which principals and resources.
 - **Within those bounds the console creates and removes template links.** A link adds no logic a reviewer has not seen in the template. Tighten-only actions, such as suspending a subject or revoking a grant, take effect at once.
 - **Links reach `policy` in the request.** A link is an operator-set record ([0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/#origins)); the actor that asks for a decision sends the links that apply to the request's principal and resource with the facts, so `policy` keeps no state port.
-- The record kind of a link, its owning writer and the Cedar schema of requests, entities and actions are out of scope here ([#1008](https://github.com/truvity/sluis/issues/1008)).
+- The record kind of a link, its owning writer and the Cedar schema of requests, entities and actions are on the [Policy](/reference/policy/) page, which fixes them for the first working version.
 
 ## Consequences
 
@@ -52,5 +52,4 @@ Forces: the actor decides whether a mint is allowed, so it must be small, memory
 
 ## Follow-ups
 
-- Cedar schema, entity model and the template-link record: [#1008](https://github.com/truvity/sluis/issues/1008); the reference page is [Policy](/reference/policy/).
 - Cutover and migration from v1, including policy: [#1017](https://github.com/truvity/sluis/issues/1017).

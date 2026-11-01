@@ -157,12 +157,18 @@ actors-write: site-install
 check-examples:
     tools/checks/examples.mjs
 
+# The example installations under tests/installations/: every upstream's `org` names a company
+# boundary, the vocabulary file has the shape of docs/reference/vocabulary.md, and every grant name
+# in a client's `requires`, a policy file, the links and the test vectors is declared in it.
+check-installations: site-install
+    tools/checks/installations.mjs
+
 # The checks above against scratch repositories that must pass or must fail.
 check-selftest: site-install
     tools/checks/selftest.mjs
 
 # Every repository rule.
-check-rules: check-selftest check-decisions check-requirements check-actors check-examples check-public check-yaml-ext check-agent-links
+check-rules: check-selftest check-decisions check-requirements check-actors check-examples check-installations check-public check-yaml-ext check-agent-links
 
 # Everything a pull request must pass.
 check: check-rules site-check site-workers

@@ -1,8 +1,13 @@
-# The grant vocabulary of the local installation (ADR 0028): the scopes, the things with their
-# roles, and what each role implies. A grant is <scope>:<thing>:<role>, and every scope has every
-# thing. A role implies the roles listed under it, on the same scope and thing.
+# The grant vocabulary of the local installation (ADR 0028). Schema v1:
+# https://sluis.id/reference/vocabulary/
+#
+# A grant is <scope>:<thing>:<role>. Every scope has every thing, and every role of a thing exists
+# in every scope unless the role names its `scopes`. A role implies the roles listed under it, on
+# the same scope and thing.
+$schema: https://sluis.id/schema/vocabulary/v1/vocabulary.schema.json
+
 scopes:
-  dev: {}
+  dev: {}                   # an environment
   acme: {}                  # a company
   prod: { sensitive: true } # named in full or not granted; a wildcard never reaches it
 

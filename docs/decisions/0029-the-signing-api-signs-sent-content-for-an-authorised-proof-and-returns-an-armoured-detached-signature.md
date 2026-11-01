@@ -93,4 +93,3 @@ message SignDetachedResponse {
 
 - The signing API's later stages: [#1074](https://github.com/truvity/sluis/issues/1074), [#1075](https://github.com/truvity/sluis/issues/1075); release use and CI credentials: [#874](https://github.com/truvity/sluis/issues/874).
 - A raw signature and a Sigstore bundle, each with a key of its own: [#1117](https://github.com/truvity/sluis/issues/1117).
-- The Cedar schema that the action and resource are written in: [#1008](https://github.com/truvity/sluis/issues/1008).

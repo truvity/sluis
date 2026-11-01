@@ -413,7 +413,7 @@ requirements:
       - {kind: test-vectors, ref: "hand-off fixtures: a chain to an unknown root and a certificate for another key; both refused and nothing changes"}
   - id: REQ-PKI-030
     area: PKI
-    statement: "sluis MUST refuse a hand-off document whose major version it does not know."
+    statement: "sluis MUST refuse a hand-off document whose contract version it does not know."
     rationale: "The two products release separately, so an unknown version must fail closed."
     level: MUST
     source: design-decision
@@ -422,7 +422,7 @@ requirements:
     standards: []
     issues: [1066, 1070]
     verification:
-      - {kind: test-vectors, ref: "hand-off fixtures: a document with an unknown major version; refused"}
+      - {kind: test-vectors, ref: "hand-off fixtures: a document with an unknown contract version; refused"}
   - id: REQ-PKI-031
     area: PKI
     statement: "sluis MUST raise a notice 60 days, an alert 30 days and a critical alert 14 days before an intermediate certificate or OpenPGP subkey expires."
@@ -665,3 +665,27 @@ requirements:
     issues: [913]
     verification:
       - {kind: integration-test, ref: "CRL nextUpdate test"}
+  - id: REQ-PKI-050
+    area: PKI
+    statement: "The key install command MUST refuse an answer whose trust sequence is higher than the sequence of the root list it holds."
+    rationale: "A list older than the answer may lack the root that signed it, so the chain could not be checked against current anchors."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1066]
+    verification:
+      - {kind: integration-test, ref: "a test answer with a trust sequence above the held list; refused and nothing is installed"}
+  - id: REQ-PKI-051
+    area: PKI
+    statement: "The key request command MUST write one back-signature for every active primary of the root list it holds in an OpenPGP subkey request, and name those primaries in the proof."
+    rationale: "Either root card can then bind the subkey with no second request."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1066, 1067]
+    verification:
+      - {kind: test-vectors, ref: "hand-off fixtures: a request with a back-signature for each of two active primaries verifies, and one missing a primary is refused"}
