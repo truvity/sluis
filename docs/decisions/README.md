@@ -67,6 +67,7 @@ A rewritten record says so in one line under its proposal link, with the date. O
 | [0022](0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes.md) | Search is an index fed from the log, and the index is one driver with provisioning modes | Accepted |
 | [0023](0023-quotas-api-is-idempotent-and-its-data-follows-the-origin-model.md) | Quota's API is idempotent by a request id and `Idempotency-Key`, and its data follows the origin model | Accepted |
 | [0029](0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime.md) | One repository, one version, one release train, and packaging follows the runtime | Accepted |
+| [0031](0031-intermediates-and-the-hand-off-to-root-custody.md) | Intermediates and the hand-off to root custody: sluis holds no root, asks for its intermediates to be certified, and signs in place | Accepted |
 | [0033](0033-database-access-uses-short-lived-credentials.md) | Database access uses short-lived credentials | Accepted |
 | [0038](0038-the-local-installation-is-docker-compose-with-one-container-per-actor.md) | The local installation is Docker Compose with one container per actor, the published images and minimal drivers | Accepted |
 | [0039](0039-delivery-goes-local-first-then-boards-lambda-and-kubernetes-in-parallel.md) | Delivery goes local first, then boards, lambda and kubernetes in parallel | Accepted |

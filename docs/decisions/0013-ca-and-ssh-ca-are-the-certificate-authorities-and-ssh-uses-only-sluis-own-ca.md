@@ -5,6 +5,7 @@
 
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 Rewritten in place on 2026-10-30 (the open point of [issue #910](https://github.com/truvity/sluis/issues/910) decided: ACME in `ca` comes after the first release; the record is Accepted).
+Rewritten in place on 2026-11-01 (the roots and the break-glass CA moved to the separate product [ritueel](https://ritueel.id); the SSH CA keys are anchors; see [0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)).
 
 ## Context
 
@@ -19,7 +20,7 @@ Four things shape the answer.
 - **A certificate that carries authority leaks it.** If a certificate lists every host group its holder may reach, it grows with the organisation, it shows the topology to every host it touches, and OpenSSH caps a certificate at 256 principals.
 - **`sshd` decides per account.** `AuthorizedPrincipalsFile` is read for each account at each login, so the host can hold the authority and the certificate only the identity.
 - **Not every device can run a service.** Baseboard controllers and KVM appliances run OpenSSH but nothing else of ours. Some routers and switches do not support OpenSSH certificates at all.
-- **The keys are already decided.** The SSH user CA and the SSH host CA are separate keys, both certified by the roots as provenance, and X.509 keys are separate for each trust domain ([0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/)). The two-root hierarchy and the certificate profiles are ADR 0031.
+- **The keys are already decided.** The SSH user CA and the SSH host CA are separate keys, anchors that hosts learn from a list ritueel publishes, and X.509 keys are separate for each trust domain ([0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/)). How an intermediate is certified is [0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/); the certificate profiles are a later record.
 
 ## Decision
 
@@ -29,21 +30,21 @@ Four things shape the answer.
 - **Each boundary has its own.** The SSH CAs are per environment, and each company's principals reach a host through the bundle below ([0009](/decisions/0009-one-installation-per-boundary/)). A host trusts exactly one sluis SSH CA, its environment's, plus the break-glass CA.
 - **Issuance is bound to the requester.** The subject of a certificate is the authenticated requester: a person's key from their sign-in, a workload from its exchanged proof, a host from its enrolment ([0012](/decisions/0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials/)). A request cannot name someone else.
 - **`key-holder` signs only what each purpose allows.** The `ca` purpose signs only a parseable TBSCertificate within its constraints. The `ssh-ca` purpose signs only an OpenSSH certificate body.
-- **Serial numbers are random and 128 bits long.** A ceremony draws its serials when its plan is written and records them in the plan and in the `.attempt` reservation, so the bytes can be recomputed before the touch (ADR 0032).
+- **Serial numbers are random and 128 bits long.** Each CA draws a fresh serial at issuance. No ledger is kept.
 
 ### X.509
 
 - **`ca` issues from an intermediate per trust domain.** The trust domain is the boundary ([0012](/decisions/0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials/)). Its profiles include the host and workload X.509-SVIDs and the database client certificate ([0033](/decisions/0033-database-access-uses-short-lived-credentials/)). A relying party trusts only the intermediate of its own use: a database trusts only the database-client intermediate.
 - **Clusters keep cert-manager and trust-manager.** `ca` signs for cert-manager through an external issuer, shipped as its own chart. The issuer accepts a CSR with an empty subject and takes the identity from the requester. (the last sentence is inferred)
 - **Every X.509 certificate is logged.** `ca` writes each certificate it issues into a C2SP `static-ct-api` log, which is witnessed like the audit log ([Audit](/concepts/audit/), [Standards](/standards/)). `mtc-tlog` follows with Merkle Tree Certificates, on the post-quantum track (ADR 0052).
-- **Revocation backs short lifetimes.** `ca` publishes a static CRL. Short lifetimes are the main control. The revocation state and the CRL cadence are ADR 0031.
+- **Revocation backs short lifetimes.** `ca` publishes a static CRL. Short lifetimes are the main control. The revocation cadence is a later record.
 
 ### SSH: identity in the certificate, authority on the host
 
 - **A certificate carries identity only.** A person's certificate carries `u:<person-key>`, the opaque and stable person key. A machine's carries `w:<workload>`, named for the workload and not for the instance.
 - **The host's `sluis-host` writes the authority.** It writes `/etc/ssh/principals/<account>` from a signed bundle that Cedar policy computed. Each line has `expiry-time` set to the bundle's expiry, and `from=`, `command=` or `no-pty` where policy says so.
 - **Grant principals are for three cases only.** `g:<account>@<group>` goes into a certificate only for a host without the service (static mode, below), for sluis's own hosts, which must not depend on sluis to be reached, and for elevation. Elevation is on request, with fresh MFA, for 15 to 60 minutes.
-- **Break-glass is `bg:<scope>`, from an offline CA.** The CA is made in a root ceremony. Its lines are written at install and never touched by the bundle.
+- **Break-glass is `bg:<scope>`, from an offline CA that ritueel holds.** sluis does not make it; the host gets its public key from the list of SSH CA keys that ritueel publishes. Its lines are written at install and never touched by the bundle.
 - **Principals carry a kind prefix**, so kinds cannot collide, and one sluis CA is trusted per host.
 - **Policy has two actions.** `ssh.login` is standing access, evaluated when the bundle is built, for each person or workload, host and account. `ssh.certify` is evaluated when a certificate is signed. It decides the lifetime, the extensions, the source address and which `g:` grants the certificate carries.
 - **Groups come from declared rules** over attested and declared attributes. The console can only narrow them.
@@ -93,7 +94,7 @@ Four things shape the answer.
 - Standing access is revoked by the next bundle, not by waiting for a certificate to expire, so a working-day certificate does not slow revocation.
 - Every target host with standing access runs `sluis-host`. A host that cannot is in static mode, and its revocation list and CA rotation are manual.
 - An outage of sluis longer than the staleness limit locks out normal logins. Grant, elevation and break-glass access keep working, and each group can change the limit.
-- The break-glass CA is a second trust root on the host. It is offline and made in a ceremony, and it has to be guarded and rotated like the roots.
+- The break-glass CA is a second trust root on the host. It is offline and held by ritueel, which guards and rotates it.
 - Two CA actors mean two sets of keys, profiles and conformance tests, and two things to publish: X.509 anchors and CRLs, SSH CA keys and KRLs.
 - Every certificate is audited: the requester, the profile, the serial, the validity and the public key hash. Every X.509 certificate is also in the issuance log.
 - `sluis config check` refuses a policy that uses `reported` attributes in a permit, and refuses a `g:` grant outside the three allowed cases. (inferred)
@@ -177,7 +178,7 @@ Four things shape the answer.
 
 - Pros: audited and in-band.
 - Cons: useless when sluis is down, which is when break-glass is needed.
-- Why not: break-glass comes from an offline CA. The in-band path is elevation.
+- Why not: break-glass comes from an offline CA held by ritueel. The in-band path is elevation.
 
 ### The host service everywhere, including appliances
 

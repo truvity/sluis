@@ -6,6 +6,7 @@
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 Rewritten in place on 2026-10-30 (the three open points of [issue #910](https://github.com/truvity/sluis/issues/910) decided: one boundary issuer for workload tokens, one actor ID form, and what the server keeps for a reusable token; the record is Accepted).
 Rewritten in place on 2026-10-31 (the trust anchor of the `yubikey-attestation` verifier is named: Yubico Attestation Root 1, found by spike S4).
+Rewritten in place on 2026-11-01 (the roots moved to the separate product [ritueel](https://ritueel.id): the host pins the roots' public keys and follows a signed root list, and the issuer keys carry `x5c`; see [0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)).
 
 ## Context
 
@@ -20,11 +21,11 @@ v1 gave workloads an identity on both of its platforms and exchanged it for toke
 
 v2 does. A board cluster loses a node and gets a replacement. A cloud instance starts from an auto scaling group with nothing on it but user data. A host somewhere in a lab has nothing but a person who can see its console. ADR [0017](/decisions/0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite/) says that a replacement node enrols its identity through `sluis-node` (the node agent). It does not say how.
 
-SPIFFE is the published standard for workload identity: an ID format, the trust domain and its bundle, and two document formats for the identity itself (X.509-SVID and JWT-SVID). SPIRE is its reference implementation, with a server, an agent on every node, node and workload attestors, and registration entries. sluis already has most of what SPIRE brings: a certificate authority with two roots ([0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/)), a policy engine ([0014](/decisions/0014-policy-is-written-in-cedar-and-evaluated-by-a-rust-actor/)), a token issuer and a node agent. The question is which parts of SPIFFE to follow and whether to run SPIRE.
+SPIFFE is the published standard for workload identity: an ID format, the trust domain and its bundle, and two document formats for the identity itself (X.509-SVID and JWT-SVID). SPIRE is its reference implementation, with a server, an agent on every node, node and workload attestors, and registration entries. sluis already has most of what SPIRE brings: a certificate authority whose intermediates a root held by ritueel certifies ([0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/)), a policy engine ([0014](/decisions/0014-policy-is-written-in-cedar-and-evaluated-by-a-rust-actor/)), a token issuer and a node agent. The question is which parts of SPIFFE to follow and whether to run SPIRE.
 
 Other records constrain the answer:
 
-- Authority keys sign in place. Workload-issuer keys are hardware-held and published through a JWKS with no `x5c` ([0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/)).
+- Authority keys sign in place. Workload-issuer keys are hardware-held and published through a JWKS, each entry with an `x5c` chain ([0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/)).
 - P-384 is the default ([0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/)).
 - A boundary is the unit of keys and trust ([0009](/decisions/0009-one-installation-per-boundary/)). Actors are named `<actor>@<boundary>` in every layer, for example `ca@prod`.
 - The maintainer wants sluis to follow specifications rather than invent formats.
@@ -58,12 +59,12 @@ Other records constrain the answer:
 - **A cloud driver exchanges the token for that cloud's credentials**, for example with `AssumeRoleWithWebIdentity` on AWS. The role's trust policy pins `sub` to the actor and its boundary.
 - **Every actor uses its own credentials, and nothing mediates the data path.** Where a backend can tell callers apart, the actor reaches it with credentials of its own. sluis brokers credentials. It does not proxy data. The node's per-actor tokens, cloud token exchange, database client certificates from `ca` and NATS credentials from sluis are all forms of this.
 - **Where the platform gives an identity, sluis uses it.** On serverless it is the function's role. On Kubernetes it is a projected ServiceAccount token per container by default, EKS Pod Identity for a pod with one actor, and `sluis-node` only as a fallback. The Kubernetes detail is ADR 0046.
-- **The issuer keys follow the key rule.** They are hardware-held and published through a JWKS, with no `x5c` ([0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/)).
+- **The issuer keys follow the key rule.** They are hardware-held and published through a JWKS, each entry with an `x5c` chain up to the root ([0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/)).
 
 ### Hosts, and replacement sluis nodes, enrol the same way
 
 - **A host enrols with the same mechanism** and receives a host X.509-SVID from `ca`, under a host profile.
-- **A replacement sluis node enrols the same way.** This is how the node agent of [0017](/decisions/0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite/) gets its identity. The ceremony that certifies a node's intermediate with the root cards stays a separate step (ADR 0032).
+- **A replacement sluis node enrols the same way.** This is how the node agent of [0017](/decisions/0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite/) gets its identity. The certificate for a node's intermediate comes from a root held by ritueel, through the hand-off of [0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/).
 - **There are five ways to join:**
 
   | Case | How | Notes |
@@ -81,7 +82,7 @@ Other records constrain the answer:
 - **The enrolment token never travels.** The client sends the token's ID and an HMAC over its CSR and a nonce from the server, keyed with the token's secret.
 - **The server keeps a key derived from the secret, sealed at rest.** For a token, single-use or reusable, the server stores the HMAC key that HKDF derives from the token's secret, not the secret. Like every state value it is encrypted in the port library (EC-1, [0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/)): under a data key that the boundary's key-encryption key wraps, in KMS or on the node cards. A copy of the store alone therefore cannot enrol a host. (that this applies to single-use tokens too is inferred)
 - **Enrolment is encrypted end to end through the edge.** The signed trust bundle carries an enrolment public key. The host encrypts its proof and its CSR to that key with HPKE (RFC 9180). The private key is held by `key-holder` or KMS, and `exchange` opens the request through the keys port. The edge sees only ciphertext. (inferred)
-- **The host pins the roots.** The fingerprints of both roots are mandatory at enrolment, except in manual approval, where the person compares the fingerprint the host shows. The pin updates itself through bundles signed by the current roots. Web PKI is kept so that the host can reach sluis, and as an extra layer. It is not the trust.
+- **The host pins the roots.** The public keys of the roots, as SPKI hashes, are mandatory at enrolment, except in manual approval, where the person compares the pin the host shows. A pin on a public key survives a root whose validity is extended. The pin updates itself through the root list, which only grows in version ([0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)). Web PKI is kept so that the host can reach sluis, and as an extra layer. It is not the trust.
 - **The enrolment API** has start, poll, renew over mutual TLS, leave, and bundle. `entry` routes it and `exchange` carries it out.
 - **Policy has four actions:** `host.enrol`, `host.renew`, `enrol-token.create` and `enrolment.approve`.
 - **Every enrolment, renewal, approval and refusal is audited**, and a pending request notifies the people who may approve it.
@@ -111,14 +112,14 @@ Other records constrain the answer:
   | Node attestors | Verifier drivers of `exchange` |
   | Workload attestors | The peer uid on the node agent's socket; the ServiceAccount token on Kubernetes |
   | Registration entries | Declared rules plus Cedar policy |
-  | The SPIRE server's CA | `ca`, under two roots |
+  | The SPIRE server's CA | `ca`, under an intermediate that a ritueel root certifies |
   | The SPIRE agent | `sluis-node` on a node; nothing on serverless (inferred) |
   | Trust bundle endpoint | The signed bundle, published statically (inferred) |
 
 ### The trust bundle reaches hosts through one generic package
 
 - **The `sluis` package ships `sluis trust sync`,** a `sluis-trust-sync.timer` and a oneshot service. They do nothing until `sluis trust enroll --url … --fingerprint …` configures them.
-- **The sync fetches the bundle in SPIFFE format and checks it.** The signature must be by a key certified by both roots. A bundle with a lower `spiffe_sequence` than the last one is refused, so an old bundle cannot be replayed.
+- **The sync fetches the bundle in SPIFFE format and checks it.** The bundle and the root list are checked against the pinned roots: the signature must be by a root in the list the host holds, and a list with a lower version is refused ([0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)). A bundle with a lower `spiffe_sequence` than the last one is refused, so an old bundle cannot be replayed.
 - **It writes the anchors and runs the system's tool**, `update-ca-trust` or `update-ca-certificates`.
 - **The unit is hardened.** It may write only the anchors directory and the extracted store.
 - **sluis generates no packages.** The same package serves every installation, and its configuration says what to pull.
@@ -146,7 +147,7 @@ Other records constrain the answer:
 ### Deploy SPIRE
 
 - Pros: a mature implementation, with many attestors, the Workload API and federation today.
-- Cons: a second CA and a second root of trust beside sluis's two roots, a server and an agent on every node, its own datastore, and registration entries that repeat what declared rules and Cedar already say. (inferred)
+- Cons: a second CA and a second root of trust beside the roots that ritueel holds, a server and an agent on every node, its own datastore, and registration entries that repeat what declared rules and Cedar already say. (inferred)
 - Why not: sluis already holds the CA, the verifiers and the policy. It follows the SPIFFE formats and does not run a second system for them.
 
 ### Own formats instead of SPIFFE
@@ -213,7 +214,7 @@ Other records constrain the answer:
 
 - Pros: no fingerprint to type.
 - Cons: any public CA that issues a certificate for the sluis host name could stand in for sluis. (inferred)
-- Why not: the root fingerprint is mandatory, except in manual approval where a person compares it. Web PKI stays for reachability.
+- Why not: the pin of the root's public key is mandatory, except in manual approval where a person compares it. Web PKI stays for reachability.
 
 ### The instance identity document accepted on every request
 
