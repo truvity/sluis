@@ -56,7 +56,7 @@ On 2026-11-01, before any code was written, the maintainer had the 32 records ac
 | [0002](0002-the-design-model-actors-ports-drivers-and-contracts.md) | The design model: actors declare ports, drivers declare requirements, placement is derived, and a permission manifest per actor generates the enforcement | Accepted |
 | [0003](0003-core-actors-with-one-responsibility-each.md) | Core is a few actors with one responsibility each: a slim entry, session, console, exchange, signer, policy, ca and ssh-ca | Accepted |
 | [0004](0004-drivers-listeners-and-boundary-enforcement.md) | Drivers are platform-started services on Unix sockets, listeners are few and named, and every port is enforced in three layers | Accepted |
-| [0005](0005-boundaries-and-the-isolation-ladder.md) | Boundaries are environments, companies and products on an isolation ladder, and a boundary on its own runtime is an installation federated by declared trust | Accepted |
+| [0005](0005-boundaries-and-the-isolation-ladder.md) | Boundaries are environments, companies and customer boundaries on an isolation ladder, and a boundary on its own runtime is an installation federated by declared trust | Accepted |
 | [0006](0006-identity-issuers-audiences-and-sign-in.md) | Each boundary has its own issuer, a token has one audience, and people sign in with passkeys and step-up | Accepted |
 | [0007](0007-workload-identity-and-host-enrolment.md) | Workload identity follows SPIFFE: proofs are exchanged for short-lived credentials, and hosts enrol the same way | Accepted |
 | [0008](0008-certificate-authorities-for-x509-ssh-and-databases.md) | The ca and ssh-ca actors are the X.509 and SSH certificate authorities, SSH uses only sluis's own CA, and databases get short-lived client certificates | Accepted |
@@ -81,6 +81,10 @@ On 2026-11-01, before any code was written, the maintainer had the 32 records ac
 | [0027](0027-a-person-is-tied-to-an-upstream-account-by-issuer-and-subject-claim.md) | A person is tied to an upstream account by the issuer and a configured subject claim, never by e-mail, and a directory only adds facts | Accepted |
 | [0028](0028-grants-come-from-a-declared-vocabulary-and-a-token-carries-fixed-claims-for-one-audience.md) | Grants come from a declared vocabulary, a token carries a fixed set of claims narrowed to its one audience, and token lifetimes have defaults and caps | Accepted |
 | [0029](0029-the-signing-api-signs-sent-content-for-an-authorised-proof-and-returns-an-armoured-detached-signature.md) | The signing API signs the content it is sent for a proof that policy authorised, and its first stage returns an armoured OpenPGP detached signature | Accepted |
+| [0030](0030-tenancy-and-scale-a-boundary-holds-keys-and-a-tenant-is-a-record.md) | Tenancy and scale: a boundary is the unit of keys and isolation, a tenant is a record without keys, and growth past a cohort is another installation | Accepted |
+| [0031](0031-declared-and-issued-configuration-authority-is-declared-and-instances-are-issued.md) | Declared and issued configuration: authority is declared and delivered through a configuration service, and instances are issued at run time under declared templates | Accepted |
+| [0032](0032-data-lifecycle-and-evidence-never-share-a-key-with-personal-data.md) | Data lifecycle and evidence: evidence and personal data never share a key, erasure is shredding the key, and v1's history stays where it is | Accepted |
+| [0033](0033-evolution-and-compatibility-n-and-n-1-inside-a-major-and-parallel-cutover.md) | Evolution and compatibility: N and N-1 inside a major version, a parallel cutover from v1, and neutral artifacts as the deliverable | Accepted |
 
 ## Where the old records went
 

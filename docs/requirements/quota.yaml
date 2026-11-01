@@ -317,7 +317,7 @@ requirements:
     superseded_by: [REQ-QUOTA-029]
   - id: REQ-QUOTA-025
     area: QUOTA
-    statement: "A quota balance MUST belong to a declared account and be keyed by boundary, company, account and meter."
+    statement: "A quota balance MUST belong to an account issued under a declared plan template and be keyed by boundary, company, account and meter."
     rationale: "Per-customer billing and per-client caps fit one model, and keys carry no personal data."
     level: MUST
     source: stakeholder-integrator
@@ -453,3 +453,15 @@ requirements:
     issues: [915]
     verification:
       - {kind: integration-test, ref: "crash between change and send test"}
+  - id: REQ-QUOTA-036
+    area: QUOTA
+    statement: "When a billing period closes, quota MUST write a statement for each billing account as an entry of the usage log, naming the checkpoint of the usage log that it was computed from."
+    rationale: "A statement in the log is portable evidence that survives the exit of the company (ADR 0032)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "close a period: the statement entry is in the usage log, and its digest in the envelope matches the statement"}

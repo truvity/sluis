@@ -162,4 +162,4 @@ GitHub Releases is the immutable record. Each release holds the same files as th
 
 ## Compatibility
 
-All artifacts of one version are compatible with each other, and only with each other. Between releases, compatibility follows semantic versioning ([ADR 0019](/decisions/0019-release-train-packaging-and-distribution/#compatibility-between-releases), [#1022](https://github.com/truvity/sluis/issues/1022)).
+The artifacts of one release are built, tested and shipped together, and each also works with those of the previous release of the same major version, so a rolling deployment can run two neighbouring releases at once and a rollback needs no migration ([ADR 0033](/decisions/0033-evolution-and-compatibility-n-and-n-1-inside-a-major-and-parallel-cutover/#n-and-n-1-inside-a-major-version)). Between releases, compatibility follows semantic versioning ([ADR 0019](/decisions/0019-release-train-packaging-and-distribution/#compatibility-between-releases), [#1022](https://github.com/truvity/sluis/issues/1022)).

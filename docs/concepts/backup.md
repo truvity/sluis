@@ -43,10 +43,18 @@ The archive is encrypted with a fresh data key, and the data key is wrapped for 
 
 - **The key that wraps a backup archive is not the sealing key** ([ADR 0012](/decisions/0012-cryptography-and-authority-keys/#keys-sign-in-place)). On AWS it may live in another account, and only the restore role may decrypt with it. The archive and its key preferably live in a separate account, because the backup exists for the case where the primary account is lost or hostile.
 - **Sealed values stay sealed.** When a data key is sealed, an escrow copy of it is encrypted to the archive's recipients ([ADR 0011](/decisions/0011-state-is-one-port-with-compare-and-set/#sealed-secrets)). Losing the sealing key is a restore from those recipients; it needs no ceremony and copies no key out of its store.
+- **An archive holds wrapped data only.** It holds no authority key and no sealing key, and its one escrow copy is of the data keys of sealed secrets, never of a company's audit or usage key, so an archive cannot undo a shred ([ADR 0032](/decisions/0032-data-lifecycle-and-evidence-never-share-a-key-with-personal-data/#backups)).
 - **The backup side holds public material and a wrap permission only**, so a compromised backup job cannot read earlier archives.
+- **An installation declares how long it keeps an archive.** An erasure reaches the copies in archives when they expire, and a restore re-applies every shred and erasure that the audit log records after the archive was taken.
 
 :::note[Proposed]
 The archive format, the escrow copies, the recipient set of each installation and the restore tooling are fixed by the planned backup decision record ([#1015](https://github.com/truvity/sluis/issues/1015)). The steps below are the design it starts from.
+:::
+
+## Recovery targets
+
+:::note[Proposed]
+The recovery time and the recovery point that an installation promises are not set. They depend on a measured restore and on what the operator accepts, and they are tracked with the backup decision record ([#1015](https://github.com/truvity/sluis/issues/1015)). Installations run in one region for now, and a regional outage stops signing there ([ADR 0030](/decisions/0030-tenancy-and-scale-a-boundary-holds-keys-and-a-tenant-is-a-record/#where-installations-run)).
 :::
 
 ## Restoring

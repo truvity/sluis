@@ -124,7 +124,7 @@ A **`sealed-state`** driver is a `secrets` driver that keeps its ciphertext in `
 - **A sealed value uses the same envelope as every value**, with `purpose=secret` in the encryption context and the additional authenticated data, so it cannot be read as an ordinary value or the other way round.
 - **Each version of a secret is one immutable item**, and the record that names the current version changes by compare-and-set, so a rotated secret can overlap with its predecessor.
 - **A re-seal rewraps the data keys** under the new sealing key without decrypting the values.
-- **A backup archives sealed values sealed**, with escrow copies of the data keys encrypted to the archive's recipients; losing the sealing key is a restore from those recipients, not a ceremony ([Backup](/concepts/backup/#encryption)).
+- **A backup archives sealed values sealed**, with escrow copies of the data keys of sealed secrets encrypted to the archive's recipients; losing the sealing key is a restore from those recipients, not a ceremony ([Backup](/concepts/backup/#encryption)).
 
 Nobody outside sluis can read sealed state, so an exported value goes out through a drop.
 

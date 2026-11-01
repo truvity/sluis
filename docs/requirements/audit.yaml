@@ -1288,8 +1288,8 @@ requirements:
       - {kind: integration-test, ref: "usage log cosignature test"}
   - id: REQ-AUDIT-097
     area: AUDIT
-    statement: "A usage log entry MUST be encrypted with HPKE to its company's audit tenant key, as an audit log entry is."
-    rationale: "Usage reveals a company's activity, and a shred must reach it too."
+    statement: "A usage log entry MUST be encrypted with HPKE to its company's usage data key."
+    rationale: "Evidence must outlive the shred of the company's personal data, so it has a key of its own (ADR 0032)."
     level: MUST
     source: design-decision
     status: planned
@@ -1736,3 +1736,51 @@ requirements:
     issues: [839]
     verification:
       - {kind: integration-test, ref: "reversal audit record test"}
+  - id: REQ-AUDIT-132
+    area: AUDIT
+    statement: "A usage event MUST NOT carry a field whose sensitivity is personal."
+    rationale: "Evidence carries no personal data, so it can outlive a shred (ADR 0032)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [837, 915]
+    verification:
+      - {kind: test-vectors, ref: "a usage part with a pseudonym, a subject or free text is refused by the writer"}
+  - id: REQ-AUDIT-133
+    area: AUDIT
+    statement: "A company's usage data key MUST be a different key from its audit data key."
+    rationale: "Keys with different lifetimes are not shared (ADR 0032)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [837]
+    verification:
+      - {kind: integration-test, ref: "the audit key does not decrypt a usage entry, and the usage key does not decrypt an audit entry"}
+  - id: REQ-AUDIT-134
+    area: AUDIT
+    statement: "Shredding a company's audit data key MUST NOT delete its usage data key."
+    rationale: "Exit ends the personal data and keeps the evidence (ADR 0032)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [837, 973]
+    verification:
+      - {kind: integration-test, ref: "after a shred the usage entries of the company are still readable by quota"}
+  - id: REQ-AUDIT-135
+    area: AUDIT
+    statement: "A company's usage data key MUST be kept until the declared retention of the usage log ends for that company's entries."
+    rationale: "A bill can be disputed until the billing retention ends (ADR 0032)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [837, 1016]
+    verification:
+      - {kind: integration-test, ref: "a deletion of a usage key before its retention ends is refused"}

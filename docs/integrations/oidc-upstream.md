@@ -38,6 +38,7 @@ Beyond sign-in, a connection supports what a CIAM product or any strict provider
 - **Claim mapping per connection**, from the provider's claims to the facts sluis uses.
 - **`acr` and `amr` passthrough**, so policy sees how strongly a person signed in.
 - **Step-up (RFC 9470).** When a grant needs a stronger sign-in than the session has, sluis sends the person back with a challenge for a higher `acr`, or asks for a passkey ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#step-up)).
+- **Sessions and step-up for customers.** The upstream holds the long single-sign-on session; sluis keeps the 24-hour limit of a human session and authenticates the person at the upstream again, silently while the upstream's session is valid. A customer's step-up is a re-authentication at the upstream with the `acr_values` and `max_age` that policy asked for, and sluis asks no customer for a passkey ([ADR 0023](/decisions/0023-sessions-have-three-classes-with-limits-per-class/#customers)).
 - **Back-channel logout**: the upstream can end the session at sluis with a back-channel logout token.
 - **Rate limits** per connection.
 
