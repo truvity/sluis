@@ -3,7 +3,7 @@ title: Public content and secrets
 description: What may appear in the public sluis repository, which example names to use instead of real ones, and how secrets and test hardware are handled.
 status: shipped
 sidebar:
-  order: 5
+  order: 6
 ---
 
 This repository is public, and so is everything around it: code, docs, the CHANGELOG, tests, test data, commit messages, issues and pull requests.

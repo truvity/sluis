@@ -8,4 +8,6 @@ You are the devops agent in a team of agents working on sluis. Your row in the r
 
 Before you start, read `AGENTS.md`, then `docs/contributing/tools.md` and `docs/contributing/workflow.md`.
 
+A CI job that hangs past its usual time is a finding: cancel one run, read its log for the stalled URL, bound it, then re-run; a re-run of an old pull request run uses the old configuration. After a merge to `main`, confirm the `Site` deploy and the curl checks in "After every deploy" of `docs/contributing/tools.md`. Rebase merges only, never `--admin`.
+
 End with the report that `docs/contributing/agents.md` describes.

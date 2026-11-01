@@ -3,7 +3,7 @@ title: Pages and writing style
 description: How a page of the sluis site marks what is built and decided, where a page lives, how big its diagrams may be, and how it is written.
 status: shipped
 sidebar:
-  order: 4
+  order: 5
 ---
 
 The pages on this site describe the **target state** of sluis v2: what it is meant to be, until it is built. A page is not a promise that the thing exists, so it says how far it has got. The [writing style](#writing-style) below holds for everything in the repository, commit messages included.
@@ -12,7 +12,15 @@ The pages on this site describe the **target state** of sluis v2: what it is mea
 
 Docs live next to the thing they describe: the format of the decision records is in `docs/decisions/`, the format of the requirements in `docs/requirements/`, and a page about a part of sluis sits in that part's section of the site. When the thing changes, its docs change in the same pull request.
 
-A fact is stated once, on the page that owns it, and the other pages link there ([Design principles](/principles/)). State the design as plain fact and link the decision record for the reasoning; history stays in git and the records. v1 behaviour is described only on the [v1 parity checklist](/features/).
+A fact is stated once, on the page that owns it, and the other pages link there ([Design principles](/principles/), [How we design](/contributing/design/#state-each-rule-once)). State the design as plain fact and link the decision record for the reasoning; history stays in git and the records. v1 behaviour is described only on the [v1 parity checklist](/features/).
+
+### Moving a page
+
+Moving or renaming a page needs a line in the `redirects` map of `site/astro.config.mjs` in the same pull request, pointing at the final page. Without it the old address becomes a 404, and a link on another site breaks. Check after the deploy that the old address answers 301 to the new one ([After every deploy](/contributing/tools/#after-every-deploy)). A decision record that is merged or renumbered is recorded in `docs/decisions/renumbered.json` instead, and the redirects follow from it ("Design phase" in `docs/decisions/README.md`).
+
+### Home pages
+
+A home page, or the top of a section, starts from the reader's pain: what goes wrong for them today. Then comes the mission, then what the project does about each pain, with an honest status for each (designed, built, planned). It does not open with the architecture. Changes to the site's layout, home page, Worker or headers follow [Changing the site](/contributing/tools/#changing-the-site).
 
 ## Status
 

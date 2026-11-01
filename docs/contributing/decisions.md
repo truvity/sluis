@@ -3,10 +3,10 @@ title: Decisions, requirements and research
 description: How a sluis v2 decision becomes a record, how a requirement is written and marked done, and the shape of a spike or research result.
 status: shipped
 sidebar:
-  order: 3
+  order: 4
 ---
 
-A decision record (ADR) says why sluis is shaped the way it is, a requirement says what sluis v2 must do, and a spike or research result is the evidence a decision is made on. Who decides is in [GOVERNANCE.md](https://github.com/truvity/sluis/blob/main/GOVERNANCE.md) ("How a decision is made"); this page is the order of work.
+A decision record (ADR) says why sluis is shaped the way it is, a requirement says what sluis v2 must do, and a spike or research result is the evidence a decision is made on. Who decides is in [GOVERNANCE.md](https://github.com/truvity/sluis/blob/main/GOVERNANCE.md) ("How a decision is made"); this page is the order of work, and [How we design](/contributing/design/) is the order of thinking before it.
 
 ## The maintainer decides
 
@@ -33,9 +33,13 @@ A record is `Accepted` only when every part of it is decided. While a part is st
 
 Every record keeps the options it did not take, one line each: the option in bold, then why it lost. Git keeps the merged text, not the dropped reasoning, so this part is required. A road that bounds no live rule can go.
 
+### One rule, stated once
+
+A rule lives in one place: a record, or a reference page with test vectors that the record links. A page with vectors can carry the rule in detail (the format of a token, a signed document, an install file) while the record keeps the reasoning and links the page. Do not restate the rule in a second record; link its heading.
+
 ### Rewriting a record
 
-Before the first v2 release the maintainer may have records rewritten, merged and renumbered in place; after it, a changed mind gets a new record. A rewritten record carries no history lines. The rules are in the "Design phase" section of `docs/decisions/README.md`; its last table maps old record numbers to their new records.
+Before the first v2 release the maintainer may have records rewritten, merged and renumbered in place; after it, a changed mind gets a new record. A rewritten record carries no history lines. When records are merged, split or renumbered, update `docs/decisions/renumbered.json` in the same pull request: the site turns each old address into a 301 to the record that took it over, and `just check-decisions` fails when an old slug is still a file or a new one is missing. The rules are in the "Design phase" section of `docs/decisions/README.md`; its last table maps old record numbers to their new records.
 
 v1 records stay on `master`. Refer to one as "v1 ADR NNNN" with a link to `master`; never copy or renumber it.
 
@@ -101,7 +105,7 @@ Write the parts in this order:
 9. **Changes made.** Every change to any machine, account or device, and whether it was undone.
 10. **Raw logs.** Where the raw output is kept.
 
-Measure before you conclude, and read what each tool printed, not only its exit code ([Tools, checks and verification](/contributing/tools/)).
+Label each claim READ, MEASURED or UNVERIFIED ([Measure and date](/contributing/design/#measure-and-date)). Measure before you conclude, and read what each tool printed, not only its exit code ([Tools, checks and verification](/contributing/tools/)).
 
 ### Keep it public
 
