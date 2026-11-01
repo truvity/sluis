@@ -1,5 +1,14 @@
 ## Unreleased
 
+## v1.80.1
+
+A patch release: dependency updates, with no change in behaviour. `github.com/truvity/policy` moves from v1.54.1 to v1.55.0 in the root module, `audit`, and both `deploy/pulumi` modules; the TypeScript lock files, the pinned CI actions and the other non-major Go dependencies move with it. Upgrade notes: none.
+
+### Changed
+
+- **Non-major dependency updates.** `github.com/truvity/policy` v1.55.0, `github.com/truvity/cnpg/v2` v2.38.0 and `gemaal` v0.26.5 in `audit`, the pinned `truvity/ci-actions` v3.8.0, and the refreshed lock files of `frontend`, `audit/ts`, `audit/react` and `ts`. **Upgrade:** none.
+- **Renovate tidies every Go module after a Go dependency update.** A post-upgrade task runs `hack/tidy-modules.sh` (`just tidy-modules`), because the modules replace one another by path and a bump left the `go.sum` of the others stale. Development tooling only. **Upgrade:** none.
+
 ## v1.80.0
 
 A minor release: a CI job identity may run on pull requests, read only (`refs/pull/*/merge`); and go-jose v4 and chi v5 move to patched versions (three go-jose and one chi advisory). Upgrade notes: an installation that declares job identities calls `ValidateGitHubPullRequestGrants` beside `ValidateGitHubJobs` and `ValidateGitHubAppGrants`.
