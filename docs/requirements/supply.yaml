@@ -215,7 +215,7 @@ requirements:
       - {kind: integration-test, ref: "sign N times; the audit log holds N records with caller and key"}
   - id: REQ-SUPPLY-016
     area: SUPPLY
-    statement: "The signing API MUST return an ASCII-armoured OpenPGP detached signature for a file or a digest."
+    statement: "The signing API MUST return an ASCII-armoured OpenPGP detached signature for the content it is sent."
     rationale: "The package tools read this form; a binary Release.gpg fails in apt."
     level: MUST
     source: design-decision
@@ -252,3 +252,76 @@ requirements:
     issues: [874]
     verification:
       - {kind: integration-test, ref: "the verifier matrix accepts a release signature and refuses a tampered artifact and an expired subkey"}
+  - id: REQ-SUPPLY-019
+    area: SUPPLY
+    statement: "The signing API MUST refuse a request whose content is empty or longer than 4 MiB with invalid_argument."
+    rationale: "An OpenPGP signature needs the data, so a digest alone cannot be signed (ADR 0029)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [890]
+    verification:
+      - {kind: integration-test, ref: "send zero bytes and 4 MiB plus one byte: both refused"}
+  - id: REQ-SUPPLY-020
+    area: SUPPLY
+    statement: "The signing API MUST return a version 4 OpenPGP signature of type 0x00 with ECDSA on P-384 and SHA-384, whose hashed subpackets are the creation time and the issuer fingerprint and whose unhashed subpacket is the issuer key id."
+    rationale: "This is the packet rule that the release keyring and the verifiers read (ADR 0029)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-83, section: "5.2", depth: Full}
+    issues: [890]
+    verification:
+      - {kind: integration-test, ref: "gpgv, sqv, apt and rpm accept the signature, and a packet parser shows exactly those subpackets"}
+  - id: REQ-SUPPLY-021
+    area: SUPPLY
+    statement: "The signer MUST sign an artifact only for a grant that policy sealed and whose key purpose, content hash and expiry match the request."
+    rationale: "A flaw in the actors in front of the signer must not obtain a signature policy did not allow."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [890]
+    verification:
+      - {kind: integration-test, ref: "a grant for other content, another purpose or past its expiry is refused; a request without a grant is refused"}
+  - id: REQ-SUPPLY-022
+    area: SUPPLY
+    statement: "The signing API MUST answer failed_precondition when the OpenPGP binding of the release subkey is absent or expired."
+    rationale: "A subkey that no primary vouches for must not sign (ADR 0029)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [890]
+    verification:
+      - {kind: integration-test, ref: "sign before sluis key install and after the binding's expiry: both refused"}
+  - id: REQ-SUPPLY-023
+    area: SUPPLY
+    statement: "The signing API MUST NOT return a signature whose audit record could not be written."
+    rationale: "A signing service is found out by its records."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [890]
+    verification:
+      - {kind: integration-test, ref: "stop the audit transport: the request fails and no signature is returned"}
+  - id: REQ-SUPPLY-024
+    area: SUPPLY
+    statement: "The release-signing key MUST be used by the signer only and only for OpenPGP signatures."
+    rationale: "One key under two formats lets an input chosen for one pass as a signature in the other."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [890]
+    verification:
+      - {kind: integration-test, ref: "the access list of key-holder and the key policy name one actor, and the signer has no other format to ask for"}
