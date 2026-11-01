@@ -98,7 +98,7 @@ A node's card has one PIN and cannot refuse a caller by itself, so **`key-holder
 
 - **One process, one Unix socket per caller.** Each socket sits in a directory that only its caller can open: systemd `.socket` units with `SocketUser=` and `FileDescriptorName=` on a host, and only that caller's socket mounted into its container.
 - **A peer-uid check as a second factor.** `key-holder` reads the caller's uid from the connection (`SO_PEERCRED`) and checks it against the socket it arrived on and an access list of caller, key purpose and operation, generated from the manifests.
-- **Content-aware signing per purpose.** The `ca` purpose signs only a TBSCertificate that parses and stays within its constraints, the `ssh-ca` purposes only an OpenSSH certificate body, a token purpose only a JWS signing input. A caller that has a socket still cannot get arbitrary bytes signed, and a parser mistake refuses a signature rather than signing the wrong thing.
+- **Content-aware signing per purpose.** The `ca` purpose signs only a TBSCertificate that parses and stays within its constraints, the `ssh-ca` purposes only an OpenSSH certificate body, a token purpose only a JWS signing input, the release-signing purpose only an OpenPGP signature input. A caller that has a socket still cannot get arbitrary bytes signed, and a parser mistake refuses a signature rather than signing the wrong thing.
 - **Exclusive card access**, through Go and `piv-go` ([Keys](/concepts/keys/#key-holder)).
 - **Hardened.** No network, seccomp, the PIN in locked memory, every signature rate-limited and audited. The access list lets only the audit writer use the log key.
 
