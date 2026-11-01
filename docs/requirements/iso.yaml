@@ -950,3 +950,27 @@ requirements:
     issues: [968]
     verification:
       - {kind: test-vectors, ref: "T-23: a bundle with one certificate that chains to an unpinned root; that certificate is not written and the rest are"}
+  - id: REQ-ISO-072
+    area: ISO
+    statement: "In containers the uid of an actor instance MUST be the actor's pinned base uid plus 1000 times the uid block that the install file declares for its boundary."
+    rationale: "Two boundaries then never share a uid, so the peer-uid check can tell their instances apart."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [863]
+    verification:
+      - {kind: integration-test, ref: "generate the Compose file for two boundaries: every instance has a distinct uid and the one-boundary file uses the base uids"}
+  - id: REQ-ISO-073
+    area: ISO
+    statement: "sluis config check MUST refuse a uid block that is out of range or used by two boundaries."
+    rationale: "A repeated block would give two boundaries one uid."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [863]
+    verification:
+      - {kind: integration-test, ref: "a repeated block and a block of 55 are refused"}

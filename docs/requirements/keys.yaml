@@ -377,3 +377,15 @@ requirements:
     issues: [800]
     verification:
       - {kind: integration-test, ref: "on a test card an imported key is refused and a generated key attests; a managed key is created by the store"}
+  - id: REQ-KEYS-027
+    area: KEYS
+    statement: "The workload-issuer key of sluis-node MUST be a key of its own that no other actor uses."
+    rationale: "Its callers and its blast radius differ from the token-signing key's, and signing keys are never shared (ADR 0012)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [914, 870]
+    verification:
+      - {kind: integration-test, ref: "the key-holder access list names sluis-node for the workload-issuer purpose and signer for the token-signing purpose, with different slots"}

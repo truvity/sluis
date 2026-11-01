@@ -477,3 +477,87 @@ requirements:
     issues: [1081]
     verification:
       - {kind: integration-test, ref: "subject derivation review test"}
+  - id: REQ-TOKEN-033
+    area: TOKEN
+    statement: "An access token and an ID token MUST carry in groups only the held grants whose scope and thing appear among the pairs of the audience's requires."
+    rationale: "A relying party must not read a grant meant for another system (ADR 0028)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [776]
+    verification:
+      - {kind: integration-test, ref: "hold grants on two things: the token for the first audience carries only that thing's grants"}
+  - id: REQ-TOKEN-034
+    area: TOKEN
+    statement: "sluis MUST NOT issue a claim that is not in the declared claim set of its token type."
+    rationale: "A fixed set lets the claims be tested as a whole and keeps configuration from widening a token (ADR 0028)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [776]
+    verification:
+      - {kind: integration-test, ref: "a configuration that names another claim is refused at load; no token carries one"}
+  - id: REQ-TOKEN-035
+    area: TOKEN
+    statement: "A token MUST omit acr, amr and auth_time when the upstream sent none."
+    rationale: "An absent value means unknown, and a default would claim an assurance that was never shown."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [776, 1106]
+    verification:
+      - {kind: integration-test, ref: "sign in through an upstream that sends none of them: the tokens carry none"}
+  - id: REQ-TOKEN-036
+    area: TOKEN
+    statement: "The access and ID tokens of a person MUST default to a lifetime of 1 hour."
+    rationale: "The default is v1's, so relying parties tuned to it keep working (ADR 0028)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [776]
+    verification:
+      - {kind: integration-test, ref: "issue a token with no setting: exp minus iat is 3600 seconds"}
+  - id: REQ-TOKEN-037
+    area: TOKEN
+    statement: "A token's exp MUST be no later than the earliest of the issuer's token_ttl, the client's ttl_cap, the end of its session and the end of the exchanged proof."
+    rationale: "A token must never outlive what it came from (ADR 0028)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [776]
+    verification:
+      - {kind: integration-test, ref: "set each limit below the others in turn: exp follows the shortest"}
+  - id: REQ-TOKEN-038
+    area: TOKEN
+    statement: "sluis config check MUST refuse a token_ttl or a ttl_cap above 1 hour."
+    rationale: "The maximum is fixed in code, and a longer token needs a new decision record."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [776]
+    verification:
+      - {kind: integration-test, ref: "a value of 2h is refused with the path of the field"}
+  - id: REQ-TOKEN-039
+    area: TOKEN
+    statement: "sluis MUST issue a token without cnf for an audience that does not declare binding."
+    rationale: "The relying parties of v1 parity accept bearer tokens only (ADR 0028)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [776]
+    verification:
+      - {kind: integration-test, ref: "a token for an undeclared audience has no cnf"}

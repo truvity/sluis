@@ -131,3 +131,51 @@ requirements:
     issues: [892]
     verification:
       - {kind: integration-test, ref: "delegation bound test"}
+  - id: REQ-POLICY-010
+    area: POLICY
+    statement: "The loader MUST refuse a grant name that the installation's vocabulary does not declare."
+    rationale: "A typo then stops the load instead of granting nothing or the wrong thing (ADR 0028)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [892]
+    verification:
+      - {kind: integration-test, ref: "a policy file, a client requires and a binding each naming an undeclared grant are refused with the path"}
+  - id: REQ-POLICY-011
+    area: POLICY
+    statement: "A wildcard in a group binding MUST NOT expand into a sensitive scope."
+    rationale: "A sensitive scope is named in full or not granted."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [892]
+    verification:
+      - {kind: integration-test, ref: "a wildcard over scopes does not reach a scope marked sensitive"}
+  - id: REQ-POLICY-012
+    area: POLICY
+    statement: "The loader MUST refuse a wildcard outside the scope or thing position of a group binding, and a wildcard that expands to nothing."
+    rationale: "A wildcard in requires, a claim, a lifetime or the role position would grant or admit by pattern."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [892]
+    verification:
+      - {kind: integration-test, ref: "each misplaced wildcard and an empty expansion are refused"}
+  - id: REQ-POLICY-013
+    area: POLICY
+    statement: "An installation MUST declare a grant vocabulary."
+    rationale: "Without one a name nobody declared would load, and a typo would grant nothing or the wrong thing (ADR 0028)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [892]
+    verification:
+      - {kind: integration-test, ref: "an install file without a vocabulary is refused by sluis config check"}
