@@ -440,18 +440,17 @@ requirements:
       - {kind: integration-test, ref: "introspection tests"}
   - id: REQ-TOKEN-015
     area: TOKEN
-    statement: "sluis MAY issue pairwise subject identifiers per sector, derived with a keyed hash that is never rotated, so that two sectors cannot correlate a person."
-    rationale: "Pairwise subjects prevent cross-service tracking."
+    statement: "sluis MAY issue pairwise subject identifiers per sector, derived from the upstream subject with a keyed hash that is never rotated, so that two sectors cannot correlate a person."
+    rationale: "Pairwise subjects prevent cross-service tracking, while single sign-on follows the sluis session and does not depend on the subject."
     level: MAY
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Partial}
       - {id: NC-06, section: "2104", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [1024]
     verification:
       - {kind: test-vectors, ref: "own subject vectors"}
       - {kind: conformance-suite, ref: "OIDF Basic OP with pairwise subject"}
@@ -461,12 +460,11 @@ requirements:
     rationale: "Reversible subjects leak the underlying identifier."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Full}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [776]
     verification:
       - {kind: integration-test, ref: "subject opacity test"}
   - id: REQ-TOKEN-032
@@ -476,11 +474,10 @@ requirements:
     rationale: "Reversible subjects leak the underlying identifier."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Full}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [776]
     verification:
       - {kind: integration-test, ref: "subject derivation review test"}

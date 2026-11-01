@@ -173,12 +173,11 @@ requirements:
     rationale: "Residency is a legal requirement for some users."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [1061]
     verification:
       - {kind: integration-test, ref: "region guard test"}
   - id: REQ-OPS-008

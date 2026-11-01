@@ -9,7 +9,7 @@ export function getStaticPaths() {
 
 const c = catalogue();
 const area = c.areaByCode.get(Astro.props.code)!;
-const title = area.title.replace(/ \(open scope\)$/, '');
+const title = area.title;
 const n = (f: (r: (typeof area.reqs)[number]) => boolean) => area.reqs.filter(f).length;
 const index = c.areas.findIndex((a) => a.code === area.code);
 const prev = c.areas[index - 1];
@@ -20,15 +20,6 @@ const next = c.areas[index + 1];
   title={`${area.code}: ${title}`}
   description={`The ${area.reqs.length} sluis v2 requirements of the ${title.toLowerCase()} area, with their standards, features, decisions and verification.`}
 >
-  {area.scopeOpen && (
-    <aside class="rq-scope" aria-label="Scope">
-      <span class="rq-badge rq-scope-badge">scope open</span>
-      <p>
-        This area belongs to customer account hosting. Whether sluis hosts customer accounts is undecided, so these requirements wait for
-        that decision and are all open. They are published so that the question can be judged on the whole text.
-      </p>
-    </aside>
-  )}
   <p>
     {area.reqs.length} requirements: {n((r) => r.level === 'MUST')} MUST, {n((r) => r.level === 'SHOULD')} SHOULD,
     {' '}{n((r) => r.level === 'MAY')} MAY. {n((r) => r.status === 'done')} done, {n((r) => r.status === 'planned')} planned,

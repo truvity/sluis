@@ -3,11 +3,10 @@ import ReqLayout from '../../components/requirements/ReqLayout.astro';
 import { areaPath, catalogue, count, hasKind, KIND_LABEL, odPath, reqPath, type Req } from '../../lib/requirements';
 
 const c = catalogue();
-const scope = (r: Req) => c.areaByCode.get(r.area)!.scopeOpen;
 const musts = c.reqs.filter((r) => r.level === 'MUST');
 const live = (r: Req) => r.status !== 'withdrawn';
 const pct = (n: number, d: number) => (d ? `${Math.round((100 * n) / d)}%` : '-');
-const row = (label: string, rs: Req[]) => ({ label, n: rs.length, core: rs.filter((r) => !scope(r)).length });
+const row = (label: string, rs: Req[]) => ({ label, n: rs.length });
 
 const noSuite = musts.filter((r) => live(r) && !hasKind(r, 'conformance-suite', 'test-vectors'));
 const manualOnly = musts.filter((r) => r.verification.length > 0 && r.verification.every((v) => v.kind === 'manual'));
@@ -57,17 +56,16 @@ const noSuiteByArea = c.areas.map((a) => [a, noSuite.filter((r) => r.area === a.
   description="What the sluis v2 requirements catalogue covers and what it does not: MUST clauses without a suite or test vectors, open records and unused standards."
 >
   <p>
-    Statistics computed from the catalogue at build time ({c.reqs.length} requirements, checked {c.checked}). The "core" column leaves out the
-    account-hosting areas whose scope is open. A MUST that has an integration test but no conformance suite and no test vectors is not a
+    Statistics computed from the catalogue at build time ({c.reqs.length} requirements, checked {c.checked}). A MUST that has an integration test but no conformance suite and no test vectors is not a
     gap in itself: the list below says where sluis owes its own vectors or an official suite does not reach.
   </p>
 
   <h2 id="summary">Summary</h2>
   <div class="rq-table-wrap">
     <table class="rq-table rq-stats">
-      <thead><tr><th>Measure</th><th>Requirements</th><th>Core only</th></tr></thead>
+      <thead><tr><th>Measure</th><th>Requirements</th></tr></thead>
       <tbody>
-        {stats.map((s) => <tr><td data-label="Measure">{s.label}</td><td data-label="Requirements">{s.n}</td><td data-label="Core only">{s.core}</td></tr>)}
+        {stats.map((s) => <tr><td data-label="Measure">{s.label}</td><td data-label="Requirements">{s.n}</td></tr>)}
       </tbody>
     </table>
   </div>
@@ -84,7 +82,7 @@ const noSuiteByArea = c.areas.map((a) => [a, noSuite.filter((r) => r.area === a.
       <tbody>
         {perArea.map((p) => (
           <tr>
-            <td data-label="Area"><a href={areaPath(p.a.code)}>{p.a.code}</a>{p.a.scopeOpen && <> <span class="rq-badge rq-scope-badge">scope open</span></>}</td>
+            <td data-label="Area"><a href={areaPath(p.a.code)}>{p.a.code}</a></td>
             <td data-label="Total">{p.total}</td>
             <td data-label="MUST">{p.must}</td>
             <td data-label="MUST with suite or vectors">{p.suite} <span class="rq-note">{pct(p.suite, p.must)}</span></td>
@@ -101,7 +99,7 @@ const noSuiteByArea = c.areas.map((a) => [a, noSuite.filter((r) => r.area === a.
   <p>{noSuite.length} requirements, by area. Each is verified by an integration test or by manual review.</p>
   {noSuiteByArea.map(([a, rs]) => (
     <details class="rq-details">
-      <summary><b>{a.code}</b> {a.title.replace(/ \(open scope\)$/, '')}: {rs.length}{a.scopeOpen && <> <span class="rq-badge rq-scope-badge">scope open</span></>}</summary>
+      <summary><b>{a.code}</b> {a.title}: {rs.length}</summary>
       <ul class="rq-list">
         {rs.map((r) => <li><a href={reqPath(r)}>{r.id}</a> {r.statement} <span class="rq-note">({[...new Set(r.verification.map((v) => KIND_LABEL[v.kind]))].join(', ')})</span></li>)}
       </ul>

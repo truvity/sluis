@@ -7,8 +7,6 @@ import { areaPath, catalogue, count, SOURCE, STATUS_HINT } from '../../lib/requi
 const c = catalogue();
 const by = (key: 'level' | 'status' | 'source') => c.vocabulary[key].map((k) => [k, count(c.reqs, (r) => r[key]).get(k) ?? 0] as const);
 const perArea = (code: string, f: (r: (typeof c.reqs)[number]) => boolean) => c.areaByCode.get(code)!.reqs.filter(f).length;
-const core = c.reqs.filter((r) => !c.areaByCode.get(r.area)!.scopeOpen).length;
-const open = c.reqs.length - core;
 ---
 
 <ReqLayout
@@ -26,15 +24,6 @@ const open = c.reqs.length - core;
     to standards, features and verification, and the <a href="/requirements/coverage/">coverage</a> page lists what has no test or no
     standard yet. Checked {c.checked}.
   </p>
-
-  <aside class="rq-scope" aria-label="Scope">
-    <span class="rq-badge rq-scope-badge">scope open</span>
-    <p>
-      {open} of the requirements ({c.areas.filter((a) => a.scopeOpen).map((a) => a.code).join(', ')}) describe customer account hosting.
-      Whether sluis hosts customer accounts at all is undecided, so they are published and marked, and the filter below can hide them.
-      The other {core} requirements do not depend on that decision.
-    </p>
-  </aside>
 
   <h2 id="counts">Counts</h2>
   <div class="rq-grid">
@@ -62,9 +51,9 @@ const open = c.reqs.length - core;
       </thead>
       <tbody>
         {c.areas.map((a) => (
-          <tr data-rq-area data-scope-open={a.scopeOpen ? '' : undefined}>
+          <tr>
             <td data-label="Area"><a href={areaPath(a.code)}>{a.code}</a></td>
-            <td data-label="Title">{a.title.replace(/ \(open scope\)$/, '')} {a.scopeOpen && <span class="rq-badge rq-scope-badge">scope open</span>}</td>
+            <td data-label="Title">{a.title}</td>
             <td data-label="Total">{a.reqs.length}</td>
             <td data-label="MUST">{perArea(a.code, (r) => r.level === 'MUST')}</td>
             <td data-label="done">{perArea(a.code, (r) => r.status === 'done')}</td>

@@ -151,7 +151,6 @@ const label = (g: Group, i: number) => (g.milestone ? `${i + 1}. ${g.name}` : g.
                 <tr class="ps-area-row">
                   <th scope="row">
                     <a href={areaPath(a.area.code)}>{a.area.code}</a>
-                    {a.area.scopeOpen && <span class="ps-scope"> scope open</span>}
                   </th>
                   {reqCells(a.counts).map((v, k) => <td class:list={['ps-num', { 'ps-first': k === 0, 'ps-zero': v === 0 }]}>{v}</td>)}
                   {Array.from({ length: COLS - 7 }, (_, k) => <td class:list={['ps-num', 'ps-zero', { 'ps-first': [0, 3, 7, 8, 9].includes(k) }]}>—</td>)}
@@ -163,8 +162,7 @@ const label = (g: Group, i: number) => (g.milestone ? `${i + 1}. ${g.name}` : g.
       </table>
     </div>
     <p class="ps-note">
-      Area rows count requirements only; decision records and issues are counted per milestone. "Scope open" marks the
-      account-hosting areas whose scope is not decided.
+      Area rows count requirements only; decision records and issues are counted per milestone.
     </p>
 
     <h2 id="open-work">Open work by milestone</h2>

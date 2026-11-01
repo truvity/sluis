@@ -1,4 +1,4 @@
-# REG: Registration, recovery and lifecycle (open scope)
+# REG: Registration, recovery and lifecycle
 schema: 1
 area: REG
 requirements:
@@ -399,8 +399,8 @@ requirements:
       - {kind: integration-test, ref: "regeneration test"}
   - id: REQ-REG-029
     area: REG
-    statement: "The mail module MUST send verification codes, notices and recovery messages."
-    rationale: "Registration, notices and recovery depend on mail."
+    statement: "The e-mail Notifier MUST send recovery codes and security alerts through the configured provider."
+    rationale: "Recovery and security alerts depend on mail."
     level: MUST
     source: stakeholder-ciam
     status: planned
@@ -412,7 +412,7 @@ requirements:
       - {kind: integration-test, ref: "code delivery to sink test"}
   - id: REQ-REG-030
     area: REG
-    statement: "The mail module MUST provide templates for every configured locale."
+    statement: "The e-mail Notifier MUST provide templates for every configured locale."
     rationale: "Messages must reach people in their language."
     level: MUST
     source: stakeholder-ciam
@@ -425,7 +425,7 @@ requirements:
       - {kind: integration-test, ref: "locale template coverage test"}
   - id: REQ-REG-031
     area: REG
-    statement: "The mail module MUST send through an outbox with retries."
+    statement: "The e-mail Notifier MUST send through an outbox with retries."
     rationale: "A transient failure must not lose a message."
     level: MUST
     source: stakeholder-ciam
@@ -438,7 +438,7 @@ requirements:
       - {kind: integration-test, ref: "mail transport failure test"}
   - id: REQ-REG-032
     area: REG
-    statement: "The mail module MUST apply per-address and global abuse limits."
+    statement: "The e-mail Notifier MUST apply per-address and global abuse limits."
     rationale: "Mail must not become an amplification channel."
     level: MUST
     source: stakeholder-ciam
@@ -451,7 +451,7 @@ requirements:
       - {kind: integration-test, ref: "abuse limit test"}
   - id: REQ-REG-033
     area: REG
-    statement: "The mail module MUST sign messages with DKIM on the operator's domain in the production profile."
+    statement: "The e-mail Notifier MUST sign messages with DKIM on the operator's domain in the production profile."
     rationale: "Unsigned mail is distrusted or spoofed."
     level: MUST
     source: stakeholder-ciam
@@ -464,7 +464,7 @@ requirements:
       - {kind: integration-test, ref: "DKIM signature check"}
   - id: REQ-REG-034
     area: REG
-    statement: "The built-in mail sink MUST be refused at load in the production profile."
+    statement: "The e-mail Notifier MUST refuse the built-in mail sink at load in the production profile."
     rationale: "A sink keeps messages readable by the test interface."
     level: MUST
     source: stakeholder-ciam
@@ -776,26 +776,24 @@ requirements:
     rationale: "Operators must be able to review the lifecycle."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "lifecycle policy load test"}
   - id: REQ-REG-057
     area: REG
-    statement: "A corporate account MUST be disabled when its connection is removed or after an idle period, and deleted after retention."
-    rationale: "An orphaned corporate account is a standing credential."
+    statement: "A subject that came through a corporate connection MUST be disabled when the connection is removed or after an idle period, and deleted after retention."
+    rationale: "An orphaned subject is a standing credential."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "corporate lifecycle test"}
   - id: REQ-REG-058
@@ -818,12 +816,11 @@ requirements:
     rationale: "The person's rights must be exercisable."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "export and deletion test"}
   - id: REQ-REG-060

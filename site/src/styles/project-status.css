@@ -38,7 +38,6 @@
 .ps-group-row th { color: var(--sl-color-white); }
 .ps-current .ps-group-row > * { background: var(--sl-color-accent-low); }
 .ps-area-row th { padding-left: 1.75rem !important; font-family: var(--sl-font-mono); font-size: var(--sl-text-xs); font-weight: 400; }
-.ps-scope { font-family: var(--sl-font-system); color: var(--sl-color-orange-high); font-size: var(--sl-text-xs); }
 .ps-table [id] { scroll-margin-top: calc(var(--sl-nav-height, 3.5rem) + 1rem); }
 
 /* open work per milestone */

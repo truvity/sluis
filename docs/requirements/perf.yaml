@@ -21,11 +21,10 @@ requirements:
     rationale: "A large revocation must not exceed a time budget."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [1062]
     verification:
       - {kind: integration-test, ref: "100000-session revocation test"}

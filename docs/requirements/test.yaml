@@ -107,18 +107,17 @@ requirements:
       - {kind: test-vectors, ref: "kit vectors"}
   - id: REQ-TEST-007
     area: TEST
-    statement: "Inspection reads, seeding, a software authenticator and a test clock MUST be compiled only into test builds."
-    rationale: "End-to-end tests need controllable fixtures."
+    statement: "Inspection reads, seeding, a software authenticator and a test clock MUST be absent from released binaries."
+    rationale: "End-to-end tests need controllable fixtures, and a released binary must not carry them."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-59, section: "1", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [877]
     verification:
-      - {kind: integration-test, ref: "production-build symbol test"}
+      - {kind: integration-test, ref: "released-binary symbol test"}
   - id: REQ-TEST-009
     area: TEST
     statement: "The port conformance suite MUST test create-if-absent under concurrent writers for every blob driver."

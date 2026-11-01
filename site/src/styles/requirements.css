@@ -7,9 +7,6 @@
 .rq-nav a[aria-current='page'] { border-color: var(--sl-color-accent); background: var(--sl-color-accent-low); color: var(--sl-color-white); }
 
 .rq-jump { font-size: var(--sl-text-sm); color: var(--sl-color-gray-2); }
-.rq-scope { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: flex-start; margin: 1rem 0; padding: .75rem 1rem;
-  border: 1px solid var(--sl-color-orange); border-radius: .5rem; background: var(--sl-color-orange-low); }
-.rq-scope p { margin: 0; flex: 1 1 24rem; font-size: var(--sl-text-sm); }
 
 /* badges and chips */
 .rq-badge, .rq-chip { display: inline-block; padding: 0 .55em; border: 1px solid var(--sl-color-gray-4); border-radius: 1em;
@@ -25,7 +22,6 @@ a.rq-chip:hover { border-color: var(--sl-color-accent); color: var(--sl-color-wh
 .rq-status-partial { border-color: var(--sl-color-orange); color: var(--sl-color-orange-high); background: var(--sl-color-orange-low); }
 .rq-status-open { border-color: var(--sl-color-red); color: var(--sl-color-red-high); background: var(--sl-color-red-low); }
 .rq-status-out-of-scope, .rq-status-withdrawn { border-style: dashed; }
-.rq-scope-badge { border-color: var(--sl-color-orange); color: var(--sl-color-orange-high); background: var(--sl-color-orange-low); font-weight: 600; }
 .rq-depth-partial { border-style: dashed; }
 .rq-issue { border-color: var(--sl-color-accent); color: var(--sl-color-accent-high); }
 .rq-decision { border-color: var(--sl-color-red); color: var(--sl-color-red-high); }
@@ -64,7 +60,6 @@ a.rq-chip:hover { border-color: var(--sl-color-accent); color: var(--sl-color-wh
 .rq-filter label { display: grid; gap: .15rem; font-size: var(--sl-text-xs); color: var(--sl-color-gray-2); }
 .rq-filter select, .rq-filter input[type='search'] { font: inherit; font-size: var(--sl-text-sm); padding: .3rem .4rem; color: var(--sl-color-text);
   background: var(--sl-color-bg); border: 1px solid var(--sl-color-gray-4); border-radius: .35rem; min-width: 7rem; }
-.rq-filter .rq-check { display: flex; align-items: center; gap: .4rem; font-size: var(--sl-text-sm); color: var(--sl-color-text); }
 .rq-count { margin: 0; flex-basis: 100%; font-size: var(--sl-text-sm); color: var(--sl-color-gray-2); }
 .rq-filter :focus-visible, .rq-tabs :focus-visible { outline: 3px solid var(--sl-color-accent-high); outline-offset: 2px; }
 

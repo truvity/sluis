@@ -1,4 +1,4 @@
-# VAULT: Fallback credential vault (open scope)
+# VAULT: Fallback credential vault
 schema: 1
 area: VAULT
 requirements:
@@ -980,44 +980,41 @@ requirements:
       - {kind: integration-test, ref: "slow vault test"}
   - id: REQ-VAULT-070
     area: VAULT
-    statement: "DNS CAA records with an account URI MUST restrict certificate issuance for the issuer, account and vault hosts."
+    statement: "DNS CAA records with an account URI MUST restrict certificate issuance for the issuer hosts."
     rationale: "Issuance by an unintended authority is the main impersonation path."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: NC-13, section: "8657", depth: Full}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1063]
     verification:
       - {kind: integration-test, ref: "CAA record check"}
   - id: REQ-VAULT-071
     area: VAULT
-    statement: "Certificate Transparency logs MUST be monitored for the issuer, account and vault hosts."
+    statement: "Certificate Transparency logs MUST be monitored for the issuer hosts."
     rationale: "Monitoring finds certificates that the operator did not request."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: NC-13, section: "8657", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1063]
     verification:
       - {kind: integration-test, ref: "CT monitor test"}
   - id: REQ-VAULT-072
     area: VAULT
-    statement: "An unexpected certificate for the issuer, account or vault host MUST be treated as an incident."
+    statement: "An unexpected certificate for an issuer host MUST be treated as an incident."
     rationale: "It signals an impersonation attempt."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: NC-13, section: "8657", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1063]
     verification:
       - {kind: integration-test, ref: "CT monitor incident test"}
   - id: REQ-VAULT-073
