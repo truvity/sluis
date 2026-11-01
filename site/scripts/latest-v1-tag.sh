@@ -6,7 +6,7 @@
 #
 # usage: site/scripts/latest-v1-tag.sh [<remote>]   (default: origin; a URL works too)
 #
-# Used by the Pages workflow and by `just site-v1`, so both pick the same tag.
+# Used by the Site workflow and by `just site-v1`, so both pick the same tag.
 set -euo pipefail
 
 remote=${1:-origin}

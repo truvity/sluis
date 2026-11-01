@@ -5,6 +5,7 @@
 
 Decided by the maintainer on 2026-10-31. Proposal: [issue #1010](https://github.com/truvity/sluis/issues/1010).
 Rewritten in place on 2026-10-31 (no preview per pull request: preview hostnames would publish the operator's account subdomain; the deploy is GitHub Actions, not Cloudflare's build service).
+Rewritten in place on 2026-11-01 (the fallback week is over: GitHub Pages is off, the workflow's Pages jobs are gone, and the names are custom domains of the Worker instead of routes over proxied records).
 
 ## Context
 
@@ -97,7 +98,7 @@ The project board's `Product milestone` field is a single-select with four optio
 - The server island needs a fixed `ASTRO_KEY`, so that cached HTML can still decrypt the island's props after a redeploy. Its fallback is the build-time snapshot, which is what readers without JavaScript and crawlers see.
 - One CI shows the whole path. The deploy is a job of the workflow that builds the site, so its logs sit next to the build's, it runs only after the site checks have passed, and a broken deploy is a red check on the commit. Cloudflare posts no checks or comments on the repository.
 - The deploy needs a long-lived Cloudflare API token, because Cloudflare accepts no OIDC federation for deploys. The token is limited to deploying this one Worker (it cannot create or delete Workers) and expires, but a leak still lets its holder replace the Worker that serves the site. It lives only in the `cloudflare` environment, which allows `main` only; anyone who can merge to `main`, or edit a workflow that runs there, can use it. The maintainer rotates it before it expires, and a deploy that fails with an authentication error is the reminder.
-- The deploy job rebuilds the site for the Worker instead of passing on the build for GitHub Pages, because the KV namespace id is written into the generated Worker configuration at build time, from a secret that only this job can read. The build must produce the same output as the Pages build: the v1 documentation under `/v1/`, the Git LFS images and fonts, and the build checks, within the 20,000-file limit. `.github/workflows/site.yaml` keeps its GitHub Pages job as a manual fallback for one week after the cutover, and retires it then.
+- The deploy job rebuilds the site for the Worker instead of passing on the build for GitHub Pages, because the KV namespace id is written into the generated Worker configuration at build time, from a secret that only this job can read. The build must produce the same output as the Pages build: the v1 documentation under `/v1/`, the Git LFS images and fonts, and the build checks, within the 20,000-file limit. `.github/workflows/site.yaml` kept a GitHub Pages job as a manual fallback for the first week after the cutover, and retired it on 2026-11-01.
 - The repository's Cloudflare configuration names bindings, not resources, so a fork can build the site but cannot deploy it to the operator's account.
 - The status page changes when the maintainer edits the project board, with no pull request. Decision and requirement status still change only by a merged pull request.
 - Work that is not yet a decision record or a requirement is invisible on the status page until it has an issue with a `Product milestone`.

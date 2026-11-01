@@ -54,7 +54,7 @@ site-render dist='site/dist' shots='':
 site-check: site-lint site-build site-render site-links
 
 # Refresh v1-src from the newest stable v1 release tag (or the tag given) and build
-# the v1 documentation into site/dist/v1. The Pages workflow picks the tag by the
+# the v1 documentation into site/dist/v1. The Site workflow picks the tag by the
 # same rule (site/scripts/latest-v1-tag.sh). Needs python3, jq, curl.
 site-v1 tag='':
     #!/usr/bin/env bash
@@ -68,7 +68,7 @@ site-v1 tag='':
     site/scripts/build-v1.sh v1-src site/dist
     site/scripts/check-built.sh site/dist
 
-# Everything the Pages workflow publishes: the site and v1 under /v1/.
+# Everything the Site workflow builds: the site and v1 under /v1/.
 site-all: site-check site-v1
 
 # The Cloudflare Workers build (ADR 0063), as the deploy job of site.yaml makes it, and

@@ -42,7 +42,7 @@ jobs:
         with:
           lfs: true
           persist-credentials: false
-      # The tag the Pages workflow publishes under /v1/ (site/scripts/latest-v1-tag.sh).
+      # The tag the Site workflow publishes under /v1/ (site/scripts/latest-v1-tag.sh).
       - name: Find the newest stable v1 tag
         id: v1
         run: |
