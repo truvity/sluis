@@ -125,6 +125,4 @@ Both readers were run on 2026-11-01 (`go.yaml.in/yaml/v3` v3.0.6 and `saphyr-par
 
 ## Still to build
 
-:::note[Proposed]
-**The CI check against home-made primitives and unlisted libraries** is built with the first code ([#1039](https://github.com/truvity/sluis/issues/1039)); until then the review of each pull request is the check.
-:::
+**The CI check against home-made primitives and unlisted libraries** is built with the first code ([#1039](https://github.com/truvity/sluis/issues/1039)); it reads the data file beside this page, `approved-libraries.yaml`. Until then the review of each pull request is the check.
