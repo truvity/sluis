@@ -12,6 +12,9 @@
 //
 // Also checked, each failing closed (an empty sweep is a failure):
 //   - the headers every response must carry are in the `/*` rule;
+//   - the `/*` policy names no external origin except Cloudflare Web Analytics (the CDN
+//     injects its beacon at the edge): https://static.cloudflareinsights.com in script-src
+//     and https://cloudflareinsights.com in connect-src, exactly, with no wildcard;
 //   - no v2 page has an inline event handler or a javascript: URL (the CSP blocks them);
 //   - the /v1/* rule detaches the strict policy and sets its own: the v1 documentation
 //     is MkDocs output with a different inline script on almost every page;
@@ -96,6 +99,19 @@ else {
   const dir = (n) => csp.split(';').map((d) => d.trim()).find((d) => d.split(/\s+/)[0] === n);
   for (const [n, want] of [['frame-ancestors', "'none'"], ['object-src', "'none'"], ['base-uri', "'self'"], ['default-src', "'self'"]]) {
     if (!dir(n)?.split(/\s+/).slice(1).includes(want)) bad(`the CSP lacks ${n} ${want}`);
+  }
+  // External origins: only the two of Cloudflare Web Analytics, each in its own directive.
+  const allowedOrigins = { 'script-src': 'https://static.cloudflareinsights.com', 'connect-src': 'https://cloudflareinsights.com' };
+  const isLocal = (t) => /^'[a-z0-9-]+'$/i.test(t) || /^'(sha256|sha384|sha512)-[A-Za-z0-9+/=_-]+'$/.test(t) || /^(data|blob):$/.test(t);
+  for (const d of csp.split(';').map((x) => x.trim()).filter(Boolean)) {
+    const [name, ...tokens] = d.split(/\s+/);
+    for (const t of tokens) {
+      if (isLocal(t)) continue;
+      if (allowedOrigins[name] !== t) bad(`the CSP directive ${name} allows ${t}; the only external origins are ${Object.entries(allowedOrigins).map(([k, v]) => `${v} in ${k}`).join(' and ')}`);
+    }
+  }
+  for (const [name, origin] of Object.entries(allowedOrigins)) {
+    if (!dir(name)?.split(/\s+/).includes(origin)) bad(`the CSP directive ${name} lacks ${origin} (Cloudflare Web Analytics)`);
   }
   const script = dir('script-src') ?? '';
   if (/'unsafe-inline'|'unsafe-eval'|\*/.test(script)) bad(`the v2 script-src allows unsafe-inline, unsafe-eval or a wildcard: ${script.slice(0, 80)}`);
