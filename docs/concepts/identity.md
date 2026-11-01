@@ -14,13 +14,13 @@ This page is about how an actor of sluis reaches a cloud. How a host, a pod or a
 
 The **node agent** (`sluis-node`) runs on each self-hosted node. It issues a short-lived **workload JWT** per actor. It knows which actor is asking without trusting what the caller says: the actor's identity comes from its **uid**, read from the connection's peer credentials on its Unix socket.
 
-The node agent signs each token with the **node's non-extractable key**, so a token cannot be made without the node. Tokens are valid for an hour and refreshed hourly per actor. At about 120 ms per signature on a YubiKey, the cost is negligible.
+The node agent signs each token with the **node's non-extractable key**, so a token cannot be made without the node. Tokens are valid for an hour and refreshed hourly per actor. At about 147 ms per signature, about 7 a second per YubiKey 5 Nano (measured 2026-10-31), the cost is negligible.
 
 The token's `sub` is the actor instance's name, **`<actor>@<boundary>`** ([Actors](/concepts/actors/#naming)), and the cloud role's trust policy pins it. This is credential brokering, not mediation: the node agent hands each actor a token of its own, and the cloud enforces what that token may do ([Ports and drivers](/concepts/drivers/#per-actor-and-shared-instances)).
 
 ## One issuer per boundary
 
-The boundary's issuer is the issuer of these tokens, by default (decided 2026-10-30, [ADR 0012](/decisions/0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials/)).
+The boundary's issuer is the issuer of these tokens, by default (decided 2026-10-30, [ADR 0007](/decisions/0007-workload-identity-and-host-enrolment/)).
 
 - Its **JWKS** holds public keys only: **one key per node card**, three on the boards, plus the next keys while a key rotates. Each node signs with its own card's key, under the one issuer.
 - The issuer publishes a **static discovery document** and the JWKS. Nothing runs to serve them.
@@ -69,7 +69,7 @@ sequenceDiagram
   N-->>D: workload JWT
 ```
 
-The driver asks for a workload token for the audience of the target account, its registered client ID such as `aws-<account-alias>` and not the shared `sts.amazonaws.com` ([ADR 0059](/decisions/0059-each-boundary-has-its-own-issuer-and-tokens-carry-one-audience/)), over the node agent's Unix socket. The node agent reads the caller's uid from the peer credentials and maps the uid to an actor. It signs a JWT with ES384 using the node key, which is non-extractable, with the claims `iss=https://sluis.prod.example.com` (the boundary's issuer; a fleet with per-node issuers uses the node's issuer URL instead), `sub=writer@prod` (the actor instance), `iat` and `exp`. The JWT is valid for about 1 hour.
+The driver asks for a workload token for the audience of the target account, its registered client ID such as `aws-<account-alias>` and not the shared `sts.amazonaws.com` ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/)), over the node agent's Unix socket. The node agent reads the caller's uid from the peer credentials and maps the uid to an actor. It signs a JWT with ES384 using the node key, which is non-extractable, with the claims `iss=https://sluis.prod.example.com` (the boundary's issuer; a fleet with per-node issuers uses the node's issuer URL instead), `sub=writer@prod` (the actor instance), `iat` and `exp`. The JWT is valid for about 1 hour.
 
 ### Step 2: the cloud exchanges the token for credentials
 

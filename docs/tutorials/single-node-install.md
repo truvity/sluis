@@ -114,7 +114,7 @@ The YubiKey holds the node's keys in PIV slots. It has no symmetric keys, so sea
 | `85` | Release subkey |
 | `86` to `95` | Spare: a key made by an event rotation goes in a free spare slot while the old one finishes; older sealing keys stay here until their data keys are re-wrapped |
 
-The token-signing key is not the intermediate: it has a slot of its own, and the intermediate issues its certificate. The yearly renewal re-signs the same keys, so no purpose needs a second slot. This slot map is proposed until `key-holder` is built ([ADR 0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/#the-card-slot-map)). Slot `9e` is not used. All keys are EC P-384. Change the default PIN and management key first, then let sluis generate the keys on the device so that they never leave it.
+The token-signing key is not the intermediate: it has a slot of its own, and the intermediate issues its certificate. The yearly renewal re-signs the same keys, so no purpose needs a second slot. This slot map is proposed until `key-holder` is built ([ADR 0012](/decisions/0012-cryptography-and-authority-keys/#the-card-slot-map)). Slot `9e` is not used. All keys are EC P-384. Change the default PIN and management key first, then let sluis generate the keys on the device so that they never leave it.
 
 ```sh
 # Example

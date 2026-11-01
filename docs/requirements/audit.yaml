@@ -243,7 +243,7 @@ requirements:
       - {id: ST-74, section: "1", depth: Partial}
       - {id: ST-76, section: "1", depth: Partial}
     decisions: ["OD-36"]
-    issues: [886]
+    issues: [955]
     verification:
       - {kind: integration-test, ref: "per-node log test"}
   - id: REQ-AUDIT-029
@@ -260,7 +260,7 @@ requirements:
       - {id: ST-74, section: "1", depth: Partial}
       - {id: ST-76, section: "1", depth: Partial}
     decisions: ["OD-36"]
-    issues: [886]
+    issues: [955]
     verification:
       - {kind: integration-test, ref: "co-signing and failure tests"}
   - id: REQ-AUDIT-010
@@ -645,7 +645,7 @@ requirements:
     standards:
       - {id: ST-77, section: "2.1", depth: Partial}
     decisions: ["OD-36"]
-    issues: [886]
+    issues: [837, 838]
     verification:
       - {kind: integration-test, ref: "per-node writer test"}
   - id: REQ-AUDIT-046
@@ -903,11 +903,11 @@ requirements:
     rationale: "The writer stays away from R2, at the cost of up to an hour of log with no off-site copy."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    superseded_by: [REQ-AUDIT-103]
     runtimes: ["bare-metal"]
     standards:
       - {id: ST-75, section: "1", depth: Partial}
-    issues: [984]
     verification:
       - {kind: integration-test, ref: "off-site copy test"}
   - id: REQ-AUDIT-066

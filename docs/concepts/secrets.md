@@ -48,7 +48,7 @@ Interface (illustrative): `get`, `put` with an expected revision, `delete` and `
 
 Drivers are of two kinds, and the port says so in its capability flags:
 
-- **Stores** are writable. An installation has exactly one. Examples are a parameter store on AWS, a KV store such as OpenBao, and `sealed-state`.
+- **Stores** are writable. An installation has exactly one. Examples are a parameter store on AWS and `sealed-state`.
 - **Sources** are read-only. They deliver the secrets that declared configuration references and the bootstrap secrets, such as a YubiKey PIN: a systemd credential, a mounted file, an environment variable (development only).
 
 The bootstrap rule is that **the credentials of the store come from a source, never from the store**.
@@ -73,7 +73,7 @@ A dedicated decision record is still to come. It has to fix:
 - a re-seal path, for when the sealing key rotates;
 - recovery when a sealing key is lost;
 - one immutable item per version, with compare-and-set on the record;
-- how sealed values behave in a backup beyond the rule already agreed: they are archived sealed, with an escrow ceremony for the sealing key ([ADR 0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
+- how sealed values behave in a backup beyond the rule already agreed: they are archived sealed, with an escrow ceremony for the sealing key ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/)).
 
 Until it is written, the driver is a design, not a promise. `sealed-state` is for sluis's internal values. Nobody outside sluis can read it, so an exported value on such an installation goes out through a drop (below). The PIN of the card itself comes from a source, a systemd credential.
 :::

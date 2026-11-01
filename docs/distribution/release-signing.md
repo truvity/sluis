@@ -96,7 +96,7 @@ A Helm chart pins its images by digest, so verifying the chart and installing it
 The OpenPGP key is a **dedicated sluis release identity**, not anyone's personal key.
 
 - **The primaries are ritueel's.** There are two primary keys, one on each root card, held and used only at ritueel's yearly ceremony. They are redundancy, not two-person control. How they are made, why there are two, how the cards alternate and what to do when one is lost are taught at [ritueel.id](https://ritueel.id/concepts/openpgp-release-keys/). sluis does not hold a primary and does not run that ceremony.
-- **A signing subkey does the work.** It is generated on the signing key store (a node's YubiKey, or a cloud key service), bound by the primary of the year, and carries a back-signature that `key-holder` makes on the card ([ADR 0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)). It lasts about 13 months, and each year a new binding over the same subkey extends its expiry, so years overlap. The subkey itself is replaced only on an event or after three years at most ([ADR 0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/#rotation)). sluis warns 60, 30 and 14 days before it expires.
+- **A signing subkey does the work.** It is generated on the signing key store (a node's YubiKey, or a cloud key service), bound by the primary of the year, and carries a back-signature that `key-holder` makes on the card ([ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/)). It lasts about 13 months, and each year a new binding over the same subkey extends its expiry, so years overlap. The subkey itself is replaced only on an event or after three years at most ([ADR 0012](/decisions/0012-cryptography-and-authority-keys/#rotation)). sluis warns 60, 30 and 14 days before it expires.
 - **Users verify with the keyring package,** which carries both primaries and every current subkey binding. A verifier that holds only one primary's certificate cannot check a signature from a subkey that the other primary bound.
 - **A subkey is revoked by the primary of the year.** The revocation reaches users through a new keyring package.
 - **The maintainer's personal key certifies each release key** is an open question, tracked with the publication research (ritueel issue 28).
@@ -113,7 +113,7 @@ The output is an ASCII-armoured detached signature, delivered in stages:
 | v1 parity | The `Release.gpg` and `InRelease` files of an apt repository, and the `repomd.xml.asc` of an rpm repository |
 | Later | The header signature of each rpm package, and a stand-in for `gpg` that git can call, for CI |
 
-The design is in [ADR 0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/).
+The design is in [ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/).
 
 ### Packaging notes
 
@@ -139,7 +139,7 @@ The name of the signature file is not decided. The commands use `SHA256SUMS.asc`
 How a user finds and verifies the public key is under research. The plan is to use several independent channels, so one compromised channel cannot replace the key:
 
 - keys.openpgp.org;
-- the Web Key Directory, direct method, on sluis.id (static files, served as assets on Cloudflare Workers, [ADR 0063](/decisions/0063-the-site-is-static-on-cloudflare-workers-with-a-live-status-api/));
+- the Web Key Directory, direct method, on sluis.id (static files, served as assets on Cloudflare Workers, [ADR 0020](/decisions/0020-the-site-is-static-on-cloudflare-workers/));
 - DNS `OPENPGPKEY` records (RFC 7929), if DNSSEC is enabled on the zone;
 - `SECURITY.md` in the repository;
 - the GitHub release;

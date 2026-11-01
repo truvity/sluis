@@ -271,7 +271,7 @@ requirements:
       - {kind: manual, ref: "release matrix review"}
   - id: REQ-KEYS-011
     area: KEYS
-    statement: "An alarm MUST be raised on key-ring decryption outside planned rotation."
+    statement: "An alarm MUST be raised when a value is decrypted with a retired key version outside a planned re-seal."
     rationale: "Key misuse is silent without alarms."
     level: MUST
     source: security-review
@@ -281,7 +281,7 @@ requirements:
       - {id: ST-88, section: "1", depth: Partial}
     issues: [800, 836]
     verification:
-      - {kind: integration-test, ref: "alert-rule test (key-ring)"}
+      - {kind: integration-test, ref: "alert-rule test (retired key version)"}
   - id: REQ-KEYS-019
     area: KEYS
     split_from: REQ-KEYS-011

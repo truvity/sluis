@@ -111,15 +111,15 @@ shapes:
     blob: "Cloudflare R2 in the first release, through the s3-compatible driver with credentials from the cloudflare cloud driver; Garage on the boards, with an hourly off-site R2 copy, is a later backend"
     lock: "lock mode removable (an R2 account administrator can remove the lock); the peer witnesses protect the history, which is what lets a production log run here"
     cluster: "three nodes; each node has its own writer, spool and log; the audit pieces run on the same nodes and share driver instances"
-    index_placement: "rqlite, a replicated SQLite (ADR 0022), so the reader can run on any node; its full-text search was tested on a three-node cluster, and the board spike (S5, 2026-10-31) measured rqlite on native arm64 and eMMC, about 9 MiB per cluster and about 400 commits/s per board, with sqlite on the indexer's node as the fallback. Where Search runs is derived from the port and driver rules"
+    index_placement: "rqlite, a replicated SQLite (ADR 0015), so the reader can run on any node; its full-text search was tested on a three-node cluster, and the board spike (S5, 2026-10-31) measured rqlite on native arm64 and eMMC, about 9 MiB per cluster and about 400 commits/s per board, with sqlite on the indexer's node as the fallback. Where Search runs is derived from the port and driver rules"
   lambda:
     log_key: "one KMS key, used only by the writer function's IAM role through its key policy. One log; the function's role is the isolation"
     witness: "none by default (optional); an external witness is possible. There is no peer"
     blob: "an S3 bucket"
     lock: "lock mode compliance (Object Lock), per install"
     cluster: "managed by the platform; the writer runs with a reserved concurrency of 1 on a standard SQS queue, and correctness comes from create-if-absent on the bucket; the throttling is measured at the Lambda step"
-    index_placement: "postgres on Aurora by default (ADR 0022), reached through RDS Proxy with IAM authentication; the indexer and the reader run in the VPC"
-    note: "The default index here is postgres on Aurora (ADR 0022), reached through RDS Proxy with IAM authentication and one database role per actor kind. Where Search runs is derived from the port and driver rules. A small install can also run sluis audit search from the CLI, which builds a local sqlite index from the log. The search index is a rebuildable cache; the log in the blob is the record."
+    index_placement: "postgres on Aurora by default (ADR 0015), reached through RDS Proxy with IAM authentication; the indexer and the reader run in the VPC"
+    note: "The default index here is postgres on Aurora (ADR 0015), reached through RDS Proxy with IAM authentication and one database role per actor kind. Where Search runs is derived from the port and driver rules. A small install can also run sluis audit search from the CLI, which builds a local sqlite index from the log. The search index is a rebuildable cache; the log in the blob is the record."
 
 # ---------------------------------------------------------------------------
 # The map
@@ -409,7 +409,7 @@ flows:
         edges: ["indexer>statedrv", "indexer>blobdrv", "indexer>index", "statedrv>statestore", "blobdrv>archive"]
         text: The indexer follows audit_batches from its cursor, fetches each new batch object and applies it to the search index, then advances the cursor. Lag is the leader sequence minus that cursor. Where Search runs is derived from the port and driver rules.
         variants:
-          - { shapes: [boards], text: "The index is rqlite (ADR 0022), replicated across the nodes, so the reader can run on any node. The reader merges the three logs by time." }
+          - { shapes: [boards], text: "The index is rqlite (ADR 0015), replicated across the nodes, so the reader can run on any node. The reader merges the three logs by time." }
           - { shapes: [lambda], text: "The index here is postgres on Aurora, reached through RDS Proxy. The indexer follows the log's checkpoints in the same bucket and keeps the index there." }
   - id: search
     title: An auditor searches
@@ -558,7 +558,7 @@ promises:
     text: The writer asks the keys driver to sign the batch head. The driver's access list (or the key policy on AWS) lets only the writer use the log key, and the writer cannot read it. The witness holds nothing the writer holds, and cannot write a batch.
     status: agreed
   - title: A witness is optional, and the risk of none is documented
-    text: sluis config check warns when an installation has no witness. With no witness and no notary, a compromised writer can get a rewritten checkpoint signed. A compliance lock on s3 still prevents overwriting objects, but not a split view. In production a log needs a compliance lock or a witness, and sluis config check refuses anything else there (ADR 0021).
+    text: sluis config check warns when an installation has no witness. With no witness and no notary, a compromised writer can get a rewritten checkpoint signed. A compliance lock on s3 still prevents overwriting objects, but not a split view. In production a log needs a compliance lock or a witness, and sluis config check refuses anything else there (ADR 0016).
     status: agreed
   - title: The search index is a projection, never the evidence
     text: Losing a search index costs search time and no evidence. The blob and the seals are the record, and verification never trusts the index or state.
@@ -610,7 +610,7 @@ chain:
       text: With no witness and no notary, a compromised writer can get a rewritten checkpoint signed. A compliance lock on s3 still prevents overwriting objects, but not a split view. A witness is optional, and sluis config check warns when there is none.
       status: agreed
     - title: Seal granularity
-      text: A batch is sealed at 256 records or 5 seconds after its first record, whichever comes first, and an empty batch is never sealed. Each batch ends with a seal entry that records its count, the writer instance and the observed clock offset (ADR 0021).
+      text: A batch is sealed at 256 records or 5 seconds after its first record, whichever comes first, and an empty batch is never sealed. Each batch ends with a seal entry that records its count, the writer instance and the observed clock offset (ADR 0016).
       status: agreed
 
 lag:
@@ -623,7 +623,7 @@ lag:
 
 index_notes:
   - title: One search index per node, or one replicated index
-    text: A sqlite index (SQLite with FTS5) is one file fed by the ordered audit_batches sequence in replicated state. On boards the index is a replicated rqlite index (ADR 0022), so the reader can run on any node; its full-text support was verified on a three-node cluster, and the board spike measured rqlite's memory and write rate on the hardware on 2026-10-31. A node that was down catches up in order from its cursor, and a new node replays from zero. Purges and erasures are entries in the same sequence. Where Search runs is derived from the port and driver rules.
+    text: A sqlite index (SQLite with FTS5) is one file fed by the ordered audit_batches sequence in replicated state. On boards the index is a replicated rqlite index (ADR 0015), so the reader can run on any node; its full-text support was verified on a three-node cluster, and the board spike measured rqlite's memory and write rate on the hardware on 2026-10-31. A node that was down catches up in order from its cursor, and a new node replays from zero. Purges and erasures are entries in the same sequence. Where Search runs is derived from the port and driver rules.
     status: agreed
   - title: Rebuilding
     text: The search index can be thrown away. A node rebuilds by replaying audit_batches from zero and fetching each batch object.
@@ -633,7 +633,7 @@ index_notes:
     status: agreed
 
 compare:
-  - { topic: "Record, action table, profiles", v1: "one record format (a Protobuf core with JSON Schema slots), a catalogue per application, profile copies per purpose", v2: "an OCSF event per record with the sluis facts in one unmapped.sluis object, a table of actions in code with a JSON Schema generated from it, and a separate usage log in CloudEvents for quota and billing (ADR 0064)" }
+  - { topic: "Record, action table, profiles", v1: "one record format (a Protobuf core with JSON Schema slots), a catalogue per application, profile copies per purpose", v2: "an OCSF event per record with the sluis facts in one unmapped.sluis object, a table of actions in code with a JSON Schema generated from it, and a separate usage log in CloudEvents for quota and billing (ADR 0017)" }
   - { topic: "How a record is accepted", v1: "emit library with block or async delivery to a receiver, JetStream or SQS", v2: "transport port (direct, or queue: spool, SQS, NATS JetStream); the request returns on transport durability" }
   - { topic: "Who runs it", v1: "pods or Lambda functions, a chart or a Pulumi library; a CronJob for the notary", v2: "actors started by the platform; drivers as services, no exec" }
   - { topic: "Coordination between parts", v1: "none: the bucket layout is the contract and each part lists the bucket", v2: "the ordered audit_batches sequence in replicated state" }

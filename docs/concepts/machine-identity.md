@@ -12,7 +12,7 @@ A **machine identity** is the name a host, a pod, a CI job or a sluis actor carr
 2. The `exchange` actor verifies the proof and performs a **token exchange** ([RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693)). `policy` decides what the machine may become.
 3. sluis returns a **credential**: an X.509-SVID from `ca`, a JWT-SVID from the boundary's issuer, or an SSH host certificate from `ssh-ca`.
 
-This is agreed (2026-10-30). The record is [ADR 0012](/decisions/0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials/). How an actor on a node reaches a cloud with its identity is on [Identity](/concepts/identity/); this page is about the identity itself. The threats it answers are T-20 to T-24 on the [threat model](/security/threat-model/#machine-identity-enrolment-and-trust): a credential for another identity, a caller from another boundary, a stolen or replayed enrolment, wrong roots, and a neighbour using an actor's identity.
+This is agreed (2026-10-30). The record is [ADR 0007](/decisions/0007-workload-identity-and-host-enrolment/). How an actor on a node reaches a cloud with its identity is on [Identity](/concepts/identity/); this page is about the identity itself. The threats it answers are T-20 to T-24 on the [threat model](/security/threat-model/#machine-identity-enrolment-and-trust): a credential for another identity, a caller from another boundary, a stolen or replayed enrolment, wrong roots, and a neighbour using an actor's identity.
 
 ## SPIFFE, as far as sluis implements it
 
@@ -125,7 +125,7 @@ A host that joins must be given the **pin of the roots**, the hashes of their pu
 
 The trust bundle reaches a host through a **generic package**, not through a package that sluis generates for each estate.
 
-- The `sluis` package ships `sluis trust sync`, with a `sluis-trust-sync.timer` and a oneshot service. They stay off until `sluis trust enroll --url <bundle-url> --fingerprint <root-fingerprint>` configures them.
+- The `sluis` package ships `sluis trust sync`, with a `sluis-trust-sync.timer` and a oneshot service. They stay off until `sluis trust enroll --url <bundle-url> --pin <spki-hash>` configures them.
 - Each run fetches the SPIFFE-format bundle, checks the bundle and the root list against the pinned roots (the signature must be by a root in the list the host holds), refuses a bundle whose `spiffe_sequence` or a root list whose version is lower than the one it has, writes the trust anchors and runs `update-ca-trust` or `update-ca-certificates`.
 - The unit is hardened: it may write only the anchor directory and the extracted store.
 - On Kubernetes the same bundle feeds a trust-manager `Bundle` source or a `ClusterTrustBundle`.
@@ -138,4 +138,4 @@ The trust bundle reaches a host through a **generic package**, not through a pac
 | Client | `sluis-host enroll` detects the platform, keeps the key in a card, then a TPM, then a file, shows the matching code, and handles status, renew, leave and re-enrol |
 | Console | A hosts list, a queue of pending requests, enrolment tokens (shown once), an "Add host" page, and the rules, read-only |
 
-**ACME comes after the first release** (decided 2026-10-30, [#978](https://github.com/truvity/sluis/issues/978)). `ca` will then serve ACME (RFC 8555), and `sluis-host` is only the SSH host service ([SSH](/integrations/ssh/)). Until then a host gets TLS certificates by sending a CSR to `ca`, through the enrolment API or the certificate module of `sluis-host` ([ADR 0013](/decisions/0013-ca-and-ssh-ca-are-the-certificate-authorities-and-ssh-uses-only-sluis-own-ca/)).
+**ACME comes after the first release** (decided 2026-10-30, [#978](https://github.com/truvity/sluis/issues/978)). `ca` will then serve ACME (RFC 8555), and `sluis-host` is only the SSH host service ([SSH](/integrations/ssh/)). Until then a host gets TLS certificates by sending a CSR to `ca`, through the enrolment API or the certificate module of `sluis-host` ([ADR 0008](/decisions/0008-certificate-authorities-for-x509-ssh-and-databases/)).

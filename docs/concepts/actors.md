@@ -12,7 +12,7 @@ sluis is not one program. It is a handful of **core actors**, each with one job,
 
 | Kind | Actors | Notes |
 |---|---|---|
-| **Core actors** | `entry`, `session`, `console`, `exchange`, `signer`, `policy`, `ca`, `ssh-ca` | Actors with one responsibility each ([ADR 0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/), rewritten on 2026-10-30). `entry` is slim: it parses, validates and routes, and holds nothing. |
+| **Core actors** | `entry`, `session`, `console`, `exchange`, `signer`, `policy`, `ca`, `ssh-ca` | Actors with one responsibility each ([ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/), rewritten on 2026-10-30). `entry` is slim: it parses, validates and routes, and holds nothing. |
 | **Quota** | `quota` | Not a core actor: `quota` is the engine of the Quota piece, which is a separate piece that can be combined with sluis in one installation and then shares its driver instances ([OD-37](/open-decisions/#od-37) and [OD-38](/open-decisions/#od-38), decided). See [Audit](/concepts/audit/#the-four-pieces). |
 | **Integration actors** | `Upstream`, `WorkloadVerifier`, `FactsSource`, `CredentialMinter`, `Provisioner`, `Notifier` | One process per vendor tenant and credential, such as `google-signin@<company>` and `google-directory@<company>`. See [Integrations](/concepts/integrations/) and [Naming](#naming). |
 | **Platform** | `sluis-node`, `key-holder` | `sluis-node` is the node agent; it does not run on serverless or on Kubernetes. `key-holder` is the one mediating driver, for the keys on a node's card: see [Ports and drivers](/concepts/drivers/#the-mediating-driver). |
@@ -43,7 +43,7 @@ Three actors use an authority key, each a different one: `signer`, `ca` and `ssh
 
 **Hardening of `entry`.** `entry` is written in a memory-safe language (see [Source layout](/architecture/source-layout/#languages)), parses only closed parameter lists and is fuzzed, loads no plugin and runs on a read-only file system. On bare-metal it also runs under seccomp and Landlock with `PrivateNetwork=yes` and Unix sockets only: `cloudflared` forwards to a Unix-socket origin.
 
-**The console.** The browser reaches the console API through `entry`, which routes it to the `console` actor; the session is an HttpOnly cookie that `session` checks, and the browser holds no token. An operator-set write is routed by `console` to the actor that owns the record kind, which validates it; the manifest says which kinds accept operator-set writes, and the owner's own state credentials refuse any other writer ([ADR 0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/), [ADR 0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)). The console's single-page application is a separate artifact, served on the same origin by each runtime's static host.
+**The console.** The browser reaches the console API through `entry`, which routes it to the `console` actor; the session is an HttpOnly cookie that `session` checks, and the browser holds no token. An operator-set write is routed by `console` to the actor that owns the record kind, which validates it; the manifest says which kinds accept operator-set writes, and the owner's own state credentials refuse any other writer ([ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/), [ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/)). The console's single-page application is a separate artifact, served on the same origin by each runtime's static host.
 
 ## Naming
 
@@ -157,11 +157,11 @@ flowchart LR
   minter -->|"checks grant against<br/>policy's public key"| minter
 ```
 
-The `policy` actor is written in Rust with the `cedar-policy` crate, and Cedar is the policy language. The actor, its isolation and its signed output do not depend on the language. Each executable has one language, chosen by rules in [ADR 0060](/decisions/0060-the-language-follows-the-executable/); see [Source layout](/architecture/source-layout/#languages).
+The `policy` actor is written in Rust with the `cedar-policy` crate, and Cedar is the policy language. The actor, its isolation and its signed output do not depend on the language. Each executable has one language, chosen by rules in [ADR 0014](/decisions/0014-the-language-follows-the-executable/); see [Source layout](/architecture/source-layout/#languages).
 
 ## The fusion rule
 
-On a small node memory is tight, and the node also runs the state store, so two actors may be **fused** into one unit when the rule allows it. On a 2 GB board, spike S5 measured on 2026-10-31 about 10 MiB of private memory per Go actor stand-in under load and about 1 MiB per Rust one, and a tier-0 board with 30 actors, each in its own process, stayed under its memory ceiling in either language ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)). The rule:
+On a small node memory is tight, and the node also runs the state store, so two actors may be **fused** into one unit when the rule allows it. On a 2 GB board, spike S5 measured on 2026-10-31 about 10 MiB of private memory per Go actor stand-in under load and about 1 MiB per Rust one, and a tier-0 board with 30 actors, each in its own process, stayed under its memory ceiling in either language ([ADR 0014](/decisions/0014-the-language-follows-the-executable/)). The rule:
 
 > Two actors may share a unit only if the unit's manifest is the union of theirs, and no unit holds a key next to an unauthenticated listener.
 

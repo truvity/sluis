@@ -49,9 +49,9 @@ On bare-metal nodes, the node agent (`sluis-node`) issues a short-lived **worklo
 | GCP | Workload Identity Federation | ES256 |
 | Azure | A federated credential | RS256 |
 
-The node's non-extractable hardware key signs the workload JWT, about once an hour per actor (about 120 ms per signature). Platform-native identity is used where it exists: a Lambda function role. On Kubernetes the platform's own token is proposed to be used (see the kubernetes row above and [Identity](/concepts/identity/)).
+The node's non-extractable hardware key signs the workload JWT, about once an hour per actor (about 147 ms per signature, measured 2026-10-31). Platform-native identity is used where it exists: a Lambda function role. On Kubernetes the platform's own token is proposed to be used (see the kubernetes row above and [Identity](/concepts/identity/)).
 
-Discovery is a static document plus the public keys at an HTTPS URL. There is **one issuer per boundary** by default, and its key set holds one key per node card. Per-node issuers, `https://<issuer>/nodes/<node>/`, are optional for a fleet whose nodes run different actors; there each cloud role trusts only the issuers of the nodes that run that actor ([ADR 0012](/decisions/0012-machine-identity-follows-spiffe-proofs-are-exchanged-for-short-lived-credentials/)). AWS allows at most 100 EC keys in a JWKS and 100 OIDC providers per account, and requires https with no port and no query.
+Discovery is a static document plus the public keys at an HTTPS URL. There is **one issuer per boundary** by default, and its key set holds one key per node card. Per-node issuers, `https://<issuer>/nodes/<node>/`, are optional for a fleet whose nodes run different actors; there each cloud role trusts only the issuers of the nodes that run that actor ([ADR 0007](/decisions/0007-workload-identity-and-host-enrolment/)). AWS allows at most 100 EC keys in a JWKS and 100 OIDC providers per account, and requires https with no port and no query.
 
 IAM Roles Anywhere stays an AWS-only alternative. `aws_signing_helper serve` is not used, because it exposes credentials on a local port to every process.
 :::

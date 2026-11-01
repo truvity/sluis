@@ -1,4 +1,4 @@
-// The v2 project board, read once per build with the GitHub GraphQL API (ADR 0063): the
+// The v2 project board, read once per build with the GitHub GraphQL API (ADR 0020): the
 // options of its `Product milestone` field, in their order, and every sluis issue on the
 // board with its state, labels and milestone. The status page groups by those options,
 // so a new or reordered option changes the page with no code change.

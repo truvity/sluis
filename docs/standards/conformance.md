@@ -30,21 +30,21 @@ The plan names are the OpenID Foundation's. The exact plan identifiers in the su
 | Basic OP | The code flow with PKCE, the ID token, UserInfo and refresh, for static client registration with discovery | Planned, first |
 | RP-Initiated Logout OP | `end_session`, `id_token_hint`, post-logout redirects. Every logout submission must include it | Planned, first |
 | Back-Channel Logout OP | The signed logout token, its two-minute expiry and no `nonce` | Planned, first. v1 passes it, so v2 keeps it |
-| FAPI 2.0 Security Profile (Final) OP | The sender-constrained variants sluis supports (DPoP; mutual TLS only if added) | Planned, after v2 parity ([#929](https://github.com/truvity/sluis/issues/929)). Needs PAR, `private_key_jwt`, DPoP, RFC 9207 and, for some variants, JAR |
-| FAPI 2.0 Message Signing OP | Signed requests and responses | Planned, after v2 parity ([#929](https://github.com/truvity/sluis/issues/929)). Builds on the Security Profile |
+| FAPI 2.0 Security Profile (Final) OP | The sender-constrained variants sluis supports (DPoP; mutual TLS only if added) | Planned, after the parity milestone ([#929](https://github.com/truvity/sluis/issues/929)). Needs PAR, `private_key_jwt`, DPoP, RFC 9207 and, for some variants, JAR |
+| FAPI 2.0 Message Signing OP | Signed requests and responses | Planned, after the parity milestone ([#929](https://github.com/truvity/sluis/issues/929)). Builds on the Security Profile |
 | Relying-party plans (Basic RP, Config RP and the logout RP plans that apply) | sluis acting as a client of an upstream provider | Planned, later ([#930](https://github.com/truvity/sluis/issues/930)). Runs against the [generic OIDC upstream](/integrations/oidc-upstream/) |
-| Form Post OP | `response_mode=form_post` for the code flow; the auto-submit page has a strict CSP with a nonce | Planned, second wave: after the first-wave plans, in the same pipeline ([#979](https://github.com/truvity/sluis/issues/979), [ADR 0061](/decisions/0061-optional-openid-plans-form-post-is-supported-ciba-comes-later/)) |
-| CIBA, poll mode (the suite's CIBA plan, confirmed against the suite release when the flow ships) | Client-initiated backchannel authentication, approved with a passkey on the approving device | Planned, after v2 parity, poll mode only ([#980](https://github.com/truvity/sluis/issues/980), [ADR 0061](/decisions/0061-optional-openid-plans-form-post-is-supported-ciba-comes-later/)) |
-| WebAuthn conformance tool | The passkey ceremony ([#885](https://github.com/truvity/sluis/issues/885)) | Target in v2, with passkeys ([ADR 0048](/decisions/0048-passkeys-step-up-and-device-login/)) |
+| Form Post OP | `response_mode=form_post` for the code flow; the auto-submit page has a strict CSP with a nonce | Planned, second wave: after the first-wave plans, in the same pipeline ([#979](https://github.com/truvity/sluis/issues/979), [ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/)) |
+| CIBA, poll mode (the suite's CIBA plan, confirmed against the suite release when the flow ships) | Client-initiated backchannel authentication, approved with a passkey on the approving device | Later: after the parity milestone, once a real consumer exists, poll mode only ([#980](https://github.com/truvity/sluis/issues/980), [ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/)) |
+| WebAuthn, with a browser virtual authenticator and a software authenticator library (no test code in sluis) | The passkey ceremony ([#885](https://github.com/truvity/sluis/issues/885)) | Target in v2, with passkeys ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/)) |
 
 ### The decisions
 
-The four optional plans were decided by the maintainer on 2026-10-30 ([ADR 0061](/decisions/0061-optional-openid-plans-form-post-is-supported-ciba-comes-later/), question [#928](https://github.com/truvity/sluis/issues/928)):
+The four optional plans were decided by the maintainer on 2026-10-30 ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/), question [#928](https://github.com/truvity/sluis/issues/928)):
 
 - **Form post: supported** for the code flow. The auto-submit page carries a strict Content-Security-Policy with a nonce fresh for each response, and the Form Post OP plan joins the programme ([#979](https://github.com/truvity/sluis/issues/979)).
 - **Third-party-initiated login: not now.** It is revisited if the console gets an app launcher.
 - **Front-channel logout: not supported.** Back-channel logout is the path, and discovery does not advertise front-channel logout.
-- **CIBA: later, in poll mode only,** with a passkey on the approving device, and not before v2 parity ([#980](https://github.com/truvity/sluis/issues/980)). FAPI 2.0 is after parity too, and device login ([#855](https://github.com/truvity/sluis/issues/855)) is postponed ([ADR 0048](/decisions/0048-passkeys-step-up-and-device-login/)).
+- **CIBA: later, in poll mode only,** with a passkey on the approving device, after the parity milestone, and only once a real consumer exists ([#980](https://github.com/truvity/sluis/issues/980)). FAPI 2.0 is after parity too, and device login ([#855](https://github.com/truvity/sluis/issues/855)) is postponed ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/)).
 
 ### The plans sluis does not claim
 
@@ -55,8 +55,8 @@ Users and auditors should not infer support from silence. These are not planned 
 | Implicit OP and Hybrid OP | The implicit and hybrid response types are not served; code with PKCE replaces them. |
 | Dynamic OP | Dynamic client registration is refused (an endpoint that mints trust). Client ID Metadata Documents admit self-describing clients from allow-listed origins. |
 | Session Management OP | A browser iframe mechanism. |
-| Front-Channel Logout OP | Hidden iframes depend on third-party cookies, which browsers block. Back-channel logout is the path; discovery does not advertise front-channel logout ([ADR 0061](/decisions/0061-optional-openid-plans-form-post-is-supported-ciba-comes-later/)). |
-| 3rd Party-Initiated Login OP | A sign-in starts at the client. Revisited if the console gets an app launcher ([ADR 0061](/decisions/0061-optional-openid-plans-form-post-is-supported-ciba-comes-later/)). |
+| Front-Channel Logout OP | Hidden iframes depend on third-party cookies, which browsers block. Back-channel logout is the path; discovery does not advertise front-channel logout ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/)). |
+| 3rd Party-Initiated Login OP | A sign-in starts at the client. Revisited if the console gets an app launcher ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/)). |
 | FAPI 1.0 Advanced | Superseded by FAPI 2.0. |
 
 A suite module may skip because the discovery document says a feature is not served. That is the intended outcome: **discovery is truthful**, and a skip is acceptable only when discovery explains it.
@@ -107,8 +107,8 @@ The [requirements catalogue](/requirements/) says, for each requirement, how it 
 <!-- coverage:begin (generated by site/scripts/check-requirements.mjs with its write-coverage flag; do not edit) -->
 | Requirements | Externally checked | Share |
 |---|---|---|
-| All, not withdrawn (695) | 184 | 26.5% |
-| MUST (648) | 169 | 26.1% |
+| All, not withdrawn (676) | 184 | 27.2% |
+| MUST (630) | 169 | 26.8% |
 <!-- coverage:end -->
 
 ## Where to follow it
