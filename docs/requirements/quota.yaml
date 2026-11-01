@@ -133,7 +133,7 @@ requirements:
     standards:
       - {id: ST-97, section: "1", depth: Partial}
       - {id: ST-78, section: "8785", depth: Partial}
-    issues: [839]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "usage query test"}
   - id: REQ-QUOTA-012
@@ -148,12 +148,12 @@ requirements:
     standards:
       - {id: ST-97, section: "1", depth: Partial}
       - {id: ST-78, section: "8785", depth: Partial}
-    issues: [839]
+    issues: [915]
     verification:
       - {kind: integration-test, ref: "aggregate-sum test"}
   - id: REQ-QUOTA-008
     area: QUOTA
-    statement: "Turning enforcement on in production MUST be preceded by a load test of the mint path with enforcement enabled."
+    statement: "Turning enforcement on in production MUST be preceded by a load test of the mint path with enforcement enabled, on the state driver that the installation uses."
     rationale: "Enforcement adds state writes to the hot path."
     level: MUST
     source: design-decision
@@ -465,3 +465,440 @@ requirements:
     issues: [915]
     verification:
       - {kind: integration-test, ref: "close a period: the statement entry is in the usage log, and its digest in the envelope matches the statement"}
+  - id: REQ-QUOTA-037
+    area: QUOTA
+    split_from: REQ-QUOTA-036
+    statement: "A statement MUST name, for each usage log it was computed from, the checkpoint and the range of entries it covers."
+    rationale: "A reader can recompute the statement from exactly what it covers."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "statement sources test"}
+  - id: REQ-QUOTA-038
+    area: QUOTA
+    split_from: REQ-QUOTA-036
+    statement: "Quota MUST append the statement of a period only if none exists for its boundary, account and period."
+    rationale: "A statement that never changes can be signed, stored and disputed."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "statement appended once test"}
+  - id: REQ-QUOTA-039
+    area: QUOTA
+    statement: "Quota MUST count an event whose own period is closed in the earliest open period."
+    rationale: "A late event is billed and not lost."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "late event counted test"}
+  - id: REQ-QUOTA-040
+    area: QUOTA
+    split_from: REQ-QUOTA-039
+    statement: "Quota MUST flag an event that it counts in a later period than its own with the period it belongs to."
+    rationale: "A late event is visible on the statement."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "late event flag names its period test"}
+  - id: REQ-QUOTA-041
+    area: QUOTA
+    statement: "A correction to a closed period MUST be made as an `Adjust` in an open period."
+    rationale: "A closed statement is never rewritten or reopened."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "correction through Adjust test"}
+  - id: REQ-QUOTA-042
+    area: QUOTA
+    statement: "Quota MUST NOT close a period while an event of that period waits in its outbox."
+    rationale: "A statement computed before the outbox drains would miss usage."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "close deferred by outbox test"}
+  - id: REQ-QUOTA-043
+    area: QUOTA
+    statement: "Recomputing a statement from the checkpoints and entry ranges it names MUST give the same canonical bytes."
+    rationale: "A changed statement is detected."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-78, section: "8785", depth: Partial}
+    issues: [915]
+    verification:
+      - {kind: test-vectors, ref: "statement recomputation vectors"}
+  - id: REQ-QUOTA-044
+    area: QUOTA
+    statement: "Quota MUST serve a closed statement on a pull call authorised per account, as canonical JSON with the inclusion proof of its entry."
+    rationale: "Billing pulls at its own pace and holds the only credential."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-97, section: "1", depth: Partial}
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "statement pull and authorisation test"}
+  - id: REQ-QUOTA-045
+    area: QUOTA
+    statement: "A statement MUST NOT carry personal data or free text."
+    rationale: "A statement survives the shredding of a company's audit key."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "statement content scan test"}
+  - id: REQ-QUOTA-046
+    area: QUOTA
+    statement: "Quota MUST NOT create or change a plan template at run time."
+    rationale: "Plans are declared authority, reviewed in git."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "plan template declared only test"}
+  - id: REQ-QUOTA-047
+    area: QUOTA
+    statement: "Quota MUST create an account only on a `CreateAccount` call from a declared client whose delegation allows `quota.account.create` for the named plan."
+    rationale: "An account is issued under a declared template by a declared client."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-12, section: "1", depth: Partial}
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "account creation grant test"}
+  - id: REQ-QUOTA-048
+    area: QUOTA
+    statement: "`CreateAccount` MUST return the existing account when the id, the company and the plan are the same."
+    rationale: "A retried creation counts once."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "account creation idempotency test"}
+  - id: REQ-QUOTA-049
+    area: QUOTA
+    split_from: REQ-QUOTA-048
+    statement: "`CreateAccount` MUST refuse an id that exists with another plan or another company."
+    rationale: "A conflicting creation is visible."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "account creation conflict test"}
+  - id: REQ-QUOTA-050
+    area: QUOTA
+    statement: "Quota MUST refuse `Admit`, `Confirm`, `Cancel`, `TopUp` and `Adjust` on an account that does not exist."
+    rationale: "A typo or a hostile caller must not open an account."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "unknown account refused test"}
+  - id: REQ-QUOTA-051
+    area: QUOTA
+    statement: "After a restore quota MUST roll its accounts forward from the usage log."
+    rationale: "No account that reached the log is lost."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-100, section: "1.0.2", depth: Partial}
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "account roll-forward from the usage log test"}
+  - id: REQ-QUOTA-052
+    area: QUOTA
+    statement: "Quota MUST refuse a configuration reload that removes a plan template which an account uses."
+    rationale: "An account must not lose its limits by a reload."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "plan removal reload test"}
+  - id: REQ-QUOTA-053
+    area: QUOTA
+    statement: "A closed account MUST refuse `Admit`."
+    rationale: "A closed account takes no new usage."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "closed account test"}
+  - id: REQ-QUOTA-054
+    area: QUOTA
+    statement: "The quota front MUST authenticate a calling service by its X.509-SVID over mutual TLS against the trust bundle that the installation declares."
+    rationale: "The certificate is the credential of a service, and no token is exchanged per call."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-109, section: "1", depth: Partial}
+      - {id: ST-19, section: "1", depth: Partial}
+    issues: [1026]
+    verification:
+      - {kind: integration-test, ref: "service call authentication test"}
+  - id: REQ-QUOTA-055
+    area: QUOTA
+    statement: "Quota MUST ask `policy` to authorise every call with the caller's identity, the action and the account, with its company, plan and state, as the resource."
+    rationale: "A service acts only on the accounts its policy names."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-12, section: "1", depth: Partial}
+    issues: [1026]
+    verification:
+      - {kind: integration-test, ref: "per-account authorisation test"}
+  - id: REQ-QUOTA-056
+    area: QUOTA
+    statement: "Quota MUST NOT reuse a grant for the same caller, action and account for longer than 60 seconds."
+    rationale: "A suspended or closed account stops admitting within a minute."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1026]
+    verification:
+      - {kind: integration-test, ref: "grant reuse ceiling test"}
+  - id: REQ-QUOTA-057
+    area: QUOTA
+    statement: "The quota front MUST accept a person only with an exchanged token for its audience that is valid for at most 5 minutes and bound to the caller's X.509-SVID."
+    rationale: "A person's call is as short-lived and as bound as the audit front's."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-07, section: "1", depth: Partial}
+      - {id: ST-19, section: "1", depth: Partial}
+    issues: [1026]
+    verification:
+      - {kind: integration-test, ref: "person token test"}
+  - id: REQ-QUOTA-058
+    area: QUOTA
+    statement: "The quota front MUST keep accepting calls from services whose certificates are valid while the issuer is unreachable."
+    rationale: "The hot path does not depend on the issuer."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1026]
+    verification:
+      - {kind: integration-test, ref: "issuer outage test"}
+  - id: REQ-QUOTA-059
+    area: QUOTA
+    statement: "`sluis config check` MUST refuse a `session` or `console` actor in an installation that runs only the Quota piece."
+    rationale: "A quota installation has no browser surface until a consumer needs one."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1026]
+    verification:
+      - {kind: integration-test, ref: "config-check quota installation test"}
+  - id: REQ-QUOTA-060
+    area: QUOTA
+    statement: "The action table entry of an emitting product MUST declare, for every meter, its name, unit and kind, and for a gauge how its samples combine over a period."
+    rationale: "A meter means the same thing to every reader."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [841]
+    verification:
+      - {kind: integration-test, ref: "meter declaration schema test"}
+  - id: REQ-QUOTA-061
+    area: QUOTA
+    statement: "The emitter library MUST add a usage part to a message only for an outcome that the meter declares, `success` by default."
+    rationale: "A refused or failed call is audited and not billed unless its table says so."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [841]
+    verification:
+      - {kind: integration-test, ref: "billable outcome test"}
+  - id: REQ-QUOTA-062
+    area: QUOTA
+    statement: "CI MUST fail when a release renames a meter, or changes its unit or kind, without retiring the old one."
+    rationale: "A renamed meter is a new meter, and old events keep their meaning."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [841]
+    verification:
+      - {kind: integration-test, ref: "meter table comparison test"}
+  - id: REQ-QUOTA-063
+    area: QUOTA
+    statement: "Quota MUST assign a usage event to the period of its CloudEvents `time` when that time is not earlier than the recorded time by more than the close grace and not later by more than 5 minutes, and otherwise to the period of the recorded time."
+    rationale: "Statements and caps count the same events, and a wrong clock cannot move usage across periods."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-100, section: "1.0.2", depth: Partial}
+    issues: [915]
+    verification:
+      - {kind: test-vectors, ref: "period assignment vectors"}
+  - id: REQ-QUOTA-064
+    area: QUOTA
+    statement: "Quota MUST flag a usage event whose period was assigned from its recorded time as `time_adjusted`."
+    rationale: "An event moved by the rule shows as moved."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "time adjusted flag test"}
+  - id: REQ-QUOTA-065
+    area: QUOTA
+    statement: "Quota MUST merge the usage logs of a boundary by recorded time, keeping each log's own order and breaking ties by log id, when it rolls balances forward."
+    rationale: "A floor and a once-only refund depend on the order of effects."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "roll-forward order across logs test"}
+  - id: REQ-QUOTA-066
+    area: QUOTA
+    statement: "Quota MUST bound its outbox by count and by the age of its oldest message, with both bounds declared in the install file."
+    rationale: "An effect that only the outbox holds is lost if the state is lost."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "outbox bound test"}
+  - id: REQ-QUOTA-067
+    area: QUOTA
+    split_from: REQ-QUOTA-066
+    statement: "When its outbox reaches a bound, quota MUST refuse changing calls as unavailable."
+    rationale: "Admission stops before an effect can be lost."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "outbox full test"}
+  - id: REQ-QUOTA-068
+    area: QUOTA
+    split_from: REQ-QUOTA-066
+    statement: "When its outbox is at a bound, quota MUST keep serving reads."
+    rationale: "An operator and a billing system can still see the balances while changes are refused."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "reads with a full outbox test"}
+  - id: REQ-QUOTA-069
+    area: QUOTA
+    statement: "Quota MUST raise an alarm when its outbox passes the declared warning level."
+    rationale: "An operator sees a writer outage building up before it stops admission."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "outbox alarm test"}
+  - id: REQ-QUOTA-070
+    area: QUOTA
+    statement: "After a restore, quota MUST refuse `Admit` on an enforcing balance as unavailable until the longest reservation time to live in force has passed."
+    rationale: "The reservations forgotten by the restore must not let the limit be exceeded."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "quiet window after restore test"}
+  - id: REQ-QUOTA-071
+    area: QUOTA
+    split_from: REQ-QUOTA-070
+    statement: "Within the quiet window after a restore, quota MUST handle a `Confirm` for a reservation it does not know as an `Admit` and a `Confirm` in one step under the strict check."
+    rationale: "Work that was admitted before the restore is still charged, and the limit still holds."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [915]
+    verification:
+      - {kind: integration-test, ref: "confirm of an unknown reservation test"}

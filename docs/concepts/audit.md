@@ -158,6 +158,17 @@ There is one audit log per environment boundary (per node on a cluster), and eac
 
 **Quota** is the quota engine and its state, and it meters by default and enforces per policy rule, for chosen subjects or audiences ([ADR 0017](/decisions/0017-audit-records-the-usage-stream-and-quota/#quota)). Enforcement is strict in 2.0, by compare-and-set on the state port; whether to relax it is decided after the load test of the mint path. Its API is `Admit`, `Confirm`, `Cancel`, `TopUp`, `Adjust` and `Balance`: every changing call is idempotent by a `request_id`, amounts are signed 64-bit integers in a declared unit, balance effects live in the usage log and only quota writes them, and an enforcing rule must declare what happens when its balance runs out and when quota is unreachable.
 
+- **Plans are declared and accounts are issued.** A declared client creates an account at run time under a declared plan ([ADR 0042](/decisions/0042-plan-templates-are-declared-and-accounts-are-issued-at-run-time-by-a-declared-client/)).
+- **A meter has a name, a unit and a kind, and never changes;** only declared outcomes bill, and an event belongs to the period of its own time within a stated skew ([ADR 0044](/decisions/0044-a-meter-has-a-name-a-unit-and-a-kind-and-a-usage-event-belongs-to-the-period-of-its-event-time/)).
+
+:::note[Proposed]
+These are proposed records. Their open parts are tracked in [#915](https://github.com/truvity/sluis/issues/915) and [#1026](https://github.com/truvity/sluis/issues/1026).
+
+- **Billing pulls a statement** per account and period, closed once and anchored in the usage log ([ADR 0041](/decisions/0041-the-finance-export-is-a-statement-per-account-and-period-closed-once-anchored-in-the-usage-log-and-pulled/)).
+- **Services call over mutual TLS with their SVID, and people with exchanged tokens;** a quota installation has no console until a consumer exists ([ADR 0043](/decisions/0043-a-quota-installation-is-fronted-by-service-identity-for-services-and-exchanged-tokens-for-people/)).
+- **Consistency and failure are measured per state driver** before enforcement is switched on ([ADR 0045](/decisions/0045-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on/)).
+:::
+
 ## The audit front
 
 Every audit installation has a front of its own, also when the audit pieces are combined with sluis ([ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/#the-audit-front)):

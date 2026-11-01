@@ -167,13 +167,13 @@ Rate limits, caps and balances, with compare-and-set on the state port; it meter
 
 - **Language:** Rust, rule R11 of [ADR 0014](/decisions/0014-the-language-follows-the-executable/). Rust unless its design names a serious trade-off.
 - **Placement:** beside sluis, or on its own; any number of instances; on bare-metal, serverless, kubernetes. Runs beside sluis, sharing its driver instances, or in an installation of its own.
-- **Keys:** `sealing`, slot `9d`: wrap, unwrap; the data keys of its own record kinds.
+- **Keys:** `sealing`, slot `9d`: wrap, unwrap; the data keys of its own record kinds and the companies' usage data keys.
 - **Ports:** state, transport. On local: state: `embedded`, transport: `spool`.
 - **Calls:** none.
-- **Decisions:** [ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/), [ADR 0017](/decisions/0017-audit-records-the-usage-stream-and-quota/), [ADR 0014](/decisions/0014-the-language-follows-the-executable/).
+- **Decisions:** [ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/), [ADR 0017](/decisions/0017-audit-records-the-usage-stream-and-quota/), [ADR 0014](/decisions/0014-the-language-follows-the-executable/), [ADR 0041](/decisions/0041-the-finance-export-is-a-statement-per-account-and-period-closed-once-anchored-in-the-usage-log-and-pulled/), [ADR 0042](/decisions/0042-plan-templates-are-declared-and-accounts-are-issued-at-run-time-by-a-declared-client/), [ADR 0043](/decisions/0043-a-quota-installation-is-fronted-by-service-identity-for-services-and-exchanged-tokens-for-people/), [ADR 0044](/decisions/0044-a-meter-has-a-name-a-unit-and-a-kind-and-a-usage-event-belongs-to-the-period-of-its-event-time/), [ADR 0045](/decisions/0045-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on/).
 - **Requirement areas:** [QUOTA](/requirements/quota/).
 - **Standards:** NC-15 Idempotency: IETF Idempotency-Key draft (`X-Request-ID` is not an RFC).
-- **Issues:** [#915](https://github.com/truvity/sluis/issues/915); label `actor:quota`.
+- **Issues:** [#915](https://github.com/truvity/sluis/issues/915), [#1026](https://github.com/truvity/sluis/issues/1026); label `actor:quota`.
 
 ### `writer`
 

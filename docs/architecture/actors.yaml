@@ -171,12 +171,12 @@ actors:
     language_note: "Rust unless its design names a serious trade-off."
     placement: { scope: beside-sluis, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "Runs beside sluis, sharing its driver instances, or in an installation of its own." }
     keys:
-      - { purpose: sealing, slot: 9d, ops: [wrap, unwrap], context: "the data keys of its own record kinds" }
-    adrs: ['0003', '0017', '0014']
+      - { purpose: sealing, slot: 9d, ops: [wrap, unwrap], context: "the data keys of its own record kinds and the companies' usage data keys" }
+    adrs: ['0003', '0017', '0014', '0041', '0042', '0043', '0044', '0045']
     requirement_areas: [QUOTA]
     standards: [NC-15]
     label: actor:quota
-    issues: [915]
+    issues: [915, 1026]
 
   # ---- audit (ADR 0015, "Four pieces")
   - name: writer
