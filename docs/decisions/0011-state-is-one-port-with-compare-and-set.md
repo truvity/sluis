@@ -24,7 +24,7 @@ Facts about the backends, checked on the dates given: rqlite authorises per endp
 - **Writes that must go together are one atomic batch.** There are no interactive transactions; a flow over several records is idempotent steps with a recovery marker.
 - **Expiry is part of the contract.** A record past its lifetime reads as absent, whatever the engine did with it.
 - **Record keys never contain personal data.** Keys stay in the clear so the store can index and list them.
-- **Further operations are out of scope here:** delete, listing by prefix, watch or a change feed, and a conditional adjust of a counter, tracked in [#1009](https://github.com/truvity/sluis/issues/1009). The conditional adjust is added if the quota load test shows contention ([0017](/decisions/0017-audit-records-the-usage-stream-and-quota/#quota)).
+- **Further operations are out of scope here:** delete, listing by prefix, and watch or a change feed, tracked in [#1009](https://github.com/truvity/sluis/issues/1009) for v1 parity. A conditional adjust of a counter belongs to quota and is added only if the quota load test shows contention ([0045](/decisions/0045-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on/#the-load-test)).
 
 ### One writer per kind
 
@@ -116,6 +116,7 @@ How the rqlite clusters are run:
 
 ## Follow-ups
 
-- Further state operations (delete, list by prefix, watch, conditional adjust): [#1009](https://github.com/truvity/sluis/issues/1009).
+- Further state operations (delete, list by prefix, watch), v1 parity: [#1009](https://github.com/truvity/sluis/issues/1009).
+- A conditional adjust, only if the quota load test shows contention: [#915](https://github.com/truvity/sluis/issues/915).
 - Interface details of the `secrets` and `export` ports: [#1014](https://github.com/truvity/sluis/issues/1014).
 - Backup archive format, escrow copies and restore tooling: [#1015](https://github.com/truvity/sluis/issues/1015).

@@ -83,7 +83,7 @@ A **write batch** applies several writes together or none of them. The audit wri
 ### Further operations
 
 :::note[Proposed]
-Delete, listing by prefix, a feed of changes and a **conditional adjust** are further state operations, planned in [#1009](https://github.com/truvity/sluis/issues/1009). A conditional adjust changes a number by a delta and refuses if the result would cross a floor, as one operation on the store. It is added if the quota load test shows that compare-and-set on a hot counter contends; until then quota uses compare-and-set.
+Delete, listing by prefix and a feed of changes are further state operations, planned for v1 parity in [#1009](https://github.com/truvity/sluis/issues/1009). A **conditional adjust** is a quota matter: it changes a number by a delta and refuses if the result would cross a floor, as one operation on the store. It is added only if the quota load test shows that compare-and-set on a hot counter contends ([ADR 0045](/decisions/0045-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on/#the-load-test), [#915](https://github.com/truvity/sluis/issues/915)); until then quota uses compare-and-set.
 :::
 
 ### Leases and fencing tokens

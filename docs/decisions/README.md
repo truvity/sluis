@@ -92,6 +92,11 @@ On 2026-11-01, before any code was written, the maintainer had the 32 records ac
 | [0038](0038-clients-are-declared-resources-map-to-a-client-and-self-described-clients-are-admitted-only-from-allow-listed-origins.md) | Clients are declared, a resource maps to a registered client, and a self-described client is admitted only from an allow-listed origin | Accepted |
 | [0039](0039-audit-lifecycle-tiers-move-only-cold-objects-and-compliance-profiles-are-floors-that-the-configuration-check-enforces.md) | Audit lifecycle tiers move only cold objects, and compliance profiles are floors that the configuration check enforces | Accepted |
 | [0040](0040-console-roles-are-declared-grants-and-its-pages-are-organised-by-the-origin-of-what-they-show.md) | Console roles are declared grants, and its pages are organised by the origin of what they show | Accepted |
+| [0041](0041-the-finance-export-is-a-statement-per-account-and-period-closed-once-anchored-in-the-usage-log-and-pulled.md) | The finance export is a statement per boundary, account and period, closed once, anchored in the usage log and pulled by the billing system | Proposed |
+| [0042](0042-plan-templates-are-declared-and-accounts-are-issued-at-run-time-by-a-declared-client.md) | Plan templates are declared, and an account is an issued record that a declared client creates at run time | Accepted |
+| [0043](0043-a-quota-installation-is-fronted-by-service-identity-for-services-and-exchanged-tokens-for-people.md) | A quota installation is fronted by service identity for services and by exchanged tokens for people, and has no console until a consumer exists | Proposed |
+| [0044](0044-a-meter-has-a-name-a-unit-and-a-kind-and-a-usage-event-belongs-to-the-period-of-its-event-time.md) | A meter has a name, a unit and a kind that never change, only declared outcomes bill, and a usage event belongs to the period of its event time within a stated skew | Accepted |
+| [0045](0045-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on.md) | Quota consistency and failure are measured per state driver before enforcement is switched on | Proposed |
 
 ## Where the old records went
 

@@ -1648,8 +1648,8 @@ requirements:
       - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
   - id: REQ-AUDIT-125
     area: AUDIT
-    statement: "The writer MUST sign the batch heads of the audit log and of the usage log with the same log key of the installation."
-    rationale: "Both logs have one writer, one audience and one lifetime, so a second key would add a policy and a slot for nothing."
+    statement: "The writer MUST sign the batch heads of the audit log and of the usage log with the same log key, the one key of that writer."
+    rationale: "Both logs of a writer have one audience and one lifetime, so a second key would add a policy and a slot for nothing, and each writer has its own key."
     level: MUST
     source: design-decision
     status: planned
@@ -1657,7 +1657,7 @@ requirements:
     standards: []
     issues: [914, 915]
     verification:
-      - {kind: integration-test, ref: "the checkpoints of both log kinds of a test installation verify against one public key"}
+      - {kind: integration-test, ref: "the checkpoints of both log kinds of one writer verify against one public key, and those of two writers against two"}
   - id: REQ-AUDIT-126
     area: AUDIT
     statement: "Each signed batch head MUST name the log it belongs to, the audit log or the usage log."
