@@ -285,3 +285,16 @@ requirements:
     issues: [916]
     verification:
       - {kind: integration-test, ref: "further-factor test"}
+  - id: REQ-FED-021
+    area: FED
+    statement: "sluis MUST refuse the sign-in of a person whom the directory has disabled."
+    rationale: "A known disable takes effect at once, and the bounded window for last-known groups applies only while the directory is unreachable, where sluis cannot learn of a disable."
+    level: MUST
+    source: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.2.1", depth: Partial}
+    issues: [807]
+    verification:
+      - {kind: integration-test, ref: "disabled person sign-in test"}

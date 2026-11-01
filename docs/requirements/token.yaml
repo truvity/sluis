@@ -464,7 +464,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Full}
-    issues: [776]
+    issues: [1081]
     verification:
       - {kind: integration-test, ref: "subject opacity test"}
   - id: REQ-TOKEN-032
@@ -478,6 +478,6 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Full}
-    issues: [776]
+    issues: [1081]
     verification:
       - {kind: integration-test, ref: "subject derivation review test"}

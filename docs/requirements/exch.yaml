@@ -156,3 +156,16 @@ requirements:
     issues: [785]
     verification:
       - {kind: integration-test, ref: "unauthenticated exchange negative test"}
+  - id: REQ-EXCH-012
+    area: EXCH
+    statement: "The token exchange endpoint MUST refuse an exchange when the directory person of the subject is disabled."
+    rationale: "A known disable takes effect at once, and the bounded window for last-known groups applies only while the directory is unreachable, where sluis cannot learn of a disable."
+    level: MUST
+    source: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-07, section: "2.2.2", depth: Partial}
+    issues: [782]
+    verification:
+      - {kind: integration-test, ref: "disabled person exchange test"}

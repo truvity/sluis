@@ -78,8 +78,8 @@ requirements:
       - {kind: integration-test, ref: "idle and absolute limit tests"}
   - id: REQ-SESS-003
     area: SESS
-    statement: "A refresh MUST re-check that the grant, the client and the account are still allowed."
-    rationale: "Refresh must not upgrade or hide a state change."
+    statement: "A refresh MUST re-check that the grant and the client are still allowed and that the directory person is not disabled."
+    rationale: "Refresh must not upgrade or hide a state change, so a person whom the directory has disabled gets no new tokens once sluis knows of it."
     level: MUST
     source: v1-parity
     status: planned
@@ -332,3 +332,16 @@ requirements:
     issues: [794]
     verification:
       - {kind: integration-test, ref: "consent-binding test"}
+  - id: REQ-SESS-024
+    area: SESS
+    statement: "sluis MUST end all sessions and refresh grants of a person when it learns that the directory has disabled that person."
+    rationale: "A known disable takes effect at once, and the bounded window for last-known groups applies only while the directory is unreachable, where sluis cannot learn of a disable."
+    level: MUST
+    source: v1-parity
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-14, section: "4", depth: Partial}
+    issues: [793]
+    verification:
+      - {kind: integration-test, ref: "disabled person session end test"}

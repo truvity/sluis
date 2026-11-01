@@ -424,7 +424,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Partial}
-    issues: [776]
+    issues: [1081]
     verification:
       - {kind: integration-test, ref: "subject format test"}
   - id: REQ-SUBJ-032
@@ -436,8 +436,8 @@ requirements:
     status: planned
     runtimes: all
     standards:
-      - {id: NC-02, section: "9562", depth: Full}
-    issues: [776]
+      - {id: ST-28, section: "2", depth: Partial}
+    issues: [1081]
     verification:
       - {kind: integration-test, ref: "subject before first sign-in test"}
   - id: REQ-SUBJ-033
@@ -464,7 +464,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Partial}
-    issues: [776]
+    issues: [1081]
     verification:
       - {kind: integration-test, ref: "subject scan for e-mail"}
   - id: REQ-SUBJ-035
