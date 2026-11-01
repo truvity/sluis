@@ -1,0 +1,117 @@
+# 0014 — The language follows the executable: Go by default, Rust at the edge, in the trusted base, in cloud drivers and on the smallest boards
+
+**Status:** Accepted
+**Date:** 2026-11-01
+
+Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
+
+## Context
+
+sluis v2 is written in two languages. `policy` is Rust because Cedar's engine is a Rust crate ([0009](/decisions/0009-policy-is-cedar-in-a-rust-actor/)), and the cloud drivers for AWS, GCP and Azure are Rust. Two toolchains, a Rust kit for Connect over Unix sockets, configuration and the conformance suite are a cost already paid, so moving one more component to Rust costs that component's code, not a second toolchain.
+
+The unit of choice is the executable. Every component boundary is a ConnectRPC contract ([0002](/decisions/0002-the-design-model-actors-ports-drivers-and-contracts/#contracts)), every driver is its own service on a Unix socket ([0004](/decisions/0004-drivers-listeners-and-boundary-enforcement/#drivers-are-platform-started-services)), and the executable a unit starts is the only code in its process. A driver's language is independent of its caller's, and a wrong choice can be reversed one component at a time.
+
+The research of 2026-10-30 found:
+
+- **Go is memory-safe with exceptions:** data races on multi-word values, `unsafe` and cgo. Since 2024 the Go standard library had 89 advisories and none was memory corruption; Rust's TLS and certificate crates had the same classes (denial of service, panics, logic bugs) in the same period.
+- **What Rust buys:** no memory corruption through data races in the most concurrent processes, deterministic destruction and zeroisation of secrets, a smaller footprint and faster cold start (on lambda-perf, 2026-10-30, arm64, 128 MB, hello world: Go 46.6 ms and 17 MB, Rust 18.0 ms and 13.3 MB). It does not buy freedom from parser logic bugs, allocation bombs or panics.
+- **The libraries decide many components.** Go clearly leads for an embeddable OpenID Connect provider, the X.509 CA and the static-ct-api issuance log, the C2SP transparency-log tools, PIV attestation, HPKE, Kubernetes controllers and the vendor SDKs.
+- **The YubiKey path (spike S4, 2026-10-31, firmware 5.8.0, `cryptoki` 0.12.1 over `ykcs11` 2.7.3 against `piv-go` v2.6.0).** Both worked within 1 to 3 ms of each other; the card is the cost, about 146 ms per P-384 signature. `ykcs11` does not hold the card for itself: when a second client touched it, the holder failed in 3 of 5 runs, once without recovering, because libykpiv reconnects with `SCARD_RESET_CARD`; libykpiv also caches the PIN in its own heap, out of reach of `zeroize`. `piv-go` connects exclusively, queues callers fairly and reaches its first signature in 0.17 s. Its own `piv.Verify` rejects attestations from firmware 5.7 and newer, so sluis supplies Yubico Attestation Root 1 and its intermediates.
+- **The small boards (spike S5, 2026-10-31, arm64, 4 cores, 2 GB RAM, eMMC).** The memory fits with Go or with Rust actors; a Go actor costs about 10 MiB of private memory more than a Rust one, about 300 MiB at 30 actors, the largest single difference in the budget. The budget and the write figures are on [Bare metal](/runtimes/bare-metal/).
+- **The Rust side has known gaps.** Connect for Rust (`connectrpc` 0.9.1) is official but before 1.0, with one named maintainer; OpenTelemetry traces in Rust are Beta; GoReleaser's Rust builder warns that workspaces might not work.
+
+## Decision
+
+### The rules
+
+- **R1. One executable, one language.** An actor is never split across languages, so its language holds on every runtime. A driver is its own executable and may differ from its caller. The source-layout table records the choice per component.
+- **R2. Rust at the unauthenticated edge**, where a process is reachable by unauthenticated network input and needs no protocol library that is mature only in Go: the slim `entry`, and the key-less edge relay on Kubernetes ([0018](/decisions/0018-runtimes-installations-and-delivery-order/#kubernetes)). An edge actor that needs an OpenID Connect provider stays Go until a Rust one exists.
+- **R3. Rust for the trusted base:** processes that run as root or as a shared mediator, speak a fixed local protocol and hold a PIN, a session or key material in memory: `sluis-node`, `key-holder` and `sluis-host`. One named exception: `key-holder` is Go (below).
+- **R4. Go where the deciding library is Go-only or best in Go:** the X.509 CA and its issuance log, the C2SP log writer and witness, the OpenID Connect provider and token exchange, PIV attestation, HPKE, age with post-quantum recipients, TPM, Kubernetes controllers and the cert-manager issuer, and the vendor SDKs.
+- **R5. Drivers follow their backend's best SDK, with one language per vendor SDK in the build.** AWS, GCP and Azure are Rust, so the build has one AWS SDK language. Local backends default to Go. One named exception: `cloud-cloudflare` is Go.
+- **R6. Go by default** for business logic, CRUD and integrations, except on the smallest board tier (R11): delivery speed, stable OpenTelemetry and the wider hiring pool.
+- **R7. No Rust where the only library for a security function is marked experimental or unaudited.** Use a standard interface such as PKCS#11, or stay in Go. The `yubikey` crate is the case in point.
+- **R8. No FIPS build in 2.0.** Rust components use current crates and rustls, with no FIPS pin, and keep to the approved algorithms of [0012](/decisions/0012-cryptography-and-authority-keys/#algorithms). A FIPS build of the Rust side would need aws-lc-rs in FIPS mode and an answer for the AWS SDK for Rust, which signs SigV4 requests and S3 checksums with RustCrypto, outside any module (spike S2, 2026-10-30).
+- **R9. Both kits pass one conformance suite:** Connect over Unix sockets with peer credentials, configuration from the JSON Schema, the CLI conventions, OpenTelemetry. A component may move language only once its language's kit passes the suite.
+- **R10. Contracts are on the wire, so a choice is reversible.** A language change replaces one component behind the same contract and suite.
+- **R11. Rust on the smallest board tier, unless a serious trade-off is named.** An actor that runs on a tier-0 board (2 GB, as in spike S5) prefers Rust. Go is used there only where the rules name a serious trade-off, such as a required library that exists only in Go. Where no trade-off is named yet, the component's language is chosen by R11 when its component is designed. Building the trusted base in Go first and swapping later is acceptable, under R9.
+- **`GOMEMLIMIT` is a ceiling** at 2 to 3 times each process's steady private memory, with the default `GOGC` (24 to 32 MiB for rqlite, 24 MiB for an actor; decided 2026-10-31). A limit of 12 MiB cut throughput by 61 to 81 % through garbage collection.
+
+### Per-actor table
+
+| Component | Language | Rule |
+|---|---|---|
+| `entry` (slim), the Kubernetes edge relay | Rust | R2 |
+| `sluis-node` | Rust. It verifies OpenPGP signatures on signed configuration and binaries, by a release subkey that a root primary in the keyring has bound; Sigstore provenance is a second signal, not the trust | R3 |
+| `sluis-host` | Rust | R3 |
+| `key-holder` | Go with `piv-go` for YubiKey PIV | R4: an exception to R3 |
+| `policy` | Rust | R4 (`cedar-policy`) |
+| `cloud` port drivers: web identity, platform role, GCP and Azure federation | Rust | R5 |
+| AWS-backed drivers of the other ports: `aws-kms`, `dynamodb` (state and lease), `sqs`, `s3-compatible` blob | Rust | R5 |
+| `cloud-cloudflare` | Go, sharing the library of the integration `cloudflare@<company>` | R4: an exception to R5 |
+| `session` | Go | R4: the embeddable OpenID Connect provider |
+| `exchange` | Go | R4: the proof verifiers, HPKE and the OpenID Connect provider; its HPKE key and the session cookie-sealing key stay behind the `keys` port |
+| `ca` | Go | R4: the X.509 CA and its issuance log |
+| `writer`, `witness` | Go | R4: the C2SP log writer and witness |
+| Integrations | Go | R4: the vendor SDKs |
+| Other drivers (local backends, indexes, witnesses, `nats-jetstream`, `age` export) | Go | R5, R6; R4 for `age` export (age with post-quantum recipients) |
+| `signer`, `ssh-ca`, `quota`, `console` (the actor; the single-page application is TypeScript), `indexer`, `reader`, the local drivers (rqlite state, lease and index, the spool, the local lock, the files blob, `sqlite`), `sluis agent` | R11: Rust unless the component's design names a serious trade-off | R11 |
+| The `sluis` CLI, the cert-manager issuer | Go | R4, R6; not resident on a tier-0 board |
+
+- **`key-holder` is Go with `piv-go`.** One `key-holder` owns each node's card, and `piv-go` enforces that by construction with its exclusive connection, where `ykcs11` resets the card when another client appears and keeps a PIN copy that cannot be wiped. `key-holder` keeps the PIN in locked memory and zeroes its own copy; Go cannot promise the runtime keeps no other, which the zeroisation review records. PKCS#11 stays only for the later YubiHSM 2 and Nitrokey drivers, whose language is chosen with them.
+- **Attestation verification is Go**, in the CLI at node initialisation and in the `yubikey-attestation` verifier of `exchange` ([0007](/decisions/0007-workload-identity-and-host-enrolment/#proofs-and-the-exchange)), anchored on Yubico Attestation Root 1 and its intermediates, supplied by sluis.
+- **`cloud-cloudflare` is Go:** one vendor library in one language weighs more than one language for every `cloud` driver.
+- **The cloud and AWS-backed drivers are one group** in Rust. They run as Lambda extensions and as sidecars, where start-up time adds to every cold start.
+- **OpenTelemetry from Rust** uses a small Connect instrumentation crate of sluis's own, offered upstream, and OTLP over HTTP/protobuf; about 3 MiB more per Rust actor is accepted (spike S6, 2026-10-31).
+
+### The spikes are gates
+
+A conditional verdict holds once its spike passes; the languages are fixed before code of the first working version is written.
+
+| Spike | What it shows | Gates |
+|---|---|---|
+| S1 | Connect for Rust over Unix sockets: `connectrpc` server and client with a peer-credential extension and the default-deny interceptor, against connect-go both ways; the conformance runner; streaming | R2, R3, R5 |
+| S3 | A slim `entry` prototype in both languages, behind the tunnel client and the Lambda Web Adapter, with limits, timeouts and 24 hours of fuzzing; p99 latency, memory, cold start, binary size | `entry` |
+| S10 | GoReleaser with a Cargo workspace: every Rust binary for two architectures, with SBOM and provenance like the Go artefacts, and Lambda zips within the layer limits | Every Rust component |
+
+Spikes S2 ([#940](https://github.com/truvity/sluis/issues/940)), S4 ([#942](https://github.com/truvity/sluis/issues/942)), S5 ([#943](https://github.com/truvity/sluis/issues/943)), S6 ([#944](https://github.com/truvity/sluis/issues/944)) and S7 ([#945](https://github.com/truvity/sluis/issues/945)) are done (results above) and in [0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/#pkl-and-json-schema) for configuration.
+
+### Fallbacks are candidates
+
+A fallback is not chosen in advance. When a spike fails, the maintainer picks the fallback for that component from its candidates, with the results in hand.
+
+| Component | Candidate fallbacks |
+|---|---|
+| `entry` | Go first, Rust after the parity milestone |
+| AWS-backed drivers | Go |
+| `sluis-node`, `sluis-host` | Go |
+| Connect for Rust (S1) | The gRPC protocol through tonic, or a hand-written unary codec |
+
+## Consequences
+
+- More of sluis moves to Rust on the boards. Reviewers read more Rust, and the Rust gates cover more components; each move waits for the Rust kit to pass the suite.
+- The public edge and the trusted base, apart from `key-holder`, are memory-safe without a garbage collector and can zeroise what they hold. The cost is two languages on the request path and at the trust boundaries.
+- Most of sluis stays Go where its deciding libraries are: the OpenID Connect provider, the CA, the transparency logs, the vendor SDKs and Kubernetes.
+- One AWS SDK language: the AWS-backed and cloud drivers share a toolchain and a release path.
+- `piv-go` reaches pcsc-lite through cgo on Linux, so `key-holder` keeps a per-architecture native build ([0019](/decisions/0019-release-train-packaging-and-distribution/#packaging-per-runtime)).
+- `key-holder` is the one trusted-base process in Go: its PIN sits in a garbage-collected process and it uses a few megabytes more than a Rust holder, but the card has exactly one owner, enforced by the library.
+- The Rust components build like any other Rust code, with cargo-zigbuild and no CMake, Perl or pinned clang.
+- The spikes S1, S3 and S10 are on the critical path of the first working version. If Connect for Rust stalls, a fallback candidate carries the Rust components; tonic is in maintenance only, so the hand-written codec is the longer-lived one.
+- Two OpenTelemetry stacks, with Rust traces in Beta.
+- The `sluis` CLI stays the only executable people run, and it is Go. The source-layout page follows this record.
+
+## Roads not taken
+
+- **Go for everything except `policy` and the cloud drivers.** It leaves the public edge with net/http's advisory stream and Go's data-race class, keeps root-run secrets in a garbage-collected heap, and splits the AWS SDK across two languages.
+- **Rust for everything, or for every actor on a tier-0 board.** Rust has no embeddable OpenID Connect provider, no maintained static-ct-api log or C2SP witness, no PIV-attestation library and no maintained vendor clients; each would be written in-house.
+- **Group by piece (core, audit, platform in one language each).** It overrides the library-driven choices, while the contracts already make each executable independent.
+- **`exchange` in Rust, or `session` and `exchange` together.** Three of the six proof verifiers and RFC 8693 would be written in-house, and the HPKE crate is unaudited; the secrets leave the process through the `keys` port instead.
+- **`key-holder` on the `yubikey` crate.** Its own notice says it is unaudited and experimental (R7).
+- **`key-holder` in Rust through PKCS#11 (`cryptoki` with `ykcs11`).** Spike S4 found that `ykcs11` resets the card for every client when a second one appears and keeps a PIN copy Rust cannot wipe; `piv-go`'s exclusive connection is what one holder per node needs.
+- **`cloud-cloudflare` in Rust.** The Cloudflare library would exist twice, and its maintained SDK is Go.
+- **Go by default on a tier-0 board.** About 300 MiB more private memory at 30 actors on a 2 GB board (spike S5, 2026-10-31), where Rust costs no serious trade-off.
+
+## Follow-ups
+
+- The zeroisation review of the `key-holder` PIN paths, and the release-subkey slot on a real card: [#942](https://github.com/truvity/sluis/issues/942).
+- Spikes S1, S3 and S10 before code of the first working version.
