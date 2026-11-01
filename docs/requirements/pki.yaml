@@ -514,8 +514,8 @@ requirements:
       - {kind: integration-test, ref: "a slot map with a collision, given to each of the three commands, is refused"}
   - id: REQ-PKI-038
     area: PKI
-    statement: "`sluis config check`, `sluis key request` and node initialisation MUST each refuse a key purpose that the card slot map gives no slot."
-    rationale: "A purpose with no slot would fall back to a slot chosen elsewhere, or fail only when a key is needed."
+    statement: "`sluis config check`, `sluis key request` and node initialisation MUST each refuse an enabled key purpose that the card slot map gives no slot."
+    rationale: "An enabled purpose with no slot would fall back to a slot chosen elsewhere, or fail only when a key is needed."
     level: MUST
     source: design-decision
     status: planned
@@ -524,4 +524,53 @@ requirements:
       - {id: NC-10, section: "PIV", depth: Partial}
     issues: [914]
     verification:
-      - {kind: integration-test, ref: "a slot map that leaves a purpose without a slot, given to each of the three commands, is refused"}
+      - {kind: integration-test, ref: "a slot map that leaves an enabled purpose without a slot, given to each of the three commands, is refused"}
+  - id: REQ-PKI-039
+    area: PKI
+    statement: "The yearly renewal of an intermediate certificate or an OpenPGP subkey MUST be a new certificate or binding over the same key."
+    rationale: "Re-signing keeps the trust chain fresh without the work and exposure of a new key each year."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [914, 1066]
+    verification:
+      - {kind: integration-test, ref: "a renewal in a test installation: the new certificate or binding carries the public key of the old one"}
+  - id: REQ-PKI-040
+    area: PKI
+    statement: "sluis MUST replace the key material of an authority signing key other than the log key no later than three years after the key was made, or earlier on an event."
+    rationale: "A signing key is rotated at most every three years, which also keeps the rotation path exercised."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [914, 1066]
+    verification:
+      - {kind: integration-test, ref: "a clock-moving test: a key older than three years is reported as due, and a rotation puts the new key in a free spare slot while the old one still signs"}
+  - id: REQ-PKI-041
+    area: PKI
+    statement: "sluis MUST NOT use one asymmetric signing key for two purposes, two environments or two installations."
+    rationale: "A signing call takes no encryption context and an alias points to the same key, so the store cannot separate two uses of one signing key."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [914]
+    verification:
+      - {kind: integration-test, ref: "a scan of the configured key purposes, environments and installations: none resolves to one key, and a configuration that maps two of them to one key is refused"}
+  - id: REQ-PKI-042
+    area: PKI
+    statement: "`sluis config check` MUST NOT require a slot or a key for a key purpose that the installation does not enable."
+    rationale: "An installation that issues no SSH certificates has no SSH CA key to place."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: NC-10, section: "PIV", depth: Partial}
+    issues: [914]
+    verification:
+      - {kind: integration-test, ref: "a slot map without ssh-user and ssh-host slots for an installation that enables neither; accepted"}

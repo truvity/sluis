@@ -23,7 +23,7 @@ GitHub is the integration that plays the most kinds of integration actor. It is 
 |---|---|
 | `WorkloadVerifier` | Verifies an Actions identity token against GitHub's key set and returns attributes: `github.repository`, `ref`, `job_workflow_ref`, `environment`, `visibility`, owner and repository ids. It needs no secret, so it can run apart from the App keys. |
 | `FactsSource` | Reports organisation members, team members and maintainers. |
-| `CredentialMinter` | Mints an installation token for a catalogued App, for a mint grant that the `policy` actor signed. |
+| `CredentialMinter` | Mints an installation token for a catalogued App, for a mint grant that the `policy` actor sealed. |
 | `Provisioner` | Makes the organisation's teams equal the desired state core publishes: invites, adds, promotes and removes. |
 
 A person's GitHub account is linked to their work address through a separate **link App**, so that a team can be filled from a directory group.
@@ -99,7 +99,7 @@ steps:
 ## v1 → v2 notes
 
 - v1 does all of this today. The App flow is a console action; teams are bound in the policy's `github` table; the token request is the `truvity/sluis` GitHub Action or `sluisctl github-token`. See the v1 guides for [Actions](/v1/guides/sluis/connect/github-actions/), [App tokens](/v1/guides/sluis/connect/github-app-tokens/), [the App catalogue](/v1/guides/sluis/connect/github-apps-catalogue/) and [organisations](/v1/guides/sluis/connect/github-organisation/).
-- In v1 the grants live in the App catalogue; in v2 they are policy, and the minter receives a signed mint grant. Caps and rates move from the minter into `policy` and `quota`.
+- In v1 the grants live in the App catalogue; in v2 they are policy, and the minter receives a sealed mint grant. Caps and rates move from the minter into `policy` and `quota`.
 - The shell-only Action stays as the way to request a token from a workflow. The command line becomes the single `sluis` binary, so `sluisctl github-token` becomes a subcommand of `sluis`.
 - Parity issues: [#783](https://github.com/truvity/sluis/issues/783) CI identity tokens, [#808](https://github.com/truvity/sluis/issues/808) team controller, [#809](https://github.com/truvity/sluis/issues/809) account links, [#810](https://github.com/truvity/sluis/issues/810) App catalogue and runner Apps, [#811](https://github.com/truvity/sluis/issues/811) installation tokens, [#826](https://github.com/truvity/sluis/issues/826) the exchange Action.
 

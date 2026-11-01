@@ -33,7 +33,7 @@ The core actors are `entry`, `session`, `console`, `exchange`, `signer`, `policy
 | `console` | The operator API, as the browser's backend. Routes each write to the actor that owns the record kind | Delegation checks. No key | Write a record kind it does not own |
 | `exchange` | Token exchange (RFC 8693), enrolment and the proof verifiers | Client secret verifiers, enrolments, token hashes. Verifier drivers with public material only; the enrolment key stays in `key-holder` or KMS | Sign a token itself |
 | `signer` | Holds the signing ring and signs tokens under a signing policy; it is not a pure oracle. It checks the issuer URL, the audience set, the lifetime and the algorithm | The token-signing key use (KMS `Sign`, or the hardware key through `key-holder`) | Accept a request from an actor its call graph does not name (`session` and `exchange`), or parse internet input |
-| `policy` | The decision point. Declared Cedar policy, plus template-linked policies within a declared delegation policy, maps facts to grants. Signs mint grants with its own key | The grant key. No state, no network, no secrets | Reach any resource: a bad process can decide wrongly, but exfiltrates nothing |
+| `policy` | The decision point. Declared Cedar policy, plus template-linked policies within a declared delegation policy, maps facts to grants. Seals mint grants under the sealing key | Use of the sealing key for grants only. No state, no network, no secrets | Reach any resource: a bad process can decide wrongly, but exfiltrates nothing |
 | `ca` | The X.509 CA | The X.509 CA keys | Sign anything outside its policy |
 | `ssh-ca` | The SSH CA, for user and host certificates | The `ssh-user` and `ssh-host` keys | Sign anything but an OpenSSH certificate within its policy |
 | `quota` | Not a core actor: the engine of the Quota piece. Rate limits, caps and metering, with compare-and-set on the state port (a conditional adjust is proposed, ADR 0057) | Its own balances (issued) and meters (derived). No key | Touch identity records |
@@ -165,7 +165,7 @@ flowchart LR
   kh --> dev[("YubiKey")]
 ```
 
-The actors that use a key (`signer`, `ca`, `ssh-ca`, and the audit `writer` for its log key) reach it only through `key-holder`, each through a socket of its own. Every actor that keeps state has its own rqlite cluster, and a declared reader of another actor's records has a `query`-only user on that cluster. `policy` also uses its grant key; it is left out of the picture.
+The actors that use a key (`signer`, `ca`, `ssh-ca`, and the audit `writer` for its log key) reach it only through `key-holder`, each through a socket of its own. Every actor that keeps state has its own rqlite cluster, and a declared reader of another actor's records has a `query`-only user on that cluster. `policy` also uses the sealing key to seal its grants; it is left out of the picture.
 
 #### Step 3: audit emits and the node agent
 

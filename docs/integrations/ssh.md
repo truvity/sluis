@@ -6,7 +6,7 @@ sidebar:
   order: 9
 ---
 
-SSH is a **client profile** like [PostgreSQL](/integrations/postgresql/): the **`ssh-ca` actor** holds two SSH certificate authority keys, one for user certificates and one for host certificates (slots 84 and 86 on a YubiKey, each with a rotation slot, and separate ECC keys on KMS), and sluis calls nothing outside. `ssh-ca` is an actor of its own, separate from the X.509 `ca`, because it is a different authority. There is an SSH CA per environment ([Boundaries](/runtimes/boundaries/#the-reference-federation)). The record is [ADR 0013](/decisions/0013-ca-and-ssh-ca-are-the-certificate-authorities-and-ssh-uses-only-sluis-own-ca/).
+SSH is a **client profile** like [PostgreSQL](/integrations/postgresql/): the **`ssh-ca` actor** holds two SSH certificate authority keys, one for user certificates and one for host certificates (slots 82 and 83 on a YubiKey, and separate ECC keys on KMS; an installation that issues no SSH certificates has neither), and sluis calls nothing outside. `ssh-ca` is an actor of its own, separate from the X.509 `ca`, because it is a different authority. There is an SSH CA per environment ([Boundaries](/runtimes/boundaries/#the-reference-federation)). The record is [ADR 0013](/decisions/0013-ca-and-ssh-ca-are-the-certificate-authorities-and-ssh-uses-only-sluis-own-ca/).
 
 ## What it's for
 

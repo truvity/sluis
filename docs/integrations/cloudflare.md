@@ -20,7 +20,7 @@ Cloudflare is a credential minter. sluis holds one account-level token that can 
 
 | Actor | What it does for Cloudflare |
 |---|---|
-| `CredentialMinter` | Receives a mint grant signed by the `policy` actor, checks the prototype, creates a token by cloning the prototype with an expiry, and sweeps expired tokens it created. |
+| `CredentialMinter` | Receives a mint grant sealed by the `policy` actor, checks the prototype, creates a token by cloning the prototype with an expiry, and sweeps expired tokens it created. |
 
 That is the only integration actor, named `cloudflare@<company>`. Cloudflare supplies no facts and takes no desired state.
 

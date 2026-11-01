@@ -19,6 +19,20 @@ An installation serves one [boundary](/runtimes/boundaries/) at L4, or the front
 
 **Any other combination is a possible installation, allowed by the rules but not tested.** A single board, a single EC2 instance or a cluster of EC2 instances is such an installation: the rules of [Ports and drivers](/concepts/drivers/) allow it, and `sluis config check` (in the design) validates it against the requirements its drivers declare, but nobody runs it in CI. Nothing on this page forbids it. It only says what is tested.
 
+## Reference installation shapes
+
+**Every port has more than one driver, each proven by a real installation.** sluis is one product in many shapes, and it is built against these reference shapes (decided by the maintainer on 2026-11-01). A driver that no reference shape runs is not trusted to be a driver.
+
+| Shape | Runtime and keys | Notes |
+|---|---|---|
+| A **workforce** installation with a few tenants | [serverless](/runtimes/serverless/), AWS KMS | Functions behind the edge, no hosts to operate. A handful of tenants, so the tenant data keys stay few |
+| A **customer-identity** installation with thousands of tenants | [kubernetes](/runtimes/kubernetes/), AWS KMS | Thousands of tenants share one sealing key: each tenant's data keys are wrapped under it with the tenant in the encryption context, and no tenant has a key of its own |
+| **Audit-with-quota** installations, one for each product | [kubernetes](/runtimes/kubernetes/), AWS KMS | Each holds only its own log key and uses the account's sealing key under its own alias and context |
+| A **self-hosted** installation on small boards | [bare-metal](/runtimes/bare-metal/), a YubiKey in each node | A file blob store and an S3-compatible object store, with no cloud account needed |
+| **Development** | [bare-metal](/runtimes/bare-metal/), software keys | The code refuses a software key in production ([ADR 0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/)) |
+
+The four tested installations below are the named, documented subset of these shapes: [lambda](#lambda) is the serverless shape, [kubernetes](#kubernetes) is the Kubernetes shapes, [boards](#boards) is the self-hosted shape, and [local](#local) is development. The key layout of each shape is on [Keys](/concepts/keys/#aws-kms-layout).
+
 ## Delivery order
 
 The installations are built in this order, which is agreed.

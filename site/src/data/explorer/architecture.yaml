@@ -206,7 +206,7 @@ drivers:
     does: "Serves the keys port from the node's YubiKey (PIV), as key-holder, the one mediating driver. One device and one PIN, so one shared instance with three checks: one Unix socket per caller, in a directory only that caller can open; the caller's peer uid on every connection; and content-aware signing per purpose (a TBSCertificate for ca, an OpenSSH certificate body for ssh-ca, a JWS signing input for token purposes). An access list generated from the manifest names who may use which key. Built with cgo against pcsc-lite."
     holds: The PIN, as a systemd credential. No symmetric keys; sealing uses ECDH plus HKDF with the P-384 key in slot 9d.
     backing: YubiKey PIV
-    slots: "map version 1, rotation slot in brackets: 9c node intermediate (82); 9a token signing, a separate key with a non-CA certificate (83); 84 SSH user CA (85) and 86 SSH host CA (87), both for ssh-ca; 88 release subkey (89); 8a audit log key (8b); 8c usage log key (8d); 8e mint grant (8f); 9d ECDH sealing and ring wrap, with 90 to 95 holding older sealing keys; 9e not used (proposed)"
+    slots: "map version 1: 9c node intermediate; 9a token signing, a separate key with a non-CA certificate; 9d ECDH sealing and ring wrap, also used for grants; 82 SSH user CA and 83 SSH host CA, both for ssh-ca; 84 log key (audit and usage); 85 release subkey; 86 to 95 spare for event rotations and older sealing keys; 9e not used (proposed)"
     status: agreed
   embedded:
     port: state
@@ -449,11 +449,11 @@ roles:
     name: policy
     kind: actor
     binary: actors/policy
-    does: "The decision point. A reviewed, file-based Cedar policy maps facts to grants. It is written in Rust with the cedar-policy crate. It keeps no state and opens no network connection. It signs mint grants with its own key."
-    holds: The grant key
+    does: "The decision point. A reviewed, file-based Cedar policy maps facts to grants. It is written in Rust with the cedar-policy crate. It keeps no state and opens no network connection. It seals mint grants under the sealing key."
+    holds: Use of the sealing key for grants only
     uses: [keys, transport]
     resources:
-      - "keys: sign with the grant key"
+      - "keys: seal grants under the sealing key (purpose=grant)"
       - "state: none; network: none"
       - "transport: put"
   signer:
@@ -474,7 +474,7 @@ roles:
     kind: actor
     binary: actors/ca
     does: "The X.509 certificate authority: host and workload SVIDs at enrolment, and database client certificates. The subject comes from the requester's authenticated identity, never from the request. Every certificate is audited and goes in the issuance log. The SSH CA is a separate actor, ssh-ca (ADR 0013)."
-    holds: The X.509 CA keys (slot 9c for the node intermediate on a YubiKey, rotation slot 82, proposed)
+    holds: The X.509 CA keys (slot 9c for the node intermediate on a YubiKey, proposed)
     uses: [keys, state, transport]
     resources:
       - "keys: sign a TBSCertificate within its profile's constraints (key-holder parses it before signing)"
@@ -487,7 +487,7 @@ roles:
     kind: actor
     binary: actors/ssh-ca
     does: "The SSH certificate authority, for user and host certificates. A certificate carries identity only (u:<person-key> for people, w:<workload> for machines); what an identity may log in as comes from the signed bundle that sluis-host writes on each host. Policy decides each signature (ssh.certify). It is its own actor because it is a different authority from ca (ADR 0013)."
-    holds: The SSH user and host CA keys (slots 84 and 86 on a YubiKey, rotation slots 85 and 87, proposed)
+    holds: The SSH user and host CA keys (slots 82 and 83 on a YubiKey, proposed)
     uses: [keys, state, transport]
     resources:
       - "keys: sign an OpenSSH certificate body only (key-holder parses it before signing)"
@@ -583,7 +583,7 @@ integrations:
   int-minter:
     kind: CredentialMinter
     example: int-cloudflare
-    does: Mints a short-lived downstream credential (cloud API token, GitHub installation token, AWS credentials). It receives a mint grant signed by policy and carries it out; it never decides.
+    does: Mints a short-lived downstream credential (cloud API token, GitHub installation token, AWS credentials). It receives a mint grant sealed by policy and carries it out; it never decides.
     holds: The connection's parent credential
     egress: the vendor's API host only
   int-provisioner:
@@ -680,7 +680,7 @@ calls:
   - { f: exchange, t: ca, m: Issue, d: "A host or workload SVID, bound to the requester's identity." }
   - { f: exchange, t: drv-keys, m: "Open(enrolment)", d: "Opens an HPKE-sealed enrolment request; the enrolment key never leaves the keys port." }
   - { f: exchange, t: drv-state, m: "enrolments/*", d: "Enrolments, enrolment-token hashes, hosts and clients, in its own cluster." }
-  - { f: exchange, t: int-minter, m: Mint(grant), d: "Downstream mint, with a grant signed by policy." }
+  - { f: exchange, t: int-minter, m: Mint(grant), d: "Downstream mint, with a grant sealed by policy." }
   - { f: exchange, t: int-notifier, m: Notify, d: "Notifications, such as an enrolment waiting for approval." }
   - { f: console, t: int-provisioner, m: Reconcile, d: "Asks the provisioner to reconcile to a published, digest-addressed desired state (illustrative)." }
   - { f: ssh-ca, t: policy, m: Decide, d: "ssh.certify: may this identity get this certificate now." }
@@ -690,7 +690,7 @@ calls:
   - { f: int-minter, t: vendor, m: Mint, d: Mints the credential at the vendor. }
   - { f: int-provisioner, t: vendor, m: Pull, d: Pulls the desired state and applies it. }
   - { f: int-notifier, t: vendor, m: Send, d: Sends the notification. }
-  - { f: policy, t: drv-keys, m: "Sign(grant)", d: Signs mint grants with its own key. }
+  - { f: policy, t: drv-keys, m: "Wrap(grant)", d: Seals mint grants under the sealing key. }
   - { f: signer, t: drv-keys, m: "Sign(token)", d: Token signatures. }
   - { f: ca, t: drv-keys, m: "Sign(cert)", d: "A TBSCertificate within its profile's constraints." }
   - { f: ssh-ca, t: drv-keys, m: "Sign(ssh cert)", d: "An OpenSSH certificate body only." }
@@ -894,14 +894,14 @@ flows:
         nodes: [exchange, policy]
         edges: ["exchange>policy"]
         text: policy decides whether this caller may mint this credential.
-      - title: policy signs a mint grant
+      - title: policy seals a mint grant
         nodes: [policy, drv-keys, store-keys]
         edges: ["policy>drv-keys", "drv-keys>store-keys"]
-        text: policy signs the mint grant (connection, preset, ttl, nonce, expiry) with its own grant key. The grant key is not the token-signing key, and only policy may use it.
+        text: policy seals the mint grant (connection, preset, ttl, nonce, expiry) with authenticated encryption under the sealing key, with purpose=grant in the encryption context. There is no grant-signing key.
       - title: exchange calls the minter with the grant
         nodes: [exchange, int-minter]
         edges: ["exchange>int-minter"]
-        text: exchange passes the grant to the minter. The minter verifies the grant against policy's public key and the nonce. It does not decide; caps and rate limits already live in core.
+        text: exchange passes the grant to the minter. The minter opens the grant under the same context and checks the nonce. It does not decide; caps and rate limits already live in core.
       - title: The minter mints at the vendor
         nodes: [int-minter, vendor]
         edges: ["int-minter>vendor"]

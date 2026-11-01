@@ -74,5 +74,6 @@ flowchart TB
 | [Secrets](/concepts/secrets/) | Which secrets does sluis keep, which does it publish, and which does it refuse to keep? |
 | [Backup](/concepts/backup/) | What is backed up, what is not, and how is sluis restored? |
 | [Audit](/concepts/audit/) | What is recorded, and why can the trail be trusted? |
+| [Design principles](/concepts/principles/) | Which eleven principles do the decision records follow? |
 
 For the same system drawn as boxes and sockets, see [Architecture](/architecture/), or open the [architecture explorer](/architecture/explorer/).

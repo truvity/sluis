@@ -61,7 +61,7 @@ The writer runs with a **reserved concurrency of 1 on a standard SQS queue** (de
 
 ## Keys
 
-- **KMS:** one symmetric key with encryption contexts for sealing, and one `ECC_NIST_P384` signing key per authority purpose. Each key policy names the one function role allowed to use it.
+- **KMS:** one symmetric key with encryption contexts for sealing (grants included), and one `ECC_NIST_P384` signing key per enabled authority purpose. Each key policy names the one function role allowed to use it.
 - A function's execution role is its identity to KMS. Only the `signer` function can use the token-signing key, only `ca` the X.509 CA key, only `ssh-ca` the SSH CA keys, and only the writer the log key. There is **no `key-holder` on serverless**: the key policy is the access list.
 - Tokens are signed directly with the non-extractable key. There is no software key on Lambda.
 

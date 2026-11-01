@@ -27,7 +27,7 @@ sluis is not one program. It is a handful of **core actors**, each with one job,
 | `console` | The operator API, as the browser's backend. It routes each write to the actor that owns the record kind | Delegation checks; no key |
 | `exchange` | Token exchange ([RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693)), enrolment and the proof verifiers ([Machine identity](/concepts/machine-identity/)) | Verifier drivers, which hold public material only. The enrolment (HPKE) key stays in `key-holder` or KMS |
 | `signer` | Holds the signing ring and signs tokens under a signing policy. It is not a pure signing oracle. | The token-signing keys |
-| `policy` | The decision point. A declared Cedar policy, plus template-linked policies within a declared delegation policy, maps facts to grants. It has no state and no network. It signs mint grants with its own key. | The grant key |
+| `policy` | The decision point. A declared Cedar policy, plus template-linked policies within a declared delegation policy, maps facts to grants. It has no state and no network. It seals mint grants under the sealing key, with `purpose=grant` in the encryption context. | Use of the sealing key for grants only |
 | `ca` | The X.509 certificate authority | The X.509 CA keys |
 | `ssh-ca` | The SSH certificate authority, an actor of its own because it is a different authority ([SSH](/integrations/ssh/)) | The `ssh-user` and `ssh-host` CA keys |
 | `quota` | Rate limits, caps and metering, on the state port with compare-and-set. The engine of the Quota piece, not a core actor. | No key. It writes quota balances (issued records) and meters (derived) |
@@ -37,7 +37,7 @@ sluis is not one program. It is a handful of **core actors**, each with one job,
 | `reader` | Serves audit queries from the index and audits every read. | Read-only access |
 | Integration actors | One process per vendor tenant and credential, in six kinds: see [Integrations](/concepts/integrations/). | The vendor credential of that integration only |
 
-Four actors use an authority key, each a different one: `signer`, `policy`, `ca` and `ssh-ca`. The audit `writer` uses the log key too, but only by asking `key-holder` to sign, and `key-holder`'s access list lets nobody but the writer use that key; on AWS a key policy does the same. `entry`, which faces the internet through the edge connector, holds nothing. Its public API is the only listener that faces the edge, and every other actor listens on Unix sockets only (see [Listeners](/architecture/listeners/)). `entry` was formerly called central.
+Three actors use an authority key, each a different one: `signer`, `ca` and `ssh-ca`. `policy` holds no signing key: it seals its grants under the sealing key. The audit `writer` uses the log key too, but only by asking `key-holder` to sign, and `key-holder`'s access list lets nobody but the writer use that key; on AWS a key policy does the same. `entry`, which faces the internet through the edge connector, holds nothing. Its public API is the only listener that faces the edge, and every other actor listens on Unix sockets only (see [Listeners](/architecture/listeners/)). `entry` was formerly called central.
 
 **Copied tokens are useless.** Tokens are sender-constrained (DPoP or mutual TLS) and authorization codes are bound by PKCE, so a token or a code read off the wire cannot be used by anyone else.
 
@@ -142,7 +142,7 @@ In v1 the issuer is one function that serves sign-in, machine token exchange and
 - `entry` parses and routes and holds nothing, so a bug in request parsing reaches no key, no secret and no record.
 - `exchange` and `session` own the protocol state, and ask `policy` before anything is issued.
 - `signer` holds the token-signing keys and signs only what its signing policy allows. It is not a pure oracle, so a compromised `entry` or `exchange` cannot ask it for an arbitrary token.
-- `policy` decides. It has no state and no network, so it cannot be made to read or exfiltrate anything. Its output is a **grant** signed by its own key, and a minter will only act on a grant signed by that key.
+- `policy` decides. It has no state and no network, so it cannot be made to read or exfiltrate anything. Its output is a **grant** sealed under the sealing key of its environment, and a minter will only act on a grant that it can open under the context `purpose=grant`.
 
 Splitting the decision from the signature gives two independent checks. To obtain a credential, an attacker needs a grant that `policy` signed **and** a minter that accepts it; to forge a token, they need `signer` to agree **and** the signing policy to allow it. v1 left the split for later and never made it. v2 makes it from the first slice.
 
@@ -150,8 +150,8 @@ Splitting the decision from the signature gives two independent checks. To obtai
 flowchart LR
   user(["Caller"]) -->|"sign-in, exchange"| entry["entry<br/>holds nothing"]
   entry -->|"route"| xchg["exchange"]
-  xchg -->|"may this subject do this?"| policy["policy<br/>no state, no network<br/>grant key"]
-  policy -->|"signed grant"| xchg
+  xchg -->|"may this subject do this?"| policy["policy<br/>no state, no network<br/>seals grants"]
+  policy -->|"sealed grant"| xchg
   xchg -->|"sign claims"| signer["signer<br/>token keys"]
   xchg -->|"grant + request"| minter["integration<br/>CredentialMinter"]
   minter -->|"checks grant against<br/>policy's public key"| minter

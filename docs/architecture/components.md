@@ -55,7 +55,7 @@ Six of the sixteen integrations that v1 lists call no external system: databases
 
 Four of the six contracts only return facts. A credential minter and a provisioner are effectors by nature, so two conditions keep them from deciding anything:
 
-1. **Core decides, the integration executes.** A minter receives a **mint grant signed by the `policy` actor's own key**: the decision, the policy digest and the hash of the scope. It refuses a scope the grant does not cover and cannot lengthen the lifetime. A provisioner pulls a desired state **addressed by its digest** from a read-only prefix that core writes. It never asks core a question.
+1. **Core decides, the integration executes.** A minter receives a **mint grant sealed by `policy` under the sealing key** (authenticated encryption, with `purpose=grant` in the encryption context, opened only by sluis itself): the decision, the policy digest and the hash of the scope. It refuses a scope the grant does not cover and cannot lengthen the lifetime. A provisioner pulls a desired state **addressed by its digest** from a read-only prefix that core writes. It never asks core a question.
 2. **Business limits live in core.** Caller caps, mint rates and which group may hold which role are policy or quota, checked before the minter is called. An integration enforces only technical limits: the vendor's API rate and maximum lifetime.
 
 The mint flow is drawn in two steps.
@@ -74,10 +74,10 @@ sequenceDiagram
   M->>P: verify the proof
   P-->>M: verified subject
   M->>D: decide mint
-  D-->>M: decision, signed grant
+  D-->>M: decision, sealed grant
 ```
 
-The caller asks for a credential of a kind and a scope, with a proof. The mint broker asks policy to decide with the subject, the facts, the kind and the scope. The decision carries the scope bound, the ttl cap and the signed mint grant.
+The caller asks for a credential of a kind and a scope, with a proof. The mint broker asks policy to decide with the subject, the facts, the kind and the scope. The decision carries the scope bound, the ttl cap and the sealed mint grant.
 
 Step 2: the mint broker admits the operation and the minter mints.
 
@@ -155,17 +155,15 @@ Three actors declare **instances: exactly 1**: the audit writer (one per log), t
 
 ### The keys port
 
-The keys port binds a **key purpose** to a backend and refuses a backend that is too weak for the purpose when the configuration loads. The code refuses a software key in production; configuration picks among the modes the installation's runtime allows. The key purposes are the unit callers name: `token-signing`, `ca`, `ssh-user`, `ssh-host`, `audit-log`, `usage-log`, `grant`, `sealing`, `enrolment`, and one per cloud federation. Callers never see an ARN, a slot or a path. Each boundary has its own keys. On a YubiKey the slot of each purpose comes from the card slot map, whose version 1 defaults are on [Keys](/concepts/keys/#yubikey-layout) (each signing purpose also has a rotation slot).
+The keys port binds a **key purpose** to a backend and refuses a backend that is too weak for the purpose when the configuration loads. The code refuses a software key in production; configuration picks among the modes the installation's runtime allows. The key purposes are the unit callers name: `token-signing`, `ca`, `ssh-user`, `ssh-host`, `log`, `sealing`, `enrolment`, and one per cloud federation. There is no `grant` purpose: a mint grant is sealed under the `sealing` key with `purpose=grant` in the encryption context. Callers never see an ARN, a slot or a path. Each boundary has its own keys, and a purpose that an installation does not enable has none. On a YubiKey the slot of each purpose comes from the card slot map, whose version 1 defaults are on [Keys](/concepts/keys/#yubikey-layout); the sharing and rotation rules are on the same page.
 
 | Key purpose | Requires | On AWS KMS | On a YubiKey (PIV) |
 | -------- | -------- | ---------- | ------------------ |
-| `token-signing` | Never exportable; used by the `signer` actor only; a key of its own, never the CA key, with a non-CA certificate for signing only that the intermediate issues | One `ECC_NIST_P384` key; tokens are signed directly | Slot 9a (rotation 83); about 8 signatures per second |
-| `ca` (X.509) | Never exportable; used by the `ca` actor only; one key per trust domain | One `ECC_NIST_P384` key per trust domain | Slot 9c (rotation 82) |
-| `ssh-user`, `ssh-host` | Never exportable; used by the `ssh-ca` actor only | One `ECC_NIST_P384` key each | Slots 84 and 86 (rotation 85 and 87) |
-| `audit-log` | Never exportable; used by the audit `writer` only, through `key-holder` or a key policy | One `ECC_NIST_P384` key per log | The node's own key in slot 8a (rotation 8b); a cluster keeps one log per node and peers witness it |
-| `usage-log` | Never exportable; used by the audit `writer` only, through `key-holder` or a key policy | One `ECC_NIST_P384` key per log | The node's own key in slot 8c (rotation 8d) |
-| `grant` | Never exportable; used by the `policy` actor only | One `ECC_NIST_P384` key | Slot 8e (rotation 8f) |
-| `sealing` | Wraps and unwraps; takes an encryption context. Wraps the data key of each (boundary, record kind) and the cookie-sealing key of `session` | One symmetric key with encryption contexts | ECDH plus HKDF (HPKE-style) with a P-384 key in slot 9d; slots 90 to 95 hold older sealing keys |
+| `token-signing` | Never exportable; used by the `signer` actor only; a key of its own, never the CA key, with a non-CA certificate for signing only that the intermediate issues | One `ECC_NIST_P384` key; tokens are signed directly | Slot 9a; about 8 signatures per second |
+| `ca` (X.509) | Never exportable; used by the `ca` actor only; one key per trust domain; present only if the installation issues certificates | One `ECC_NIST_P384` key per trust domain | Slot 9c |
+| `ssh-user`, `ssh-host` | Never exportable; used by the `ssh-ca` actor only; present only if enabled | One `ECC_NIST_P384` key each | Slots 82 and 83 |
+| `log` | Never exportable; used by the audit `writer` only, through `key-holder` or a key policy; one key signs both the audit log and the usage log, and each signed batch head names its log | One `ECC_NIST_P384` key for the installation | The node's own key in slot 84; a cluster keeps one log per node and peers witness it |
+| `sealing` | Wraps and unwraps; takes an encryption context. Wraps the data key of each (boundary, record kind), the data keys of tenants and the cookie-sealing key of `session`, and seals the mint grants (`purpose=grant`, opened only by sluis itself) | One symmetric key per account or environment with one alias for each use and its encryption contexts enforced by key-policy conditions; in a production-grade environment a multi-Region key with a replica | ECDH plus HKDF (HPKE-style) with a P-384 key in slot 9d; older sealing keys stay in the spare slots 86 to 95 |
 | `enrolment` | Opens HPKE-sealed enrolment requests; used by `exchange` only | Held by KMS | Held by `key-holder` |
 
 Each backend describes itself with traits: exportability, attestation, whether a human must touch it, latency class, throughput, and who enforces which caller may use it (platform IAM, a shared driver, or nothing). The port signs bytes or digests; JWT shaping (`exp`, `iat`, lifetime limits) lives in a `jose` library in the token issuer, not in the port. `Derive` (a keyed, deterministic function) and `Agree` (ECDH) are separate operations because a PIV token has no HMAC. ES384 (P-384) is the default; the cloud-federation keys and the FAPI 2.0 algorithms (PS256, ES256, EdDSA) are the exceptions, each in its own slot or key. See [Keys](/concepts/keys/#algorithms).
@@ -327,7 +325,7 @@ Rules the graph encodes:
 - **Core calls integrations, never the reverse.** An integration calls no core component over Connect. Its results travel through state, the audit transport, and the reply to its caller. A flow that looks circular, such as console to integration to provider to webhook to integration, is a flow over time with the pending state kept as a record.
 - **Integrations never call each other.** No integration imports another.
 - **Only the audit sink is called by everyone**, and asynchronously. The one synchronous audit call is the blocking sink used by maintenance, restore and migration.
-- **The decision point has no outgoing edge.** The `policy` actor maps facts to grants and signs a mint grant. It reads a reviewed file and nothing else.
+- **The decision point has no outgoing edge.** The `policy` actor maps facts to grants and seals a mint grant. It reads a reviewed file and nothing else.
 
 ## One writer per record kind
 

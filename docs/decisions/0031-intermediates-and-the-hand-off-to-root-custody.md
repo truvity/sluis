@@ -48,7 +48,8 @@ sluis hands ritueel a request and installs what comes back. The specification li
 
 ### Lifetimes and the warning
 
-- **An intermediate certificate and an OpenPGP subkey last about 13 months.** They are renewed at the yearly ceremony in month 12, so one year's certificate overlaps the next.
+- **An intermediate certificate and an OpenPGP subkey last about 13 months.** Each year at the ceremony in month 12 the root re-signs the same key: a new certificate for the intermediate, a new binding that extends the subkey's expiry. The new certificate overlaps the old one. A renewal makes no new key.
+- **Key material rotates only on an event, or at most every three years.** The events are a suspected compromise, a change of algorithm or store, and a change of custody. The limit follows NIST SP 800-57's one to three years for a signing key, and the forced rotation keeps the path exercised. A new key is requested like the first one, with `sluis key request`, and goes into a free spare slot on a card while the old one finishes ([0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/#rotation)).
 - **sluis warns before expiry.** A notice 60 days before, an alert 30 days before, and a critical alert 14 days before. The warning is a metric, an alert rule and a line in `sluis key status` and `sluis doctor`. The lead time is long because the renewal needs a person at ritueel's side.
 - **A stolen or lost board is a small event.** ritueel revokes the board's certificate and subkey, and sluis publishes the revocation. The window runs from the theft to that publication.
 
@@ -92,10 +93,10 @@ OpenPGP has no intermediates, but it can delegate. A company root, kept by ritue
 - sluis gets smaller and easier to test. Its tests need a card or a key service and a software root from ritueel; none needs a root ceremony.
 - The first version of sluis depends on ritueel's software-root mode for the roots its harness uses. Until ritueel delivers it, a developer has no certified intermediate.
 - A contract is now an interface between two products. A change to it needs a version and a compatibility rule on both sides; sluis refuses a version it does not know.
-- Renewal needs a person on ritueel's side once a year. The long warning is sluis's only protection; if the person is away in month 13, certificates expire and `ca` stops issuing.
+- Re-signing needs a person on ritueel's side once a year. The long warning is sluis's only protection; if the person is away in month 13, certificates expire and `ca` stops issuing.
 - The revocation of a stolen board crosses the line between the products, and the end-to-end time from theft to verifiers refusing it belongs to neither alone. The runbook has to name both parts.
 - The root list can expire or be replaced. A host keeps its last good list, and a stale list is a warning on sluis's side and a renewal on ritueel's.
-- `x5c` in the key set adds one certificate chain to the published keys, which must be refreshed at each yearly renewal. The chain has the token certificate in front of the intermediate, and the intermediate issues a new token certificate with each renewal.
+- `x5c` in the key set adds one certificate chain to the published keys, which must be refreshed at each yearly re-signing. The chain has the token certificate in front of the intermediate, and the intermediate issues a new token certificate with each new intermediate certificate.
 - The attestation check and the OpenPGP packet code exist on both sides, because there is no shared library. The cost is a shared test matrix: `gpg`, `gpgv`, `sqv`, apt and rpm.
 - The requirements for root custody move to ritueel. sluis gains requirements for the hand-off, the back-signature, expiry warnings, the root list, exclusive card access, keys born in place, and the signing API.
 

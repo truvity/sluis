@@ -32,7 +32,7 @@ The rule is stated in one sentence:
 The older wording, "plugins return facts only", was not true of minters and provisioners, which are effectors by nature. The rule says what they may do instead:
 
 - A **FactsSource** or **WorkloadVerifier** returns facts. Whether a fact entitles anyone to anything is `policy`'s question.
-- A **CredentialMinter** carries out an effect. It receives a **mint grant signed by the `policy` actor's own key**, checks the signature, and mints exactly what the grant says, narrowed to the grant's limits. It decides nothing about whether to mint.
+- A **CredentialMinter** carries out an effect. It receives a **mint grant sealed by the `policy` actor under the sealing key**, opens it (which fails for anything but a grant from its own environment), and mints exactly what the grant says, narrowed to the grant's limits. It decides nothing about whether to mint.
 - A **Provisioner** pulls a desired state **addressed by its digest** and reconciles to it. It does not choose what the state should be.
 
 Caps and rate limits are not integration business either. They live in core, in `policy` and `quota`, so a minter never contains a rule about how much is too much.
@@ -44,7 +44,7 @@ sequenceDiagram
   participant M as CredentialMinter
   participant V as Vendor API
   C->>P: facts about the caller, requested credential
-  P-->>C: mint grant, signed by the policy key
+  P-->>C: mint grant, sealed under the sealing key
   C->>M: grant and request
   M->>M: verify grant signature, expiry, nonce
   M->>V: mint, narrowed to the grant

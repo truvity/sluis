@@ -31,7 +31,7 @@ Some deployments also serve a regulated entity: a legal entity whose customers m
 
 A **boundary** is a unit of isolation. There are two kinds, and a third on demand.
 
-- **An environment boundary** owns the machine plane of one environment, such as management, development, staging or production. It owns its keys, its intermediate certificates ([0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/)), its SSH CAs, its token issuer, its grant key, its audit log, its SPIFFE trust domain and its state. Production never shares a key, a state store or a policy grant key with development.
+- **An environment boundary** owns the machine plane of one environment, such as management, development, staging or production. It owns its keys, its intermediate certificates ([0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/)), its SSH CAs, its token issuer, its sealing key (which seals its grants), its audit log, its SPIFFE trust domain and its state. Production never shares a key or a state store with development.
 - **A company boundary** owns a company's identity plane: its directory and sign-in upstream, its integrations, its people records, its operator delegation and its audit tenant key. It holds **no authority key**.
 - **A product boundary** is a company and an environment together. It is created only when a company's customers sign in through sluis, with its own keys and issuer. There is none now. A product boundary is the first candidate for promotion to an installation of its own.
 
@@ -42,7 +42,7 @@ Each boundary declares a level. A higher level adds to the ones below it.
 | Level | Adds |
 |---|---|
 | L0 tenant | Separation by sluis's code only |
-| L1 keys | Its own key-encryption key, CA, signing key and grant key |
+| L1 keys | Its own key-encryption key (which also seals grants), CA and signing key |
 | L2 process | Its own actor instances, with their own uid or role, and its own state prefix |
 | L3 store | Its own state store (an rqlite cluster or a DynamoDB table), bucket and queue |
 | L4 runtime | Its own Kubernetes cluster, cloud account or hosts, and a separate install file joined by declared trust |
@@ -65,7 +65,7 @@ Each boundary declares a level. A higher level adds to the ones below it.
 - **An issuer per environment** (ADR 0059).
 - **Process level, at least, for every environment on a cloud runtime.**
 - **State.** Below L3 one state engine holds a prefix per boundary. From L3 a boundary has its own store.
-- **Policy from one source,** compiled into a bundle per environment, with a grant key per environment. A minter accepts only its own environment's grant key. **Company-ceiling guards** are Cedar `forbid` rules: a subject from one company's directory gets no grant on a scope another company owns, unless the grant is declared as a cross-company grant ([0014](/decisions/0014-policy-is-written-in-cedar-and-evaluated-by-a-rust-actor/)). A bundle for one environment that contains another environment's policy fails the build.
+- **Policy from one source,** compiled into a bundle per environment, with a sealing key per environment, which seals the grants. A minter accepts only a grant that its own environment's sealing key opens. **Company-ceiling guards** are Cedar `forbid` rules: a subject from one company's directory gets no grant on a scope another company owns, unless the grant is declared as a cross-company grant ([0014](/decisions/0014-policy-is-written-in-cedar-and-evaluated-by-a-rust-actor/)). A bundle for one environment that contains another environment's policy fails the build.
 - **An audit log per environment,** with each company as a reader tenant that has its own key.
 - **Operator delegation per company,** plus an environment scope for machine-plane records, such as enrolling a production host.
 - **One integration process per vendor tenant,** owned by its company ([0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/)). Each directory tenant has its own upstream.
@@ -116,7 +116,7 @@ There is a runbook from day one. A company leaves, or moves to an installation o
 
 ## Consequences
 
-- A fault, a leaked key or a bad policy change in development cannot reach production, because they share no key, grant key or state. People still sign in once, in one place.
+- A fault, a leaked key or a bad policy change in development cannot reach production, because they share no key or state. People still sign in once, in one place.
 - Each boundary picks its level, so the cost follows the need. A company costs processes and prefixes, not an installation. An L4 boundary pays for its own installation: its keys, its state, its install file and its upgrades.
 - The front is the one place everyone trusts for sign-in. A compromised front can ask any boundary for a token as a signed-in person, which is why each target re-decides and why sensitive boundaries check the passkey themselves.
 - A call between boundaries costs a mutual-TLS hop and a second decision. The front never holds a boundary's keys.
@@ -139,7 +139,7 @@ There is a runbook from day one. A company leaves, or moves to an installation o
 
 - Pros: one thing to run, upgrade and sign in to. One set of keys to look after.
 - Cons: development shares keys, state and policy with production, so a mistake there is a production incident. A test of a policy change touches the live policy. (inferred)
-- Why not: an environment is a boundary. It owns its keys, its intermediate, its state and its grant key.
+- Why not: an environment is a boundary. It owns its keys, its intermediate and its state.
 
 ### Environment boundaries only, with companies as tenants
 

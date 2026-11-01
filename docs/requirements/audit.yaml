@@ -1256,7 +1256,7 @@ requirements:
       - {kind: integration-test, ref: "export format test"}
   - id: REQ-AUDIT-093
     area: AUDIT
-    statement: "The writer MUST write the usage part of a message to a usage log that has its own prefix or bucket, log key, checkpoints and retention, apart from the audit log."
+    statement: "The writer MUST write the usage part of a message to a usage log that has its own prefix or bucket, checkpoints and retention, apart from the audit log."
     rationale: "Billing data keeps its own format, retention and readers, apart from security records."
     level: MUST
     source: design-decision
@@ -1667,3 +1667,28 @@ requirements:
     issues: [841]
     verification:
       - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
+  - id: REQ-AUDIT-125
+    area: AUDIT
+    statement: "The writer MUST sign the batch heads of the audit log and of the usage log with the same log key of the installation."
+    rationale: "Both logs have one writer, one audience and one lifetime, so a second key would add a policy and a slot for nothing."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [914, 915]
+    verification:
+      - {kind: integration-test, ref: "the checkpoints of both log kinds of a test installation verify against one public key"}
+  - id: REQ-AUDIT-126
+    area: AUDIT
+    statement: "Each signed batch head MUST name the log it belongs to, the audit log or the usage log."
+    rationale: "With one log key, the name inside the signed head keeps a head of one log from being passed off as a head of the other."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-75, section: "1", depth: Partial}
+    issues: [914, 915]
+    verification:
+      - {kind: test-vectors, ref: "a checkpoint of the usage log presented as a checkpoint of the audit log; refused"}
