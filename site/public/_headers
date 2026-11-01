@@ -1,6 +1,11 @@
 # Response headers for sluis.id, read by Cloudflare Workers static assets
 # (https://developers.cloudflare.com/workers/static-assets/headers/). Edit it, then run `site/scripts/check-csp.mjs`.
 #
+# Strict-Transport-Security: the Cloudflare zone's HSTS setting is authoritative and replaces
+# the value in this file, so the value here repeats what the zone serves (max-age=31536000;
+# includeSubDomains; preload: one year, every subdomain, and eligible for the browsers' preload
+# list). The zone was raised to this first; change this line only to match the zone.
+#
 # Content-Security-Policy, v2 pages (the /* rule):
 # - script-src names each inline script by its sha256, with no 'unsafe-inline'.
 #   Starlight, Pagefind and the explorers each emit a few (theme setup, the
@@ -30,7 +35,7 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), publickey-credentials-get=(), usb=(), interest-cohort=()
   Cross-Origin-Opener-Policy: same-origin
-  Strict-Transport-Security: max-age=31536000
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
 
 /v1/*
   ! Content-Security-Policy
