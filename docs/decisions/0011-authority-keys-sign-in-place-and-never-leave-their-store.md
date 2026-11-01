@@ -6,6 +6,7 @@
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 Rewritten in place on 2026-10-30 (realignment pass).
 Rewritten in place on 2026-10-31 (after spike S4, `key-holder` reaches a YubiKey through `piv-go` rather than PKCS#11 ([0060](/decisions/0060-the-language-follows-the-executable/)); PKCS#11 stays for the planned HSM drivers).
+Rewritten in place on 2026-11-01 (the roots and their ceremonies moved to the separate product [ritueel](https://ritueel.id); this record keeps the keys sluis holds: intermediates, which sign directly and are certified through the hand-off of [0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)).
 
 ## Context
 
@@ -14,10 +15,10 @@ sluis holds four authority keys: the token-signing key, the keys of the certific
 Three things shape it.
 
 - **The volume is low.** A production installation of the previous line saw about 25,000 tokens in 7 days, a peak of 0.8 per second, and 95 % of them were token exchange. At that rate a key service or a hardware key can sign every token itself.
-- **Hardware fails, is lost and is stolen.** A root that sits on one card is a single point of failure, and a root that was copied to a second card is a key that has existed outside its device.
+- **Hardware fails, is lost and is stolen.** A key that was copied to a spare is a key that has existed outside its device, so a lost board is replaced by a new key and a new certificate, never restored.
 - **Installations differ.** Some run on AWS with a key service. Some run on single-board computers with a hardware key in each node. A workstation runs a hardware key or, for development, a software key.
 
-The algorithms are a separate decision ([0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/)). The `keys` port and the rule that placement is derived are in [0002](/decisions/0002-actors-declare-ports-placement-is-derived/).
+sluis holds no root. The roots are made and kept by [ritueel](https://ritueel.id), which certifies the intermediates that this record describes; the hand-off is [0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/). The algorithms are a separate decision ([0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/)). The `keys` port and the rule that placement is derived are in [0002](/decisions/0002-actors-declare-ports-placement-is-derived/).
 
 ## Decision
 
@@ -29,45 +30,41 @@ The algorithms are a separate decision ([0010](/decisions/0010-cryptography-uses
 - **On a YubiKey, there are no symmetric keys.** Sealing uses ECDH and HKDF in the style of HPKE, with a P-384 key held in a slot. Sealing needs no hardware. Opening does. Older sealing keys stay in retired slots after a rotation so that what they sealed can still be opened. The slot plan is on the keys page.
 - **The `keys` port has `wrap` and `unwrap` beside `sign` and `public-key`** ([0002](/decisions/0002-actors-declare-ports-placement-is-derived/)). A caller protects a data key with them without the key that protects it leaving the device. On AWS this is an encrypt call with a context that names the purpose. On a YubiKey it is ECDH and HKDF. A backup archive's data key is wrapped this way.
 - **CA serial numbers are random and 128 bits long.** No serial ledger is needed.
+- **sluis signs directly with its intermediates.** The key in the published key set is the intermediate itself, and it carries an `x5c` chain (below). A short-lived online key is a road not taken ([0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)).
 
 ### The key rule
 
-- **Every key whose public half is trusted through the PKI chain is a hardware-held child key.** It is attested where the hardware can attest, and it is certified by the roots. These are the CA intermediates, the SSH user and host CA keys, and the OpenPGP release subkeys.
-- **Token-signing and workload-issuer keys are hardware-held and published through a JWKS.** They are not certified. There is no `x5c`.
+- **Every key whose public half is trusted through the PKI chain is a hardware-held child key.** It is attested where the hardware can attest, and it is certified through a root that ritueel holds. These are the CA intermediates and the OpenPGP signing subkeys.
+- **Token-signing and workload-issuer keys are hardware-held and published through a JWKS.** They are the intermediates, and each entry carries an `x5c` chain up to the root. A standard client ignores it and fetches the key over TLS; a verifier that wants to can check the chain.
 - **Ephemeral keys are outside the rule.** Session keys, ECDH keys, wrapped data keys and derived keys are not hardware-held, and are not certified.
-- **SSH CA keys are certified by the roots.** The roots issue an X.509 certificate with a dedicated "SSH CA" usage for each SSH CA public key (`ssh-user` and `ssh-host`). The certificate is provenance evidence only: `sshd` never checks it. It keeps the rule above true for SSH. The SSH CA itself is decided in ADR 0013.
+- **SSH CA keys are anchors, not a chain.** The `ssh-user` and `ssh-host` keys are hardware-held in `key-holder`. Hosts trust a list of SSH CA keys that ritueel publishes, signed by a root; the list is the provenance. The SSH CA itself is decided in ADR 0013.
 
 Hardware-held means a key service such as AWS KMS or a hardware key such as a YubiKey. KMS cannot attest where a key was born, so for it the checks are the key's description, its policy, the audit record of its creation and a match between the public key and the request.
 
 ### Two main topologies
 
 1. **A KMS root and a KMS intermediate for each environment** (development, staging and production), on AWS.
-2. **Two independent YubiKey roots and a YubiKey intermediate on each node**, on the boards. Each node's intermediate is certified by both roots and attested.
+2. **A YubiKey intermediate on each node**, on the boards. Each node's intermediate is generated on its card, attested, and certified by a root card through ritueel. The certificate lasts about 13 months and is renewed every year.
 
-A YubiKey root with KMS intermediates is allowed but is not a main pattern.
+In both, the root is ritueel's: a KMS root, or root cards. A root on a YubiKey with KMS intermediates is allowed but is not a main pattern.
 
-### Roots on ordinary YubiKeys
+### Roots belong to ritueel
 
-- **Roots exist to survive hardware failure.** Loss and theft are handled by the runbook below. The two cards may be with one person, stored apart, or card B may be with a remote second person, who also acts as the second person of a ceremony.
-- **Each card of a pair generates its own independent root, on the card.** The slot is PIV, the PIN policy is always and the touch policy is always. Both roots are authoritative, and both are in every trust bundle. Cross-signing is optional. No key is ever copied between cards, so each keeps its attestation. A second card is not a spare of the first.
-- **Each intermediate is certified by both roots.** There is one intermediate key and two certificates, one from each root. Losing either card breaks no chain.
-- **The runbook for a lost root card** is:
-  1. Remove that root from every trust bundle through the trust registry. That is the only way to revoke a root.
-  2. Generate a new root on a fresh card.
-  3. Re-issue any intermediate that chained only to the lost root. Because every intermediate has two certificates, none should exist.
-  4. Until the first step is done, the lost card's PIN and touch policy limit the exposure.
-- **The roots are ordinary YubiKeys in PIV mode, not an HSM.**
+- **sluis holds no root.** It does not create, keep, rotate or revoke one, and it generates none, not even for development.
+- **sluis asks for its intermediate to be certified, and installs what comes back.** The request carries proof of where the key lives. The formats and the commands (`sluis key request`, `install` and `status`) are in [0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/).
+- **A lost or stolen board is replaced, not restored.** A new key is born on a new card, a new certificate is requested, and ritueel revokes the old certificate. The card's PIN policy limits the exposure until then.
+- **Root cards, their ceremonies, revocation readiness and root rotation are described by ritueel.**
 
 ### Touch and PIN
 
-- **Root cards are touch always.** A person touches the card for every signature.
-- **Node cards are touch never and PIN once.** A node signs unattended, including the back-signatures made during a ceremony. The policies are fixed when the key is generated and are visible in its attestation.
+- **Node cards are touch never and PIN once.** A node signs unattended, including the back-signature of its OpenPGP subkey. The policies are fixed when the key is generated and are visible in its attestation.
 - **A node starts locked.** The `key-holder` driver on a node does not have the PIN when it starts:
   - `sluis node unlock <node>` delivers the PIN over an authenticated channel, either an SSH certificate from sluis's own CA or the admin API.
   - A peer that is already unlocked releases the node's encrypted PIN automatically. That covers a reboot of one node and a rolling update.
   - After a full power loss one manual unlock is needed. The first node then unlocks the others.
   - The PIN is never stored in plaintext on disk.
   - `key-holder` never retries a wrong PIN automatically, because the card blocks after three attempts and then needs the PUK.
+- **`key-holder` has exclusive access to its card.** It runs as a dedicated user, the card service accepts only that user, and no other software that talks to cards runs on the node. Measured 2026-10-31 on a YubiKey 5 Nano: while the PIN is verified any local process can sign, a default disconnect by any client resets the card, and wrong PINs from any local user block it. Exclusive access is a requirement of the node, not a convention.
 
 ### Floors in code
 
@@ -75,36 +72,35 @@ A YubiKey root with KMS intermediates is allowed but is not a main pattern.
 
 ### Other key hardware
 
-- **YubiHSM 2 and Nitrokey HSM 2 are planned PKCS#11 drivers of the `keys` port, not built now.** They are drivers, not root hardware: the roots stay on ordinary YubiKeys. `key-holder` reaches a YubiKey through `piv-go` ([0060](/decisions/0060-the-language-follows-the-executable/)), and such a device is added later as a PKCS#11 driver beside it. Their detail is in ADR 0052, which also covers more `keys` drivers and a post-quantum root.
+- **YubiHSM 2 and Nitrokey HSM 2 are planned PKCS#11 drivers of the `keys` port, not built now.** They are drivers for the keys sluis holds. `key-holder` reaches a YubiKey through `piv-go` ([0060](/decisions/0060-the-language-follows-the-executable/)), and such a device is added later as a PKCS#11 driver beside it. Their detail is in ADR 0052, which also covers more `keys` drivers and a post-quantum root.
 
 ### The release subkey
 
-- **The node's OpenPGP release subkey lives in a PIV slot, reached through `key-holder`'s PIV driver.** The OpenPGP applet is used only on the root cards, for the primaries. How a release is signed is in ADR 0030.
+- **The node's OpenPGP signing subkey lives in a PIV slot, reached through `key-holder`'s PIV driver.** `key-holder` also makes the subkey's back-signature on the card, so binding the subkey to a primary needs nothing else from the board. The OpenPGP applet is not used on a node, and the primary is ritueel's. How a release is signed is in ADR 0030, and the signing API is in [0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/).
 
 ### The card slot map
 
-- **A documented, versioned map says which card slot serves which purpose.** It has a reservation per purpose, and ranges kept for rotation and future use. It covers PIV slots `9a`, `9c`, `9d` and `9e`, the retired slots `82` to `95`, and the OpenPGP applet keys on the root cards.
-- **Defaults ship in code, and an installation may override them in declared configuration.** There is a default map for each card role: root card and node card.
-- **`sluis config check`, `sluis ceremony` and node initialisation refuse a collision and a purpose with no slot.** The map records each slot's attestation in the registry.
-- **The exact slot numbers are decided in ADR 0032**, with the ceremonies. The keys page shows the proposed numbers.
+- **A documented, versioned map says which card slot serves which purpose.** It has a reservation per purpose, and ranges kept for rotation and future use. It covers PIV slots `9a`, `9c`, `9d` and `9e` and the retired slots `82` to `95`.
+- **Defaults ship in code, and an installation may override them in declared configuration.** The map is for node cards. The slot map of root cards is ritueel's.
+- **`sluis config check`, `sluis key request` and node initialisation refuse a collision and a purpose with no slot.** The map records each slot's attestation in the registry.
+- **The exact slot numbers are settled when `key-holder` is built** (issue #914). The keys page shows the proposed numbers.
 
 ### Related records
 
-- **The detail of the ceremonies**: the steps, the commands, the attestation checks, the machine, the transcripts and the yearly drill, and the `sluis ceremony` command, are in ADR 0032. This record fixes the topology and the rules they follow.
-- **Release signing**, including the OpenPGP primaries and subkeys: ADR 0030.
+- **Roots and ceremonies** are held by [ritueel](https://ritueel.id). The hand-off, the commands and the expiry warning are in [0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/).
+- **Release signing**, including the OpenPGP subkeys and the keyring: ADR 0030.
 - **SSH**: the SSH CA, certificates for people and machines and host certificates: ADR 0013.
 - **Workload identity**: the issuer, its URL and its key per node: ADR 0012.
 - **TPM 2.0** is outside this record. It is a backlog feature, in addition to the YubiKey and not instead of it.
 
 ## Consequences
 
-- No key can be exported, so a backup never holds one. A restore on new hardware means new keys and a new certificate for each public key. The roots and the runbook are what make that safe. Secrets that are not keys, such as a vendor-issued App key, are archived sealed, and the escrow of the sealing key never copies a key out of its device ([0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
+- No key can be exported, so a backup never holds one. A restore on new hardware means new keys and a new certificate for each public key. The hand-off to ritueel and the yearly renewal are what make that safe. Secrets that are not keys, such as a vendor-issued App key, are archived sealed, and the escrow of the sealing key never copies a key out of its device ([0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
 - Signing speed is set by the store, not by software. A YubiKey signs P-384 at about 120 ms, or about 8 signatures a second, and the measured peak is a tenth of that. KMS costs about $2.62 a month at the measured volume. A software key is only for development and for CI.
 - Every purpose adds a key, a policy and a rotation schedule. In return a key policy names one actor and one use.
-- Two roots mean two trust anchors to publish, document and watch. Clients see two certificates for one intermediate, and some path builders do not try the second. A server presents one chain. These effects are documented on the keys page. Revocation state is open and belongs to ADR 0031.
-- A lost card is not a revocation list entry. The trust registry is the mechanism, and its bundles have to reach every verifier.
+- The roots, their trust anchors and their revocation are ritueel's. What reaches sluis is a signed root list, and a revoked intermediate has to reach every verifier ([0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)).
 - Nodes that sign unattended depend on the PIN handling above. A full power loss needs a person. A wrong PIN is never retried, so a bad unlock cannot lock the card.
-- A root card is touched for every signature, so a root signs only in a ceremony, and a ceremony needs a card holder.
+- Intermediates are certified for about 13 months, so each is renewed once a year, and the renewal needs a person at ritueel's side.
 - `sluis config check` has to know the key modes, the floor and the slot map. The tests need a virtual card or a software stand-in for the signer, and rehearsals on a real card.
 - A key born in a slot of the map is attested there, so a reviewer can compare the registry with the map.
 - The keys page, the hardware page and the release-signing page say the same as this record.
@@ -117,43 +113,11 @@ A YubiKey root with KMS intermediates is allowed but is not a main pattern.
 - Cons: a second key type to issue, certify, rotate and revoke. A key that exists in memory and can be copied.
 - Why not: the volume is low, and the store can sign every token. A burst key solves a problem that is not there.
 
-### One root on one card, with a spare
+### YubiHSM 2 and Nitrokey HSM 2 as drivers built now
 
-- Pros: one anchor to publish. The conventional design.
-- Cons: the spare is a second card that holds either a copy of the key, which is the imported key below, or nothing a verifier trusts. Losing the one root card stops all signing. (inferred)
-- Why not: it does not survive hardware failure, and the cheap way to make it survive is to copy the key. (inferred)
-
-### One key generated off the card and imported into both cards
-
-- Pros: one root and one anchor, and two cards that sign. (inferred)
-- Cons: the key existed in software before it reached the cards, and no card can attest where it was born. No ceremony can prove otherwise, because a ceremony shows what people did and not where a key was made.
-- Why not: it gives up attestation, which is the property that makes a root on a card worth having. (inferred)
-
-### A software key wrapped by both cards
-
-- Pros: any algorithm, including ones the cards lack. Software speed. (inferred)
-- Cons: the key is in memory at every signing and has no attestation. (inferred)
-- Why not (inferred): the key is no longer held by hardware. It stays a candidate for a future root with a post-quantum algorithm on an air-gapped machine, because no hardware listed offers one.
-
-### A software key split 2-of-2 between the cards
-
-- Pros: both cards are needed to sign. (inferred)
-- Cons: the key is reassembled in memory at every signing and has no attestation. Both cards must be present, so losing either one stops all signing. That is the opposite of surviving a failure. (inferred)
-- Why not: it fails the purpose of the pair. (inferred)
-
-### An HSM pair with a wrapped export between the devices
-
-Two YubiHSM 2 devices. The pros and cons are from the root-hardware research.
-
-- Pros: a hash-chained audit log on the device, much more capacity, a device that can stay attached to a server, and attestation of keys made on the device.
-- Cons: about EUR 786 for each device against an ordinary YubiKey (Yubico product page, checked 2026-10-29), a second device family to operate, and a key that is copied between devices as a wrapped export. A copy has no proof of where it was born. GnuPG cannot use it as an OpenPGP card.
-- Why not: it reopens the decision to use ordinary YubiKeys and gives up the property that nothing is copied. (inferred)
-
-### YubiHSM 2 and Nitrokey HSM 2 as root hardware, or as drivers built now
-
-- Pros: an installation that wants a server-attached device or an on-device audit log could have one, through a PKCS#11 driver, without any change to the roots.
-- Cons: more drivers to write and keep conformant, before any installation asks for one. The Nitrokey HSM 2 has no Ed25519 and no audit log, conflicting figures for its capacity and unclear attestation of single keys.
-- Why not: they are not root hardware, because the roots stay on ordinary YubiKeys. They are planned as PKCS#11 drivers and not built now, added beside `key-holder`'s PIV driver when an installation asks for one (ADR 0052).
+- Pros: an installation that wants a server-attached device or an on-device audit log could have one, through a PKCS#11 driver.
+- Cons: more drivers to write and keep conformant, before any installation asks for one, at about EUR 786 a device for the YubiHSM 2 (Yubico product page, checked 2026-10-29). The Nitrokey HSM 2 has no Ed25519 and no audit log, conflicting figures for its capacity and unclear attestation of single keys.
+- Why not: they are planned as PKCS#11 drivers and not built now, added beside `key-holder`'s PIV driver when an installation asks for one (ADR 0052).
 
 ### The software key allowed in production, chosen by configuration only
 
@@ -165,13 +129,13 @@ Two YubiHSM 2 devices. The pros and cons are from the root-hardware research.
 
 - Pros: GnuPG can use the card directly.
 - Cons: `key-holder` would need a second path to the card, besides PIV, and the applet has its own PIN and slot layout to manage on every node.
-- Why not: a PIV slot reached through `key-holder` keeps one path to the card and one audit point. The applet stays on the root cards, for the primaries. (the cons are inferred)
+- Why not: a PIV slot reached through `key-holder` keeps one path to the card and one audit point. The applet is not used on a node. (the cons are inferred)
 
-### SSH CA keys outside the PKI chain
+### An X.509 certificate on each SSH CA key, as provenance
 
-- Pros: `sshd` does not check a certificate on a CA key, so nothing would break.
-- Cons: the SSH CA keys would be the only authority keys with no provenance record. The key rule above would have an exception.
-- Why not: the roots certify them with an X.509 certificate as provenance, and `sshd` ignores it.
+- Pros: every authority key has a record in the chain, and `sshd` ignores the certificate, so nothing breaks.
+- Cons: a second kind of record for a key that has no chain; hosts need the anchor list anyway.
+- Why not: an SSH CA key is an anchor, and a list of CA keys signed by a root gives the same provenance.
 
 ### Fixed slot numbers with no map
 
@@ -191,11 +155,11 @@ Two YubiHSM 2 devices. The pros and cons are from the root-hardware research.
 - Cons: a key policy cannot say that only one actor may use one purpose. A weakness in one use becomes a weakness in all.
 - Why not: the key policy is the control, and it needs one purpose for each key.
 
-### Certify the token-signing keys and publish them with `x5c`
+### A key set with no `x5c`
 
-- Pros: a verifier could validate them through the PKI chain.
-- Cons: token verifiers already fetch a published key set. A chain in every token adds size and a second trust path.
-- Why not: the key set is the trust path for tokens. The PKI chain is the trust path for certificates.
+- Pros: nothing extra to publish and refresh at the yearly renewal.
+- Cons: custody can be checked only in the audit log.
+- Why not: a standard client ignores the member, and a verifier that wants the chain to the root can have it. The chain is in the key set and not in each token, which would add size and a second trust path.
 
 ### Store the node PIN on disk, or retry a wrong PIN automatically
 
@@ -206,5 +170,17 @@ Two YubiHSM 2 devices. The pros and cons are from the root-hardware research.
 ### Touch always on the node cards
 
 - Pros: a person confirms every signature.
-- Cons: a node cannot sign unattended. Token issuance and the back-signatures of a ceremony would wait for a person.
-- Why not: the root cards carry the touch. Nodes need to sign on their own, and their policy is visible in the attestation.
+- Cons: a node cannot sign unattended. Token issuance and the back-signature of a subkey would wait for a person.
+- Why not: nodes need to sign on their own, and their policy is visible in the attestation.
+
+### A short-lived software key certified by the intermediate
+
+- Pros: many signatures a second without a call to the store.
+- Cons: a second key type to issue, certify, rotate and revoke; a key that exists in memory and can be copied.
+- Why not: three boards sign about 21 P-384 signatures a second (measured 2026-10-31) and a key service more, far above the load. This is the derived-key road above, and [0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/) records it again for the intermediates.
+
+### Keep the roots and their ceremonies in this record
+
+- Pros: one place for the whole chain.
+- Cons: the rarest and most valuable keys sit beside the busiest code, and the teaching of root transitions is buried in a record about something else.
+- Why not: roots are a separate product, [ritueel](https://ritueel.id), with its own decisions.
