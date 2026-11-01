@@ -416,7 +416,7 @@ requirements:
       - {kind: integration-test, ref: "user handle independence test"}
   - id: REQ-SUBJ-031
     area: SUBJ
-    statement: "A subject MUST be an opaque random identifier that sluis assigns when it first sees a directory person."
+    statement: "A subject MUST be an opaque random identifier that sluis assigns when it first sees a person: at a directory read where the upstream has a directory, otherwise at the person's first sign-in."
     rationale: "Resource servers key their records by it."
     level: MUST
     source: stakeholder-ciam
@@ -424,7 +424,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Partial}
-    issues: [1081]
+    issues: [1081, 1106]
     verification:
       - {kind: integration-test, ref: "subject format test"}
   - id: REQ-SUBJ-032
@@ -437,7 +437,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Partial}
-    issues: [1081]
+    issues: [805]
     verification:
       - {kind: integration-test, ref: "subject before first sign-in test"}
   - id: REQ-SUBJ-033

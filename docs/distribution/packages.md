@@ -133,7 +133,7 @@ An installation verifies the zips and publishes the layers into its own account;
 
 ## OCI images
 
-One image per process, so a container can run its one executable only. Multi-arch images are on GHCR as `ghcr.io/truvity/sluis/<kind>/<name>` (if GHCR refuses three-segment names, `ghcr.io/truvity/sluis/<kind>-<name>`, [#876](https://github.com/truvity/sluis/issues/876)). The tag is the release version; pull by digest.
+One image per process, so a container can run its one executable only. Multi-arch images are on GHCR as `ghcr.io/truvity/sluis/<kind>-<name>`, for example `ghcr.io/truvity/sluis/actor-entry`, from the first working version. No image is named `sluis`: that name belongs to v1. The tag is the release version, with no `latest`; pull by digest, and find every digest of a release in its `release-images.txt`.
 
 - The base is distroless `static`, or distroless with glibc and a pinned `pcsc-lite` for a cgo executable.
 - The executable sits at the package's path, byte for byte, and a label names its source package. A release test compares the images' binaries with the packages' files by hash.
@@ -141,12 +141,12 @@ One image per process, so a container can run its one executable only. Multi-arc
 
 ```sh
 # Example
-docker pull ghcr.io/truvity/sluis/actors/entry@sha256:<digest>
+docker pull ghcr.io/truvity/sluis/actor-entry@sha256:<digest>
 ```
 
 ## Helm charts
 
-Charts are OCI artifacts under `ghcr.io/truvity/sluis/charts/`, and a chart's version is the release version. A chart pins every image by digest, so it installs exactly the images released with it.
+From the parity milestone the chart is an OCI artifact at `ghcr.io/truvity/sluis/charts/sluis`, packaged by truvity/ocictl from the same build, and a chart's version is the release version. A chart pins every image by digest, so it installs exactly the images released with it.
 
 - **One `sluis` chart** with a piece selector and the presets `install`, `audit-install`, `quota-install` and `kubernetes-dev`, and no subcharts, so a writer and a reader always come from one release. The console runs as its own Deployment behind the same route as `entry`.
 - **The cert-manager issuer** has a chart of its own, with its CRDs and RBAC. The certificate sidecar is an image plus a documented container snippet.

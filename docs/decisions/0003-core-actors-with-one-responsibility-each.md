@@ -33,7 +33,7 @@ v2 states the permissions of every process in a manifest ([0002](/decisions/0002
 - **`ssh-ca` is its own actor, separate from `ca`.** An SSH CA is a different authority from an X.509 CA, with a different key, format and relying parties, so a flaw in one does not sign for the other ([0008](/decisions/0008-certificate-authorities-for-x509-ssh-and-databases/)).
 - **`signer` and `policy` are split from the first slice.** v1 deferred the same split and never made it.
 - **`signer`, `policy`, `ca` and `ssh-ca` run per boundary** ([0005](/decisions/0005-boundaries-and-the-isolation-ladder/)).
-- **A copied token is useless.** Tokens are sender-constrained by DPoP or mutual TLS, and authorization codes are bound by PKCE; the actor that serves the endpoint checks the binding.
+- **A copied token is worth little, and later nothing.** Authorization codes are always bound by PKCE. The first working version issues bearer tokens with short lifetimes, because the relying parties of v1 parity (AWS web identity, the Kubernetes API server, Argo CD) accept bearer JWTs only. Sender-constrained tokens, by DPoP or mutual TLS, arrive after the parity milestone ([#912](https://github.com/truvity/sluis/issues/912)); from then on binding is declared per audience, required where the client and the relying party support it, and the actor that serves the endpoint checks it.
 - **`entry` is hardened as the edge it is.** It is written in a memory-safe language ([0014](/decisions/0014-the-language-follows-the-executable/)), fuzzed against its closed parameter lists, loads no plugins and runs on a read-only file system. Its listener is in [0004](/decisions/0004-drivers-listeners-and-boundary-enforcement/#listeners).
 - **The other actors are named elsewhere.** `quota` is the engine of the Quota piece, beside core ([0017](/decisions/0017-audit-records-the-usage-stream-and-quota/#quota)). The audit actors are writer, witness, indexer and reader, with no notary ([0015](/decisions/0015-audit-pieces-transport-search-and-front/#four-pieces)). The platform actors are the node agent `sluis-node` and the one mediating driver, `key-holder` ([0004](/decisions/0004-drivers-listeners-and-boundary-enforcement/#key-holder-is-the-one-mediator)).
 - **Integration actors return facts or carry out effects that core has authorised:** upstream, facts source, credential minter, provisioner and notifier. They are split by credential, so each process holds one vendor tenant's credential only. The verifiers of proofs are not actors but verifier drivers of `exchange` ([0007](/decisions/0007-workload-identity-and-host-enrolment/)).
@@ -79,7 +79,7 @@ v2 states the permissions of every process in a manifest ([0002](/decisions/0002
 
 ## Consequences
 
-- A flaw in request parsing in `entry` reaches no key, no session record and no state, and `entry` cannot send anything out. To obtain a credential an attacker needs a grant that `policy` sealed and a minter that accepts it; to forge a token, `signer` and its signing policy must agree; a copied token fails its sender binding.
+- A flaw in request parsing in `entry` reaches no key, no session record and no state, and `entry` cannot send anything out. To obtain a credential an attacker needs a grant that `policy` sealed and a minter that accepts it; to forge a token, `signer` and its signing policy must agree; a copied token is useful only until it expires, and fails its sender binding once the audience requires one.
 - The cost is more processes. Each actor instance is its own user, unit, socket and manifest, each call between actors is a hop over a Unix socket, and a request crosses `entry` and then its owning actor. Small machines rely on the tested fusion rule to fit.
 - One generated name per instance lets a unit, a role, a key alias and an audit record be matched without a lookup table; a rename is a manifest change.
 - Splitting integrations by credential means a process per vendor tenant and capability. A company's sign-in, directory, GitHub organisation or Slack workspace then fails, rotates and leaves on its own.
@@ -95,8 +95,10 @@ v2 states the permissions of every process in a manifest ([0002](/decisions/0002
 - **The decision point with state or network access.** An actor that can be made to read or exfiltrate anything is a target, and its grants could no longer be reviewed as a file.
 - **A process per port.** A process that serves many owners holds many credentials, which defeats the split.
 - **One integration process per vendor, serving every tenant.** One process would hold every company's credential for that vendor, and a company could not leave or rotate alone.
+- **DPoP or mutual TLS from the first working version.** The parity relying parties cannot check a binding, so their tokens would be bearer anyway, and the binding code would have no consumer before the FAPI 2.0 profile.
 - **Free fusion, with no rule.** A unit could quietly gain a key next to a listener, or a permission no member actor was allowed.
 
 ## Follow-ups
 
 - Integrations return facts or carry out effects and never decide: [#997](https://github.com/truvity/sluis/issues/997).
+- Sender-constrained tokens with DPoP, after the parity milestone: [#912](https://github.com/truvity/sluis/issues/912).

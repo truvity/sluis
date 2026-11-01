@@ -21,13 +21,13 @@ sidebar:
 | `session`, `exchange` | Go | The embeddable OpenID Connect provider, the proof verifiers and HPKE |
 | `ca` | Go | The X.509 CA and its issuance log |
 | `writer`, `witness` | Go | The C2SP log writer and witness |
-| Integrations | Go | The vendor SDKs |
-| Other drivers (local backends, indexes, witnesses, `nats-jetstream`, `age` export) | Go | The default, and age with post-quantum recipients |
-| `signer`, `ssh-ca`, `quota`, `console` (the actor), `indexer`, `reader`, the local drivers (rqlite state, lease and index, the spool, the local lock, the files blob, `sqlite`), `sluis agent` | Rust unless the component's design names a serious trade-off | They run on the smallest boards |
+| Integrations, among them the generic OpenID Connect upstream `oidc@<name>` | Go | The vendor SDKs and the OpenID Connect client |
+| Other drivers (`nats-jetstream`, the `postgres` index, witness drivers, `age` export) | Go | The default, and age with post-quantum recipients |
+| `signer`, `console` (the actor), `indexer`, `reader`, the local drivers (`embedded` state and its local lock, the spool, the `fs` blob, the `sqlite` index), the rqlite drivers, `ssh-ca`, `quota`, `sluis agent` | Rust | They run on the smallest boards and need no Go-only library; `console` moves to Go if spike S1 shows that Connect for Rust lacks the server streaming it needs |
 | The `sluis` CLI, the cert-manager issuer | Go | Not resident on a board |
 | The console's single-page application | TypeScript | |
 
-PKCS#11 is used only by the later YubiHSM 2 and Nitrokey drivers, whose language is chosen with them. Every Rust choice is [gated by its spike](/decisions/0014-the-language-follows-the-executable/#the-spikes-are-gates), and the languages are fixed before code of the first working version is written; when a spike fails, the fallback for that component is chosen from the candidates in ADR 0014.
+PKCS#11 is used only by the later YubiHSM 2 and Nitrokey drivers, whose language is chosen with them. Every Rust choice is [gated by its spike](/decisions/0014-the-language-follows-the-executable/#the-spikes-are-gates): S1 and S10 for every Rust component, and S3 for `entry` as well. A gate does not stop work: the component is built against its contract meanwhile, and when a spike fails, the fallback for that component is chosen from the candidates in ADR 0014.
 
 Tokens are standard JWS and JWT, so any language verifies them against the published key set. An actor can move between languages because every contract is ConnectRPC and every integration and driver is out of process: the language is chosen per executable, and the contracts do not change.
 

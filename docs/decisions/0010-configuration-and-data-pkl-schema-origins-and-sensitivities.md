@@ -25,7 +25,7 @@ sluis also keeps many kinds of data: the install file and policy, records an ope
 - **One validator per language, with shared conformance vectors.** Go uses `santhosh-tekuri/jsonschema/v6`, Rust the `jsonschema` crate, TypeScript `ajv` in its draft 2020-12 build. Each vector is a document with the expected verdict and error path; a validator that disagrees fails the build, and each real disagreement adds a vector.
 - **Strictness comes from the schema.** `unevaluatedProperties: false` makes an unknown key an error that names the path, and format assertions are on. Errors never show the value.
 - **Retired fields:** a retired option set in a declared document is refused. A retired field in a record that sluis wrote itself is read, ignored and never written again, because refusing it would make an installed record unreadable.
-- **Telemetry is not configured in the file.** It is configured by the standard `OTEL_*` environment variables only and exported as OTLP over HTTP with protobuf. The schema has no telemetry keys, and a span or a metric never carries what an audit record says. Further telemetry rules are out of scope here, tracked in [#1003](https://github.com/truvity/sluis/issues/1003).
+- **Telemetry is not configured in the file.** It is configured by the standard `OTEL_*` environment variables only and exported as OTLP over HTTP with protobuf. The schema has no telemetry keys, and a span or a metric never carries what an audit record says. The telemetry conventions, among them the generated allowlist, are [0022](/decisions/0022-telemetry-is-opentelemetry-with-fixed-conventions/).
 - **The install file is the document the schema describes.** "Installation" is not a key of it ([0005](/decisions/0005-boundaries-and-the-isolation-ladder/)).
 - **A v1 configuration file does not carry over unchanged.** Moving a v1 installation is part of the cutover tooling of the parity milestone, tracked in [#1017](https://github.com/truvity/sluis/issues/1017).
 
@@ -41,7 +41,7 @@ Ask in order; the first "yes" is the origin.
 3. **learned**: observed in an external system and rebuildable from it without a person, by pull or by push. Examples: directory users, groups and memberships, workspace members, discovered channels, the installed-Apps list, the client metadata document cache.
 4. **derived**: rebuilt from sluis's own records or log; verification never trusts it. Examples: the search index and its cursor, quota meters and hourly aggregates, desired-state projections.
 5. **issued**: sluis created it, or a vendor or a person handed it over once; **durable** or **ephemeral**.
-   - Durable: generated client secret versions and their rotation metadata, revocations and revocation state, the certificates that the hand-off returns ([0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/#the-hand-off)) in the trust registry, vendor-issued secrets (an App private key, a bot token), pins (the workspace at first install, the first subject, an App id and installation id), account links, approvals and consents, quota balances and top-ups.
+   - Durable: generated client secret versions and their rotation metadata, revocations and revocation state, the certificates that the hand-off returns ([0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/#the-hand-off)), held by the actor that installed them, vendor-issued secrets (an App private key, a bot token), pins (the workspace at first install, the first subject, an App id and installation id), account links, approvals and consents, quota balances and top-ups.
    - Ephemeral: sessions, refresh tokens and their spent markers, authorization and device codes, pending sign-in state, short-lived minted credentials, leases, dedupe records, the maintenance flag.
 - **A grant is not a stored record.** It is a sealed output of `policy` in flight ([0012](/decisions/0012-cryptography-and-authority-keys/#grants-are-sealed-not-signed)).
 - **An act is not configuration.** An approval, a confirmed held removal, a consent or an account link is an issued record of that act; a lasting choice is operator-set.
@@ -55,7 +55,7 @@ Where each origin lives and who writes it:
 | operator-set | `state`, a namespace per kind, revisioned, compare-and-set; secret parts behind `secrets` | The owning actor of the kind, on a request through the console API |
 | learned | `state`, in the observing integration's namespace, with the time observed and a maximum age; or memory | The integration actor that observed it |
 | derived | `index`; `state` for meters and projections; caches | The deriving actor (the indexer; `quota` for meters) |
-| issued, durable | `state` records; `secrets` for values; the trust registry and trust log; `blob` for published revocation lists | The issuing actor, one per kind |
+| issued, durable | `state` records; `secrets` for values; `blob` for published revocation lists and the issuance log of `ca` | The issuing actor, one per kind |
 | issued, ephemeral | `state` with a short lifetime; memory | The protocol's owner (`session` for sessions and codes, `exchange` for enrolments, the lease holder) |
 
 - **Every operator-set kind has one owning actor, and it is that kind's only writer.** The `console` actor behind `entry` ([0003](/decisions/0003-core-actors-with-one-responsibility-each/#the-actors)) checks the operator's delegation and routes each write to the owner, which validates it with its own logic. The manifest declares which kinds accept operator-set writes, and the state backend refuses any other writer ([0011](/decisions/0011-state-is-one-port-with-compare-and-set/#one-writer-per-kind)).
@@ -179,7 +179,6 @@ The full value of a write sits in the OCSF record's own entity data ([0017](/dec
 
 ## Follow-ups
 
-- Telemetry rules beyond the `OTEL_*` contract: [#1003](https://github.com/truvity/sluis/issues/1003).
 - Backup archive format and the restore tooling: [#1015](https://github.com/truvity/sluis/issues/1015).
 - Cutover and migration of v1 configuration, in the parity milestone: [#1017](https://github.com/truvity/sluis/issues/1017).
 - Reconcilers (membership only, one per target, under a lease): [#1012](https://github.com/truvity/sluis/issues/1012).

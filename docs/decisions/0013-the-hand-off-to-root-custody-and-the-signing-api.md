@@ -32,7 +32,8 @@ sluis hands ritueel a request and installs what comes back. The specification li
 - **`key-holder` makes the back-signature on the board.** The subkey stays in a PIV slot and the card signs the digest of the primary-key binding. sluis builds the OpenPGP packets itself and does not use `gpg` on a board. Tested 2026-10-31 with a throwaway primary: `gpg`, `gpgv` and `sqv` accept the subkey with the back-signature and refuse it without.
 - **`sluis key request`** creates the key if it does not exist, writes the request and the proof, and prints the key's fingerprint. **`sluis key install`** checks that the chain leads to a root in the root list, that the certificate or binding matches the key, and that its validity and constraints are as expected, and only then starts using it. **`sluis key status`** lists each key, its store, its expiry and its warning level.
 - **Attestation is checked on both sides.** sluis checks the attestation of its own keys when it requests, against Yubico Attestation Root 1 and its intermediates; ritueel checks it again before it certifies.
-- **The token certificate is not part of the hand-off.** The node's intermediate issues it on the node ([0012](/decisions/0012-cryptography-and-authority-keys/#the-token-signing-key)).
+- **The token certificate is not part of the hand-off.** The node's intermediate issues it on the node ([0012](/decisions/0012-cryptography-and-authority-keys/#the-token-signing-key)), under the profile of [0021](/decisions/0021-leaf-certificate-profiles-lifetimes-and-revocation/#leaf-profiles).
+- **The request carries the intermediate's name constraints,** built from the boundary's declared names ([0021](/decisions/0021-leaf-certificate-profiles-lifetimes-and-revocation/#the-intermediates-name-constraints)).
 
 ### Lifetimes and the warning
 
@@ -64,8 +65,8 @@ sluis signs four kinds of thing, each with a key bound to its purpose: artifacts
 
 ### Signed releases
 
-- **Nothing is signed before the roots exist.** sluis's own releases carry checksums only until ritueel has held the root ceremony and its drill.
-- **From then on, releases are signed through the signing API with a release subkey held in a cloud key service (KMS),** bound by a root primary in the release keyring. CI reaches the signing API with its OIDC token, so a release needs no card work. The project's releases are the API's first user. Channels and packaging are [0019](/decisions/0019-release-train-packaging-and-distribution/#signing-and-checksums).
+- **Nothing is signed with OpenPGP before the roots exist.** Until ritueel has held the root ceremony and its drill, sluis's own releases carry checksums, SBOMs and keyless Sigstore attestations and signatures from the CI build, which need no root ([0019](/decisions/0019-release-train-packaging-and-distribution/#signing-and-checksums)).
+- **From then on, releases are signed through the signing API with a release subkey held in a cloud key service (KMS), an `ECC_NIST_P384` key of its own with `SIGN_VERIFY` usage,** bound by a root primary in the release keyring. CI reaches the signing API with its OIDC token, so a release needs no card work. The project's releases are the API's first user. Channels and packaging are [0019](/decisions/0019-release-train-packaging-and-distribution/#signing-and-checksums).
 
 ### Company OpenPGP certification
 
@@ -90,9 +91,9 @@ Later, not in the first working version. OpenPGP has no intermediates as X.509 d
 - **Use `gpg` on the board for the back-signature.** `gpg` cannot bind an existing P-384 key as a signing subkey (tested 2026-10-31 with 2.2.27 and 2.4.7), and it sent wrong PINs to a test card.
 - **A Sigstore bundle in the first version.** More to build before the first user, and apt and rpm do not read it.
 - **Sign releases before the roots exist, with a provisional key.** A signature that a later root does not vouch for teaches users to trust a key that is then thrown away.
+- **A trust log of sluis's own, appended by `sluis key install`.** The root list and the ceremony records that vouch for an intermediate are ritueel's, an installed certificate is an issued record of the installing actor and an audit event, and the certificates `ca` issues are in its issuance log ([0008](/decisions/0008-certificate-authorities-for-x509-ssh-and-databases/#issuance-log-and-revocation)); a fourth log would hold nothing the others do not.
 - **Online OpenPGP certification in the first version, or never.** It needs strict policy and expiry rules before it exists, and never would leave company-wide keys manual with no follow of joiners and leavers.
 
 ## Follow-ups
 
 - The request and response contract of the signing API: [#890](https://github.com/truvity/sluis/issues/890).
-- Leaf certificate profiles, leaf lifetimes and the revocation cadence, including the token certificate's profile: [#1073](https://github.com/truvity/sluis/issues/1073).

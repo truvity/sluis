@@ -19,7 +19,7 @@ v1 ADR 0005 made ES384 the default, and v1 ADR 0009 added a per-audience RS256 e
 
 - **EC P-384 with ES384 is the default** and what sluis chooses for itself, including the checkpoints of the audit log and of the issuance log (C2SP signed notes with P-384 keys). One curve means one key type in the key set, one verifier path and one sealing scheme.
 - **sluis supports the FAPI 2.0 set: PS256, ES256 and EdDSA (Ed25519).** ES384 stays the default.
-- **Everything sluis signs, seals, hashes, derives or encrypts stays within the FIPS-approved set:** P-384 ECDSA, AES-256-GCM, HKDF-SHA384 and SHA-384, plus the named exceptions below. There is no FIPS mode and no certified build in 2.0: Go keeps the standard library's defaults (`GOFIPS140` and `fips140` unset), and Rust uses current crates and rustls with no FIPS pin. Keeping to the approved set means a FIPS build can be added later as a build option without changing a format or a stored value. The Rust build facts are in [0014](/decisions/0014-the-language-follows-the-executable/).
+- **Everything sluis signs, seals, hashes, derives or encrypts stays within the FIPS-approved set:** P-384 ECDSA, AES-256-GCM, HKDF-SHA384, HMAC-SHA384 (for audit pseudonyms, [0025](/decisions/0025-audit-pseudonyms-are-keyed-per-company-and-epoch/)) and SHA-384, plus the named exceptions below. There is no FIPS mode and no certified build in 2.0: Go keeps the standard library's defaults (`GOFIPS140` and `fips140` unset), and Rust uses current crates and rustls with no FIPS pin. Keeping to the approved set means a FIPS build can be added later as a build option without changing a format or a stored value. The Rust build facts are in [0014](/decisions/0014-the-language-follows-the-executable/).
 - **AES-256-GCM takes its nonce from the cryptographic library**, never from the caller (in Rust, `RandomizedNonceKey` of `aws-lc-rs`).
 - **TLS follows the libraries' defaults**, which may negotiate X25519 or ChaCha20-Poly1305. Nothing sluis stores or publishes depends on them.
 - **The only source of randomness is the operating system's CSPRNG**, through Go's `crypto/rand` (tests use `testing/cryptotest.SetGlobalRandom`) or, in Rust, the generator of the cryptographic library. Nothing is mixed in from a key service or a card. `sluis doctor` checks the platform: kernel 5.18 or newer (a cloned virtual machine reseeds), a hardware generator present or deliberately absent, and the entropy pool initialised before the first key.
@@ -79,7 +79,7 @@ A mint grant is read only by sluis itself, so no outside verifier needs a signat
 
 ### The token-signing key
 
-- **Token-signing and workload-issuer keys are hardware-held, separate from the CA key, one per node.** The node's own intermediate certifies each with a **non-CA certificate that allows digital signatures only**, issued on the node without a ceremony, so a key that signs tokens cannot issue a certificate.
+- **Token-signing and workload-issuer keys are hardware-held, separate from the CA key, one per node.** The node's own intermediate certifies each with a **non-CA certificate that allows digital signatures only**, issued on the node without a ceremony under the profile of [0021](/decisions/0021-leaf-certificate-profiles-lifetimes-and-revocation/#leaf-profiles), so a key that signs tokens cannot issue a certificate.
 - **Each key-set entry carries an `x5c` chain:** the token certificate, the node intermediate, then up to the root. A standard client ignores it and fetches the key over TLS; a verifier that wants to can check custody down to a root it trusts. The chain is in the key set, not in each token.
 - **The key set carries every active token key, and a next key only while an event rotation is in progress.**
 
@@ -157,4 +157,3 @@ A documented, versioned map says which card slot serves which purpose: one slot 
 ## Follow-ups
 
 - More `keys` drivers (PKCS#11 for YubiHSM 2 and Nitrokey HSM 2) and post-quantum tokens and certificates: Later, [#1029](https://github.com/truvity/sluis/issues/1029).
-- The profile of the non-CA token certificate is written with the other leaf certificate profiles: [#1073](https://github.com/truvity/sluis/issues/1073).

@@ -77,7 +77,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-28, section: "5.7", depth: Full}
-    issues: [916]
+    issues: [1106, 916]
     verification:
       - {kind: integration-test, ref: "link-key test"}
   - id: REQ-FED-014
@@ -91,7 +91,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-28, section: "5.7", depth: Full}
-    issues: [916]
+    issues: [1106, 916]
     verification:
       - {kind: integration-test, ref: "e-mail link negative test"}
   - id: REQ-FED-003
@@ -104,7 +104,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-10, section: "2.4", depth: Full}
-    issues: [916]
+    issues: [1106, 916]
     verification:
       - {kind: integration-test, ref: "mix-up tests"}
   - id: REQ-FED-015
@@ -118,7 +118,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-10, section: "2.4", depth: Full}
-    issues: [916]
+    issues: [1106, 916]
     verification:
       - {kind: integration-test, ref: "missing-iss test"}
   - id: REQ-FED-004
@@ -145,7 +145,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2", depth: Partial}
-    issues: [916]
+    issues: [1106, 916]
     verification:
       - {kind: integration-test, ref: "claim allow-list test"}
   - id: REQ-FED-016
@@ -159,7 +159,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2", depth: Partial}
-    issues: [916]
+    issues: [1106, 916]
     verification:
       - {kind: integration-test, ref: "role-claim negative test"}
   - id: REQ-FED-017
@@ -173,7 +173,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2", depth: Partial}
-    issues: [916]
+    issues: [1106, 916]
     verification:
       - {kind: integration-test, ref: "unsolicited-response negative test"}
   - id: REQ-FED-006
