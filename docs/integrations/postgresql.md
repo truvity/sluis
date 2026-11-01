@@ -6,7 +6,7 @@ sidebar:
   order: 8
 ---
 
-PostgreSQL is a **client profile**, not an integration: sluis calls nothing outside for it. The `ca` actor signs a short-lived X.509 client certificate from a **database-client intermediate**, and the database trusts only that intermediate. This page is here because "connect a database" is a use case every operator asks about. The record is [ADR 0033](/decisions/0033-database-access-uses-short-lived-credentials/).
+PostgreSQL is a **client profile**, not an integration: sluis calls nothing outside for it. The `ca` actor signs a short-lived X.509 client certificate under the boundary's one intermediate, with the **database client profile**, and the database trusts only that intermediate. This page is here because "connect a database" is a use case every operator asks about. The record is [ADR 0008](/decisions/0008-certificate-authorities-for-x509-ssh-and-databases/).
 
 It covers PostgreSQL that you run yourself, including CloudNativePG (CNPG). **IAM authentication on Amazon RDS and Aurora is outside sluis** (below).
 
@@ -25,7 +25,7 @@ None. A client profile has no process and no credential of its own. The certific
 
 | Field | Holds |
 |---|---|
-| Issuer | The database-client intermediate of the [trust domain](/concepts/machine-identity/#spiffe-ids), one per boundary |
+| Issuer | The intermediate of the [trust domain](/concepts/machine-identity/#spiffe-ids), one per boundary; the database client profile keeps these certificates apart from every other use ([ADR 0008](/decisions/0008-certificate-authorities-for-x509-ssh-and-databases/#database-client-certificates)) |
 | Common name (CN) | The database **role** |
 | Organizational unit (OU) | The **person** (their person key) or the **workload** |
 
@@ -102,7 +102,7 @@ The command signs in with the cached sign-in, requests a certificate, writes the
 ## v1 → v2 notes
 
 - v1 does not sign the certificate itself. OpenBao trusts the issuer on a JWT auth mount and signs the database client certificate; `sluisctl psql` and `sluisctl pg` authenticate to OpenBao and run the tool. See [Connect PostgreSQL with short-lived client certificates](/v1/guides/sluis/connect/postgresql/) and [Connect OpenBao](/v1/guides/sluis/connect/openbao/).
-- In v2 the `ca` actor signs the certificate, from the database-client intermediate. No secrets manager is needed for this use case, and sluis stays out of secrets storage.
+- In v2 the `ca` actor signs the certificate, under the boundary's intermediate, with the database client profile. No secrets manager is needed for this use case, and sluis stays out of secrets storage.
 - **PostgreSQL 18's native OAuth does not apply today:** v1 serves no device authorization grant for it, and v2 plans one for the command line later; it is postponed ([#855](https://github.com/truvity/sluis/issues/855)).
 - Parity issues: [#824](https://github.com/truvity/sluis/issues/824) certificates, [#829](https://github.com/truvity/sluis/issues/829) the `psql` and `pg` wrappers.
 

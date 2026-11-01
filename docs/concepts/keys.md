@@ -42,12 +42,12 @@ Which keys are certified, and which are only published, depends on how a verifie
 
 - **A key whose public half is trusted through the PKI chain is a hardware-held child key**, attested where possible, and certified through a root that ritueel holds. These are the CA intermediates and the OpenPGP signing subkeys. Each is certified in its own format: an X.509 intermediate by a certificate, an OpenPGP subkey by a binding signature from a primary (see [Roots and certification](#roots-and-certification)).
 - **The SSH CA keys are anchors, not a chain.** The `ssh-user` and `ssh-host` keys are held for the `ssh-ca` actor. Hosts trust a list of SSH CA keys that ritueel publishes, signed by a root. `sshd` never checks a certificate on a CA key.
-- **Token-signing and workload-identity issuer keys are hardware-held, separate from the CA key, and published through JWKS.** A token key is not the intermediate and never issues a certificate. It is its own key, and the node's own intermediate certifies it with a **non-CA certificate that allows signing only**. Each JWKS entry carries an **`x5c`** chain: the token certificate, then the node intermediate, then up to a root. A token carries no `x5c` header. A standard verifier ignores the member and gets the public key from the JWKS; a verifier that wants to can check the chain to a root it trusts. The intermediate issues the token certificate itself, so no ceremony is involved; its profile is planned in the leaf certificate profiles of ADR 0067 ([issue #1073](https://github.com/truvity/sluis/issues/1073)), which [ADR 0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/) leaves open.
+- **Token-signing and workload-identity issuer keys are hardware-held, separate from the CA key, and published through JWKS.** A token key is not the intermediate and never issues a certificate. It is its own key, and the node's own intermediate certifies it with a **non-CA certificate that allows signing only**. Each JWKS entry carries an **`x5c`** chain: the token certificate, then the node intermediate, then up to a root. A token carries no `x5c` header. A standard verifier ignores the member and gets the public key from the JWKS; a verifier that wants to can check the chain to a root it trusts. The intermediate issues the token certificate itself, so no ceremony is involved; its profile is planned with the leaf certificate profiles ([issue #1073](https://github.com/truvity/sluis/issues/1073)), which [ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/) leaves open.
 - **Ephemeral keys are outside the rule.** Session keys, ECDH keys, wrapped data keys and derived keys are made for one use and are not certified or published as authority keys.
 
 ## When keys are shared and when separate
 
-Decided by the maintainer on 2026-11-01 ([ADR 0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/#when-keys-are-shared-and-when-separate)). A key is shared between two uses only when every one of these is equal:
+Decided by the maintainer on 2026-11-01 ([ADR 0012](/decisions/0012-cryptography-and-authority-keys/#when-keys-are-shared-and-when-separate)). A key is shared between two uses only when every one of these is equal:
 
 - **the audience**: who verifies or decrypts;
 - **the required lifetime**;
@@ -190,7 +190,7 @@ The slots are a map that is documented and versioned, and the table above is its
 
 There is one YubiKey per node. EUCLEAK, a side-channel flaw in the older firmware, is fixed from firmware 5.7. The root cards belong to ritueel, are kept apart, and never sit in a node.
 
-Every actor reaches a node card only through **`key-holder`**, the one process that opens the card, exclusively, through `piv-go` ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)): one socket per caller, a peer-uid check on each call, and signing that understands the content of each purpose, so the `ca` purpose signs only a certificate within its constraints and the `ssh-ca` purposes only an OpenSSH certificate body. See [The mediating driver](/concepts/drivers/#the-mediating-driver).
+Every actor reaches a node card only through **`key-holder`**, the one process that opens the card, exclusively, through `piv-go` ([ADR 0014](/decisions/0014-the-language-follows-the-executable/)): one socket per caller, a peer-uid check on each call, and signing that understands the content of each purpose, so the `ca` purpose signs only a certificate within its constraints and the `ssh-ca` purposes only an OpenSSH certificate body. See [The mediating driver](/concepts/drivers/#the-mediating-driver).
 
 ### Touch and PIN policy
 
@@ -224,7 +224,7 @@ The consequence is that sealing needs the YubiKey only when opening. The spare s
 
 ## Roots and certification
 
-sluis holds **no root**. The roots, the ceremonies that use them and every transition from one root to another belong to the separate product [ritueel](https://ritueel.id). sluis holds intermediates and signs with them every day. The two meet at standard formats ([ADR 0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)):
+sluis holds **no root**. The roots, the ceremonies that use them and every transition from one root to another belong to the separate product [ritueel](https://ritueel.id). sluis holds intermediates and signs with them every day. The two meet at standard formats ([ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/)):
 
 1. **Request.** `sluis key request` creates the key if it does not exist, on the node's YubiKey or in the key service, and writes a PKCS#10 request with a **proof of where the key lives**: the YubiKey attestation chain, or the KMS key's identifier and public key. For an OpenPGP signing subkey it writes the public subkey and its back-signature, which `key-holder` makes on the card.
 2. **Certify.** At ritueel's ceremony the card of the year checks the proof, shows the fingerprint, and signs. This is the only step that touches a root.
@@ -255,11 +255,11 @@ The vendor kernel 5.10 that the boards run for now makes `sluis doctor` warn on 
 
 ## FIPS
 
-sluis v2.0 has **no FIPS mode and no certified build** (decided 2026-10-31, [ADR 0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/)). Go builds without forcing FIPS mode, and the Rust components use current crates and rustls with no FIPS pin. sluis v2.0 makes no FIPS 140-3 claim.
+sluis v2.0 has **no FIPS mode and no certified build** (decided 2026-10-31, [ADR 0012](/decisions/0012-cryptography-and-authority-keys/)). Go builds without forcing FIPS mode, and the Rust components use current crates and rustls with no FIPS pin. sluis v2.0 makes no FIPS 140-3 claim.
 
 What is kept is a rule: **every algorithm stays within the FIPS-approved set.** sluis signs with P-384 ECDSA, seals with AES-256-GCM using a nonce that the library generates, derives with HKDF-SHA384 and hashes with SHA-384. The exceptions are the ones named on this page: PS256, ES256 and RSA where an audience or a cloud requires them, and Ed25519 where a protocol requires it, such as NATS. A format that fixes its own algorithm, such as age for backups and export drops, is followed as it is.
 
-The rule is there so that a **FIPS build variant** can be added later as a build option, when a customer needs it. That is likely after AWS-LC 4 is certified, which lifts the old pin that a certified Rust build would need today. In that variant, Go runs its FIPS 140-3 module and the Rust components use `aws-lc-rs` in FIPS mode ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)). The variant gets its own build design when it is added. BoringCrypto is not used.
+The rule is there so that a **FIPS build variant** can be added later as a build option, when a customer needs it. That is likely after AWS-LC 4 is certified, which lifts the old pin that a certified Rust build would need today. In that variant, Go runs its FIPS 140-3 module and the Rust components use `aws-lc-rs` in FIPS mode ([ADR 0014](/decisions/0014-the-language-follows-the-executable/)). The variant gets its own build design when it is added. BoringCrypto is not used.
 
 ## JOSE
 

@@ -322,7 +322,7 @@ requirements:
   - id: REQ-CLIENT-023
     area: CLIENT
     statement: "sluis MUST NOT offer the client credentials grant."
-    rationale: "A machine proves what it is with a workload proof and holds no client secret (ADR 0012)."
+    rationale: "A machine proves what it is with a workload proof and holds no client secret (ADR 0007)."
     level: MUST
     source: design-decision
     status: out-of-scope

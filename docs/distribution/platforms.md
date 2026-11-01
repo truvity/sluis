@@ -35,7 +35,7 @@ On Ubuntu 22.04:
 
 ## FIPS
 
-- **No FIPS build in v2.0.** There is no FIPS mode and no certified build. Every platform above gets the same build: Go without forced FIPS mode, and Rust with current crates and rustls ([ADR 0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/)).
+- **No FIPS build in v2.0.** There is no FIPS mode and no certified build. Every platform above gets the same build: Go without forced FIPS mode, and Rust with current crates and rustls ([ADR 0012](/decisions/0012-cryptography-and-authority-keys/)).
 - **The algorithms stay within the FIPS-approved set**, so a FIPS build variant can be added later as a build option when a customer needs it. The variant gets its own build design, name and delivery when it is added.
 - **BoringCrypto is not used**, in this build or in the variant.
 

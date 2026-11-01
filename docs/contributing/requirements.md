@@ -22,7 +22,7 @@ Every record carries the fields the README defines, among them `source` (where t
 
 ## Linking the issues that deliver it
 
-Add `issues:` with the issue numbers when an issue in truvity/sluis delivers the requirement, for example `issues: [915]`. Issue numbers go only there; `features` takes only `parity` or `design`. A requirement may have no issue yet. The field is a link, not a milestone: the project status page ([ADR 0063](/decisions/0063-the-site-is-static-on-cloudflare-workers-with-a-live-status-api/)) groups requirements by the Product milestone of their linked issues, so set the milestone on the issue, not on the record. `just check-requirements` warns, for now, about every planned or partial requirement without `issues`, and prints the count per area.
+Add `issues:` with the issue numbers when an issue in truvity/sluis delivers the requirement, for example `issues: [915]`. Issue numbers go only there; `features` takes only `parity` or `design`. A requirement may have no issue yet. The field is a link, not a milestone: the project status page ([ADR 0020](/decisions/0020-the-site-is-static-on-cloudflare-workers/)) groups requirements by the Product milestone of their linked issues, so set the milestone on the issue, not on the record. `just check-requirements` warns, for now, about every planned or partial requirement without `issues`, and prints the count per area.
 
 ## Marking a requirement done
 

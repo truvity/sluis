@@ -24,7 +24,7 @@ The rules the split follows:
 
 The concept is explained on [Actors](/concepts/actors/); the ports and the shared drivers on [Ports and drivers](/concepts/drivers/); the six integration actors on [Integrations](/concepts/integrations/); the key custody behind `signer` and `ca` on [Keys](/concepts/keys/); and the audit actors on [Audit](/concepts/audit/).
 
-The core actors are `entry`, `session`, `console`, `exchange`, `signer`, `policy`, `ca` and `ssh-ca` ([ADR 0007](/decisions/0007-core-is-a-few-actors-with-one-responsibility-each/), rewritten on 2026-10-30). The `quota` actor sits beside them as the engine of the Quota piece, and there are four audit actors, plus integrations. `signer` and `policy` are split out from the first slice rather than later: splitting later is what v1 deferred and never did.
+The core actors are `entry`, `session`, `console`, `exchange`, `signer`, `policy`, `ca` and `ssh-ca` ([ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/), rewritten on 2026-10-30). The `quota` actor sits beside them as the engine of the Quota piece, and there are four audit actors, plus integrations. `signer` and `policy` are split out from the first slice rather than later: splitting later is what v1 deferred and never did.
 
 | Actor | Responsibility | Holds | Cannot |
 | ----- | -------------- | ----- | ------ |
@@ -36,7 +36,7 @@ The core actors are `entry`, `session`, `console`, `exchange`, `signer`, `policy
 | `policy` | The decision point. Declared Cedar policy, plus template-linked policies within a declared delegation policy, maps facts to grants. Seals mint grants under the sealing key | Use of the sealing key for grants only. No state, no network, no secrets | Reach any resource: a bad process can decide wrongly, but exfiltrates nothing |
 | `ca` | The X.509 CA | The X.509 CA keys | Sign anything outside its policy |
 | `ssh-ca` | The SSH CA, for user and host certificates | The `ssh-user` and `ssh-host` keys | Sign anything but an OpenSSH certificate within its policy |
-| `quota` | Not a core actor: the engine of the Quota piece. Rate limits, caps and metering, with compare-and-set on the state port (a conditional adjust is proposed, ADR 0057) | Its own balances (issued) and meters (derived). No key | Touch identity records |
+| `quota` | Not a core actor: the engine of the Quota piece. Rate limits, caps and metering, with compare-and-set on the state port (a conditional adjust is proposed, [#1009](https://github.com/truvity/sluis/issues/1009)) | Its own balances (issued) and meters (derived). No key | Touch identity records |
 | `writer` | Receives audit records, seals them in batches and writes them to the blob, create-if-absent. Exactly one per log | The log-store credential. It asks `key-holder` (on AWS, KMS under a key policy that names it) to sign each batch head, and never holds the log key | Delete or overwrite an object, or use any key but the log key |
 | `witness` | Co-signs the batch heads it has seen. Optional | Its own key | Write a batch object |
 | `indexer` | Builds the search index from the blob. Exactly one | Read on the blob, write on the index | Write to the evidence |
@@ -66,7 +66,7 @@ A backend that can authorise each caller is used with **per-actor credentials an
 
 It has no internet egress, loads no plugins and has no reconcile logic: one code path per operation, fuzz-tested decoding, a rate limit and an audit record per signature. Its blast radius is every key on the card, and that price is paid once, in a small audited process. See [The mediating driver](/concepts/drivers/#the-mediating-driver).
 
-There is **no `state-owner`**. State on a cluster of boards is **one rqlite cluster per (boundary, owning actor)**, `sluis-rqlite@<boundary>-<actor>`: the owner has the only user with `execute`, declared readers have `query`-only users, and each cluster has its own port, certificate and systemd sandbox. The unit of a `per-actor` rqlite driver reaches its cluster's TCP client port through a narrow rule instead of `PrivateNetwork=yes`: `IPAddressDeny=any`, `IPAddressAllow=` for its cluster only, and a client certificate per cluster ([ADR 0008](/decisions/0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp/#how-a-per-actor-rqlite-driver-reaches-its-cluster)).
+There is **no `state-owner`**. State on a cluster of boards is **one rqlite cluster per (boundary, owning actor)**, `sluis-rqlite@<boundary>-<actor>`: the owner has the only user with `execute`, declared readers have `query`-only users, and each cluster has its own port, certificate and systemd sandbox. The unit of a `per-actor` rqlite driver reaches its cluster's TCP client port through a narrow rule instead of `PrivateNetwork=yes`: `IPAddressDeny=any`, `IPAddressAllow=` for its cluster only, and a client certificate per cluster ([ADR 0004](/decisions/0011-state-is-one-port-with-compare-and-set/#how-a-per-actor-rqlite-driver-reaches-its-cluster)).
 
 The **node agent** (`sluis-node`, bare-metal only) is the root-owned process that is the node's trusted base. It issues a short-lived workload JWT per uid, brokers cloud credentials, pulls and verifies signed configuration and binaries, and starts units. Everything in [Deployment](/architecture/deployment/) depends on it staying small. It does not run on serverless or on Kubernetes.
 
@@ -94,7 +94,7 @@ Every component ships as its own executable, in one language ([Source layout](/a
   vendor/         third-party binaries that sluis starts, such as rqlite
 ```
 
-The directory names and the layout are agreed (PK-1), and the directory is called `actors/` (agreed; it amends the layout, which first called it `roles/`). The executable names above are illustrative. Actors are pinned by the unit: the executable a unit starts is the only code in that process, so an actor cannot contain another actor's code. Packaging follows the runtime, and is agreed ([ADR 0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/), [ADR 0038](/decisions/0038-the-local-installation-is-docker-compose-with-one-container-per-actor/)):
+The directory names and the layout are agreed (PK-1), and the directory is called `actors/` (agreed; it amends the layout, which first called it `roles/`). The executable names above are illustrative. Actors are pinned by the unit: the executable a unit starts is the only code in that process, so an actor cannot contain another actor's code. Packaging follows the runtime, and is agreed ([ADR 0019](/decisions/0019-release-train-packaging-and-distribution/), [ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/)):
 
 - **Bare-metal** ships `.deb` and `.rpm` packages **split by function** (`sluis`, `sluis-node`, `sluis-server`, one `sluis-driver-<name>` per driver executable with its system dependencies, `sluis-audit-writer`, `sluis-audit-search`, `sluis-quota`, `sluis-host`, `sluis-console`), with a meta-package per bare-metal installation such as `sluis-install-boards`, and a tarball. The packages ship **systemd template units** only, `sluis-<actor>@.service` and `.socket`; a **systemd generator** in the package reads `/etc/sluis/install.yaml` and creates the instances and their `sysusers.d` entries.
 - **Serverless** ships **one function per actor and one zip per executable**; drivers reach a function as one Rust `aws` extension, and sluis uses at most three layers of its own.
@@ -202,7 +202,7 @@ Audit is built from the same ports as the rest of sluis and adds one port, the w
 | ---- | --------- | ------------------- |
 | Transport | Per installation: direct (`direct-unix` on the same host, `direct-mtls` between hosts) or a queue (spool, SQS, NATS JetStream). The defaults are a spool on bare-metal and SQS on serverless and Kubernetes; direct mode falls back to a local spool when the writer is down, so it needs a disk | [OD-34](/open-decisions/#od-34), [OD-35](/open-decisions/#od-35) |
 | Writer | Per installation. Exactly one writer per log; a cluster keeps one log per node | [OD-31](/open-decisions/#od-31) |
-| Blob | Per installation, with a lock mode of none, removable or compliance. A production log needs compliance, or a weaker mode plus a witness | [ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/) |
+| Blob | Per installation, with a lock mode of none, removable or compliance. A production log needs compliance, or a weaker mode plus a witness | [ADR 0016](/decisions/0016-the-audit-log/) |
 | Witness | Per installation, and optional everywhere; `sluis config check` warns when there is none | [OD-36](/open-decisions/#od-36) |
 
 Two further pieces are separate from the log:
@@ -212,7 +212,7 @@ Two further pieces are separate from the log:
 | **Search** | The indexer, the search index and the reader | Derived from the port and driver rules, not decided per installation: for example, with a `sqlite` index on a cluster the reader runs on the indexer's node. See [Ports and drivers](/concepts/drivers/#where-an-actor-runs-is-derived) and [OD-32](/open-decisions/#od-32) |
 | **Quota** | The quota engine and its quota state (the state port with compare-and-set) | Derived in the same way. A separate piece, combinable with sluis, sharing its driver instances. It meters by default and enforces per policy rule. [OD-38](/open-decisions/#od-38), [OD-33](/open-decisions/#od-33) |
 
-**The audit front.** Every audit installation, also one combined with sluis, has a front of its own: a slim `entry` on its own host, the `reader` as its API, and its own `session` and `console` actors, which are the same executables as sluis's, with an audit console bundle of its own ([ADR 0062](/decisions/0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own/)).
+**The audit front.** Every audit installation, also one combined with sluis, has a front of its own: a slim `entry` on its own host, the `reader` as its API, and its own `session` and `console` actors, which are the same executables as sluis's, with an audit console bundle of its own ([ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/)).
 
 The [audit explorer](/architecture/audit-explorer/) draws these boxes for each tested installation, and the [architecture explorer](/architecture/explorer/) draws the actor processes.
 

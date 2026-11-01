@@ -6,7 +6,7 @@ sidebar:
   order: 7
 ---
 
-sluis is configured by files that an operator reads and edits, and by the records an operator sets on the console. The design makes four promises about them: a file that is wrong is refused before anything takes effect; a field that does not exist is an error, not silently ignored; any value can be traced to the origin and the layer that set it; and an operational switch can never change who may do what. The rules are [ADR 0015](/decisions/0015-configuration-is-defined-once-in-pkl-and-shipped-as-json-schema/) and [ADR 0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/).
+sluis is configured by files that an operator reads and edits, and by the records an operator sets on the console. The design makes four promises about them: a file that is wrong is refused before anything takes effect; a field that does not exist is an error, not silently ignored; any value can be traced to the origin and the layer that set it; and an operational switch can never change who may do what. The rules are [ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/).
 
 ## Pkl at build time, generated artifacts at runtime
 
@@ -50,7 +50,7 @@ The **effective configuration** is declared overlaid with operator-set. Learned 
 - **Operator-set fills what declared leaves open.** The order is declared, then operator-set, then the schema default.
 - **Tighten-only switches** (recovery off, a reconciler paused, a lower quota limit) may be moved by an operator in their safe direction even when declared sets them. Moving one back is a declared change that names a new generation.
 - **An object defined in both places is held**: nothing changes on it until one side is removed, or a declared fragment adopts the operator-set record with `adopts: <kind>/<id>@<revision>`.
-- **Authority is declared only.** The one exception is Cedar policies linked from declared templates within a declared delegation policy, which the console may create and remove ([ADR 0014](/decisions/0014-policy-is-written-in-cedar-and-evaluated-by-a-rust-actor/)).
+- **Authority is declared only.** The one exception is Cedar policies linked from declared templates within a declared delegation policy, which the console may create and remove ([ADR 0009](/decisions/0009-policy-is-cedar-in-a-rust-actor/)).
 
 A secret in configuration is a reference such as `cred:sluis-int-github.app-key`, resolved at run time through the `secrets` port (see [Secrets and export](/concepts/secrets/)). The value never appears in a file, in `explain` output, in logs or in a crash dump. A secret put at run time with `sluis secrets put` or on the console is an operator-set secret in sluis's own store.
 

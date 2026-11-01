@@ -19,12 +19,12 @@ What the design settled on 2026-11-01:
 
 - **The key model.** The token-signing key is separate from the CA key. Its certificate is a non-CA certificate from the node intermediate. One rule says which keys may be shared and which must be separate. The signing certificate is re-signed every year, and the key is rotated on an event or after at most three years. There is one log key, and grants are sealed. The page also fixes the compact seven-slot card map, the KMS layout per installation, and the reference installation shapes ([Keys](/concepts/keys/)).
 - **Design principles.** A public page says what sluis is, and is not ([Design principles](/concepts/principles/#what-sluis-is-and-is-not)).
-- **Audit records.** [ADR 0064](/decisions/0064-audit-records-are-ocsf-events-with-one-unmapped-sluis-object-and-usage-is-a-separate-stream/) was rewritten: OCSF events with no schema extension, one `unmapped.sluis` object, and no catalogue loaded at run time.
-- **Requirements.** No requirement record is open any more. Break-glass recovery uses passkeys only (REQ-AUTHN-066 to REQ-AUTHN-073). As of 2026-11-01, 184 of 695 requirement records have conformance coverage (26.5%). The live figure is on the [project status](/status/) page.
+- **Audit records.** [ADR 0017](/decisions/0017-audit-records-the-usage-stream-and-quota/) records them: OCSF events with no schema extension, one `unmapped.sluis` object, and no catalogue loaded at run time.
+- **Requirements.** No requirement record is open any more. Break-glass recovery uses passkeys only (REQ-AUTHN-066 to REQ-AUTHN-073). As of 2026-11-01, 184 of 676 requirement records have conformance coverage (27.2%). The live figure is on the [project status](/status/) page.
 
 Still open in the design, as of 2026-11-01:
 
-- ADR 0067, the profiles of the leaf certificates ([#1073](https://github.com/truvity/sluis/issues/1073)).
+- The profiles of the leaf certificates ([#1073](https://github.com/truvity/sluis/issues/1073)).
 - The decision record for directory sync.
 - The live status API ([#1037](https://github.com/truvity/sluis/issues/1037)).
 - The audit-with-quota installations that serve one product each. They are decided later.
@@ -35,16 +35,16 @@ Root custody lives in [ritueel](https://github.com/truvity/ritueel), a separate 
 
 v2 is delivered in four product milestones, in this priority order. They are the options of the `Product milestone` field on the v2 board (checked 2026-10-31), and the [project status](https://sluis.id/status/) page groups requirements, decision records and issues under them. Within milestone 2, the boards, lambda and kubernetes installations are built in parallel after local ([delivery order](#delivery-order)).
 
-1. **First working version.** The minimal local installation: Docker Compose on a workstation, one container per actor, built from the published images, with the minimal drivers (embedded SQLite state, a SQLite index, a files blob, a local lock, a spool or direct transport) and software keys in CI or the host's YubiKey on a workstation ([ADR 0038](/decisions/0038-the-local-installation-is-docker-compose-with-one-container-per-actor/)). It is where the basic functionality is developed and tested, and what the integration tests run on.
+1. **First working version.** The minimal local installation: Docker Compose on a workstation, one container per actor, built from the published images, with the minimal drivers (embedded SQLite state, a SQLite index, a files blob, a local lock, a spool or direct transport) and software keys in CI or the host's YubiKey on a workstation ([ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/)). It is where the basic functionality is developed and tested, and what the integration tests run on.
    - **Done when** the example install file for local starts under Docker Compose from the published images, and the integration tests run against it in CI.
    - Live numbers: [project status](https://sluis.id/status/).
-2. **v1 parity.** The boards, lambda and kubernetes installations, and everything v1 does. Parity means that the workloads that use v1 today can be wired to the new sluis, possibly in a different way or with a different configuration, not that behaviour is identical ([ADR 0039](/decisions/0039-delivery-goes-local-first-then-boards-lambda-and-kubernetes-in-parallel/)).
+2. **v1 parity.** The boards, lambda and kubernetes installations, and everything v1 does. Parity means that the workloads that use v1 today can be wired to the new sluis, possibly in a different way or with a different configuration, not that behaviour is identical ([ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/)).
    - **Done when** every row of the [features page](/features/) is `Done` or `Changed` (with its decision), and the boards, lambda and kubernetes installations are built and tested ([installations](/runtimes/installations/)).
    - Live numbers: [project status](https://sluis.id/status/).
 3. **CIAM upstream.** A customer-identity product signs in a product's customers through sluis. sluis stays a broker and does not become the customer-identity product: the CIAM product is one more OpenID Connect upstream ([OIDC upstream](/integrations/oidc-upstream/)).
    - **Done when** the generic OIDC upstream ([#916](https://github.com/truvity/sluis/issues/916)) does claim mapping per upstream, `acr` and `amr` passthrough, step-up (RFC 9470), end-user subjects, back-channel logout and rate limits per connection.
    - Live numbers: [project status](https://sluis.id/status/).
-4. **Quota.** `quota` as a front for installations: applications ask it to admit work before it runs, confirm or cancel the usage after, and push top-ups. It runs beside an installation or on its own ([ADR 0004](/decisions/0004-audit-is-four-pieces-joined-by-a-transport-port/), [ADR 0023](/decisions/0023-quotas-api-is-idempotent-and-its-data-follows-the-origin-model/)).
+4. **Quota.** `quota` as a front for installations: applications ask it to admit work before it runs, confirm or cancel the usage after, and push top-ups. It runs beside an installation or on its own ([ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/), [ADR 0017](/decisions/0017-audit-records-the-usage-stream-and-quota/)).
    - **Done when** quota meters by default and enforces per policy rule for chosen subjects or audiences, a request counts once however often it is retried, and under strict enforcement the admitted total never exceeds the limit under concurrent requests (REQ-QUOTA-001 and REQ-QUOTA-002; work item [#915](https://github.com/truvity/sluis/issues/915)).
    - Live numbers: [project status](https://sluis.id/status/).
 
@@ -73,7 +73,7 @@ The maintainer agreed this order for the tested [installations](/runtimes/instal
 
 1. **local first.** Docker Compose on a workstation, one container per actor, with the minimal drivers: embedded SQLite state, a SQLite index, a files blob, a local lock, and a spool or direct transport. Keys are software keys in CI and the host's YubiKey on a workstation. This step runs until v2 can replace v1, and it includes the enablers of the target architecture.
 2. **Then boards, lambda and kubernetes in parallel,** built and tested in parallel.
-   - **boards.** Three single-board computers behind a Cloudflare tunnel, a YubiKey in each node, state and index on rqlite ([ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)), audit records on R2 in the first release (Garage, an S3-compatible store on the boards, is a later backend, blocked on conditional writes and prefix scoping upstream: [#982](https://github.com/truvity/sluis/issues/982)), the audit pieces on the same nodes, and one log per node with the other nodes as peer witnesses.
+   - **boards.** Three single-board computers behind a Cloudflare tunnel, a YubiKey in each node, state and index on rqlite ([ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/)), audit records on R2 in the first release (Garage, an S3-compatible store on the boards, is a later backend, blocked on conditional writes and prefix scoping upstream: [#982](https://github.com/truvity/sluis/issues/982)), the audit pieces on the same nodes, and one log per node with the other nodes as peer witnesses.
    - **lambda.** AWS Lambda.
    - **kubernetes.** The one tested Kubernetes installation.
 
@@ -83,7 +83,7 @@ Packaging follows the runtime, not a build profile: `.deb` and `.rpm` packages s
 
 ## Spikes before code
 
-The language of each executable is fixed from a set of **spikes**, run before the first code of step 1 (agreed 2026-10-30, [ADR 0060](/decisions/0060-the-language-follows-the-executable/)). Every Rust choice on [Source layout](/architecture/source-layout/#languages) is gated by its spike. When a spike fails, the maintainer decides the fallback for that executable at that time; the fallbacks listed in ADR 0060 are candidates, not commitments (decided 2026-10-30).
+The language of each executable is fixed from a set of **spikes**, run before the first code of step 1 (agreed 2026-10-30, [ADR 0014](/decisions/0014-the-language-follows-the-executable/)). Every Rust choice on [Source layout](/architecture/source-layout/#languages) is gated by its spike. When a spike fails, the maintainer decides the fallback for that executable at that time; the fallbacks listed in ADR 0014 are candidates, not commitments (decided 2026-10-30).
 
 | Spike | What it settles |
 |---|---|
@@ -94,14 +94,14 @@ The language of each executable is fixed from a set of **spikes**, run before th
 | [S5](https://github.com/truvity/sluis/issues/943) | The memory budget on the boards: each actor and driver under load, in each language, against the 2 GB budget. **Done** (2026-10-31): the memory fits with Go or with Rust actors (about 985 or 680 MiB of a 1380 MiB ceiling on a tier-0 board), rqlite costs about 9 MiB per cluster, and the CPU, not the eMMC, limits writes first, at about 400 commits/s per board. The maintainer decided its open points on 2026-10-31: no thermal action, the write rate estimated from the actor design (about 7 commits/s needed at the measured peak), the estimated rows kept, `GOMEMLIMIT` as a ceiling, and Rust on tier-0 boards unless a serious trade-off |
 | [S6](https://github.com/truvity/sluis/issues/944) | OpenTelemetry from Rust: one trace across a Go and Rust hop. **Done** (2026-10-31): passed with conditions |
 | [S7](https://github.com/truvity/sluis/issues/945) | Configuration in Rust: the same conformance vectors as the Go structs. **Done** (2026-10-31): passed with conditions |
-| [S8](https://github.com/truvity/ritueel/issues/26) | The ceremony with OpenPGP cards. **Moved to ritueel** on 2026-11-01 with the rest of the root ceremonies; the 2026-10-31 result stays in that issue. sluis keeps only the back-signature that `key-holder` makes on the card ([ADR 0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)) |
+| [S8](https://github.com/truvity/ritueel/issues/26) | The ceremony with OpenPGP cards. **Moved to ritueel** on 2026-11-01 with the rest of the root ceremonies; the 2026-10-31 result stays in that issue. sluis keeps only the back-signature that `key-holder` makes on the card ([ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/)) |
 | [S10](https://github.com/truvity/sluis/issues/947) | One release train: GoReleaser with a Cargo workspace, for two architectures, with SBOM, signing and provenance, and Lambda zips within their limits |
 
 One more spike was run for the boards' blob store, not before step 1: **Garage on the boards** ([#982](https://github.com/truvity/sluis/issues/982)). **Done** (2026-10-31): Garage v2.5.0 has no conditional writes and no prefix-scoped keys, both open upstream, so the boards use R2 for blobs in the first release and Garage moves to Later.
 
 ## Architecture decision records
 
-The records are on [Decisions](/decisions/), with their status. During the design phase the maintainer may rewrite them in place; on 2026-10-30 every record was realigned to one set of decisions. The audit records followed on 2026-10-31: the log ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/), Accepted since its record format was decided the same day; on 2026-11-01 the record formats moved to [ADR 0064](/decisions/0064-audit-records-are-ocsf-events-with-one-unmapped-sluis-object-and-usage-is-a-separate-stream/): OCSF events with one `unmapped.sluis` object for the sluis facts that OCSF lacks, and a separate usage stream in CloudEvents for quota and billing), search ([ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)), quota ([ADR 0023](/decisions/0023-quotas-api-is-idempotent-and-its-data-follows-the-origin-model/)) and the audit installation's front ([ADR 0062](/decisions/0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own/), built in [#985](https://github.com/truvity/sluis/issues/985)).
+The records are on [Decisions](/decisions/), with their status. During the design phase the maintainer may rewrite, merge and renumber them in place. On 2026-11-01, before any code, the 32 records accepted until then were merged into 20 and renumbered from 0001, so that each rule is stated once; the old addresses redirect, and the map is in the [decisions README](https://github.com/truvity/sluis/blob/main/docs/decisions/README.md#where-the-old-records-went). The audit design is in four of them: the pieces, search and the front ([ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/), front built in [#985](https://github.com/truvity/sluis/issues/985)), the log ([ADR 0016](/decisions/0016-the-audit-log/)), and the record formats, the usage stream and quota ([ADR 0017](/decisions/0017-audit-records-the-usage-stream-and-quota/)): OCSF events with one `unmapped.sluis` object for the sluis facts that OCSF lacks, and a separate usage stream in CloudEvents for quota and billing.
 
 ## Technical backlog
 
@@ -210,7 +210,7 @@ The board drivers, federation, host enrolment and SSH, the conformance pipeline 
 
 ### Later
 
-After the first release or after v2 parity: FAPI 2.0, CIBA, ACME, device login (postponed), a FIPS build variant, Garage on the boards, other clouds and other stores.
+After the first release or after the parity milestone: FAPI 2.0, CIBA (once a real consumer exists), ACME, device login (postponed), a FIPS build variant, Garage on the boards, other clouds and other stores.
 
 | Issue | Item |
 |---|---|
@@ -232,5 +232,5 @@ After the first release or after v2 parity: FAPI 2.0, CIBA, ACME, device login (
 | [#976](https://github.com/truvity/sluis/issues/976) | Kubernetes Lease driver |
 | [#977](https://github.com/truvity/sluis/issues/977) | Live reload of declared configuration |
 | [#978](https://github.com/truvity/sluis/issues/978) | Ca: ACME (RFC 8555) for host TLS certificates, after the first release |
-| [#980](https://github.com/truvity/sluis/issues/980) | CIBA in poll mode with a passkey on the approving device (after v2 parity) |
+| [#980](https://github.com/truvity/sluis/issues/980) | CIBA in poll mode with a passkey on the approving device (Later: after the parity milestone, once a real consumer exists) |
 | [#982](https://github.com/truvity/sluis/issues/982) | Garage as the boards' blob store (blocked on conditional writes); spike done 2026-10-31 |

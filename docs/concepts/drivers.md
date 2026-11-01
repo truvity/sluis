@@ -87,18 +87,18 @@ A YubiKey or another card on a node has one PIN and cannot refuse a caller by it
 - **One `key-holder` process, one Unix socket per caller.** Each socket sits in a directory that only that caller can open: systemd `.socket` units with `SocketUser=` and `FileDescriptorName=` on a host, and only that one socket mounted into a container.
 - **A peer-uid check as a second factor.** `key-holder` reads the caller's uid from the connection and checks it against the socket it arrived on and an access list of caller actor × key purpose × operation, generated from the manifests.
 - **Content-aware signing per purpose.** The `ca` purpose signs only a parseable TBSCertificate within its constraints; the `ssh-ca` purposes sign only an OpenSSH certificate body; the token purposes sign only a JWS signing input. A caller that has a socket still cannot get arbitrary bytes signed.
-- **The only process that touches the card.** `key-holder` is written in Go with `piv-go`, which opens the card exclusively, so no other program on the node can use the card or reset it while `key-holder` runs ([ADR 0060](/decisions/0060-the-language-follows-the-executable/), after spike S4).
+- **The only process that touches the card.** `key-holder` is written in Go with `piv-go`, which opens the card exclusively, so no other program on the node can use the card or reset it while `key-holder` runs ([ADR 0014](/decisions/0014-the-language-follows-the-executable/), after spike S4).
 - **Hardened.** `key-holder` has no network, runs under seccomp, keeps the PIN in mlocked memory (unlocked by a peer or by `sluis node unlock`), rate-limits signatures and audits each one. The access list lets only the audit `writer` use the log key, which is what replaces a separate notary.
 
 More cards per node are an option for later. The cards of the roots are ritueel's and are not used through sluis.
 
 **There is no `state-owner`.** rqlite is light enough to run **one cluster per (boundary, owning actor)** (measured on a desktop at about 7 to 9 MB idle and 16 to 26 MB loaded per node, plus about 30 MB shared per host). The owning actor gets an rqlite user with `execute`, and each declared reader a user with `query` only. Each cluster runs as a systemd template instance, `sluis-rqlite@<boundary>-<actor>`, with its own port from a port scheme and its own certificate, mutual TLS between nodes and to clients, and a sandbox that lets it write its data directory only (which also contains SQLite's `ATTACH`-creates-files hole). On a 2 GB board, spike S5 measured about 9 MiB per cluster under write load, plus about 22 MiB of binary pages once per board (2026-10-31). There the CPU, not the eMMC, limits writes first, at about 400 commits/s per board summed over its clusters.
 
-**How an actor reaches its own cluster** (decided 2026-10-30). rqlite's client API is a TCP port, so the unit of a `per-actor` rqlite driver does not run with `PrivateNetwork=yes`. It gets a narrow rule instead: `IPAddressDeny=any`, `IPAddressAllow=` for its own cluster's addresses only, and `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`, plus a client certificate per cluster. Actors that need no network keep `PrivateNetwork=yes`. If rqlite adds a Unix-socket listener (proposed upstream, not merged), the driver moves to it ([ADR 0008](/decisions/0008-drivers-are-unix-socket-services-and-only-the-public-api-listens-on-tcp/#how-a-per-actor-rqlite-driver-reaches-its-cluster)).
+**How an actor reaches its own cluster** (decided 2026-10-30). rqlite's client API is a TCP port, so the unit of a `per-actor` rqlite driver does not run with `PrivateNetwork=yes`. It gets a narrow rule instead: `IPAddressDeny=any`, `IPAddressAllow=` for its own cluster's addresses only, and `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`, plus a client certificate per cluster. Actors that need no network keep `PrivateNetwork=yes`. If rqlite adds a Unix-socket listener (proposed upstream, not merged), the driver moves to it ([ADR 0004](/decisions/0011-state-is-one-port-with-compare-and-set/#how-a-per-actor-rqlite-driver-reaches-its-cluster)).
 
 ## Defence in depth
 
-Every port is protected in **three layers**, and all three are generated from one manifest (agreed, DD-1). The record is [ADR 0058](/decisions/0058-boundaries-are-enforced-in-three-layers-per-port-and-every-state-value-is-encrypted/). The threats these layers answer (T-8 to T-14 and T-24 among them), the attacker positions and what is left after each control are on the [threat model](/security/threat-model/), and each control's test vectors are in the [isolation requirements](/requirements/iso/).
+Every port is protected in **three layers**, and all three are generated from one manifest (agreed, DD-1). The record is [ADR 0004](/decisions/0004-drivers-listeners-and-boundary-enforcement/). The threats these layers answer (T-8 to T-14 and T-24 among them), the attacker positions and what is left after each control are on the [threat model](/security/threat-model/), and each control's test vectors are in the [isolation requirements](/requirements/iso/).
 
 | Layer | Where | What it does |
 |---|---|---|
@@ -194,7 +194,7 @@ Every driver declares what it needs from the installation. The columns are: whet
 Neither the nodes nor the dependencies belong to a [runtime](/runtimes/). The number of nodes is an attribute of an installation, and a provider is a dependency that a driver declares, such as an AWS account, a Cloudflare account, a YubiKey or a NATS service. The one exception is serverless: it always comes with a provider (AWS Lambda today), so there the provider is part of the runtime.
 
 :::note[Proposed]
-The `secrets` and `export` drivers are proposed. The `rqlite` index driver is decided ([ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)): rqlite is a replicated SQLite, so with it the reader can run on any node of a cluster. The witness and transport drivers follow the decisions in [Audit](/concepts/audit/): the installation defaults are the spool on bare-metal and SQS on serverless and Kubernetes ([OD-34](/open-decisions/#od-34)), and a witness is optional ([OD-36](/open-decisions/#od-36)).
+The `secrets` and `export` drivers are proposed. The `rqlite` index driver is decided ([ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/)): rqlite is a replicated SQLite, so with it the reader can run on any node of a cluster. The witness and transport drivers follow the decisions in [Audit](/concepts/audit/): the installation defaults are the spool on bare-metal and SQS on serverless and Kubernetes ([OD-34](/open-decisions/#od-34)), and a witness is optional ([OD-36](/open-decisions/#od-36)).
 :::
 
 ## Which drivers fit which runtime
@@ -242,7 +242,7 @@ Legend: ✓ possible, ~ possible with the condition in the footnote, ✗ impossi
 4. The writer runs in the same pod.
 5. `direct-mtls` falls back to a local spool when the writer is down, so it needs a disk, which serverless does not have ([OD-35](/open-decisions/#od-35)). A function sends through a queue. For `nats-jetstream`, producers can send from serverless, and the writer runs outside it.
 6. On one node only.
-7. Serverless runs the indexer and the reader with a `postgres` index, on Aurora by default on the lambda installation ([OD-12](/open-decisions/#od-12), [ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)). On AWS the functions reach it through RDS Proxy with IAM authentication, and they run in the VPC.
+7. Serverless runs the indexer and the reader with a `postgres` index, on Aurora by default on the lambda installation ([OD-12](/open-decisions/#od-12), [ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/)). On AWS the functions reach it through RDS Proxy with IAM authentication, and they run in the VPC.
 8. Not independent within the same cluster.
 9. There is no node agent, so the JWT has to come from the signer.
 10. Only on a cloud VM.
@@ -261,11 +261,11 @@ The `index` port has one Postgres driver, `postgres`, and the driver has a **pro
 
 `external` covers a database that someone else runs: a CNPG cluster in another Kubernetes cluster behind a load balancer, or a Postgres run on bare metal. Exposing CNPG through a load balancer is **not a driver of its own**; from sluis's side it is `external`.
 
-The default index of the lambda installation is `postgres` in the `aurora` mode, and of the kubernetes installation `postgres` in the `cnpg` mode ([ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)).
+The default index of the lambda installation is `postgres` in the `aurora` mode, and of the kubernetes installation `postgres` in the `cnpg` mode ([ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/)).
 
 ## The rqlite index driver
 
-The `index` port gains a second replicated driver, `rqlite`. rqlite is a replicated SQLite, and an installation that already runs it for `state` has the index on the same cluster with nothing more to run. Because every node holds a replica, the reader can run on **any node**, which a `sqlite` file on one node cannot offer. It is the index of the [boards](/runtimes/installations/#boards) installation ([ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)).
+The `index` port gains a second replicated driver, `rqlite`. rqlite is a replicated SQLite, and an installation that already runs it for `state` has the index on the same cluster with nothing more to run. Because every node holds a replica, the reader can run on **any node**, which a `sqlite` file on one node cannot offer. It is the index of the [boards](/runtimes/installations/#boards) installation ([ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/)).
 
 Its full-text search works: FTS5 was tested on 2026-10-30 with rqlite 10.6 on a three-node cluster, built with cgo and FTS5 and JSON1 compiled in (the arm64 build uses the same flags). The findings for the driver: followers serve reads only at the `none` level, so a reader uses a small freshness bound, and `weak` to read its own write; writes are batched; the search table is an external-content FTS table. Native arm64 hardware and the cost of fsync on eMMC are not yet tested. The board spike confirms them; if it fails, the boards fall back to `sqlite` on the indexer's node, with the reader beside it, and no new decision is needed.
 
@@ -276,7 +276,7 @@ There is **one blob driver for object stores, `s3-compatible`**, and the separat
 - on AWS, from STS through web identity or the platform role, scoped by IAM prefix conditions;
 - on Cloudflare R2, from the **`cloudflare` cloud driver**, which runs as `cloud-cloudflare@<boundary>` and mints R2 **temporary credentials** scoped to the bucket and the prefix. They are minted locally, as an HS256 token signed with the parent token's secret. The parent token is per boundary and is stored sealed.
 
-Long-lived R2 tokens can be scoped to a bucket only; a prefix scope exists only on temporary credentials, and R2 has no OIDC federation (checked 2026-09-26). The `cloudflare` cloud driver is separate from the company integration `cloudflare@<company>`, which mints Cloudflare tokens for people and jobs ([Cloudflare](/integrations/cloudflare/)); the two share a library, and both are written in Go ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)).
+Long-lived R2 tokens can be scoped to a bucket only; a prefix scope exists only on temporary credentials, and R2 has no OIDC federation (checked 2026-09-26). The `cloudflare` cloud driver is separate from the company integration `cloudflare@<company>`, which mints Cloudflare tokens for people and jobs ([Cloudflare](/integrations/cloudflare/)); the two share a library, and both are written in Go ([ADR 0014](/decisions/0014-the-language-follows-the-executable/)).
 
 ### Garage
 
@@ -299,12 +299,12 @@ When both upstream features ship, Garage's design is:
 - the **`garage` cloud driver**, `cloud-garage@<boundary>`, holds a scoped admin token and creates a **key per (boundary, actor) with an expiry**;
 - each actor has **a bucket of its own**, because a key's rights are per bucket, and each boundary has its own Garage cluster;
 - the lock mode is **`none`**, so the audit log's tamper evidence comes from the peer witnesses;
-- on the boards the audit log has an **off-site copy on R2**, copied by an hourly job of the audit installation ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/));
-- `cloud-garage` is written in Rust ([ADR 0060](/decisions/0060-the-language-follows-the-executable/)).
+- on the boards the audit log has an **off-site copy on R2**, copied by an hourly job of the audit installation ([ADR 0016](/decisions/0016-the-audit-log/));
+- `cloud-garage` is written in Rust ([ADR 0014](/decisions/0014-the-language-follows-the-executable/)).
 
 ## Create-if-absent
 
-**The blob store is the write-once fence** of the audit log ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/), decided 2026-10-31). sluis supports only blob backends with an atomic create-if-absent, and every blob driver must refuse to overwrite an existing object on a `put-once`:
+**The blob store is the write-once fence** of the audit log ([ADR 0016](/decisions/0016-the-audit-log/), decided 2026-10-31). sluis supports only blob backends with an atomic create-if-absent, and every blob driver must refuse to overwrite an existing object on a `put-once`:
 
 | Driver | How |
 |---|---|
@@ -327,7 +327,7 @@ Two ports carry flags that an actor can require, so that "any driver for this po
 | `s3-compatible` on Cloudflare R2 | `removable` | An object lock exists, but an account administrator can remove it. |
 | `s3-compatible` on AWS S3 | `compliance` | Object Lock in compliance mode: not even the account's root can shorten the retention. |
 
-An actor that stores a record which must not be changed, such as the audit log store, states what lock mode it needs. For the audit log the rule is ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)): **in a production boundary the log store needs `compliance`, or a weaker lock mode plus a witness** (`peer` or `external`); `sluis config check` refuses anything else there, and warns in development and staging. So the boards (R2, `removable`, with peer witnesses) pass, and a single-node production installation on `fs` needs an `external` witness. See [Audit](/concepts/audit/#lock-modes-retention-and-legal-holds).
+An actor that stores a record which must not be changed, such as the audit log store, states what lock mode it needs. For the audit log the rule is ([ADR 0016](/decisions/0016-the-audit-log/)): **in a production boundary the log store needs `compliance`, or a weaker lock mode plus a witness** (`peer` or `external`); `sluis config check` refuses anything else there, and warns in development and staging. So the boards (R2, `removable`, with peer witnesses) pass, and a single-node production installation on `fs` needs an `external` witness. See [Audit](/concepts/audit/#lock-modes-retention-and-legal-holds).
 
 **State `cas`.** The `state` port has compare-and-set. An actor that changes a record that more than one caller can reach requires it. Quota state is `state` with compare-and-set. Quota meters by default and enforces per policy rule ([OD-33](/open-decisions/#od-33), decided); enforcement needs `state` with compare-and-set on the mint path. The contract has no unconditional put: see [Data](/concepts/data/).
 
@@ -391,10 +391,10 @@ The keys, state and index choices follow the agreed installations. The **local**
 
 On **boards** the log is per node: each node's writer, spool and log key are its own, and the other two nodes are its peer witnesses. See [Audit](/concepts/audit/#exactly-one-writer-per-log).
 
-Each driver choice is the reading of an older decision. [OD-5](/open-decisions/#od-5) and [OD-34](/open-decisions/#od-34) put the spool on bare-metal installations and SQS on serverless, [OD-22](/open-decisions/#od-22) put SQS on Kubernetes, [OD-20](/open-decisions/#od-20) put KMS on Kubernetes, and [OD-12](/open-decisions/#od-12), as revised, lets serverless run the indexer and the reader with a `postgres` index; [ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/) makes it the lambda default. The key mode follows the same pattern: KMS on AWS, a YubiKey on boards, a software key only in the local installation.
+Each driver choice is the reading of an older decision. [OD-5](/open-decisions/#od-5) and [OD-34](/open-decisions/#od-34) put the spool on bare-metal installations and SQS on serverless, [OD-22](/open-decisions/#od-22) put SQS on Kubernetes, [OD-20](/open-decisions/#od-20) put KMS on Kubernetes, and [OD-12](/open-decisions/#od-12), as revised, lets serverless run the indexer and the reader with a `postgres` index; [ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/) makes it the lambda default. The key mode follows the same pattern: KMS on AWS, a YubiKey on boards, a software key only in the local installation.
 
 :::note[Proposed]
-The secrets row is a proposal. The index defaults are decided in [ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/).
+The secrets row is a proposal. The index defaults are decided in [ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/).
 :::
 
 The only inter-node traffic is the Raft traffic of the rqlite clusters, one port per cluster from the port scheme, over mutual TLS with a certificate per cluster. These are the only TCP ports between nodes.

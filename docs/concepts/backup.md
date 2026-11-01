@@ -14,10 +14,10 @@ This page is the design. Nothing on it is shipped yet. Where a detail is not set
 
 The backup is a **logical archive**: the `backup` side reads records through the ports (never through a database), and the restore side writes them back through the same ports. The archive is therefore the same on every driver, and it can be restored onto a different driver of the same port (rqlite to DynamoDB, for example).
 
-Only **authoritative, non-recreatable state** goes in. What that is follows from each record kind's [origin](/concepts/data/#origins-and-sensitivity) ([ADR 0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)):
+Only **authoritative, non-recreatable state** goes in. What that is follows from each record kind's [origin](/concepts/data/#origins-and-sensitivity) ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/)):
 
 - **operator-set records**: chat channels managed from the console, runtime switches, console-connected tenants, secrets put at run time;
-- **durable issued records**: the issued parts of clients (generated secret versions and their rotation metadata), grants and revocations, the certificate issuance ledger and revocation state, pins (the workspace at first install, the first subject, an App id), account links, approvals and consents, quota balances and top-ups;
+- **durable issued records**: the issued parts of clients (generated secret versions and their rotation metadata), revocations, the certificate issuance log and revocation state, pins (the workspace at first install, the first subject, an App id), account links, approvals and consents, quota balances and top-ups;
 - **vendor-issued secrets**, such as a GitHub App key or a chat bot token, which cannot be fetched again;
 - the metadata that other records depend on, such as the signing ring's public side and the record of which keys were expected.
 
@@ -69,7 +69,7 @@ A restore is started by an operator and never by the console, so that it works w
 2. **Provenance check.** The archive is accepted only if the audit log has a `backup.completed` record carrying its digest, and the record sits under a checkpoint that a witness has co-signed where the installation has one. When the log cannot be reached, the operator can override, and the override is itself recorded first.
 3. **Decrypt.** The restore actor unwraps the data key through the keys port, or the operator brings the offline YubiKey.
 4. **Write the records** through the ports, under maintenance mode. Every member's digest is checked first, and every record is read back afterwards.
-5. **Roll forward from the audit log.** For every record kind marked for it, the restore replays the log from the archive's time to the present: operator-set records, revocations, the issued parts of clients, grants, pins, account links, approvals, quota balances and the issuance ledger. The audit records of those kinds carry the full value apart from secrets, and they never carry secrets. A revocation that happened after the last archive is therefore not lost. Each kind has a merge rule: replace, or a union for tighten-only switches, so a restore never loosens one (a disabled recovery generation stays disabled).
+5. **Roll forward from the audit log.** For every record kind marked for it, the restore replays the log from the archive's time to the present: operator-set records, revocations, the issued parts of clients, pins, account links, approvals, quota balances and the issuance log. The audit records of those kinds carry the full value apart from secrets, and they never carry secrets. A revocation that happened after the last archive is therefore not lost. Each kind has a merge rule: replace, or a union for tighten-only switches, so a restore never loosens one (a disabled recovery generation stays disabled).
 6. **Rebuild derived state.** The indexer rebuilds the search index (or loads a snapshot), quota meters are rebuilt from the log, and learned facts are pulled again.
 7. **Everyone re-signs in.** Sessions and refresh tokens do not exist after a restore. Clients obtain new ones.
 8. **Lift maintenance** only after the read-back is clean.

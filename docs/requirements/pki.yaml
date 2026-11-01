@@ -65,12 +65,12 @@ requirements:
     rationale: "Independent roots avoid copying keys and keep attestation."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-62, section: "5280", depth: Full}
       - {id: NC-10, section: "PIV", depth: Full}
-    issues: [914]
     verification:
       - {kind: manual, ref: "ceremony record"}
       - {kind: integration-test, ref: "attestation verification test"}
@@ -81,12 +81,12 @@ requirements:
     rationale: "Independent roots mean losing one card does not lose the other."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-62, section: "5280", depth: Full}
       - {id: NC-10, section: "PIV", depth: Full}
-    issues: [914]
     manual_reason: "Independence of the roots is evidenced by the ceremony record and the token attestations."
     verification:
       - {kind: manual, ref: "ceremony record"}
@@ -97,12 +97,12 @@ requirements:
     rationale: "A copied key loses its attestation."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-62, section: "5280", depth: Full}
       - {id: NC-10, section: "PIV", depth: Full}
-    issues: [914]
     verification:
       - {kind: integration-test, ref: "attestation distinctness test"}
   - id: REQ-PKI-013
@@ -112,12 +112,12 @@ requirements:
     rationale: "A verifier must be able to trust either root."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-62, section: "5280", depth: Full}
       - {id: NC-10, section: "PIV", depth: Full}
-    issues: [914]
     verification:
       - {kind: integration-test, ref: "either-root chain test"}
   - id: REQ-PKI-014
@@ -127,12 +127,12 @@ requirements:
     rationale: "Independent roots avoid copying keys and keep attestation."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-62, section: "5280", depth: Full}
       - {id: NC-10, section: "PIV", depth: Full}
-    issues: [914, 968]
     verification:
       - {kind: integration-test, ref: "trust-bundle content test"}
   - id: REQ-PKI-005
@@ -141,11 +141,11 @@ requirements:
     rationale: "Operator presence is the control."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: ["bare-metal"]
     standards:
       - {id: NC-10, section: "PIV", depth: Full}
-    issues: [914]
     manual_reason: "The environment of a root ceremony is a human procedure that only a checklist can evidence."
     verification:
       - {kind: manual, ref: "ceremony checklist"}
@@ -156,11 +156,11 @@ requirements:
     rationale: "Operator presence is the control."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: ["bare-metal"]
     standards:
       - {id: NC-10, section: "PIV", depth: Full}
-    issues: [914]
     verification:
       - {kind: manual, ref: "ceremony checklist"}
       - {kind: integration-test, ref: "token policy attestation test"}
@@ -170,12 +170,12 @@ requirements:
     rationale: "A burnt attempt must never be reusable."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: all
     standards:
       - {id: ST-62, section: "4", depth: Partial}
       - {id: ST-78, section: "RFC 8785", depth: Partial}
-    issues: [914]
     verification:
       - {kind: integration-test, ref: "dry-run ceremony with a throwaway root"}
   - id: REQ-PKI-016
@@ -185,12 +185,12 @@ requirements:
     rationale: "A mistyped confirmation must not burn an attempt."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: all
     standards:
       - {id: ST-62, section: "4", depth: Partial}
       - {id: ST-78, section: "RFC 8785", depth: Partial}
-    issues: [914]
     verification:
       - {kind: integration-test, ref: "wrong-hash dry-run test"}
   - id: REQ-PKI-017
@@ -200,12 +200,12 @@ requirements:
     rationale: "A burnt attempt must never be reusable."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: all
     standards:
       - {id: ST-62, section: "4", depth: Partial}
       - {id: ST-78, section: "RFC 8785", depth: Partial}
-    issues: [914]
     verification:
       - {kind: integration-test, ref: "record chain and secret scan test"}
   - id: REQ-PKI-007
@@ -226,7 +226,7 @@ requirements:
     area: PKI
     split_from: REQ-PKI-007
     statement: "sluis MAY support ACME for host certificates after the first release."
-    rationale: "Hosts can then use a stock ACME client, and ACME was placed after the first release (ADR 0013)."
+    rationale: "Hosts can then use a stock ACME client, and ACME was placed after the first release (ADR 0008)."
     level: MAY
     source: design-decision
     status: planned
@@ -270,12 +270,12 @@ requirements:
     rationale: "Two certificates for one key let either root card be lost without breaking a chain."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-62, section: "5280", depth: Full}
       - {id: NC-10, section: "PIV", depth: Partial}
-    issues: [914, 913]
     verification:
       - {kind: integration-test, ref: "two-chain verification test"}
       - {kind: manual, ref: "ceremony record"}
@@ -285,11 +285,11 @@ requirements:
     rationale: "This is the property that dual certification buys."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-62, section: "5280", depth: Full}
-    issues: [914]
     verification:
       - {kind: integration-test, ref: "single-root chain verification test"}
   - id: REQ-PKI-021
@@ -298,11 +298,11 @@ requirements:
     rationale: "Removal from the bundles is the only way to revoke a root."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-62, section: "5280", depth: Partial}
-    issues: [968, 914]
     verification:
       - {kind: integration-test, ref: "trust-bundle removal test"}
       - {kind: manual, ref: "runbook review"}
@@ -312,11 +312,11 @@ requirements:
     rationale: "A replacement root must have its own attestation."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: NC-10, section: "PIV", depth: Full}
-    issues: [914]
     manual_reason: "A runbook step is exercised in a drill by people."
     verification:
       - {kind: manual, ref: "runbook drill"}
@@ -326,11 +326,11 @@ requirements:
     rationale: "Dual certification should leave none, but the runbook must still check."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-62, section: "5280", depth: Partial}
-    issues: [914, 913]
     verification:
       - {kind: manual, ref: "runbook drill"}
       - {kind: integration-test, ref: "orphaned-intermediate scan"}
@@ -340,11 +340,11 @@ requirements:
     rationale: "Cross-signing is optional because both roots are already authoritative."
     level: MAY
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-62, section: "5280", depth: Partial}
-    issues: [914]
     verification:
       - {kind: integration-test, ref: "cross-signature chain test"}
   - id: REQ-PKI-025
@@ -353,11 +353,11 @@ requirements:
     rationale: "The second token holds its own independent root, not a copy."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: all
     standards:
       - {id: NC-10, section: "PIV", depth: Partial}
-    issues: [914]
     manual_reason: "A statement in the documentation is checked by reading it."
     verification:
       - {kind: manual, ref: "documentation review"}
@@ -367,12 +367,12 @@ requirements:
     rationale: "The ceremony automates every step that is not a human act and leaves PIN, touch and custody manual."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: NC-10, section: "PIV", depth: Full}
     manual_reason: "The feature is planned; a dry run with a throwaway root is the first available evidence."
-    issues: [914]
     verification:
       - {kind: manual, ref: "ceremony dry-run with a throwaway root"}
   - id: REQ-PKI-027

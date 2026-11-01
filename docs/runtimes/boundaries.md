@@ -6,7 +6,7 @@ sidebar:
   order: 5
 ---
 
-A **boundary** is the unit of isolation in sluis: what one compromised or misconfigured part cannot cross. This page says which kinds of boundary there are, how strongly each can be separated, and how several installations form one sluis for the people who use it. The record is [ADR 0009](/decisions/0009-one-installation-per-boundary/), rewritten on 2026-10-30; the issuers and tokens are [ADR 0059](/decisions/0059-each-boundary-has-its-own-issuer-and-tokens-carry-one-audience/).
+A **boundary** is the unit of isolation in sluis: what one compromised or misconfigured part cannot cross. This page says which kinds of boundary there are, how strongly each can be separated, and how several installations form one sluis for the people who use it. The record is [ADR 0005](/decisions/0005-boundaries-and-the-isolation-ladder/), rewritten on 2026-10-30; the issuers and tokens are [ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/).
 
 ## Kinds of boundary
 
@@ -25,7 +25,7 @@ A boundary is placed on a **ladder**. Each level adds to the one before it.
 | Level | Adds |
 |---|---|
 | **L0 tenant** | Separation by sluis's code only |
-| **L1 keys** | Its own key-encryption key (which also seals grants), CA and signing keys |
+| **L1 keys** | Its own sealing key (which also seals grants), CA and signing keys |
 | **L2 process** | Its own actor instances, uid or role, and state prefix |
 | **L3 store** | Its own state store (an rqlite cluster, a DynamoDB table), bucket and queue |
 | **L4 runtime** | Its own Kubernetes cluster, cloud account or hosts, and a separate install file joined by declared trust |
@@ -71,7 +71,7 @@ A call from one boundary to another is **mutual TLS with SPIFFE IDs** ([Machine 
 The runbook exists from the first day:
 
 1. disconnect the company's boundary;
-2. check that no legal hold covers its audit records, because holds are kept outside sluis and nothing in sluis stops the shred ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)); then export its audit tenant key and crypto-shred it;
+2. check that no legal hold covers its audit records, because holds are kept outside sluis and nothing in sluis stops the shred ([ADR 0016](/decisions/0016-the-audit-log/)); then export its audit tenant key and crypto-shred it;
 3. re-issue its workloads under the new CA;
 4. remove its person links.
 
@@ -84,11 +84,11 @@ Each environment has its own issuer, and so does a product boundary when it exis
 | The group issuer, at the front | `https://sluis.example.com` |
 | An environment's issuer | `https://sluis.<env>.example.com`, one origin per host |
 
-- **Discovery and keys are static.** Each issuer publishes its discovery document and its JWKS (the current and the next key) in a bucket of its boundary, so verification survives a compute outage.
+- **Discovery and keys are static.** Each issuer publishes its discovery document and its JWKS (the active keys, and the next key only while a rotation is in progress) in a bucket of its boundary, so verification survives a compute outage.
 - **A boundary has no sign-in of its own.** It runs its own slim `entry@<boundary>`, and the group issuer is its upstream. Single sign-on is transparent; a passkey tap is asked for only where that boundary's policy wants fresh MFA.
 - **The CLI signs in once.** `sluis login` signs in at the front, and the CLI then exchanges tokens silently at each boundary's own token endpoint. The front never sees a boundary's tokens.
 - **One passkey for every issuer.** `sluis.<env>.example.com` is not under `sluis.example.com`, so the passkey's relying-party id is the registrable parent (`example.com`), and every verifier checks a strict allow-list of origins: the sluis hosts only.
-- **The audit front has a host of its own.** An environment's audit log is read through its own front at `sluis-audit.<env>.example.com`, a sibling of `sluis.<env>.example.com`, so it inherits no cookie scope from the boundary host; it is on every verifier's allow-list. The front accepts only that environment's issuer, and its `session` is an OpenID Connect client of it ([ADR 0062](/decisions/0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own/)).
+- **The audit front has a host of its own.** An environment's audit log is read through its own front at `sluis-audit.<env>.example.com`, a sibling of `sluis.<env>.example.com`, so it inherits no cookie scope from the boundary host; it is on every verifier's allow-list. The front accepts only that environment's issuer, and its `session` is an OpenID Connect client of it ([ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/)).
 
 ### Token claims
 
@@ -106,7 +106,7 @@ Client ids are unique per issuer, readable, and the same in every environment (`
 
 **A copied token is useless.** Tokens are sender-constrained (DPoP or mutual TLS), and authorization codes are bound by PKCE. JWT-SVIDs come from the same issuer as people's tokens, with a SPIFFE ID as `sub`.
 
-**Step-up is per client and per environment**, in `policy@<boundary>`: a request that needs more answers `insufficient_user_authentication` with `acr_values` ([RFC 9470](https://datatracker.ietf.org/doc/html/rfc9470)), and the boundary checks the passkey itself ([ADR 0048](/decisions/0048-passkeys-step-up-and-device-login/)).
+**Step-up is per client and per environment**, in `policy@<boundary>`: a request that needs more answers `insufficient_user_authentication` with `acr_values` ([RFC 9470](https://datatracker.ietf.org/doc/html/rfc9470)), and the boundary checks the passkey itself ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/)).
 
 ## The reference federation
 
@@ -121,7 +121,7 @@ The choices below are the reference for a federation of several companies and en
 | Process level | Every environment on AWS runs at L2 or above |
 | State | One engine with a prefix per boundary, replaced by a store of its own at L3 and above |
 | Policy | One source, compiled per environment, with a sealing key per environment, which seals the grants. **Company ceilings** are Cedar `forbid` guards |
-| Audit | A log per environment, with its own front. A company reads it as a tenant with its own key, which the log encrypts its records to ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)) |
+| Audit | A log per environment, with its own front. A company reads it as a tenant with its own key, which the log encrypts its records to ([ADR 0016](/decisions/0016-the-audit-log/)) |
 | Console | Delegation per company, plus an environment scope for machine-plane records |
 | Integrations | One process per vendor tenant |
 | Trust bundles | One per environment. Issuance is bound to the requester |

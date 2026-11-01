@@ -43,7 +43,7 @@ A declared App lists its scopes; adding one is a deliberate change, and the cons
 
 - **Which groups map to which channels**, and the channel's mode: `extend` (only adds) or `strict` (also removes).
 - **Which workspace is enabled to act.** Everything is a dry run until the workspace is enabled.
-- **Which channels the bot never touches.** A channel defined twice, in git and on the console, is *held*, not taken over, until a declared fragment adopts the console record by its revision ([ADR 0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
+- **Which channels the bot never touches.** A channel defined twice, in git and on the console, is *held*, not taken over, until a declared fragment adopts the console record by its revision ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/)).
 - **Who may connect or disconnect** a workspace: the operators of the directory that owns it.
 - **Breakers.** A pass that would remove too many people stops and waits for a confirmation.
 

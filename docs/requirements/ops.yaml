@@ -82,7 +82,7 @@ requirements:
     runtimes: ["bare-metal"]
     standards:
       - {id: ST-81, section: "8446", depth: Full}
-    issues: [887]
+    issues: [952]
     verification:
       - {kind: integration-test, ref: "join test"}
   - id: REQ-OPS-011
@@ -96,7 +96,7 @@ requirements:
     runtimes: ["bare-metal"]
     standards:
       - {id: ST-81, section: "8446", depth: Full}
-    issues: [887]
+    issues: [952]
     verification:
       - {kind: integration-test, ref: "node replacement test"}
   - id: REQ-OPS-012
@@ -110,7 +110,7 @@ requirements:
     runtimes: ["bare-metal"]
     standards:
       - {id: ST-81, section: "8446", depth: Full}
-    issues: [887]
+    issues: [952]
     verification:
       - {kind: integration-test, ref: "scale-in test"}
   - id: REQ-OPS-005
@@ -143,7 +143,7 @@ requirements:
     area: OPS
     split_from: REQ-OPS-006
     statement: "When a dependency needed for a decision is unavailable, sluis MUST NOT take a weaker path."
-    rationale: "Fail closed with bounded impact."
+    rationale: "Fail closed with bounded impact; cached group membership inside its bounded staleness window is not a weaker path, and past the window the request is refused (ADR 0006)."
     level: MUST
     source: stakeholder-ciam
     status: planned

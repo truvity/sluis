@@ -89,7 +89,7 @@ requirements:
     area: DEPLOY
     split_from: REQ-DEPLOY-003
     statement: "On bare-metal the public API MUST listen on a Unix socket only, with no TCP address bound by entry."
-    rationale: "Only the edge connector reaches entry, and entry runs with no network (ADR 0008)."
+    rationale: "Only the edge connector reaches entry, and entry runs with no network (ADR 0004)."
     level: MUST
     source: design-decision
     status: planned
@@ -110,7 +110,7 @@ requirements:
     standards:
       - {id: ST-81, section: "8446", depth: Full}
     decisions: ["OD-4"]
-    issues: [847, 887]
+    issues: [847, 952]
     verification:
       - {kind: integration-test, ref: "network scan"}
       - {kind: integration-test, ref: "mTLS test"}

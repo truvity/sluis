@@ -10,7 +10,7 @@ sluis keeps records: sessions, directory facts, operator-set configuration, quot
 
 ## Origins and sensitivity
 
-Every stored **record kind** declares one **origin**, and every field one **sensitivity**, in the configuration schema ([ADR 0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)). Together they decide where a value lives, who may write it, whether it is in a backup, what a restore does with it, whether it may leave sluis, and what an audit record, a log line or a span may say about it. The backup list, the deny matrix, the telemetry allowlist and the audit redaction are generated from them.
+Every stored **record kind** declares one **origin**, and every field one **sensitivity**, in the configuration schema ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/)). Together they decide where a value lives, who may write it, whether it is in a backup, what a restore does with it, whether it may leave sluis, and what an audit record, a log line or a span may say about it. The backup list, the deny matrix, the telemetry allowlist and the audit redaction are generated from them.
 
 To classify a record kind, ask in order; the first "yes" is its origin.
 
@@ -20,7 +20,7 @@ To classify a record kind, ask in order; the first "yes" is its origin.
 | **operator-set** | Did a person choose it at run time, on the console, the CLI or the API, as a lasting intent? | chat channels managed from the console, runtime switches, a console-connected directory tenant, a secret put at run time | The actor that owns the kind |
 | **learned** | Can sluis rebuild it without a person from an external system, by pull or by push? | directory users and groups, memberships, discovered channels, a client metadata cache | The integration that observed it |
 | **derived** | Can sluis rebuild it from its own records or log? | the search index, quota meters and hourly aggregates | The deriving actor |
-| **issued** | Otherwise: sluis created it, or a vendor or a person handed it over once. **Durable** or **ephemeral** | durable: client secret versions, revocations, grants, the issuance ledger, vendor-issued secrets, pins, account links, approvals, quota balances; ephemeral: sessions, refresh tokens, codes, leases | The issuing actor |
+| **issued** | Otherwise: sluis created it, or a vendor or a person handed it over once. **Durable** or **ephemeral** | durable: client secret versions, revocations, the issuance log, vendor-issued secrets, pins, account links, approvals, quota balances; ephemeral: sessions, refresh tokens, codes, leases | The issuing actor |
 
 An act, such as an approval or a consent, is an issued record of the act, not configuration. The audit log itself and the keys in the `keys` port are outside the model.
 
@@ -67,7 +67,7 @@ v2 keeps records of different **trust classes** and origins apart, in separate n
 **Every state value is encrypted in the port library**, before it reaches any driver (agreed, EC-1). A store, its replicas and its backups hold ciphertext.
 
 - **AES-256-GCM**, which is FIPS-compatible.
-- **A data key per (boundary, record kind).** It is wrapped by the boundary's key-encryption key through the `keys` port. Unwrapping is allowed for the kind's writer and its declared readers only: by the `key-holder` access list, or by the KMS key policy with an encryption-context condition.
+- **A data key per (boundary, record kind).** It is wrapped by the boundary's sealing key through the `keys` port. Unwrapping is allowed for the kind's writer and its declared readers only: by the `key-holder` access list, or by the KMS key policy with an encryption-context condition.
 - **The additional authenticated data is (boundary, kind, key, version)**, so a value moved to another record, kind, boundary or version fails to decrypt.
 - **Record keys never contain personal data.** Only the values are encrypted, so the keys must not carry an email address or a name.
 
@@ -77,7 +77,7 @@ Actors reach their data through five ports. Each has a contract that does not ch
 
 | Port | What it holds | The contract |
 |---|---|---|
-| `state` | Records, with revisions | Get, put with a precondition, compare-and-set, an atomic batch and expiry ([ADR 0017](/decisions/0017-state-is-one-port-with-compare-and-set-and-clusters-replicate-with-rqlite/)). Delete, listing by prefix, a conditional adjust and a feed of changes are proposed further operations (ADR 0057) |
+| `state` | Records, with revisions | Get, put with a precondition, compare-and-set, an atomic batch and expiry ([ADR 0011](/decisions/0011-state-is-one-port-with-compare-and-set/)). Delete, listing by prefix, a conditional adjust and a feed of changes are proposed further operations ([#1009](https://github.com/truvity/sluis/issues/1009)) |
 | `index` | A search index derived from batches | Apply a batch, read and set a cursor, query, rebuild from the batches |
 | `blob` | Immutable objects, such as audit batches | Put once (an atomic create-if-absent that every driver must give, [Drivers](/concepts/drivers/#create-if-absent)), get and list by key, with a lock mode of none, removable or compliance |
 | `transport` | Messages that must survive a restart, such as audit records, or a stream of them to the writer | Put, receive, acknowledge, return with a delay; or a direct stream |
@@ -87,12 +87,12 @@ The contract has no unconditional put. A caller changes a record only against th
 
 ### The atomic batch
 
-A **write batch** applies several writes together or none of them. The audit `writer` uses it to register the sealed batches of its audit log and its usage log in the sequence, record the ids it deduplicated and move its cursor, so a crash cannot leave one without the others, and the two logs never disagree ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)). The next number of the sequence is allocated by a compare-and-swap inside the same batch.
+A **write batch** applies several writes together or none of them. The audit `writer` uses it to register the sealed batches of its audit log and its usage log in the sequence, record the ids it deduplicated and move its cursor, so a crash cannot leave one without the others, and the two logs never disagree ([ADR 0016](/decisions/0016-the-audit-log/)). The next number of the sequence is allocated by a compare-and-swap inside the same batch.
 
 ### Conditional adjust
 
 :::note[Proposed]
-The conditional adjust is a proposed further operation of the state port (ADR 0057). Until it is decided, quota uses compare-and-set.
+The conditional adjust is a proposed further operation of the state port ([#1009](https://github.com/truvity/sluis/issues/1009)). Until it is decided, quota uses compare-and-set.
 :::
 
 A **conditional adjust** changes a number by a delta, and refuses if the result would cross a floor. It is one operation on the store, not a read followed by a write. If it is decided, quota would use it for strict admission: a counter that many requests hit at once would make a compare-and-set loop contend, and a read-then-write would let two requests both pass.
@@ -107,14 +107,14 @@ The final form is agreed:
 - **Where the target store can fence, the fence is in that store.** A Postgres write checks the token in the same transaction. Blob batches are created with `If-None-Match: *` (create-if-absent), so an audit log cannot fork; with one log per node, the writers on boards need no lease at all.
 - **External side effects** (the GitHub, chat and directory reconcilers) rely on the lease plus reconcilers that are idempotent.
 - **A session advisory lock is never used alone**, because it gives no fencing token.
-- A Kubernetes Lease driver is in the backlog. Whether a Postgres (CNPG) state driver is added is a question for the Kubernetes records.
+- A Kubernetes Lease driver is in the backlog. There is no PostgreSQL state driver in 2.0: Kubernetes keeps state on DynamoDB ([ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/#kubernetes)).
 
 ## Where the data lives
 
 The drivers behind the ports differ by installation (see [Ports and drivers by installation](/concepts/drivers/#ports-and-drivers-by-installation)). Two choices matter for data:
 
 - **State** is the embedded single-node store on one node, **rqlite on Raft** across the three boards, with **one cluster per (boundary, owning actor)**, and **DynamoDB** on serverless and on Kubernetes, with a table per boundary. The Raft peer traffic is each cluster's own port over mutual TLS.
-- **Index** is `sqlite` on a single server, and `rqlite` on a cluster of boards, so the reader can run on any node. It is `postgres` on Kubernetes (the `cnpg` mode, or `external` with any connection string), and `postgres` on Aurora on the lambda installation, reached through RDS Proxy ([ADR 0022](/decisions/0022-search-is-an-index-fed-from-the-log-and-the-index-is-one-driver-with-provisioning-modes/)). The search index is derived from the audit batches and can always be rebuilt from them.
+- **Index** is `sqlite` on a single server, and `rqlite` on a cluster of boards, so the reader can run on any node. It is `postgres` on Kubernetes (the `cnpg` mode, or `external` with any connection string), and `postgres` on Aurora on the lambda installation, reached through RDS Proxy ([ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/)). The search index is derived from the audit batches and can always be rebuilt from them.
 
 ## Secrets
 

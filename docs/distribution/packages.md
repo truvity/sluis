@@ -18,7 +18,7 @@ What you download depends on the [runtime](/runtimes/) you install on. There are
 | [serverless](/runtimes/serverless/) | One function per actor and one zip per executable, with at most three layers of sluis's own |
 | [kubernetes](/runtimes/kubernetes/) | One OCI image per process and one Helm chart with presets |
 
-The local installation runs the same OCI images as Kubernetes, under Docker Compose. The images carry the packages' binaries, byte for byte, and a hash test checks it ([ADR 0038](/decisions/0038-the-local-installation-is-docker-compose-with-one-container-per-actor/)). The packaging is agreed ([ADR 0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)).
+The local installation runs the same OCI images as Kubernetes, under Docker Compose. The images carry the packages' binaries, byte for byte, and a hash test checks it ([ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/)). The packaging is agreed ([ADR 0019](/decisions/0019-release-train-packaging-and-distribution/)).
 
 ## Packages by function
 
@@ -46,15 +46,15 @@ Examples of driver packages and what they bring:
 | `sluis-driver-rqlite` | Ships `rqlited` under `vendor/` and the `sluis-rqlite@.service` template |
 | `sluis-driver-aws` | The one Rust `aws` driver executable |
 
-No package depends on a driver package except the meta-packages. The lambda and kubernetes installations have no `.deb` or `.rpm`, so they have no meta-package, and the local installation runs the images under Docker, so there is no `sluis-install-local` until a native local mode exists (decided 2026-10-31, [ADR 0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)).
+No package depends on a driver package except the meta-packages. The lambda and kubernetes installations have no `.deb` or `.rpm`, so they have no meta-package, and the local installation runs the images under Docker, so there is no `sluis-install-local` until a native local mode exists (decided 2026-10-31, [ADR 0019](/decisions/0019-release-train-packaging-and-distribution/)).
 
 Root ceremonies are not part of sluis: they belong to [ritueel](https://ritueel.id), which publishes its own packages. The keyring package that apt and dnf use to verify sluis releases is built with ritueel's tools and published with the release ([Release signing](/distribution/release-signing/#the-openpgp-release-key)).
 
 The packages ship systemd **template units** only, `sluis-<actor>@.service` and `sluis-<actor>@.socket`, and a systemd generator that reads `/etc/sluis/install.yaml` and creates the instances ([Bare-metal](/runtimes/bare-metal/#what-runs-where)). sluis does not generate packages per installation.
 
-The **console's single-page application** is a separate artifact: a bundle of static files with the release's version, deployable on its own. Each runtime's static host serves it on the same origin as `entry`'s API: a directory that `entry` serves on bare-metal, the bucket behind the API gateway on serverless, a static container behind the ingress on Kubernetes ([ADR 0029](/decisions/0029-one-repository-one-version-one-release-train-and-packaging-follows-the-runtime/)).
+The **console's single-page application** is a separate artifact: a bundle of static files with the release's version, deployable on its own. Each runtime's static host serves it on the same origin as `entry`'s API: a directory that `entry` serves on bare-metal, the bucket behind the API gateway on serverless, a static container behind the ingress on Kubernetes ([ADR 0019](/decisions/0019-release-train-packaging-and-distribution/)).
 
-The **audit console** is a bundle of its own, built from the same source tree on the same release train, and served by the audit installation's static host on the audit front's origin ([ADR 0062](/decisions/0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own/)). Its package and image are named with the build ([#985](https://github.com/truvity/sluis/issues/985)).
+The **audit console** is a bundle of its own, built from the same source tree on the same release train, and served by the audit installation's static host on the audit front's origin ([ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/)). Its package and image are named with the build ([#985](https://github.com/truvity/sluis/issues/985)).
 
 ## The R2 layout
 

@@ -11,7 +11,7 @@ An actor or driver that listens on a TCP port can be reached by anything that ca
 ## The rule
 
 - **`entry`'s public API is the only listener that faces the edge.** On bare-metal it is a Unix socket, and `cloudflared` forwards to it as a Unix-socket origin, so `entry` runs with `PrivateNetwork=yes` and no network at all. On Kubernetes it is a Unix socket too, and the key-less edge relay in the pod forwards to it. Where the edge cannot reach a Unix socket, the listener is TCP bound to `127.0.0.1`: the Lambda Web Adapter on serverless.
-- **An audit front has an `entry` of its own.** An installation that combines the audit pieces with sluis runs two fronts, each an `entry` with its own edge route and host, sluis's and audit's (`sluis-audit.<env>.example.com`); each is its front's only edge listener ([ADR 0062](/decisions/0062-audit-front-is-a-slim-entry-the-reader-as-its-api-and-a-console-of-its-own/)).
+- **An audit front has an `entry` of its own.** An installation that combines the audit pieces with sluis runs two fronts, each an `entry` with its own edge route and host, sluis's and audit's (`sluis-audit.<env>.example.com`); each is its front's only edge listener ([ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/)).
 - **Every other actor and every driver listens on Unix sockets only**, under `/run/sluis/<actor>/`, one socket per instance, `/run/sluis/<actor>/<boundary>.sock`. Never a key-holding actor, never a driver, has a TCP listener.
 - **The Raft ports of the rqlite clusters, over mTLS, are the only TCP ports between nodes.** No actor is reachable from another node.
 - **Every Unix socket is mode 0660, with a group generated from the manifest.** The group is the set of actors allowed to call the socket. The callee reads the caller's uid, gid and pid with `SO_PEERCRED`, maps the uid to an actor, and checks the call graph, default deny. `key-holder` goes further: each caller has a socket of its own, in a directory only that caller can open.
@@ -68,7 +68,7 @@ The API is the same on every runtime; the listener follows the edge connector. I
 
 | Runtime and installation | Listener | Who connects |
 | ------------------------ | -------- | ------------ |
-| bare-metal: local | A Unix socket on a shared volume; `entry`'s container has no network | An edge-connector container, or a development proxy that publishes a port to the workstation; which one is ADR 0055, not yet decided |
+| bare-metal: local | A Unix socket on a shared volume; `entry`'s container has no network | A Compose service (the edge-connector image or a forwarder) that mounts the socket and publishes a port ([ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/#the-local-installation)) |
 | bare-metal: boards | A Unix socket | `cloudflared` on the same board, a tunnel to the installation's public hostname |
 | bare-metal on a virtual machine (a possible installation, not a tested one) | A Unix socket | `cloudflared` on the same instance |
 | serverless: lambda | `127.0.0.1:<port>` inside the function's sandbox | The Lambda Web Adapter, pinned at v1.1.0 and vendored into sluis's own layer. The edge in front of the function is API Gateway |
@@ -88,7 +88,7 @@ On bare-metal installations with N nodes (boards is the tested one) each rqlite 
 
 ## Local development and tests
 
-In the local installation the same sockets live on shared volumes, `entry`'s public socket among them, and `entry`'s container has no network, as on any bare-metal installation. How a test harness or a developer's browser reaches that socket, through an edge-connector container or a development proxy that publishes a port to the workstation, is not decided yet (ADR 0055, see [ADR 0038](/decisions/0038-the-local-installation-is-docker-compose-with-one-container-per-actor/)). A published port is a development convenience; production installations never publish one.
+In the local installation the same sockets live on shared volumes, `entry`'s public socket among them, and `entry`'s container has no network, as on any bare-metal installation. A test harness or a developer's browser reaches that socket through a Compose service, the edge-connector image or a forwarder, that mounts the socket and publishes a port ([ADR 0018](/decisions/0018-runtimes-installations-and-delivery-order/#the-local-installation)). A published port is a development convenience; production installations never publish one.
 
 ## Related
 
