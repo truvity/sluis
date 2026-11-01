@@ -79,7 +79,7 @@ A gateway cannot route to a Unix socket in another pod, and the kubelet's HTTP a
 The relay is the one exception on Kubernetes to the rule that only `entry`'s API listens on TCP ([ADR 0004](/decisions/0004-drivers-listeners-and-boundary-enforcement/#listeners)), and it holds no key. `entry` stays socket-only and is probed with an `exec` probe.
 
 :::note[Proposed]
-The relay serves a health endpoint for the gateway, passes the client address in `X-Forwarded-For` and strips that header unless the request comes from a configured trusted proxy, and can terminate TLS when the hop from the gateway must be encrypted. The record of the edge, pod identity and the fusion unit is planned: [#1019](https://github.com/truvity/sluis/issues/1019).
+The relay serves a health endpoint for the gateway, passes the client address in `X-Forwarded-For` and strips that header unless the request comes from a configured trusted proxy, and can terminate TLS when the hop from the gateway must be encrypted. The container is the fusion unit, and the relay's details are built with the chart: [#876](https://github.com/truvity/sluis/issues/876).
 :::
 
 The console's single-page application runs as its own Deployment and image, behind the same gateway route as `entry`, so the page and the console API share one origin.
@@ -92,7 +92,7 @@ The console's single-page application runs as its own Deployment and image, behi
 - **The baseline:** native sidecars, the `restricted` Pod Security level, projected ServiceAccount tokens and a CNI that enforces NetworkPolicy. Cilium is optional, for egress by host name. OpenShift and sandboxed runtimes such as gVisor and Kata are not in the first cut. A cluster must meet the baseline before the chart installs.
 
 :::note[Proposed]
-From the permission manifest the chart renders one ServiceAccount per pod kind with the automatic token mount off; a NetworkPolicy per pod kind that admits only the gateway to the edge port and allows egress to DNS and the allowed AWS endpoints, and per integration pod one that admits only the sluis pod; optionally a CiliumNetworkPolicy; and a PodDisruptionBudget, zone spread over two or three replicas, and rolling updates that never remove a replica before its replacement is ready. The record of the baseline and the chart layout is planned: [#1020](https://github.com/truvity/sluis/issues/1020).
+From the permission manifest the chart renders one ServiceAccount per pod kind with the automatic token mount off; a NetworkPolicy per pod kind that admits only the gateway to the edge port and allows egress to DNS and the allowed AWS endpoints, and per integration pod one that admits only the sluis pod; optionally a CiliumNetworkPolicy; and a PodDisruptionBudget, zone spread over two or three replicas, and rolling updates that never remove a replica before its replacement is ready. The chart layout is built with the chart: [#876](https://github.com/truvity/sluis/issues/876).
 :::
 
 ## Testing

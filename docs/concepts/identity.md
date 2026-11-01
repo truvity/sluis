@@ -151,7 +151,7 @@ A joining host is given the **SPKI hashes of the roots' public keys** and refuse
 
 ## The trust bundle
 
-A boundary's **trust bundle** is a static document in SPIFFE format: the certificates a host of that boundary trusts, including the enrolment certificate. It is not signed by an online key. Each certificate in it verifies itself by chaining through the boundary's intermediate to a root in the **root list**, and the root list is signed by a root at ritueel and carries a version that only increases ([ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/#root-pins-and-the-root-list)). There is one bundle per environment.
+A boundary's **trust bundle** is a static document in SPIFFE format: the certificates a host of that boundary trusts, including the enrolment certificate. It is not signed by an online key. Each certificate in it verifies itself by chaining through the boundary's intermediate to a root in the **root list**, and the root list is signed by a root at ritueel and carries a trust sequence that only increases ([ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/#root-pins-and-the-root-list)). There is one bundle per environment.
 
 ### Trust sync
 
@@ -163,6 +163,6 @@ The bundle reaches a host through the generic `sluis` package, not through a pac
   sluis trust enroll --url <url> --root-pin <spki-hash> --root-pin <spki-hash>
   ```
 
-- Each run fetches the root list and the bundle, checks the root list's signature against the pinned roots and each certificate's chain against the list, and refuses a root list with a lower version or a bundle with a lower `spiffe_sequence` than the last one. A host keeps its last good bundle when sluis is down.
+- Each run fetches the root list and the bundle, checks the root list's signature against the pinned roots and each certificate's chain against the list, and refuses a root list with a lower trust sequence or a bundle with a lower `spiffe_sequence` than the last one. A host keeps its last good bundle when sluis is down.
 - It writes the trust anchors and runs `update-ca-trust` or `update-ca-certificates`. The unit is hardened: it may write only the anchor directory and the extracted store.
 - On Kubernetes the same bundle feeds trust-manager as a source. sluis writes no Kubernetes object.

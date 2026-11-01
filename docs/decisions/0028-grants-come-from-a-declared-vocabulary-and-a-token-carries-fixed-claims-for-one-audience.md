@@ -18,7 +18,7 @@ Authority is declared only ([0010](/decisions/0010-configuration-and-data-pkl-sc
 ### Grant names and the vocabulary
 
 - **A grant name is `<scope>:<thing>:<role>`,** read as the role on the thing in the scope. Each segment is a non-empty string of ASCII letters, digits, `-` and `_`. A scope is an environment, a company or `all`; a thing is a system, project or application; a role is a rung of that thing's ladder.
-- **Every grant name is declared in a vocabulary,** a declared document loaded with the policy ([Install file](/reference/install-file/#policy)). It lists the scopes, the things with their roles, and for each role what it implies. Unlike v1, where a vocabulary is optional, a v2 installation always has one.
+- **Every grant name is declared in a vocabulary,** a declared document loaded with the policy ([Install file](/reference/install-file/#policy)), whose shape is on [Vocabulary](/reference/vocabulary/). It lists the scopes, the things with their roles, and for each role what it implies. Unlike v1, where a vocabulary is optional, a v2 installation always has one.
 - **A role ladder is explicit and does not inherit across scopes.** `admin: [operator]` means that holding `<scope>:<thing>:admin` holds `<scope>:<thing>:operator` too, transitively and on the same scope and thing. `all:x:admin` never implies `dev:x:admin`. A role may not cover more scopes than a role it implies; a role may be narrowed to some scopes.
 - **A scope can be `sensitive`.** A wildcard never reaches a sensitive scope: a sensitive scope is named in full or not granted.
 - **A wildcard `*` is allowed only in the scope or the thing position of a declared group binding.** It is refused in `requires`, in a token's claims, in lifetimes and in the role position, and a wildcard that expands to nothing fails the load.
@@ -93,4 +93,3 @@ A token carries a fixed set of claims. A claim outside the set is not issued, an
 
 - Per-audience group override, delimiter and signing algorithm; claim fragments; lifetimes by group: [#786](https://github.com/truvity/sluis/issues/786), [#787](https://github.com/truvity/sluis/issues/787), [#788](https://github.com/truvity/sluis/issues/788).
 - DPoP and mutual-TLS binding: [#912](https://github.com/truvity/sluis/issues/912).
-- The Cedar schema that policy files are written against: [#1008](https://github.com/truvity/sluis/issues/1008).

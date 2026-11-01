@@ -21,6 +21,10 @@ boundaries:
         redirects: [https://app.local.test/callback]
         secret: { credential: client-example-app }
         requires: [dev:example-app:user, acme:example-app:user]
+  example:                          # the company that owns the workforce upstream below
+    kind: company
+    level: L2
+    uid_block: 1
 
 drivers:
   keys: software
@@ -33,6 +37,7 @@ drivers:
 upstreams:
   workforce:
     kind: oidc
+    org: example                    # a company boundary above
     issuer: https://idp.local.test
     client_id: sluis-local
     subject_claim: sub              # the default; Microsoft Entra needs oid
@@ -50,4 +55,5 @@ policy:
   vocabulary: policy/vocabulary.yaml
 
 trust:
-  root_list: trust/root-list.json   # from ritueel's software root, at first start
+  root_list: trust/root-list.json   # from ritueel's software root, at first start; root-list.jws beside it
+  ca_bundle: trust/ca-bundle.pem

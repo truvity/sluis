@@ -16,7 +16,7 @@ Schema v1 has only the keys that code of the first working version reads ([princ
 - **In the local installation** the same file is mounted read-only at the same path into every container of the Compose project.
 - **`--config FILE`** points any `sluis` command at another file ([Commands](/reference/cli/#global-flags)).
 
-A path inside the file (a policy file, the root list) is relative to the directory of the install file.
+A path inside the file (a policy file, the root list, the CA bundle) is relative to the directory of the install file.
 
 ## Format
 
@@ -67,7 +67,7 @@ A path inside the file (a policy file, the root list) is relative to the directo
 | `upstreams` | yes | `session`, the upstream integration | The upstream identity providers people sign in through ([below](#upstreams)) |
 | `clients` | yes | `session`, `exchange`, `signer` | The clients of the group issuer ([below](#clients)) |
 | `policy` | yes | `policy` | The Cedar policy files ([below](#policy)) |
-| `trust` | yes | `sluis key install`, `sluis key request`, the actors that check a chain | The root list ([below](#trust)) |
+| `trust` | yes | `sluis key install`, `sluis key request`, `signer`, the actors that check a chain | The root list and the CA bundle ([below](#trust)) |
 
 ### `front`
 
@@ -83,7 +83,7 @@ A mapping from the boundary's name to its declaration. Every boundary below L4 i
 
 | Field | Required | Meaning |
 |---|---|---|
-| `kind` | yes | `environment` or `company` ([ADR 0005](/decisions/0005-boundaries-and-the-isolation-ladder/#boundary-kinds)). The product kind comes with the CIAM upstream milestone |
+| `kind` | yes | `environment` or `company` ([ADR 0005](/decisions/0005-boundaries-and-the-isolation-ladder/#boundary-kinds)). A `company` boundary is what an upstream's [`org`](#upstreams) names. The product kind comes with the CIAM upstream milestone |
 | `level` | yes | `L0` to `L3`; L4 is a separate install file ([The isolation ladder](/decisions/0005-boundaries-and-the-isolation-ladder/#the-isolation-ladder)) |
 | `host` | environment boundaries only | The host of the boundary's issuer, a sibling of the front host under `rp_id`. A company boundary has no issuer |
 | `uid_block` | yes | An integer from 0 to 54, unique in the file. In containers the uid of `<actor>@<boundary>` is the actor's pinned base uid plus 1000 times this number ([The uid table](/architecture/manifest/#the-uid-table)). Never reused after a boundary is removed |
@@ -117,11 +117,12 @@ Telemetry is not configured here: it is the standard `OTEL_*` environment variab
 
 ### `upstreams`
 
-A mapping from an upstream's name to its declaration. Each upstream is one integration process, `<vendor>[-<capability>]@<tenant>` ([ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/#names)).
+A mapping from an upstream's name to its declaration. Each upstream is one integration process, `<vendor>[-<capability>]@<tenant>` ([ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/#names)), owned by one company ([ADR 0005](/decisions/0005-boundaries-and-the-isolation-ladder/#what-each-boundary-owns)). An installation whose people all belong to one organisation declares that organisation as a company boundary too.
 
 | Field | Required | Meaning |
 |---|---|---|
 | `kind` | yes | The integration that serves it. The first working version has `oidc`, the generic OpenID Connect upstream, sign-in only, with subjects assigned at the first sign-in ([#1106](https://github.com/truvity/sluis/issues/1106), [ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#subjects)) |
+| `org` | yes | The company that owns the upstream: the name of a [`company` boundary](#boundaries) of this file. Every person who signs in through the upstream, and every account it names, has this `org`, which is the company claim of a token and the company scope of a policy. It is declared here and nowhere else: an upstream cannot send it, and a policy cannot set it ([ADR 0005](/decisions/0005-boundaries-and-the-isolation-ladder/#boundary-kinds), [ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#issuers), [Policy](/reference/policy/#entity-types)) |
 | `issuer` | yes | The upstream's issuer URL |
 | `subject_claim` | no | The ID-token claim whose value, with the issuer, identifies the person: default `sub`. Microsoft Entra needs `oid`, because its `sub` differs per application. A mutable claim (`email`, `preferred_username`, `upn`, `name`) is refused, and so is a change while the upstream has links ([ADR 0027](/decisions/0027-a-person-is-tied-to-an-upstream-account-by-issuer-and-subject-claim/#linking-an-upstream-account)) |
 | `client_id` | yes | sluis's client ID at the upstream |
@@ -144,13 +145,14 @@ A mapping from a client ID to its declaration, for the group issuer; `boundaries
 | Field | Required | Meaning |
 |---|---|---|
 | `files` | yes | The Cedar policy files, validated against the Cedar schema at load ([ADR 0009](/decisions/0009-policy-is-cedar-in-a-rust-actor/)). The schema is fixed by sluis and embedded in `policy`; an operator writes policy against it and adds no type, action or attribute. The entity types, the actions and a worked example are on [Policy](/reference/policy/) |
-| `vocabulary` | yes | The grant vocabulary: the scopes, the things with their roles and what each role implies. Every grant name in a policy file, a client's `requires` and a binding is checked against it ([ADR 0028](/decisions/0028-grants-come-from-a-declared-vocabulary-and-a-token-carries-fixed-claims-for-one-audience/#grant-names-and-the-vocabulary)) |
+| `vocabulary` | yes | The grant vocabulary file: the scopes, the things with their roles and what each role implies. Every grant name in a policy file, a client's `requires` and a binding is checked against it. Its shape is on [Vocabulary](/reference/vocabulary/) ([ADR 0028](/decisions/0028-grants-come-from-a-declared-vocabulary-and-a-token-carries-fixed-claims-for-one-audience/#grant-names-and-the-vocabulary)) |
 
 ### `trust`
 
 | Field | Required | Meaning |
 |---|---|---|
-| `root_list` | yes | The signed root list that ritueel produced, `root-list.json` with its `.jws` beside it. sluis takes its anchors from it, and `sluis key request` reads the active primaries from it ([ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/#root-pins-and-the-root-list)). At parity `sluis trust sync` keeps it current |
+| `root_list` | yes | The signed root list that ritueel produced: `root-list.json`, with its signature `root-list.jws` in the same directory ([the format](https://ritueel.id/reference/root-list/)). sluis takes its anchors from it, and `sluis key request` reads the active primaries from it ([ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/#root-pins-and-the-root-list)). At parity `sluis trust sync` keeps it current |
+| `ca_bundle` | yes | The CA bundle that ritueel produced with the list, `ca-bundle.pem`: the roots' certificates in the list's order, with the list's sequence in its first line. `signer` takes the root certificate for the `x5c` chain of the key set from it, and `sluis config check` refuses a bundle that does not match the list |
 
 ## Which keys a file enables
 
@@ -162,10 +164,11 @@ Beyond the schema:
 
 - every boundary host and the front host are siblings under `rp_id`, each host is one origin, and no two issuers share a host;
 - a boundary of kind `company` has no `host`, and every `environment` boundary has one;
+- every upstream's `org` names a boundary of kind `company`, and an `environment` boundary is not an `org`;
 - every `credential` reference names a source that exists (offline: the file is present; the value is never read by `check`);
-- every client's `requires` names grants that the vocabulary declares, no grant name outside the vocabulary appears in a policy file, and every policy file parses and validates against the Cedar schema ([Policy](/reference/policy/#what-sluis-config-check-checks));
+- the vocabulary file is valid ([Vocabulary](/reference/vocabulary/#what-sluis-config-check-checks)), every client's `requires` names grants that it declares, no grant name outside it appears in a policy file, and every policy file parses and validates against the Cedar schema ([Policy](/reference/policy/#what-sluis-config-check-checks));
 - every `uid_block` is unique, and every `subject_claim` is a claim that does not change for a person;
-- the drivers fit the runtime and the node count, every enabled key purpose has a key, and the root list verifies and is not older than the one sluis holds.
+- the drivers fit the runtime and the node count, every enabled key purpose has a key, and the root list verifies and is not older than the one sluis holds, and the CA bundle matches it: its first line names the list's sequence, and its certificates are the keys of the list's roots, in that order.
 
 ## The example file for local
 
@@ -196,6 +199,10 @@ boundaries:
         redirects: [https://app.local.test/callback]
         secret: { credential: client-example-app }
         requires: [dev:example-app:user, acme:example-app:user]
+  example:                          # the company that owns the workforce upstream below
+    kind: company
+    level: L2
+    uid_block: 1
 
 drivers:
   keys: software
@@ -208,6 +215,7 @@ drivers:
 upstreams:
   workforce:
     kind: oidc
+    org: example                    # a company boundary above
     issuer: https://idp.local.test
     client_id: sluis-local
     subject_claim: sub              # the default; Microsoft Entra needs oid
@@ -225,5 +233,6 @@ policy:
   vocabulary: policy/vocabulary.yaml
 
 trust:
-  root_list: trust/root-list.json   # from ritueel's software root, at first start
+  root_list: trust/root-list.json   # from ritueel's software root, at first start; root-list.jws beside it
+  ca_bundle: trust/ca-bundle.pem
 ```

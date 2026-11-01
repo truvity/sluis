@@ -311,6 +311,6 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    issues: [997]
+    issues: [805]
     verification:
       - {kind: integration-test, ref: "notify-then-pull test"}

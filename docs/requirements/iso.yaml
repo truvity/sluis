@@ -866,8 +866,8 @@ requirements:
       - {kind: test-vectors, ref: "T-23: a root list signed by a key outside the held list; refused and the anchors on disk are unchanged"}
   - id: REQ-ISO-065
     area: ISO
-    statement: "sluis trust sync MUST refuse a root list whose version is lower than the one it holds."
-    rationale: "Refusing a lower version stops a rollback to a list that still names a revoked root."
+    statement: "sluis trust sync MUST refuse a root list whose trust sequence is lower than the one it holds."
+    rationale: "Refusing a lower sequence stops a rollback to a list that still names a revoked root."
     level: MUST
     source: design-decision
     status: planned
@@ -876,7 +876,7 @@ requirements:
       - {id: ST-108, depth: Partial}
     issues: [968]
     verification:
-      - {kind: test-vectors, ref: "T-23: a validly signed root list with a lower version; refused and the anchors on disk are unchanged"}
+      - {kind: test-vectors, ref: "T-23: a validly signed root list with a lower sequence; refused and the anchors on disk are unchanged"}
   - id: REQ-ISO-066
     area: ISO
     statement: "A signing actor MUST refuse a grant that the sealing key of its own environment does not open."
@@ -974,3 +974,15 @@ requirements:
     issues: [863]
     verification:
       - {kind: integration-test, ref: "a repeated block and a block of 55 are refused"}
+  - id: REQ-ISO-074
+    area: ISO
+    statement: "sluis trust sync MUST refuse a root list that has the sequence of the list it holds but different content."
+    rationale: "One sequence names one set of roots, so two lists with the same sequence mean a signing mistake or an attack."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards: []
+    issues: [968]
+    verification:
+      - {kind: test-vectors, ref: "T-23: two validly signed root lists with one sequence and different content; the second is refused and the anchors on disk are unchanged"}

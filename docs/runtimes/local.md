@@ -66,7 +66,7 @@ The last row is why TLS matters here: WebAuthn is exposed only in secure context
 
 ## TLS
 
-The chain a browser sees is `root` (ritueel's software test root), `edge` (an intermediate, name-constrained to `local.test`) and a leaf for the four hosts.
+The chain a browser sees is `root` (ritueel's software test root), `edge` (an intermediate, name-constrained to `local.test` once ritueel checks DNS names; see the note before the limits) and a leaf for the four hosts.
 
 1. **The root** is the software root that `ritueel init --test-root` makes in the setup. It is marked `TEST ONLY` in its name and in every product, and ritueel refuses to mix it with a real root ([Commands](https://ritueel.id/reference/cli/#the-first-versions-commands)). Its key is a file in a volume of the project, with no passphrase.
 2. **`edge`** is the harness's own intermediate. The setup makes a P-384 key, a request and a proof for the hand-off with `openssl`, and ritueel certifies it as the entry `edge` of its `ritueel.yaml`, the way it certifies `sluis-dev`, the intermediate of `sluis key request`. A software key is accepted by the hand-off contract when the policy says it is the development setting ([the contract](https://ritueel.id/reference/hand-off-contract/#software)).
@@ -96,7 +96,7 @@ The chain a browser sees is `root` (ritueel's software test root), `edge` (an in
 `docker compose up` starts the project. The `setup` service runs these steps in order, and each step is skipped when its output already exists, so a second `up` changes nothing:
 
 1. **Make the root.** `ritueel init --store software --roots 1 --test-root --key-dir /ritueel/keys`, with the `ritueel.yaml` of the example directory, which declares two intermediates: `sluis-dev` and `edge`. This writes the root, the first trust products (`root-list.json` and `root-list.jws`, `ca-bundle.pem`) and the key file.
-2. **Publish the trust files.** The root list and the bundle are copied to the volume that the install file's `trust.root_list` and the containers' bundle read.
+2. **Publish the trust files.** The root list and the bundle are copied to the volume that the install file's `trust.root_list` and `trust.ca_bundle` name, and the bundle is also the trust bundle the containers read.
 3. **Ask for sluis's keys.** `sluis key request --out /requests` makes the keys of the install file that do not exist, in the `software` store, and writes `dev-x509-intermediate.csr.pem` and its proof ([Commands](/reference/cli/#the-key-commands)).
 4. **Have the intermediate certified.** `ritueel intermediate add sluis-dev --request dev-x509-intermediate --key-dir /ritueel/keys`, in the two runs of a script's ceremony: `--plan-only`, then the plan with `--confirm` and its digest ([ritueel commands](https://ritueel.id/reference/cli/#a-scripts-ceremony)). A test root asks no passphrase.
 5. **Install the answer.** `sluis key install /ritueel/dir/answers` checks the certificate against the root list and installs it. The token certificate is then issued on the node by the new intermediate, and `signer` writes the discovery document and the key set as blobs under `/var/lib/sluis/blob/signer@dev/issuer/` ([Storage](/reference/storage/#fs)).
@@ -116,8 +116,8 @@ Tests sign in through the upstream identity provider, never through accounts in 
 - **Optionally: Dex,** as an upstream that sends no `acr`, `amr` or `auth_time`, to prove that a missing value is treated as unknown ([Policy](/reference/policy/#context)).
 - **Nightly and before a release:** the two free cloud tenants, outside this project, on the private runner group ([#891](https://github.com/truvity/sluis/issues/891)).
 
-:::note[Proposed]
-**DNS names in ritueel's policy.** ritueel's `ritueel.yaml` limits the name constraints of an X.509 intermediate request to `permitted_uri_hosts`, URI hosts, while the `edge` intermediate and the DNS part of `sluis-dev`'s constraints ([ADR 0021](/decisions/0021-leaf-certificate-profiles-lifetimes-and-revocation/#the-intermediates-name-constraints)) are DNS subtrees. Until the policy lists DNS subtrees, the harness cannot have the DNS constraint checked by ritueel and the `edge` entry would be unconstrained. Tracked with the harness in [#877](https://github.com/truvity/sluis/issues/877).
+:::caution[Waiting on ritueel]
+**DNS names in ritueel's policy.** ritueel's `ritueel.yaml` limits the name constraints of an X.509 intermediate request to `permitted_uri_hosts`, URI hosts. The `edge` intermediate is constrained to a DNS subtree, `local.test`, and so is the DNS part of the constraints of `sluis-dev` ([ADR 0021](/decisions/0021-leaf-certificate-profiles-lifetimes-and-revocation/#the-intermediates-name-constraints)). Until ritueel's policy lists DNS subtrees and checks them, the constraint of the `edge` entry waits: ritueel cannot check it, so nothing it certifies for `edge` is constrained by its policy, and the constraint described on this page takes effect when ritueel has the change. The wait is on a change in ritueel, tracked with the harness in [#877](https://github.com/truvity/sluis/issues/877).
 :::
 
 ## Limits
