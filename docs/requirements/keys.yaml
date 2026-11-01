@@ -367,3 +367,15 @@ requirements:
     issues: [788]
     verification:
       - {kind: integration-test, ref: "config-check warning test"}
+  - id: REQ-KEYS-026
+    area: KEYS
+    statement: "A key held by a hardware or managed key driver MUST be generated inside the store that holds it."
+    rationale: "A key that existed outside its store cannot be attested and may have been copied."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [800]
+    verification:
+      - {kind: integration-test, ref: "on a test card an imported key is refused and a generated key attests; a managed key is created by the store"}

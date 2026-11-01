@@ -249,7 +249,8 @@ for (const r of reqs) {
     if (!(r.level === 'MAY' || r.statement.includes('MUST NOT'))) E(`L17 ${i}: an out-of-scope record must be a MUST NOT or a MAY`);
     if (ver.length === 0) E(`L17 ${i}: an out-of-scope record needs a verification`);
   }
-  if (r.status === 'withdrawn' && !r.superseded_by?.length) E(`L4 ${i}: a withdrawn record needs superseded_by`);
+  if (r.status === 'withdrawn' && !r.superseded_by?.length && !r.moved_to) E(`L4 ${i}: a withdrawn record needs superseded_by or moved_to`);
+  if (r.moved_to && r.status !== 'withdrawn') E(`L4 ${i}: moved_to is set on a ${r.status} record`);
   for (const s of r.superseded_by ?? []) if (!byId.has(s)) E(`L4 ${i}: superseded_by ${s} does not exist`);
   if (r.superseded_by && r.status !== 'withdrawn') E(`L4 ${i}: superseded_by is set on a ${r.status} record`);
 }

@@ -81,12 +81,12 @@ requirements:
     rationale: "The primary key must stay offline."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: all
     standards:
       - {id: ST-83, section: "9580", depth: Full}
       - {id: NC-10, section: "OpenPGP card", depth: Full}
-    issues: [888]
     verification:
       - {kind: manual, ref: "ceremony guide"}
       - {kind: integration-test, ref: "dry-run"}
@@ -97,12 +97,12 @@ requirements:
     rationale: "The primary keys stay on their cards while one shared subkey signs, so one signature verifies under either."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: all
     standards:
       - {id: ST-83, section: "9580", depth: Full}
       - {id: NC-10, section: "OpenPGP card", depth: Full}
-    issues: [888]
     verification:
       - {kind: integration-test, ref: "subkey expiry test"}
   - id: REQ-SUPPLY-005
@@ -111,13 +111,12 @@ requirements:
     rationale: "One channel is a single point of trust."
     level: SHOULD
     source: design-decision
-    status: open
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: all
     standards:
       - {id: ST-68, section: "7929", depth: Full}
       - {id: ST-83, section: "9580", depth: Full}
-    issues: [889]
-    gap: register-gap
     verification:
       - {kind: manual, ref: "channel consistency check"}
   - id: REQ-SUPPLY-006
@@ -140,12 +139,12 @@ requirements:
     rationale: "One primary per card keeps each card's attestation."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: all
     standards:
       - {id: ST-83, section: "9580", depth: Full}
       - {id: NC-10, section: "OpenPGP card", depth: Full}
-    issues: [888]
     verification:
       - {kind: manual, ref: "ceremony guide"}
       - {kind: integration-test, ref: "dry-run"}
@@ -155,11 +154,11 @@ requirements:
     rationale: "A copied primary key loses its attestation."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: all
     standards:
       - {id: NC-10, section: "OpenPGP card", depth: Full}
-    issues: [888]
     manual_reason: "Non-copying of a key is evidenced by the ceremony record and the token attestations."
     verification:
       - {kind: manual, ref: "ceremony record"}
@@ -169,11 +168,11 @@ requirements:
     rationale: "gpg and gpgv ignore a revocation made under only one primary, so a verifier that holds a single certificate would still accept the subkey."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: all
     standards:
       - {id: ST-83, section: "9580", depth: Full}
-    issues: [888]
     verification:
       - {kind: integration-test, ref: "revocation-under-both-primaries check"}
   - id: REQ-SUPPLY-013
@@ -182,11 +181,74 @@ requirements:
     rationale: "A verifier should need only one of the two certificates."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
+    moved_to: "https://github.com/truvity/ritueel/issues/24"
     runtimes: all
     standards:
       - {id: ST-83, section: "9580", depth: Full}
       - {id: ST-68, section: "7929", depth: Partial}
-    issues: [888, 889]
     verification:
       - {kind: integration-test, ref: "verify-with-either-key test"}
+  - id: REQ-SUPPLY-014
+    area: SUPPLY
+    statement: "The signing API MUST sign an artifact only for a caller that proves its identity with an OIDC token and that policy authorises for that key."
+    rationale: "CI holds no long-lived signing key; it shows a short-lived identity and policy decides."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [890]
+    verification:
+      - {kind: integration-test, ref: "a caller without a token, and a caller the policy does not name, are refused"}
+  - id: REQ-SUPPLY-015
+    area: SUPPLY
+    statement: "The signing API MUST write an audit record for every signature it makes, naming the caller and the key."
+    rationale: "A signing service is found out by its signatures, so each one must be on the record."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [890]
+    verification:
+      - {kind: integration-test, ref: "sign N times; the audit log holds N records with caller and key"}
+  - id: REQ-SUPPLY-016
+    area: SUPPLY
+    statement: "The signing API MUST return an ASCII-armoured OpenPGP detached signature for a file or a digest."
+    rationale: "The package tools read this form; a binary Release.gpg fails in apt."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-83, section: "9580", depth: Full}
+    issues: [890]
+    verification:
+      - {kind: integration-test, ref: "gpgv, sqv and apt accept the armoured signature; a tampered file is refused"}
+  - id: REQ-SUPPLY-017
+    area: SUPPLY
+    statement: "The signing API MUST sign the Release.gpg and InRelease files of an apt repository and the repomd.xml.asc file of an rpm repository."
+    rationale: "This is the second stage of OpenPGP artifact signing and covers the v1 repositories."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-83, section: "9580", depth: Full}
+    issues: [1074]
+    verification:
+      - {kind: integration-test, ref: "apt and dnf verify a test repository signed through the API in a clean container"}
+  - id: REQ-SUPPLY-018
+    area: SUPPLY
+    statement: "A release signature MUST verify against the published release keyring with gpgv, sqv, apt and rpm."
+    rationale: "Users verify with the tool they already have."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-83, section: "9580", depth: Full}
+    issues: [874]
+    verification:
+      - {kind: integration-test, ref: "the verifier matrix accepts a release signature and refuses a tampered artifact and an expired subkey"}

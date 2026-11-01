@@ -22,7 +22,7 @@ catalogue:
     WORKLOAD: {title: "Workload identity", file: workload.yaml}
     POLICY: {title: "Policy", file: policy.yaml}
     KEYS: {title: "Keys and signing", file: keys.yaml}
-    PKI: {title: "Internal PKI and ceremonies", file: pki.yaml}
+    PKI: {title: "Internal PKI: intermediates and certificates", file: pki.yaml}
     SSH: {title: "SSH certificates", file: ssh.yaml}
     DB: {title: "Database access", file: db.yaml}
     AUDIT: {title: "Audit log", file: audit.yaml}
