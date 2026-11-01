@@ -6,9 +6,9 @@ import Mark from './Mark.astro';
 import { secure } from './data';
 
 const systems = [
-  ['aws', 'AWS'],
+  [null, 'AWS'],
   ['github', 'GitHub'],
-  ['slack', 'Slack'],
+  [null, 'Slack'],
   ['cloudflare', 'Cloudflare'],
   ['kubernetes', 'Kubernetes'],
   ['postgresql', 'PostgreSQL'],
@@ -57,7 +57,7 @@ const systems = [
       <p class="role">Cloud, git, chat, CI, databases, Kubernetes, SSH</p>
       <p>They trust sluis's issuer and keep no long-lived secret of their own.</p>
       <ul class="marks">
-        {systems.map(([m, name]) => <li><Mark name={m} /><span>{name}</span></li>)}
+        {systems.map(([m, name]) => <li>{m && <Mark name={m} />}<span>{name}</span></li>)}
       </ul>
     </div>
   </div>

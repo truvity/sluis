@@ -31,7 +31,7 @@ const rot = ['-1.4deg', '1deg', '0.5deg', '-0.8deg', '1.5deg', '-0.4deg', '0.9de
   <ul class={`cloud cloud-${size}`}>
     {chips.map((c, i) => (
       <li class="chip" style={`--dy:${dy[i % dy.length]};--r:${rot[i % rot.length]};--w:${widths[i % widths.length]}rem`}>
-        <span class="chip-head"><Mark name={c.mark} /><strong>{c.name}</strong></span>
+        <span class="chip-head">{c.mark && <Mark name={c.mark} />}<strong>{c.name}</strong></span>
         <span class="chip-note">{c.note}</span>
       </li>
     ))}
