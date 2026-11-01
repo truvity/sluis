@@ -39,7 +39,7 @@ The research of 2026-10-30 found:
 
 ### Per-actor table
 
-A Rust row holds once its spikes pass; S1 and S10 passed on 2026-11-01, and S3 holds the row for `entry` with two checks left (Follow-ups) ([The spikes are gates](/decisions/0014-the-language-follows-the-executable/#the-spikes-are-gates)). A gate does not stop work: the component is built against its contract and the conformance suite meanwhile, and a failed gate moves it to the fallback candidate. Go rows have no gate.
+A Rust row holds once its spikes pass ([The spikes are gates](/decisions/0014-the-language-follows-the-executable/#the-spikes-are-gates)). S1 and S10 passed on 2026-11-01, and S3 holds the row for `entry` with the two checks listed under Follow-ups. A gate does not stop work: the component is built against its contract and the conformance suite meanwhile, and a failed gate moves it to the fallback candidate. Go rows have no gate.
 
 | Component | Language | Rule | Gate | First working version |
 |---|---|---|---|---|
