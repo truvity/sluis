@@ -61,6 +61,7 @@ Tokens are standard JWS and JWT, signed by the token-signing keys of [0012](/dec
 
 - **`policy@<boundary>` decides which clients need multi-factor authentication** in each environment, and how fresh it must be ([0009](/decisions/0009-policy-is-cedar-in-a-rust-actor/)).
 - **Step-up follows RFC 9470.** A relying party or the boundary answers `insufficient_user_authentication` with the `acr_values` (and `max_age`) it needs, and the client signs in again with what was asked.
+- **A customer's step-up is a re-authentication at the upstream,** with the same `acr_values` and `max_age`; sluis asks no customer for a passkey ([0023](/decisions/0023-sessions-have-three-classes-with-limits-per-class/#customers)).
 - **The upstream's `acr` and `amr` pass through** the generic OIDC upstream, and `session@<boundary>` keeps the freshness of each person's authentication for its boundary.
 - **Each boundary runs its own slim `entry@<boundary>` with no sign-in of its own**; its upstream is the group issuer. A boundary that demands fresh multi-factor authentication **verifies the passkey assertion itself**, against its own challenge, so a compromised front cannot act there.
 - **In a browser, sign-in is transparent.** A person taps a passkey only where a boundary's policy demands it.

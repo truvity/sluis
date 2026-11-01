@@ -475,3 +475,39 @@ requirements:
     issues: [794, 822]
     verification:
       - {kind: integration-test, ref: "agent session listing and revocation by the person"}
+  - id: REQ-SESS-035
+    area: SESS
+    statement: "At the absolute limit of a human session, sluis MUST authenticate the person at the upstream again, first with prompt=none, instead of extending the session."
+    rationale: "The upstream holds the long session and sluis keeps the 24-hour cap (ADR 0023)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [793, 916]
+    verification:
+      - {kind: integration-test, ref: "a session past its limit starts a new session through a prompt=none request, and login_required ends in an interactive sign-in"}
+  - id: REQ-SESS-036
+    area: SESS
+    statement: "sluis MUST answer a step-up for a person who signs in through a customer upstream by re-authentication at that upstream with the acr_values and max_age that policy asked for."
+    rationale: "sluis hosts no end-user factors (ADR 0023)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [916]
+    verification:
+      - {kind: integration-test, ref: "a step-up for a person of a customer upstream redirects to the upstream with acr_values and max_age"}
+  - id: REQ-SESS-037
+    area: SESS
+    statement: "sluis MUST NOT enrol a factor for, or ask for a passkey of, a person who signs in through a customer upstream."
+    rationale: "sluis hosts no end-user accounts or factors (ADR 0023, REQ-CIAM-017)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [916]
+    verification:
+      - {kind: integration-test, ref: "a sign-in and a step-up through a customer upstream show no passkey prompt and create no factor"}

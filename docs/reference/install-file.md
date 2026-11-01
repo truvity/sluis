@@ -83,7 +83,7 @@ A mapping from the boundary's name to its declaration. Every boundary below L4 i
 
 | Field | Required | Meaning |
 |---|---|---|
-| `kind` | yes | `environment` or `company` ([ADR 0005](/decisions/0005-boundaries-and-the-isolation-ladder/#boundary-kinds)). A `company` boundary is what an upstream's [`org`](#upstreams) names. The product kind comes with the CIAM upstream milestone |
+| `kind` | yes | `environment` or `company` ([ADR 0005](/decisions/0005-boundaries-and-the-isolation-ladder/#boundary-kinds)). A `company` boundary is what an upstream's [`org`](#upstreams) names. The customer kind comes with the CIAM upstream milestone |
 | `level` | yes | `L0` to `L3`; L4 is a separate install file ([The isolation ladder](/decisions/0005-boundaries-and-the-isolation-ladder/#the-isolation-ladder)) |
 | `host` | environment boundaries only | The host of the boundary's issuer, a sibling of the front host under `rp_id`. A company boundary has no issuer |
 | `uid_block` | yes | An integer from 0 to 54, unique in the file. In containers the uid of `<actor>@<boundary>` is the actor's pinned base uid plus 1000 times this number ([The uid table](/architecture/manifest/#the-uid-table)). Never reused after a boundary is removed |

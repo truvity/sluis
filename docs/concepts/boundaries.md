@@ -1,6 +1,6 @@
 ---
 title: Boundaries and federation
-description: "Boundaries in sluis: environment, company and product kinds, the isolation ladder L0 to L4, a front plus boundary installations, issuers and tokens."
+description: "Boundaries in sluis: environment, company and customer kinds, the isolation ladder L0 to L4, tenants and scale, federation of installations, issuers and tokens."
 status: target
 sidebar:
   order: 3
@@ -14,9 +14,9 @@ A **boundary** is the unit of isolation in sluis: what one compromised or miscon
 |---|---|---|
 | **Environment** | The machine plane of management, development, staging or production: its keys and intermediates, CA, issuer, sealing key, audit log, trust domain and state | Yes |
 | **Company** | The identity plane: the directory, the upstream, the integrations, people's records, operator delegation and the audit tenant's data key | No |
-| **Product** | A company and an environment together, with its own keys and issuer, for a company whose customers sign in through sluis | Yes, its own |
+| **Customer** | A company and an environment together, with its own keys and issuer, for a company whose customers sign in through sluis | Yes, its own |
 
-Production never shares a key or a state store with development. Product boundaries come with the CIAM upstream milestone ([#1023](https://github.com/truvity/sluis/issues/1023)); none exists before then.
+Production never shares a key or a state store with development. Customer boundaries come with the CIAM upstream milestone ([#1023](https://github.com/truvity/sluis/issues/1023)); none exists before then.
 
 ## The isolation ladder
 
@@ -30,7 +30,13 @@ Each boundary declares a level. Each level adds to the one before it.
 | **L3 store** | Its own state store (an rqlite cluster, a DynamoDB table), bucket and queue |
 | **L4 runtime** | Its own Kubernetes cluster, cloud account or hosts, and a separate install file joined by declared trust |
 
-A **tenant**, such as an audit or directory tenant, is L0: kept apart by code only, and never a substitute for a boundary. Every environment on a cloud runtime runs at least at L2; companies run at **L2 plus sealed data**, in the front installation. A driver whose backend cannot check its callers is allowed at L3 and above only ([ADR 0004](/decisions/0004-drivers-listeners-and-boundary-enforcement/#three-layers-per-port)). An actor instance carries its boundary in its name, `<actor>@<boundary>` ([Naming](/concepts/actors/#naming)).
+A **tenant**, such as an audit, directory or quota tenant, or a customer organisation, is L0: a record kept apart by code only, with no key of its own, and never a substitute for a boundary. Every environment on a cloud runtime runs at least at L2; companies run at **L2 plus sealed data**, in the front installation. A driver whose backend cannot check its callers is allowed at L3 and above only ([ADR 0004](/decisions/0004-drivers-listeners-and-boundary-enforcement/#three-layers-per-port)). An actor instance carries its boundary in its name, `<actor>@<boundary>` ([Naming](/concepts/actors/#naming)).
+
+## Tenants and scale
+
+Keys and isolation belong to a boundary and to nothing smaller ([ADR 0030](/decisions/0030-tenancy-and-scale-a-boundary-holds-keys-and-a-tenant-is-a-record/)). An installation is designed for about **5 to 10 customer boundaries** and **thousands of tenants** in them. The install file's `uid_block` runs from 0 to 54, so one file declares at most 55 boundaries of all kinds, which is enough. A tenant that needs keys, an issuer or a failure domain of its own is a customer boundary; a cohort that must be separate moves to an installation of its own. A billing account belongs to one installation.
+
+Installations run in one region for now, Europe (Frankfurt, AWS `eu-central-1`), and a later residency region is another installation that shares nothing.
 
 ## A federation of installations
 
@@ -75,7 +81,7 @@ A company leaves, or moves to an installation of its own, by a runbook that exis
 
 ## Issuers and tokens
 
-Each environment has its own issuer, and so does a product boundary. Companies have none: the company is the claim `org` and a policy scope.
+Each environment has its own issuer, and so does a customer boundary. Companies have none: the company is the claim `org` and a policy scope.
 
 | Issuer | Address |
 |---|---|

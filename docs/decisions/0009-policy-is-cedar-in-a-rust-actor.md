@@ -29,6 +29,7 @@ Forces: the actor decides whether a mint is allowed, so it must be small, memory
 - **Template-linked policies are the one exception to declared policy.** Policy logic stays declared: Cedar templates, and a declared delegation policy that says who may link which template to which principals and resources.
 - **Within those bounds the console creates and removes template links.** A link adds no logic a reviewer has not seen in the template. Tighten-only actions, such as suspending a subject or revoking a grant, take effect at once.
 - **Links reach `policy` in the request.** A link is an operator-set record ([0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/#origins)); the actor that asks for a decision sends the links that apply to the request's principal and resource with the facts, so `policy` keeps no state port.
+- **The same pattern issues records.** Instances such as tenants, accounts and upstream connections are issued under declared templates and a declared delegation policy ([0031](/decisions/0031-declared-and-issued-configuration-authority-is-declared-and-instances-are-issued/#instances-are-issued-under-declared-templates)).
 - The record kind of a link, its owning writer and the Cedar schema of requests, entities and actions are on the [Policy](/reference/policy/) page, which fixes them for the first working version.
 
 ## Consequences

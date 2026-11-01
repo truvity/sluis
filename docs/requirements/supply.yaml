@@ -325,3 +325,39 @@ requirements:
     issues: [890]
     verification:
       - {kind: integration-test, ref: "the access list of key-holder and the key policy name one actor, and the signer has no other format to ask for"}
+  - id: REQ-SUPPLY-025
+    area: SUPPLY
+    statement: "The contract vectors of the previous release of the same major version MUST pass against the actors of the current release."
+    rationale: "A rolling deployment runs two neighbouring releases at once (ADR 0033)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1022]
+    verification:
+      - {kind: test-vectors, ref: "previous-release vectors for messages, records and documents run against the current build in CI"}
+  - id: REQ-SUPPLY-026
+    area: SUPPLY
+    statement: "A field of a stored record kind MUST NOT be removed in the release that stops writing it."
+    rationale: "A rollback and a mixed window both need the previous release to read what the current one wrote (ADR 0033)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1022]
+    verification:
+      - {kind: integration-test, ref: "a schema diff between two releases fails when a field is removed in the release that stops writing it"}
+  - id: REQ-SUPPLY-027
+    area: SUPPLY
+    statement: "The contract vectors of the current release MUST pass against the artifacts of the previous release of the same major version."
+    rationale: "A newer writer must stay readable by an older reader during a rollout and a rollback (ADR 0033)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1022]
+    verification:
+      - {kind: test-vectors, ref: "current vectors run against the previous release's artifacts in CI"}

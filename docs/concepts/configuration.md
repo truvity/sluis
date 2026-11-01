@@ -52,11 +52,18 @@ The **effective configuration** is declared overlaid with operator-set. Learned 
 - **Declared locks.** A field that declared sets cannot be changed on the console, which shows it as locked. Otherwise the order is declared, then operator-set, then the schema default.
 - **Tighten-only switches** (recovery off, a reconciler paused, a lower quota limit) may be moved by an operator in their safe direction even when declared sets them. Moving one back is a declared change that names a new generation, so a stale document cannot undo a tightening.
 - **An object defined in both places is held**: nothing changes on it until one side is removed, or a declared fragment adopts the operator-set record with `adopts: <kind>/<id>@<revision>`.
-- **Authority is declared only.** The one exception is Cedar policies linked from declared templates within a declared delegation policy ([ADR 0009](/decisions/0009-policy-is-cedar-in-a-rust-actor/#template-links)).
+- **Authority is declared.** Two things are issued under it at run time, inside a declared delegation policy and a declared template: Cedar policies linked from templates ([ADR 0009](/decisions/0009-policy-is-cedar-in-a-rust-actor/#template-links)) and instance records such as tenants, accounts, upstream connections and a tenant's clients ([Issued instances](#issued-instances)).
 
 **Switches never reach authority.** Authority says who may do what: policy, grants, the clients that may ask for tokens. Tunables (a log level, a timeout, the choice of a driver) are declared and may come from an environment override; runtime switches (recovery off, a paused reconciler, an acknowledged breaker) are operator-set, read live and tighten-only where they touch safety.
 
 A secret in configuration is a reference such as `{ credential: idp-client-secret }`, resolved at run time from a read-only source, and later also through the `secrets` port ([Install file](/reference/install-file/#format), [Secrets and export](/concepts/data/#secrets-and-export)). The value never appears in a file, in `explain` output, in logs or in a crash dump.
+
+## Issued instances
+
+Authority says who may do what, and it is written once, in git, and reviewed. What a tenant or a customer creates is an **instance**: an issued record made at run time by a declared client or an operator under a declared template, bounded by a declared delegation policy, and audited with the template, the slot values and the delegation that permitted it ([ADR 0031](/decisions/0031-declared-and-issued-configuration-authority-is-declared-and-instances-are-issued/)). An instance holds no authority its template did not carry.
+
+- **A workforce installation** declares its authority in git and has it delivered through a configuration service, which is AWS AppConfig on serverless or the equivalent for the runtime, with live reload.
+- **A customer-identity installation** declares its own authority the same way. Its per-customer defaults, values for the slots of a template within the template's bounds, live in project configuration of the configuration service and not in git. Per-tenant changes and the organisation of users belong to a customer-identity module outside the core of sluis.
 
 ## Live reload
 

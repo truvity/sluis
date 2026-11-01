@@ -1,4 +1,4 @@
-# 0005 — Boundaries are environments, companies and products on an isolation ladder, and a boundary on its own runtime is an installation federated by declared trust
+# 0005 — Boundaries are environments, companies and customer boundaries on an isolation ladder, and a boundary on its own runtime is an installation federated by declared trust
 
 **Status:** Accepted
 **Date:** 2026-11-01
@@ -24,7 +24,7 @@ A **boundary** is a unit of isolation.
 
 - **An environment boundary** owns the machine plane of one environment, such as management, development, staging or production: its keys and intermediate certificates ([0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/)), its SSH CAs, its token issuer ([0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#issuers)), its sealing key (which seals its grants), its audit log, its SPIFFE trust domain ([0007](/decisions/0007-workload-identity-and-host-enrolment/#trust-domains)) and its state. Production never shares a key or a state store with development.
 - **A company boundary** owns a company's identity plane: its directory and sign-in upstream, its integrations, its people records, its operator delegation and its audit tenant's data key, wrapped under the environment's sealing key. It holds **no authority key**.
-- **A product boundary** is a company and an environment together, with its own keys and issuer, created when a company's customers sign in through sluis. It has no consumer yet and comes with the CIAM upstream milestone, as Later ([#1023](https://github.com/truvity/sluis/issues/1023)). It is the first candidate for promotion to an installation of its own.
+- **A customer boundary** is a company and an environment together, with its own keys and issuer, created when a company's customers sign in through sluis. It has no consumer yet and comes with the CIAM upstream milestone, as Later ([#1023](https://github.com/truvity/sluis/issues/1023)). It is the first candidate for promotion to an installation of its own. How many an installation carries, and what a tenant is inside one, is [0030](/decisions/0030-tenancy-and-scale-a-boundary-holds-keys-and-a-tenant-is-a-record/).
 
 ### The isolation ladder
 
@@ -40,7 +40,7 @@ Each boundary declares a level. A higher level adds to the ones below it.
 
 - **A tenant is L0:** a division such as an audit tenant, a quota tenant or a directory tenant, kept apart by code and by the conformance suite of the port that holds it. A tenant is not a substitute for a boundary.
 - **Every port is enforced in three layers** ([0004](/decisions/0004-drivers-listeners-and-boundary-enforcement/#three-layers-per-port)). A driver whose backend cannot check its callers is allowed at L3 and above only.
-- **A regulated entity is at least a product boundary.** A tenant is never enough for it, and sluis does not join accounts across entities. sluis stays a broker: an entity's customers come from its own CIAM product as an upstream, and sluis hosts no end-user accounts ([REQ-CIAM-017](/requirements/ciam/#REQ-CIAM-017)).
+- **A regulated entity is at least a customer boundary.** A tenant is never enough for it, and sluis does not join accounts across entities. sluis stays a broker: an entity's customers come from its own CIAM product as an upstream, and sluis hosts no end-user accounts ([REQ-CIAM-017](/requirements/ciam/#REQ-CIAM-017)).
 
 ### Federation between boundaries
 
@@ -102,4 +102,4 @@ A company leaves, or moves to an installation of its own, by a runbook that exis
 
 ## Follow-ups
 
-- CIAM upstream, product boundaries and installations per regulated entity: [#1023](https://github.com/truvity/sluis/issues/1023), Later.
+- CIAM upstream, customer boundaries and installations per regulated entity: [#1023](https://github.com/truvity/sluis/issues/1023), Later.

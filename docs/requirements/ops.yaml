@@ -314,3 +314,75 @@ requirements:
     issues: [805]
     verification:
       - {kind: integration-test, ref: "notify-then-pull test"}
+  - id: REQ-OPS-025
+    area: OPS
+    statement: "An instance record MUST be issued only under a declared template, by a caller that a declared delegation policy permits."
+    rationale: "Run-time self-service stays inside what a reviewer has read (ADR 0031)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1023]
+    verification:
+      - {kind: integration-test, ref: "an issue with no covering template, and an issue by a caller no delegation permits, are both refused"}
+  - id: REQ-OPS-026
+    area: OPS
+    statement: "The audit record of an issued instance MUST name the caller, the template, the slot values apart from secrets and the delegation that permitted it."
+    rationale: "Without them a reviewer cannot tell why an instance exists (ADR 0031)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1023]
+    verification:
+      - {kind: integration-test, ref: "issued instance audit record test"}
+  - id: REQ-OPS-027
+    area: OPS
+    statement: "An instance record MUST be refused when a slot value lies outside the bound that its template declares."
+    rationale: "An instance must not hold more authority than its template carries (ADR 0031)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1023]
+    verification:
+      - {kind: integration-test, ref: "a slot value one step outside its bound is refused and one on the bound is accepted"}
+  - id: REQ-OPS-028
+    area: OPS
+    statement: "A snapshot with a per-customer default outside the bound that its template declares MUST be refused while the version in force stays."
+    rationale: "A default carries no authority, so it may not exceed its bound (ADR 0031)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1023, 977]
+    verification:
+      - {kind: integration-test, ref: "out-of-bound default snapshot test"}
+  - id: REQ-OPS-029
+    area: OPS
+    statement: "Declared configuration MUST be applied from the configuration service of its runtime as a whole versioned snapshot, swapped atomically and audited with its digest."
+    rationale: "The reviewed commit and the applied configuration must be matchable (ADR 0031)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [977]
+    verification:
+      - {kind: integration-test, ref: "snapshot swap and digest audit test on each runtime"}
+  - id: REQ-OPS-030
+    area: OPS
+    statement: "Before the first relying party moves from v1, the cutover inventory MUST list every relying party of the v1 issuer and every consumer that keys on its sub, aud or groups claim."
+    rationale: "A consumer keyed on v1's e-mail sub breaks when the subject becomes opaque (ADR 0033)."
+    level: MUST
+    source: v1-parity
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1017]
+    verification:
+      - {kind: integration-test, ref: "the inventory run against a v1 fixture lists each relying party and each consumer of the sub claim"}

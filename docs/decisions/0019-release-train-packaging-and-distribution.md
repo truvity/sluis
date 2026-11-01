@@ -64,7 +64,7 @@ There are no build profiles: the runtime decides the packaging, and every artifa
 - **Compatibility follows semantic versioning.** A breaking change ships in a major release, or in a minor release that says so in the CHANGELOG, announces it and carries an upgrade note; stored data stays readable by the next release; protocol contracts are checked for breaking changes ([GOVERNANCE.md](https://github.com/truvity/sluis/blob/main/GOVERNANCE.md)).
 - **The configuration schema and its identifiers are public contract.** A published `$id` never changes; an incompatible schema is a new version under a new path, beside the old one ([0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/#pkl-and-json-schema)).
 - **Removed configuration is refused, never silently ignored.** A key that no longer means anything fails validation with a message naming its replacement, as in v1 ADR 0007.
-- **All artifacts of one version are compatible with each other, and only with each other.** A writer and a reader, a chart and its images, a package and its drivers come from one release.
+- **Artifacts of one release are built, tested and shipped together, and each also works with those of the previous release of the same major.** A writer and a reader, a chart and its images, a package and its drivers come from one release, and a rolling deployment runs two neighbouring releases at once ([0033](/decisions/0033-evolution-and-compatibility-n-and-n-1-inside-a-major-and-parallel-cutover/#n-and-n-1-inside-a-major-version)).
 
 ### Signing and checksums
 

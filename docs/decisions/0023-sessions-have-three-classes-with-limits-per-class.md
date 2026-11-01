@@ -47,6 +47,13 @@ Principle 3 keeps things apart where their audience, lifetime and revocation dif
 
 - **A boundary's session never outlives the session that seeded it.** The exchange into a boundary carries the original `auth_time` and class, and the boundary applies its own limits under them, so it can shorten and never lengthen.
 
+### Customers
+
+A customer is a human session like any other: sluis adds no class and no limit longer than 24 hours for the people of a customer-identity product ([REQ-CIAM-017](/requirements/ciam/#REQ-CIAM-017)).
+
+- **The upstream holds the long single-sign-on session.** sluis keeps the 24-hour absolute limit above. When it ends, sluis authenticates the person at the upstream again, silently with `prompt=none` while the upstream's own session is valid, and interactively otherwise. A silent authentication starts a new session with a fresh check of the upstream and of the person's state; it does not extend the old one (REQ-SESS-035).
+- **A customer's step-up is a re-authentication at the upstream** with the `acr_values` and `max_age` that policy asked for ([0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#step-up)). sluis enrols no factor and asks for no passkey of a person who signs in through a customer upstream (REQ-SESS-036, REQ-SESS-037).
+
 ### Configuration
 
 - **The limits are installation configuration per class,** with the defaults above and the maxima in code ([0012](/decisions/0012-cryptography-and-authority-keys/#floors-in-code)). `sluis config check` refuses a value above a maximum, an idle limit above its absolute limit, and an agent class on a client that exchanges a person's token for other credentials.
@@ -58,7 +65,8 @@ Principle 3 keeps things apart where their audience, lifetime and revocation dif
 - Agents are not ended by sign-out, which surprises some people; the sign-out page and the listing make it visible, and an operator revoke ends them.
 - Machine clients have nothing to revoke but their credential; a revocation reaches them when their last token expires, so their tokens stay short.
 - A cap on agent sessions bounds the damage of a client that registers a new session on every start.
-- Requirements: REQ-SESS-015 is narrowed to human sessions; [REQ-SESS-025](/requirements/sess/#REQ-SESS-025) to [REQ-SESS-034](/requirements/sess/#REQ-SESS-034) are added.
+- A customer is signed out of sluis at least once a day and back in by the upstream without a prompt, so a customer whom the upstream has disabled is refused within 24 hours at the latest, whatever the length of the upstream's own session. The cost is one silent redirect a day and a dependence on the upstream's session outlasting it.
+- Requirements: REQ-SESS-015 is narrowed to human sessions; [REQ-SESS-025](/requirements/sess/#REQ-SESS-025) to [REQ-SESS-037](/requirements/sess/#REQ-SESS-037) are added.
 
 ## Roads not taken
 
@@ -70,6 +78,7 @@ Principle 3 keeps things apart where their audience, lifetime and revocation dif
 - **Agent sessions ended by the person's sign-out.** Signing out of a browser would silently break every background agent; v1 made the same choice for the same reason.
 - **Sessions for machine clients.** A session needs someone who signs in and out; a machine has a credential, and a session record would only be state to keep and revoke.
 - **The class declared by the client or its metadata document.** Anyone who publishes a document could give their client a month-long session.
+- **A fourth class for customers, or a longer limit per tenant.** A second maximum to defend, and a window of weeks after a disable that nothing signals yet; the upstream already holds the long session.
 - **A boundary that sets its own limits from scratch.** A boundary could then extend a session the front had already ended.
 
 ## Follow-ups
