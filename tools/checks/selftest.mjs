@@ -64,14 +64,15 @@ const template = readFileSync(join(repo, 'docs/decisions/0000-template.md'), 'ut
 const readme = readFileSync(join(repo, 'docs/decisions/README.md'), 'utf8')
   .replace(/(## Index\n)[\s\S]*$/, '$1\n| ADR | Decision | Status |\n|-----|----------|--------|\n');
 const row = (n, slug, status) => `| [${n}](${n}-${slug}.md) | A decision | ${status} |\n`;
-const GOOD = ['- Pros: one.', '- Cons: two.', '- Why not: three.'];
-const record = ({ num = '0001', status = 'Accepted', date = '2026-10-31', drop = '', roads = GOOD, extra = [] } = {}) =>
+const GOOD = ['- **Another way.** It lost, for a reason.'];
+const PROPOSAL = 'Proposal: [issue #1](https://github.com/truvity/sluis/issues/1).';
+const record = ({ num = '0001', status = 'Accepted', date = '2026-10-31', drop = '', roads = GOOD, extra = [], proposal = PROPOSAL, body = 'Text.' } = {}) =>
   [
-    `# ${num} — We use the example`, '', `**Status:** ${status}`, `**Date:** ${date}`, '', ...extra,
-    ...['Context', 'Decision', 'Consequences'].filter((s) => s !== drop).flatMap((s) => [`## ${s}`, '', 'Text.', '']),
-    '## Roads not taken', '', '### Another way', '', ...roads, '',
+    `# ${num} — We use the example`, '', `**Status:** ${status}`, `**Date:** ${date}`, '', ...(proposal ? [proposal, ''] : []), ...extra,
+    ...['Context', 'Decision', 'Consequences'].filter((s) => s !== drop).flatMap((s) => [`## ${s}`, '', body, '']),
+    '## Roads not taken', '', ...roads, '',
+    ...(drop === 'Follow-ups' ? [] : ['## Follow-ups', '', 'None.', '']),
   ].join('\n');
-const why = (label) => ['- Pros: one.', '- Cons: two.', `- ${label}: three.`];
 const adr = (extra = {}, idx = row('0001', 'we-use-the-example', 'Accepted')) => ({
   'docs/decisions/0000-template.md': template,
   'docs/decisions/README.md': readme + idx,
@@ -80,25 +81,39 @@ const adr = (extra = {}, idx = row('0001', 'we-use-the-example', 'Accepted')) =>
 });
 const one = (opts) => ({ 'docs/decisions/0001-we-use-the-example.md': record(opts) });
 expect('a good record', 'decisions', adr(), 'pass', { has: ['1 records'] });
-expect('a label with a note in parentheses', 'decisions', adr(one({ roads: why('Why not (inferred)') })), 'pass');
-expect('a label with an allowed qualifier', 'decisions', adr(one({ roads: why('Why not first') })), 'pass');
-expect('bold labels, colon inside or outside', 'decisions', adr(one({ roads: ['- **Pros:** one.', '- **Cons**: two.', '- Why not:', '  three, on the next line.'] })), 'pass');
-expect('a label with another qualifier', 'decisions', adr(one({ roads: why('Why not really') })), 'fail', { has: ['no "- Why not:" bullet'] });
-expect('an empty label', 'decisions', adr(one({ roads: ['- Pros:', '- Cons: two.', '- Why not: three.'] })), 'fail', { has: ['empty "Pros:"'] });
-expect('a label in prose, not a bullet', 'decisions', adr(one({ roads: ['- One way. Pros: one. Cons: two.', '- Why not: three.'] })), 'fail', { has: ['no "- Pros:" bullet'] });
+expect('a road whose name ends in a colon', 'decisions', adr(one({ roads: ['- **Another way:** it lost.'] })), 'pass');
+expect('a road in the old form, an option with Pros and Cons', 'decisions', adr(one({ roads: ['### Another way', '', '- Pros: one.', '- Cons: two.', '- Why not: three.'] })), 'fail', { has: ['"###" option'] });
+expect('a line under the roads that is not a road', 'decisions', adr(one({ roads: [...GOOD, 'And a paragraph.'] })), 'fail', { has: ['not a road bullet'] });
+expect('a road with no reason', 'decisions', adr(one({ roads: ['- **Another way.**'] })), 'fail', { has: ['has no road'] });
+expect('no proposal line', 'decisions', adr(one({ proposal: '' })), 'fail', { has: ['"Proposal:'] });
+expect('a proposal line with two numbers', 'decisions', adr(one({ proposal: 'Proposal: [issue #1](https://github.com/truvity/sluis/issues/2).' })), 'fail', { has: ['one number'] });
+expect('an inferred marker', 'decisions', adr(one({ body: 'A point (inferred from the old record).' })), 'fail', { has: ['(inferred'] });
+expect('a history line', 'decisions', adr(one({ extra: ['Rewritten in place on 2026-10-30.', ''] })), 'fail', { has: ['history line'] });
+expect('an Accepted record with an open part', 'decisions', adr(one({ body: 'The format is not decided here.' })), 'fail', { has: ['no open part'] });
+expect('a Proposed record with an open part', 'decisions', adr(one({ status: 'Proposed', body: 'The format is not decided here.' }), row('0001', 'we-use-the-example', 'Proposed')), 'pass');
 expect('a line of the template comment left in', 'decisions', adr(one({ extra: [template.split('\n').find((l) => /^Keep the text public/.test(l)), ''] })), 'fail', { has: ["template's instructions comment"] });
 expect('no records', 'decisions', { ...adr({}, ''), 'docs/decisions/0001-we-use-the-example.md': undefined }, 'fail', { has: ['empty sweep'] });
 expect('a missing section', 'decisions', adr(one({ drop: 'Consequences' })), 'fail', { has: ['## Consequences'] });
+expect('no follow-ups', 'decisions', adr(one({ drop: 'Follow-ups' })), 'fail', { has: ['## Follow-ups'] });
 expect('an unknown status', 'decisions', adr(one({ status: 'Maybe' })), 'fail', { has: ['not one of'] });
 expect('superseded by a missing record', 'decisions', adr(one({ status: 'Superseded by 0099' }), row('0001', 'we-use-the-example', 'Superseded by 0099')), 'fail', { has: ['0099'] });
 expect('a date that is no day', 'decisions', adr(one({ date: '2026-02-30' })), 'fail', { has: ['YYYY-MM-DD'] });
-expect('an option without a reason', 'decisions', adr(one({ roads: why('Because') })), 'fail', { has: ['Why not:'] });
 expect('a title with another number', 'decisions', adr(one({ num: '0002' })), 'fail', { has: ['number 0002'] });
 expect('an index status that differs', 'decisions', adr({}, row('0001', 'we-use-the-example', 'Proposed')), 'fail', { has: ['says "Proposed"'] });
 expect('a record not in the index', 'decisions', adr({}, ''), 'fail', { has: ['no row in the README index'] });
 expect('an index row without a file', 'decisions', adr({}, row('0001', 'we-use-the-example', 'Accepted') + row('0003', 'gone', 'Accepted')), 'fail', { has: ['0003 has no record'] });
 expect('a file name that is not kebab-case', 'decisions', adr({ 'docs/decisions/0004_Bad.md': record({ num: '0004' }) }), 'fail', { has: ['0004_Bad.md'] });
 expect('two records with one number', 'decisions', adr({ 'docs/decisions/0001-again.md': record() }), 'fail', { has: ['also used by'] });
+const page = (text) => ({ 'docs/page.md': `# A page\n\n${text}\n` });
+expect('a page citing a record and its heading', 'decisions', adr(page('See [ADR 0001](/decisions/0001-we-use-the-example/#roads-not-taken).')), 'pass', { has: ['citations'] });
+expect('a page citing a record that does not exist', 'decisions', adr(page('As ADR 0099 says.')), 'fail', { has: ['record 0099'] });
+expect('a page citing v1 and ritueel records', 'decisions', adr(page("As v1 ADR 0099 and ritueel's ADR 0098 say, and [v1](/v1/decisions/0097-old/).")), 'pass');
+expect('a link to a record that is not a file', 'decisions', adr(page('See [it](/decisions/0002-gone/).')), 'fail', { has: ['"0002-gone"'] });
+expect('a link to a heading a record does not have', 'decisions', adr(page('See [it](/decisions/0001-we-use-the-example/#nowhere).')), 'fail', { has: ['#nowhere'] });
+const renumbered = (rows) => ({ 'docs/decisions/renumbered.json': JSON.stringify({ records: rows, anchors: {} }) });
+expect('a renumbering map of an old slug', 'decisions', adr(renumbered([{ old: '0007-old-name', new: '0001-we-use-the-example' }])), 'pass');
+expect('a renumbering map whose old slug is still a file', 'decisions', adr({ ...renumbered([{ old: '0002-still-here', new: '0001-we-use-the-example' }]), 'docs/decisions/0002-still-here.md': record({ num: '0002' }) }, row('0001', 'we-use-the-example', 'Accepted') + row('0002', 'still-here', 'Accepted')), 'fail', { has: ['still a file'] });
+expect('a renumbering map pointing at no record', 'decisions', adr(renumbered([{ old: '0007-old-name', new: '0009-nothing' }])), 'fail', { has: ['not a record'] });
 
 // ---- requirements catalogue: the evidence of a done record (L18). A scratch catalogue of one area,
 // built with the real schema and vocabulary, one record, and the files its `tests` may name.
