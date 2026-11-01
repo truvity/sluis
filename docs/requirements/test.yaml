@@ -25,13 +25,12 @@ requirements:
     rationale: "Upstream login is relying-party code."
     level: SHOULD
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-104, section: "1", depth: Full}
       - {id: ST-28, section: "3", depth: Full}
     issues: [850]
-    gap: stakeholder-only
     verification:
       - {kind: conformance-suite, ref: "OIDF RP plans"}
   - id: REQ-TEST-003

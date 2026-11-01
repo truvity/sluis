@@ -226,12 +226,11 @@ requirements:
     rationale: "Stored shared secrets are theft targets."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-20, section: "7523", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [927]
     verification:
       - {kind: integration-test, ref: "private-JWK rejection test"}
   - id: REQ-CLIENT-021
@@ -241,12 +240,11 @@ requirements:
     rationale: "Stored shared secrets are theft targets."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-20, section: "7523", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [927]
     verification:
       - {kind: integration-test, ref: "storage scan"}
   - id: REQ-CLIENT-011

@@ -232,7 +232,7 @@ requirements:
       - {kind: manual, ref: "documentation review"}
   - id: REQ-CIAM-017
     area: CIAM
-    statement: "sluis MUST NOT host end-user accounts or store end-user passwords, except for the operator break-glass recovery credentials decided in ADR 0027."
+    statement: "sluis MUST NOT host end-user accounts or store end-user passwords, except for the operator break-glass recovery passkeys."
     rationale: "A boundary for a regulated entity holds no store of that entity's end-user accounts (ADR 0009), and a customer-identity product plugs in as an upstream."
     level: MUST
     source: design-decision

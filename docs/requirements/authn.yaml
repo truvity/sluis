@@ -272,14 +272,13 @@ requirements:
     rationale: "A silent downgrade tells a relying party the user was strongly authenticated when they were not."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2.1", depth: Partial}
       - {id: ST-24, section: "3", depth: Partial}
       - {id: ST-104, section: "test plan", depth: Full}
     issues: [885]
-    gap: stakeholder-only
     verification:
       - {kind: integration-test, ref: "acr matrix (known, unknown, restricted, cool-down)"}
       - {kind: conformance-suite, ref: "OIDF Basic OP"}
@@ -290,13 +289,12 @@ requirements:
     rationale: "A silent downgrade tells a relying party the user was strongly authenticated when they were not."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2.1", depth: Partial}
       - {id: ST-24, section: "3", depth: Partial}
     issues: [885]
-    gap: stakeholder-only
     verification:
       - {kind: integration-test, ref: "downgrade negative test"}
   - id: REQ-AUTHN-010
@@ -740,12 +738,11 @@ requirements:
     rationale: "Step-up lets a resource demand stronger evidence per action."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-24, section: "3", depth: Full}
       - {id: NC-01, section: "8176", depth: Full}
-    decisions: ["OD-12"]
     issues: [885]
     verification:
       - {kind: integration-test, ref: "step-up challenge test"}
@@ -756,12 +753,11 @@ requirements:
     rationale: "A token that hides the new authentication gives the resource server nothing to check."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-24, section: "3", depth: Full}
       - {id: NC-01, section: "8176", depth: Full}
-    decisions: ["OD-12"]
     issues: [885]
     verification:
       - {kind: integration-test, ref: "step-up round trip"}
@@ -813,29 +809,133 @@ requirements:
     rationale: "Break-glass access must not expose a reusable verifier."
     level: MUST
     source: v1-parity
-    status: planned
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-60, section: "RFC 5054", depth: Full}
       - {id: ST-45, section: "TokenReview", depth: Partial}
     issues: [795]
+    superseded_by: [REQ-AUTHN-066]
     verification:
       - {kind: test-vectors, ref: "RFC 5054 appendix B"}
   - id: REQ-AUTHN-056
     area: AUTHN
     split_from: REQ-AUTHN-023
     statement: "A recovery sign-in for operators MUST be disabled by default."
-    rationale: "Break-glass access must not expose a reusable verifier."
+    rationale: "A recovery door that is open by default is a standing entry point."
     level: MUST
     source: v1-parity
     status: planned
     runtimes: all
     standards:
-      - {id: ST-60, section: "RFC 5054", depth: Full}
-      - {id: ST-45, section: "TokenReview", depth: Partial}
+      - {id: ST-59, section: "7", depth: Partial}
     issues: [795]
     verification:
       - {kind: integration-test, ref: "recovery door default-off test"}
+  - id: REQ-AUTHN-066
+    area: AUTHN
+    statement: "A recovery sign-in for operators, where offered, MUST accept a passkey assertion and no password."
+    rationale: "A stored password is a reusable secret to guard, and a passkey assertion is not."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "7.2", depth: Partial}
+    issues: [795]
+    verification:
+      - {kind: integration-test, ref: "passkey-only recovery test: a password attempt on every recovery path is refused"}
+  - id: REQ-AUTHN-067
+    area: AUTHN
+    statement: "Enabling the recovery sign-in MUST require two registered hardware keys and one registered synced passkey."
+    rationale: "Two hardware keys survive the loss of one, and the synced passkey is the copy that is kept apart from them."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "7.1", depth: Partial}
+    issues: [795]
+    verification:
+      - {kind: integration-test, ref: "enable-recovery test with one hardware key, with no synced passkey, and with the full set"}
+  - id: REQ-AUTHN-068
+    area: AUTHN
+    statement: "The recovery sign-in MUST accept a hardware key only when its registration carried an attestation statement that sluis verified."
+    rationale: "Attestation shows that the key is a hardware authenticator and not a software copy."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "6.5", depth: Partial}
+    issues: [795]
+    verification:
+      - {kind: integration-test, ref: "registration test with a missing, an invalid and a valid attestation statement"}
+  - id: REQ-AUTHN-069
+    area: AUTHN
+    statement: "The recovery sign-in MUST accept the synced passkey only by its pinned credential ID."
+    rationale: "Pinning one credential keeps any other synced passkey of the same account from opening recovery."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "7.2", depth: Partial}
+    issues: [795]
+    verification:
+      - {kind: integration-test, ref: "assertion test with the pinned credential ID and with another credential of the same account"}
+  - id: REQ-AUTHN-070
+    area: AUTHN
+    statement: "A session opened by the recovery sign-in MUST carry the recovery scope only."
+    rationale: "Recovery restores access, and a wider session would turn it into a standing back door."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "7.2", depth: Partial}
+    issues: [795]
+    verification:
+      - {kind: integration-test, ref: "scope test: a recovery session asks for another scope and is refused"}
+  - id: REQ-AUTHN-071
+    area: AUTHN
+    statement: "Every use of the recovery sign-in, successful or refused, MUST produce an audit record."
+    rationale: "An emergency door needs a trail, whether it opened or not."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "7.2", depth: Partial}
+    issues: [795]
+    verification:
+      - {kind: integration-test, ref: "audit test for a successful and a refused recovery sign-in"}
+  - id: REQ-AUTHN-072
+    area: AUTHN
+    statement: "Every successful use of the recovery sign-in MUST raise an alert to the operators."
+    rationale: "A use of recovery that nobody expected is an incident until proven otherwise."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-59, section: "7.2", depth: Partial}
+    issues: [795]
+    verification:
+      - {kind: integration-test, ref: "alert test: a successful recovery sign-in delivers one alert"}
+  - id: REQ-AUTHN-073
+    area: AUTHN
+    statement: "The recovery runbook MUST require a drill of the recovery sign-in every quarter."
+    rationale: "A recovery path that is never exercised fails when it is needed."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [795]
+    verification:
+      - {kind: manual, ref: "runbook review"}
+    manual_reason: "A drill is an operator practice, and the runbook text is the only thing a review can check."
   - id: REQ-AUTHN-024
     area: AUTHN
     statement: "Identifier, registration, recovery and fallback paths MUST return the same response for known and unknown accounts."

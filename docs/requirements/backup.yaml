@@ -182,12 +182,11 @@ requirements:
     rationale: "An untested backup is a hope."
     level: SHOULD
     source: design-decision
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-95, section: "age", depth: Partial}
     issues: [835]
-    gap: register-gap
     verification:
       - {kind: integration-test, ref: "rehearsal test"}
   - id: REQ-BACKUP-014
@@ -364,16 +363,29 @@ requirements:
       - {kind: manual, ref: "account layout review"}
   - id: REQ-BACKUP-023
     area: BACKUP
-    statement: "The backup archive blob SHOULD use the compliance lock mode."
-    rationale: "A compliance lock prevents deletion before expiry."
+    statement: "On a production-grade installation the backup archive blob SHOULD use the compliance lock mode."
+    rationale: "A compliance lock prevents deletion before expiry, even by an administrator."
     level: SHOULD
     source: design-decision
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     issues: [835]
-    gap: register-gap
+    verification:
+      - {kind: integration-test, ref: "lock-mode check"}
+  - id: REQ-BACKUP-036
+    area: BACKUP
+    split_from: REQ-BACKUP-023
+    statement: "On an installation that is not production-grade the backup archive blob MAY use the governance lock mode."
+    rationale: "A development or test installation needs to delete its archives, which a compliance lock forbids."
+    level: MAY
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-96, section: "2020-12", depth: Partial}
+    issues: [835]
     verification:
       - {kind: integration-test, ref: "lock-mode check"}
   - id: REQ-BACKUP-024
@@ -382,12 +394,11 @@ requirements:
     rationale: "Separate identities limit what a stolen backup identity can do."
     level: SHOULD
     source: design-decision
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     issues: [835]
-    gap: register-gap
     verification:
       - {kind: manual, ref: "actor identity review"}
   - id: REQ-BACKUP-025
@@ -396,12 +407,11 @@ requirements:
     rationale: "Restore is needed exactly when the service is unavailable."
     level: SHOULD
     source: design-decision
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     issues: [835]
-    gap: register-gap
     verification:
       - {kind: integration-test, ref: "restore-with-services-down test"}
   - id: REQ-BACKUP-026
@@ -410,12 +420,11 @@ requirements:
     rationale: "The log protects itself and would only bloat a tarball."
     level: SHOULD
     source: design-decision
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-77, section: "2.1", depth: Partial}
     issues: [835]
-    gap: register-gap
     verification:
       - {kind: manual, ref: "backup scope review"}
   - id: REQ-BACKUP-031
