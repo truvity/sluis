@@ -7,7 +7,7 @@
 //
 // usage: tools/checks/selftest.mjs
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -201,6 +201,37 @@ expect('a link to a missing file', 'agent-links', { ...docs, 'AGENTS.md': 'Read 
 expect('a code path to a missing file', 'agent-links', { ...docs, '.claude/skills/example/SKILL.md': 'Edit `docs/contributing/gone.md`.\n' }, 'fail', { has: ['gone.md does not exist'] });
 expect('a subagent file with a missing path', 'agent-links', { ...docs, '.claude/agents/docs.md': 'Edit `docs/contributing/gone.md`.\n' }, 'fail', { has: ['.claude/agents/docs.md:1: docs/contributing/gone.md does not exist'] });
 expect('an agent file with no pointer', 'agent-links', { ...docs, 'AGENTS.md': 'Be careful.\n' }, 'fail', { has: ['empty sweep'] });
+
+// ---- C7 actors: the repository's own registry, explorer, ADRs, requirements and page, then one change each
+const real = (p) => readFileSync(join(repo, p), 'utf8');
+const actorFiles = Object.fromEntries([
+  'docs/architecture/actors.yaml', 'site/src/data/explorer/architecture.yaml', 'docs/reference/actors.md',
+  'docs/requirements/index.yaml', 'docs/requirements/standards.yaml', 'docs/requirements/policy.yaml',
+  ...readdirSync(join(repo, 'docs/decisions')).filter((f) => /^[0-9]{4}-.*\.md$/.test(f)).map((f) => `docs/decisions/${f}`),
+].map((p) => [p, real(p)]));
+const edit = (path, from, to) => {
+  if (!actorFiles[path].includes(from)) throw new Error(`selftest fixture: ${path} lacks ${from}`);
+  return { ...actorFiles, [path]: actorFiles[path].replace(from, to) };
+};
+const a0014 = Object.keys(actorFiles).find((p) => p.startsWith('docs/decisions/0014-'));
+const a0007 = Object.keys(actorFiles).find((p) => p.startsWith('docs/decisions/0007-'));
+expect('the repository as it is', 'actors', actorFiles, 'pass', { has: ['20 actors'] });
+expect('a label that is not actor:<name>', 'actors', edit('docs/architecture/actors.yaml', 'label: actor:signer', 'label: signer'), 'fail', { has: ['label must be actor:signer'] });
+expect('a record naming an unknown actor', 'actors', edit('docs/requirements/policy.yaml', 'actors: [policy]', 'actors: [decider]'), 'fail', { has: ['decider is not an actor'] });
+expect('a record outside the actor\'s areas', 'actors', edit('docs/requirements/policy.yaml', 'actors: [policy]', 'actors: [signer]'), 'fail', { has: ['area POLICY is not a requirement area of signer'] });
+expect('a language that ADR 0014 does not give', 'actors', edit(a0014, '| `policy` | Rust |', '| `policy` | Go |'), 'fail', { has: ['language Rust, but ADR 0014 says "Go"'] });
+expect('an instance name that is no actor', 'actors', edit(a0007, '`exchange@<boundary>`', '`exchanger@<boundary>`'), 'fail', { has: ['names exchanger'] });
+expect('a role the registry lacks', 'actors', edit('site/src/data/explorer/architecture.yaml', '  quota:\n    status: decided', '  meter:\n    status: decided'), 'fail', { has: ['role meter is not an actor', 'quota actor must be drawn'] });
+expect('a stale generated page', 'actors', edit('docs/reference/actors.md', '| core | Go (R4) |', '| core | Go |'), 'fail', { has: ['generated block is stale'] });
+expect('no registry', 'actors', { ...actorFiles, 'docs/architecture/actors.yaml': undefined }, 'fail', { has: ['actors.yaml is missing'] });
+
+// ---- C8 examples: a block on a page equals the file it names
+const exPage = (body) => `---\ntitle: x\n---\n\n<!-- example: tests/x/install.yaml -->\n\`\`\`yaml\n${body}\`\`\`\n`;
+expect('an example equal to its file', 'examples', { 'docs/a.md': exPage('a: 1\n'), 'tests/x/install.yaml': 'a: 1\n' }, 'pass', { has: ['1 examples'] });
+expect('an example that differs', 'examples', { 'docs/a.md': exPage('a: 2\n'), 'tests/x/install.yaml': 'a: 1\n' }, 'fail', { has: ['differs from tests/x/install.yaml'] });
+expect('an example of a missing file', 'examples', { 'docs/a.md': exPage('a: 1\n') }, 'fail', { has: ['does not exist'] });
+expect('a mark with no block', 'examples', { 'docs/a.md': '<!-- example: tests/x/install.yaml -->\nText.\n', 'tests/x/install.yaml': 'a: 1\n' }, 'fail', { has: ['not followed by a fenced block'] });
+expect('no examples', 'examples', { 'docs/a.md': 'Text.\n' }, 'fail', { has: ['empty sweep'] });
 
 rmSync(scratch, { recursive: true, force: true });
 if (failures) {

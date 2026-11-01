@@ -87,4 +87,4 @@ Every page has the same parts: what it's for, the kinds it plays, what sluis ask
 
 ## Examples are illustrative
 
-Command names and configuration keys in the examples on these pages show the shape, not decided names, until the command tree and the configuration keys are designed ([#1097](https://github.com/truvity/sluis/issues/1097)).
+The commands of the first working version are on [Commands](/reference/cli/) and the keys of the install file on [Install file](/reference/install-file/); those pages are decided. A command or a configuration key on these pages that they do not list belongs to the parity milestone: it shows the shape, not a decided name, until it is designed ([#1097](https://github.com/truvity/sluis/issues/1097)).

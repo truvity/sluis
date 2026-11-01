@@ -1,0 +1,52 @@
+# The approved cryptography and parser libraries of sluis, per language (REQ-SEC-008, REQ-SEC-018;
+# issue #1039). docs/reference/approved-libraries.md renders the reasoning; this file is the data a
+# CI check reads once there is code: a dependency that provides a cryptographic primitive or parses
+# a protocol or a format must be listed here, under the language of the executable that links it.
+#
+# Fields of an entry:
+#   name     the module path (Go), the crate (Rust) or the package or platform API (TypeScript)
+#   for      what sluis uses it for
+#   needed_by  the record that needs the capability (the list itself is approved by review of this file)
+#
+# A library not listed needs a pull request that adds it, with the reason. A version is not
+# pinned here: the lockfiles pin versions, and Renovate moves them.
+schema: 1
+
+go:
+  - { name: "crypto/... (standard library)", for: "ECDSA P-384, AES-256-GCM, SHA-2, HKDF, HMAC, X.509, TLS and the operating system's random generator (crypto/rand)", needed_by: "ADR 0012" }
+  - { name: "golang.org/x/crypto/ssh", for: "OpenSSH keys and certificates in Go components and the CLI", needed_by: "ADR 0008" }
+  - { name: "github.com/go-piv/piv-go/v2", for: "YubiKey PIV in key-holder, and attestation verification in the CLI and the yubikey-attestation verifier", needed_by: "ADR 0014" }
+  - { name: "github.com/ProtonMail/go-crypto", for: "OpenPGP packets: the subkey request, the back-signature, detached signatures", needed_by: "ADR 0013" }
+  - { name: "filippo.io/age", for: "Backup archives and export drops (a named exception)", needed_by: "ADR 0012" }
+  - { name: "github.com/santhosh-tekuri/jsonschema/v6", for: "Validating configuration against the JSON Schema", needed_by: "ADR 0010" }
+  - { name: "connectrpc.com/connect", for: "The Connect protocol, client and server", needed_by: "ADR 0002" }
+  - { name: "google.golang.org/protobuf", for: "Protobuf encoding and decoding", needed_by: "ADR 0002" }
+
+rust:
+  - { name: "aws-lc-rs", for: "AES-256-GCM with RandomizedNonceKey, ECDSA P-384, HKDF, SHA-2 and the library's random generator", needed_by: "ADR 0012" }
+  - { name: "rustls", for: "TLS, with the aws-lc-rs provider and no FIPS pin", needed_by: "ADR 0014" }
+  - { name: "cedar-policy", for: "Parsing, validating and evaluating Cedar policy in policy", needed_by: "ADR 0009" }
+  - { name: "jsonschema", for: "Validating configuration against the JSON Schema", needed_by: "ADR 0010" }
+  - { name: "connectrpc", for: "The Connect protocol over Unix sockets, once spike S1 passes", needed_by: "ADR 0014" }
+  - { name: "zeroize", for: "Wiping secrets from memory when they are dropped", needed_by: "ADR 0014" }
+  - { name: "aws-sdk-* (the AWS SDK for Rust)", for: "Calls to AWS services from the AWS-backed drivers; its SigV4 and checksums are outside any FIPS module", needed_by: "ADR 0014" }
+
+typescript:
+  - { name: "ajv (draft 2020-12 build)", for: "Validating configuration against the JSON Schema", needed_by: "ADR 0010" }
+  - { name: "WebCrypto (crypto.subtle) and WebAuthn (navigator.credentials)", for: "Cryptography and passkeys in the console's single-page application, from the browser", needed_by: "ADR 0006" }
+  - { name: "@connectrpc/connect", for: "The Connect client of the public API (connect-es)", needed_by: "ADR 0017" }
+
+# Libraries that are not to be used, with the reason and the record that refuses them (needed_by: the record).
+refused:
+  - { name: "yubikey (Rust crate)", reason: "Its own notice says it is unaudited and experimental (R7)", needed_by: "ADR 0014" }
+  - { name: "ykcs11 through cryptoki, for key-holder", reason: "It resets the card for every client when a second one appears and keeps a PIN copy that cannot be wiped", needed_by: "ADR 0014" }
+  - { name: "gpg on a node", reason: "sluis builds the OpenPGP packets itself and the card signs; no gpg on a board", needed_by: "ADR 0013" }
+  - { name: "A Go plugin (.so) or WebAssembly module in an actor", reason: "Plugins run out of process, always", needed_by: "ADR 0004" }
+
+# Not chosen yet: the pull request of the component that needs one adds it, after a review.
+open:
+  - { for: "JOSE (JWS, JWK, JWT) in Go, and the per-language verification demos", issue: 869 }
+  - { for: "The embeddable OpenID Connect provider of session and exchange", issue: 959 }
+  - { for: "The C2SP signed-note, tlog and static-ct-api libraries of writer, witness and ca", issue: 969 }
+  - { for: "The YAML reader of the install file, in Go and in Rust", issue: 864 }
+  - { for: "OpenSSH certificates in Rust, for ssh-ca", issue: 925 }

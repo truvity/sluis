@@ -10,6 +10,7 @@ requirements:
     source: v1-parity
     status: planned
     runtimes: all
+    actors: [policy]
     standards:
       - {id: ST-96, section: "2020-12", depth: Full}
     issues: [786, 846]
@@ -24,6 +25,7 @@ requirements:
     source: v1-parity
     status: planned
     runtimes: all
+    actors: [policy]
     standards:
       - {id: ST-96, section: "2020-12", depth: Full}
     issues: [786, 846]
@@ -37,6 +39,7 @@ requirements:
     source: v1-parity
     status: planned
     runtimes: all
+    actors: [policy]
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     issues: [786, 787]
@@ -65,6 +68,7 @@ requirements:
     source: design-decision
     status: planned
     runtimes: all
+    actors: [policy]
     standards:
       - {id: NC-12, section: "Cedar", depth: Full}
     issues: [892, 852]
@@ -79,6 +83,7 @@ requirements:
     source: design-decision
     status: planned
     runtimes: all
+    actors: [policy]
     standards:
       - {id: NC-12, section: "Cedar", depth: Full}
     issues: [892, 852]
@@ -106,6 +111,7 @@ requirements:
     source: design-decision
     status: planned
     runtimes: all
+    actors: [policy]
     standards:
       - {id: NC-12, section: "Cedar", depth: Partial}
     issues: [977, 892]
@@ -119,6 +125,7 @@ requirements:
     source: design-decision
     status: planned
     runtimes: all
+    actors: [policy]
     standards:
       - {id: NC-12, section: "Cedar", depth: Partial}
     issues: [892]
