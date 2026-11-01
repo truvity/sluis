@@ -33,7 +33,7 @@ Some processes must also run exactly once. Two audit writers on one log cannot k
   | `console` | The operator API, as the browser's backend. It checks the operator's delegation and routes each write to the owning actor | No key |
   | `exchange` | Token exchange (RFC 8693), enrolment, and the verifiers of proofs | Verifier drivers, which hold public material only. The enrolment private key stays in `key-holder` or the cloud key service |
   | `signer` | Holds the signing ring and signs tokens under a signing policy. It is not a pure signing oracle | The token-signing keys |
-  | `policy` | The decision point. A declared Cedar policy maps facts to grants ([0014](/decisions/0014-policy-is-written-in-cedar-and-evaluated-by-a-rust-actor/)). It has no state and no network. It signs mint grants with its own key | The grant key |
+  | `policy` | The decision point. A declared Cedar policy maps facts to grants ([0014](/decisions/0014-policy-is-written-in-cedar-and-evaluated-by-a-rust-actor/)). It has no state and no network. It seals mint grants under the sealing key | Use of the sealing key for grants only |
   | `ca` | The X.509 certificate authority | The X.509 CA keys |
   | `ssh-ca` | The SSH certificate authority, for user and host certificates | The SSH CA keys |
   | `quota` | Rate limits, caps and metering, on the state port with compare-and-set. Not a core actor: the engine of the Quota piece | No key. It writes quota balances (issued) and meters (derived) ([0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)) |
@@ -165,7 +165,7 @@ Some processes must also run exactly once. Two audit writers on one log cannot k
 
 - Pros: policy could read live facts itself and need no facts broker.
 - Cons: an actor that can be made to read or exfiltrate anything is a target, and its grants can no longer be reviewed as a file.
-- Why not: `policy` has no state and no network. Its output is a grant signed by its own key, and the file it reads is reviewed. (inferred)
+- Why not: `policy` has no state and no network. Its output is a grant sealed under the sealing key, and the file it reads is reviewed. (inferred)
 
 ### A process per port
 

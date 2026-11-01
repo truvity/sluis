@@ -25,7 +25,7 @@ A boundary is placed on a **ladder**. Each level adds to the one before it.
 | Level | Adds |
 |---|---|
 | **L0 tenant** | Separation by sluis's code only |
-| **L1 keys** | Its own key-encryption key, CA, signing and grant keys |
+| **L1 keys** | Its own key-encryption key (which also seals grants), CA and signing keys |
 | **L2 process** | Its own actor instances, uid or role, and state prefix |
 | **L3 store** | Its own state store (an rqlite cluster, a DynamoDB table), bucket and queue |
 | **L4 runtime** | Its own Kubernetes cluster, cloud account or hosts, and a separate install file joined by declared trust |
@@ -120,7 +120,7 @@ The choices below are the reference for a federation of several companies and en
 | Issuers | One per environment, as above |
 | Process level | Every environment on AWS runs at L2 or above |
 | State | One engine with a prefix per boundary, replaced by a store of its own at L3 and above |
-| Policy | One source, compiled per environment, with a grant key per environment. **Company ceilings** are Cedar `forbid` guards |
+| Policy | One source, compiled per environment, with a sealing key per environment, which seals the grants. **Company ceilings** are Cedar `forbid` guards |
 | Audit | A log per environment, with its own front. A company reads it as a tenant with its own key, which the log encrypts its records to ([ADR 0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)) |
 | Console | Delegation per company, plus an environment scope for machine-plane records |
 | Integrations | One process per vendor tenant |

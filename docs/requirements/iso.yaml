@@ -516,10 +516,11 @@ requirements:
     rationale: "A grant key per environment keeps a decision made for one environment from being spent in another."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
     runtimes: all
     standards: []
     issues: [892]
+    superseded_by: [REQ-ISO-066, REQ-ISO-067]
     verification:
       - {kind: test-vectors, ref: "T-18 layer 2: a grant signed by policy@env-a is presented to signer@env-b; refused"}
   - id: REQ-ISO-039
@@ -876,3 +877,63 @@ requirements:
     issues: [968]
     verification:
       - {kind: test-vectors, ref: "T-23: a validly signed root list with a lower version; refused and the anchors on disk are unchanged"}
+  - id: REQ-ISO-066
+    area: ISO
+    statement: "A signing actor MUST refuse a grant that the sealing key of its own environment does not open."
+    rationale: "A sealing key per environment keeps a decision made for one environment from being spent in another."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [892, 914]
+    verification:
+      - {kind: test-vectors, ref: "T-18 layer 2: a grant sealed by policy@env-a is presented to signer@env-b; refused"}
+  - id: REQ-ISO-067
+    area: ISO
+    statement: "The `policy` actor MUST seal each mint grant with authenticated encryption under the sealing key, with `purpose=grant` in the encryption context."
+    rationale: "Only sluis itself verifies a grant, so a seal under a key that never leaves its store makes a grant-signing key unnecessary."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [892, 914]
+    verification:
+      - {kind: test-vectors, ref: "a sealed grant opened with a different purpose in the encryption context; refused, and a tampered grant; refused"}
+  - id: REQ-ISO-068
+    area: ISO
+    statement: "The data keys of a tenant MUST be wrapped under the sealing key with the tenant in the encryption context."
+    rationale: "Shredding a tenant deletes its data key, and the wrapping under a shared key keeps one tenant's keys from opening for another."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [914]
+    verification:
+      - {kind: integration-test, ref: "a tenant's data key unwrapped with another tenant in the encryption context; refused"}
+  - id: REQ-ISO-070
+    area: ISO
+    statement: "sluis MUST NOT create a key in the key store for a tenant."
+    rationale: "Thousands of tenants would otherwise mean thousands of store keys, policies and aliases; per-tenant signing keys are a possible later feature."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [914]
+    verification:
+      - {kind: integration-test, ref: "a count of the keys in the key store of a test installation before and after a tenant is added; unchanged"}
+  - id: REQ-ISO-069
+    area: ISO
+    statement: "A key policy that lets an actor use a shared symmetric KMS key MUST carry a `kms:EncryptionContext:` condition for each use that the actor's manifest names."
+    rationale: "A symmetric key may be shared only because the store itself separates its uses by encryption context."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: ["serverless", "kubernetes"]
+    standards: []
+    issues: [914]
+    verification:
+      - {kind: test-vectors, ref: "generated key policies for a shared symmetric key: every Allow statement carries an encryption-context condition; a policy without one fails the build"}

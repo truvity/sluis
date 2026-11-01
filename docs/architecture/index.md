@@ -46,7 +46,7 @@ Three consequences follow from making the manifest the single source:
 ## Ground rules
 
 - **Every major component is a ConnectRPC contract**, even when it runs in the same process as its caller.
-- **Integrations return facts, or carry out effects that core has already authorized. They never decide.** A minter receives a mint grant signed by the `policy` actor's own key. Caps and rate limits live in core.
+- **Integrations return facts, or carry out effects that core has already authorized. They never decide.** A minter receives a mint grant that the `policy` actor sealed under the sealing key. Caps and rate limits live in core.
 - **Core calls integrations, never the reverse.**
 - **Plugins always run out of process.** There are no Go `.so` plugins and no WebAssembly.
 

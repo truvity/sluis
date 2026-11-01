@@ -51,6 +51,8 @@ The CA's public certificate is published by sluis (static publication of CA cert
 
 **CNPG.** The CNPG-specific wiring (the `pg_hba` rules, the maps and the roles) lives with the CNPG deployment, outside sluis. sluis supplies the certificates and the intermediate.
 
+CloudNativePG keeps its built-in per-cluster CA for the replication certificates between the instances of a cluster. The server certificates that applications verify come from cert-manager, with an issuer backed by sluis's X.509 intermediate, and trust-manager distributes the trust bundle to the pods.
+
 ## Certificates in pods
 
 A workload in Kubernetes gets its certificate in two steps:

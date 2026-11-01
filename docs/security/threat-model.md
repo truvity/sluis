@@ -29,7 +29,7 @@ How much a boundary has of its own is its **isolation level**:
 | Level | What the boundary has of its own |
 |---|---|
 | L0 tenant | Nothing but code: rows kept apart by sluis's own logic. |
-| L1 keys | Its own key-encryption key, CA, signing and grant keys. |
+| L1 keys | Its own key-encryption key (which also seals grants), CA and signing keys. |
 | L2 process | Its own actor instances, Unix user or cloud role, and state prefix. |
 | L3 store | Its own state store (an rqlite cluster or a DynamoDB table), bucket and queue. |
 | L4 runtime | Its own Kubernetes cluster, cloud account or hosts, and its own install file. |
@@ -40,7 +40,7 @@ The assets, in the order an attacker wants them:
 
 | Asset | Where it lives |
 |---|---|
-| Authority keys: each environment's CA, SSH CA, token-signing and grant keys | The keys port: a YubiKey behind the `key-holder`, or KMS. Never exported ([ADR 0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/)). |
+| Authority keys: each environment's CA, SSH CA and token-signing keys, and the sealing key that seals its grants | The keys port: a YubiKey behind the `key-holder`, or KMS. Never exported ([ADR 0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/)). |
 | Issued credentials: tokens, X.509 and SSH certificates, SVIDs | With the clients and workloads; short-lived and, where possible, sender-constrained. |
 | Records: sessions, people, grants, hosts, enrolments, secrets of integrations | The state port, encrypted value by value. |
 | Vendor credentials: OAuth client secrets, API tokens of each company's tenants | The secrets of one integration process each. |
@@ -131,7 +131,7 @@ Each threat says what is attacked, from where, what stops it and at which layer,
 | **T-15** | A compromised integration reaches other tenants or signs for sluis | Vendor credentials, authority | AP-4 | One process per vendor tenant, with its own platform identity, secret and state prefix; integrations hold no authority key; egress only through the proxy. | That tenant's credential, and whatever it allows at the vendor. | [REQ-ISO-051](/requirements/iso/#REQ-ISO-051), [REQ-ISO-052](/requirements/iso/#REQ-ISO-052) |
 | **T-16** | A subject of one company gets a grant in another company's scope | Company boundaries | AP-1 with a valid account, AP-7 | Company-ceiling guards compiled as Cedar `forbid`, which no `permit` overrides; a partner grant is the only exception. | A bug in a shared policy definition (accepted, below). | [REQ-ISO-036](/requirements/iso/#REQ-ISO-036) |
 | **T-17** | One environment's policy leaks into another's bundle | Environment boundaries | AP-7 | Policy has one source and is compiled per environment; the build fails on a policy scoped to another environment. | As T-16. | [REQ-ISO-037](/requirements/iso/#REQ-ISO-037) |
-| **T-18** | A grant decided in one environment is spent in another | Environment boundaries | AP-3 | A grant key per environment; a signing actor refuses a grant not signed by its own environment's key. | None beyond T-8. | [REQ-ISO-038](/requirements/iso/#REQ-ISO-038) |
+| **T-18** | A grant decided in one environment is spent in another | Environment boundaries | AP-3 | A sealing key per environment; a signing actor refuses a grant that its own environment's sealing key does not open. | None beyond T-8. | [REQ-ISO-066](/requirements/iso/#REQ-ISO-066) |
 | **T-19** | A person link is used to inherit grants across companies | Company boundaries | AP-1 with one linked account | A subject per directory account and a declared person link with no grant inheritance across it; SSH certificates carry the person key, not the grants. | None beyond T-16. | [REQ-ISO-058](/requirements/iso/#REQ-ISO-058) |
 
 ### Machine identity, enrolment and trust

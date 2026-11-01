@@ -91,7 +91,7 @@ The points [OD-32](/open-decisions/#od-32) to [OD-39](/open-decisions/#od-39) re
 For now the kubernetes runtime supports AWS KMS only, on EKS ([OD-20](/open-decisions/#od-20)). A cluster outside AWS is not supported until a second key mode is wanted.
 
 :::note[Proposed]
-On AWS (EKS) the keys are AWS KMS keys with the same layout as on the other AWS installations: one symmetric key with encryption contexts for sealing, and one `ECC_NIST_P384` key per authority purpose. Each key policy names one actor.
+On AWS (EKS) the keys are AWS KMS keys with the same layout as on the other AWS installations: one symmetric key with encryption contexts for sealing (grants included), and one `ECC_NIST_P384` key per enabled authority purpose. Each key policy names one actor.
 
 When a second mode is wanted, PKCS#11 through `key-holder` comes first, then cloud KMS drivers. A remote `key-holder` on a machine with a hardware key is not proposed, because it puts a key beside a network listener.
 :::

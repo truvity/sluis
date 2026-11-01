@@ -7,11 +7,12 @@ Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/slu
 Rewritten in place on 2026-10-30 (realignment pass).
 Rewritten in place on 2026-10-31 (after spike S4, `key-holder` reaches a YubiKey through `piv-go` rather than PKCS#11 ([0060](/decisions/0060-the-language-follows-the-executable/)); PKCS#11 stays for the planned HSM drivers).
 Rewritten in place on 2026-11-01 (the roots and their ceremonies moved to the separate product [ritueel](https://ritueel.id); this record keeps the keys sluis holds: intermediates, which sign directly and are certified through the hand-off of [0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)).
-Rewritten in place on 2026-11-01 (the maintainer approved a token-signing key that is separate from the CA key, and a static slot map for node cards with a rotation slot for each signing purpose).
+Rewritten in place on 2026-11-01 (the maintainer approved a token-signing key that is separate from the CA key, and a static slot map for node cards).
+Rewritten in place on 2026-11-01, later (decided by the maintainer on 2026-11-01: when a key is shared and when it is separate, a rotation rule, one log key for the audit log and the usage log, grants sealed instead of signed, and the compact slot map, which replaces the rotation pairs).
 
 ## Context
 
-sluis holds four authority keys: the token-signing key, the keys of the certificate authorities, the audit log key and the key that signs mint grants. It also holds the keys that seal secrets at rest, and it has to publish a key for each workload identity it issues. Every one of them is worth more than any single token it signs. Where each lives, who may use it and what happens when the hardware fails are one design, not several.
+sluis holds three kinds of authority key: the token-signing key, the keys of the certificate authorities and the log key that signs the audit log and the usage log. A mint grant is not signed by a key of its own: it is sealed under the sealing key. sluis also holds the keys that seal secrets at rest, and it has to publish a key for each workload identity it issues. Every one of them is worth more than any single token it signs. Where each lives, who may use it and what happens when the hardware fails are one design, not several.
 
 Three things shape it.
 
@@ -26,9 +27,9 @@ sluis holds no root. The roots are made and kept by [ritueel](https://ritueel.id
 ### Signing and custody
 
 - **An authority key signs in place.** The non-extractable key signs each digest itself, in the key service or on the card, and never leaves that store. There are no derived signing keys: a key is never used to certify a short-lived software key that signs in its place. There is no burst key.
-- **There is one key for each purpose.** X.509 keys are separate for each trust domain (intermediates per trust domain: ADR 0031). The SSH user CA and the SSH host CA are separate keys. The token-signing key, the audit log key, the usage log key and the grant key are separate keys, and the token-signing key is not the key of the intermediate that certifies it: a key that issues certificates never signs tokens. An exception of [0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/) has its own key too. A key that is used for two purposes can be abused through the weaker of them.
-- **On AWS, the layout follows how KMS works.** One symmetric key serves every sealing need inside the installation, separated by an encryption context. The key that wraps a backup archive is not that key: it may live in a separate account, and only the restore role may decrypt with it (ADR 0035). One P-384 signing key exists for each authority purpose, so each key policy names exactly one actor. KMS allows one usage for each key, and a signing call takes no encryption context, so this is the only way to say that only one actor may sign with one key.
-- **On a YubiKey, there are no symmetric keys.** Sealing uses ECDH and HKDF in the style of HPKE, with a P-384 key held in a slot. Sealing needs no hardware. Opening does. Older sealing keys stay in retired slots after a rotation so that what they sealed can still be opened. The slot plan is on the keys page.
+- **There is one key for each signing purpose.** X.509 keys are separate for each trust domain (intermediates per trust domain: ADR 0031). The SSH user CA and the SSH host CA are separate keys. The token-signing key and the log key are separate keys, and the token-signing key is not the key of the intermediate that certifies it: a key that issues certificates never signs tokens. An exception of [0010](/decisions/0010-cryptography-uses-p384-by-default-with-named-exceptions/) has its own key too. A key that is used for two purposes can be abused through the weaker of them. The rule for sharing and separating keys is below.
+- **On AWS, the layout follows how KMS works.** A symmetric key is shared per account or environment, with one alias for each use and its own encryption context, enforced by `kms:EncryptionContext:` conditions in the key policy. The key that wraps a backup archive is not the sealing key of the installation: it may live in a separate account, and only the restore role may decrypt with it (ADR 0035). One P-384 signing key exists for each enabled authority purpose, so each key policy names exactly one actor. KMS allows one usage for each key, and a signing call takes no encryption context, so this is the only way to say that only one actor may sign with one key. The layout is on the keys page.
+- **On a YubiKey, there are no symmetric keys.** Sealing uses ECDH and HKDF in the style of HPKE, with a P-384 key held in a slot. Sealing needs no hardware. Opening does. Older sealing keys stay in spare slots after a rotation so that what they sealed can still be opened. The slot plan is on the keys page.
 - **The `keys` port has `wrap` and `unwrap` beside `sign` and `public-key`** ([0002](/decisions/0002-actors-declare-ports-placement-is-derived/)). A caller protects a data key with them without the key that protects it leaving the device. On AWS this is an encrypt call with a context that names the purpose. On a YubiKey it is ECDH and HKDF. A backup archive's data key is wrapped this way.
 - **CA serial numbers are random and 128 bits long.** No serial ledger is needed.
 - **sluis signs in place with the key of each purpose.** The key in the published key set is the token-signing key, a hardware key of its own that signs every token itself. It carries an `x5c` chain (below). A short-lived online key is a road not taken ([0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)).
@@ -42,10 +43,41 @@ sluis holds no root. The roots are made and kept by [ritueel](https://ritueel.id
 
 Hardware-held means a key service such as AWS KMS or a hardware key such as a YubiKey. KMS cannot attest where a key was born, so for it the checks are the key's description, its policy, the audit record of its creation and a match between the public key and the request.
 
+### When keys are shared and when separate
+
+Decided by the maintainer on 2026-11-01. A key is shared between two uses only when every one of these is equal:
+
+- **the audience**: who verifies or decrypts;
+- **the required lifetime**;
+- **revocation coupling**: you would never need to disable one use without the other;
+- **the callers**: the blast radius of a misuse;
+- **the store itself separates the uses**: an encryption context together with key-policy conditions.
+
+If any one differs, the uses get separate keys. This has these consequences:
+
+- **Symmetric KMS keys are shared** per account or environment, with one alias for each use and its own encryption context, enforced by `kms:EncryptionContext:` conditions in the key policy. `Encrypt` and `Decrypt` take a context, so the store itself separates the uses.
+- **Asymmetric signing keys are never shared** across purposes, environments or installations. `kms:Sign` takes no encryption context, and an alias only points to the same key, so the store cannot separate two uses of one signing key.
+- **Tenants get no keys of their own.** Each tenant's data keys are wrapped under the sealing key with the tenant in the encryption context, and shredding a tenant deletes its data key. A per-tenant signing key is a possible later bring-your-own-key feature and is not part of 2.0.
+- **Environments never share keys.** Development, staging and production each have their own.
+
+### Rotation
+
+Decided by the maintainer on 2026-11-01. The yearly cycle **re-signs**, and key material rotates only when it has to.
+
+- **The yearly renewal makes a new certificate or binding over the same key.** An X.509 intermediate is re-signed at the yearly ceremony. An OpenPGP subkey's expiry is extended with a new binding over the same subkey. Neither renewal makes a new key.
+- **Key material rotates only on an event, or at most every three years.** The events are a suspected compromise, a change of algorithm or store, and a change of custody. With no event, a signing key is replaced no later than three years after it was made. This follows the one to three years that NIST SP 800-57 gives as the cryptoperiod of a signing key. The forced rotation also keeps the rotation path exercised, so it is known to work before a compromise needs it.
+- **Symmetric KMS keys use KMS automatic rotation.**
+- **The log key rotates only on compromise.** A verifier has to keep the old public key to check old checkpoints, and a log is one continuous history.
+- **A rotation makes the new key first and retires the old one after.** On a card the new key goes into a free spare slot while the old one finishes; in KMS it is a new key under the same alias.
+
+### Grants are sealed, not signed
+
+Decided by the maintainer on 2026-11-01. A mint grant is read only by sluis itself, so no outside verifier needs a signature it can check against a public key. `policy` seals the grant with authenticated encryption under the sealing key, with `purpose=grant` in the encryption context, and the actor that carries it out opens it under the same context. On AWS the key policy lets `policy` encrypt and the minters decrypt under that context only. On a YubiKey the sealing slot `9d` serves grants too. There is no grant-signing key. A grant sealed in one environment cannot be opened in another, because environments never share keys.
+
 ### Two main topologies
 
 1. **A KMS root and a KMS intermediate for each environment** (development, staging and production), on AWS.
-2. **A YubiKey intermediate on each node**, on the boards. Each node's intermediate is generated on its card, attested, and certified by a root card through ritueel. The certificate lasts about 13 months and is renewed every year.
+2. **A YubiKey intermediate on each node**, on the boards. Each node's intermediate is generated on its card, attested, and certified by a root card through ritueel. The certificate lasts about 13 months and is re-signed every year over the same key.
 
 In both, the root is ritueel's: a KMS root, or root cards. A root on a YubiKey with KMS intermediates is allowed but is not a main pattern.
 
@@ -81,24 +113,24 @@ In both, the root is ritueel's: a KMS root, or root cards. A root on a YubiKey w
 
 ### The card slot map
 
-- **A documented, versioned map says which card slot serves which purpose.** It has one slot per purpose and a rotation slot for each signing purpose, because the yearly renewal makes the new key while the old one is still valid. The table is the default map, version 1. It covers PIV slots `9a`, `9c`, `9d` and `9e` and the retired slots `82` to `95`, which in hex are 20 slots. With the four named slots that makes 24, and the map uses 23.
+- **A documented, versioned map says which card slot serves which purpose.** It has one slot per purpose. A key made by a rotation that an event forces goes into a free spare slot while the old key finishes. The table is the default map, version 1, decided by the maintainer on 2026-11-01. It covers PIV slots `9a`, `9c`, `9d` and `9e` and the retired slots `82` to `95`, which in hex are 20 slots. With the four named slots that makes 24, and the map uses seven.
 
-  | Purpose | Slot | Rotation slot |
-  |---|---|---|
-  | X.509 CA (the node intermediate) | `9c` | `82` |
-  | Token signing | `9a` | `83` |
-  | `ssh-user` CA | `84` | `85` |
-  | `ssh-host` CA | `86` | `87` |
-  | OpenPGP release signing subkey | `88` | `89` |
-  | Audit log key | `8a` | `8b` |
-  | Usage log key | `8c` | `8d` |
-  | Mint grant | `8e` | `8f` |
-  | Sealing (ECDH, ring wrap) | `9d` | `90` to `95` hold older sealing keys until their data keys are re-wrapped |
-  | None | `9e` | Not used: the card-authentication slot signs without a PIN by default |
+  | Slot | Purpose |
+  |---|---|
+  | `9c` | X.509 intermediate |
+  | `9a` | Token signing |
+  | `9d` | Sealing (ECDH, ring wrap), also used for grants |
+  | `82` | `ssh-user` CA |
+  | `83` | `ssh-host` CA |
+  | `84` | Log key (audit and usage) |
+  | `85` | OpenPGP release-signing subkey |
+  | `86` to `95` | Spare: a key made by an event rotation goes in a free spare slot while the old one finishes. Older sealing keys stay here until their data keys are re-wrapped |
+  | `9e` | Not used: the card-authentication slot signs without a PIN by default |
 
+- **A purpose an installation does not enable gets no slot and no key.** An installation that issues no SSH certificates has no SSH CA key, and so on. `sluis config check` refuses only an enabled purpose that has no slot.
 - **Keys are per environment boundary, not per tenant.** A card belongs to one boundary. The data keys of tenants and companies are wrapped by the sealing key, so they need no slots.
 - **Defaults ship in code, and an installation may override them in declared configuration.** The map is for node cards. The slot map of root cards is ritueel's.
-- **`sluis config check`, `sluis key request` and node initialisation refuse a collision and a purpose with no slot.** The map records each slot's attestation in the registry.
+- **`sluis config check`, `sluis key request` and node initialisation refuse a collision and an enabled purpose with no slot.** The map records each slot's attestation in the registry.
 - **The exact slot numbers are settled when `key-holder` is built** (issue #914). The table above is the default map and the keys page shows it.
 
 ### Related records
@@ -111,14 +143,14 @@ In both, the root is ritueel's: a KMS root, or root cards. A root on a YubiKey w
 
 ## Consequences
 
-- No key can be exported, so a backup never holds one. A restore on new hardware means new keys and a new certificate for each public key. The hand-off to ritueel and the yearly renewal are what make that safe. Secrets that are not keys, such as a vendor-issued App key, are archived sealed, and the escrow of the sealing key never copies a key out of its device ([0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
+- No key can be exported, so a backup never holds one. A restore on new hardware means new keys and a new certificate for each public key. The hand-off to ritueel and the yearly re-signing are what make that safe. Secrets that are not keys, such as a vendor-issued App key, are archived sealed, and the escrow of the sealing key never copies a key out of its device ([0016](/decisions/0016-data-has-an-origin-and-a-sensitivity/)).
 - Signing speed is set by the store, not by software. A YubiKey signs P-384 at about 120 ms, or about 8 signatures a second, and the measured peak is a tenth of that. KMS costs about $2.62 a month at the measured volume. A software key is only for development and for CI.
-- Every purpose adds a key, a policy and a rotation schedule. In return a key policy names one actor and one use.
+- Every enabled signing purpose adds a key and a policy. In return a key policy names one actor and one use. Sharing symmetric keys per environment, and sealing grants and tenant data keys under the sealing key, keeps the number of keys small.
 - The token-signing key adds a certificate to issue under each new intermediate, and a certificate to the chain in the key set. In return no key signs both certificates and tokens.
-- Each signing purpose holds two slots, so a node card has room for the rotation of every purpose and for six older sealing keys, with only `9e` left empty.
+- A node card uses seven slots and keeps sixteen spare, for event rotations and for older sealing keys. `9e` stays empty.
 - The roots, their trust anchors and their revocation are ritueel's. What reaches sluis is a signed root list, and a revoked intermediate has to reach every verifier ([0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)).
 - Nodes that sign unattended depend on the PIN handling above. A full power loss needs a person. A wrong PIN is never retried, so a bad unlock cannot lock the card.
-- Intermediates are certified for about 13 months, so each is renewed once a year, and the renewal needs a person at ritueel's side.
+- Intermediates are certified for about 13 months, so each is re-signed once a year over the same key, and the re-signing needs a person at ritueel's side. Key material changes on an event or after three years at most.
 - `sluis config check` has to know the key modes, the floor and the slot map. The tests need a virtual card or a software stand-in for the signer, and rehearsals on a real card.
 - A key born in a slot of the map is attested there, so a reviewer can compare the registry with the map.
 - The keys page, the hardware page and the release-signing page say the same as this record.
@@ -161,11 +193,35 @@ In both, the root is ritueel's: a KMS root, or root cards. A root on a YubiKey w
 - Cons: one key both issues certificates and signs tokens, so the key policy cannot say that the token signer may not mint a certificate, and a flaw in token handling reaches the CA. The CA key is used for every token, not only for certificates.
 - Why not: the maintainer decided on 2026-11-01 that the token-signing key is its own hardware key, certified by the intermediate with a non-CA certificate for signing only. It still signs in place on the card, so this is not the short-lived key road below.
 
-### One slot per purpose, rotated by overwriting
+### A rotation slot for each signing purpose, used in turn
 
-- Pros: half as many slots, so a node card has room to spare.
-- Cons: the old key is gone before the new certificate is installed, so a failed renewal leaves a purpose with no key.
-- Why not: the renewal needs the old key to stay valid while the new one is certified, so each signing purpose gets a rotation slot. (the cons are inferred)
+- Pros: every yearly renewal could make a new key while the old one still signs.
+- Cons: the yearly renewal does not need a new key. Most purposes would hold a slot that is empty for years, and the pairs left no room for a purpose that comes later.
+- Why not: the yearly cycle re-signs the same key, and key material rotates only on an event or after three years at most. A free spare slot serves the rare rotation, and the spare slots are shared by every purpose.
+
+### Yearly rotation of key material
+
+- Pros: a key is never older than a year.
+- Cons: a hardware key is replaced every year with a ceremony for each node, which adds exposure and work, and the rotation path is exercised no better than by a rotation every three years.
+- Why not: NIST SP 800-57 gives one to three years for a signing key, and re-signing the same key each year keeps the trust chain fresh. Key material rotates on an event, or at most every three years, which also keeps the rotation path exercised.
+
+### A separate usage-log key
+
+- Pros: the usage log could be given to a reader with a key of its own.
+- Cons: a second key, a second policy and a second slot, for readers that verify the same writer's output.
+- Why not: both logs have one audience, one lifetime and one writer. One log key per installation signs both, and each signed batch head names its log, which keeps the two apart.
+
+### A grant-signing key
+
+- Pros: a grant would carry a signature that a verifier checks against a public key.
+- Cons: no outside party verifies a grant. A key for it adds a slot, a key policy and a rotation, and signing authenticates the grant but does not need to be readable by anyone else.
+- Why not: grants are verified only by sluis itself, so they are sealed under the sealing key with `purpose=grant` in the encryption context.
+
+### A signing or sealing key for each tenant
+
+- Pros: a tenant's data and signatures could be cut off by deleting its key in the store.
+- Cons: thousands of tenants would mean thousands of keys, policies and aliases, and KMS charges for each key.
+- Why not: each tenant's data keys are wrapped under the sealing key with the tenant in the encryption context, and shredding a tenant deletes its data key. A per-tenant signing key is a possible later bring-your-own-key feature.
 
 ### Fixed slot numbers with no map
 
@@ -183,11 +239,11 @@ In both, the root is ritueel's: a KMS root, or root cards. A root on a YubiKey w
 
 - Pros: fewer keys to hold and rotate.
 - Cons: a key policy cannot say that only one actor may use one purpose. A weakness in one use becomes a weakness in all.
-- Why not: the key policy is the control, and it needs one purpose for each key.
+- Why not: the key policy is the control, and it needs one purpose for each signing key. Symmetric keys are the exception, because the store separates their uses by encryption context (see the sharing rule above).
 
 ### A key set with no `x5c`
 
-- Pros: nothing extra to publish and refresh at the yearly renewal.
+- Pros: nothing extra to publish and refresh at the yearly re-signing.
 - Cons: custody can be checked only in the audit log.
 - Why not: a standard client ignores the member, and a verifier that wants the chain to the root can have it. The chain is in the key set and not in each token, which would add size and a second trust path.
 

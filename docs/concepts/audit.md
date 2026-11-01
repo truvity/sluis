@@ -67,7 +67,7 @@ The **witness** co-signs batch heads it has seen, so that the writer alone canno
 
 ## Exactly one writer per log
 
-The rule is **exactly one writer per log**, not one per installation. A log is the ordered sequence of batches with one log key. The writer declares **instances: exactly 1**, so when an installation has more than one node, or elastic nodes, it needs the lease port.
+The rule is **exactly one writer per log**, not one per installation. A log is the ordered sequence of batches of one kind. The audit log and the usage log of an installation are signed with the same log key, and every signed batch head names its log. The writer declares **instances: exactly 1**, so when an installation has more than one node, or elastic nodes, it needs the lease port.
 
 **The writer is fenced by the blob store itself.** A batch object is created only if it does not exist yet (`If-None-Match: *`), so a second writer that believes it holds the log cannot overwrite a batch or fork the log: its create fails. The lease, where one is needed, lives on the state store with a fencing token ([Data](/concepts/data/#leases-and-fencing-tokens)).
 
@@ -80,9 +80,9 @@ The rule is **exactly one writer per log**, not one per installation. A log is t
 | [local](/runtimes/installations/#local) | A software key, or the host's YubiKey through `key-holder` | None |
 | [boards](/runtimes/installations/#boards) | Each node's own YubiKey signs for that node's log, through the shared `key-holder` | The other two nodes, as `peer` witnesses |
 | [lambda](/runtimes/installations/#lambda) | One KMS `ECC_NIST_P384` key whose key policy names the writer function's role only | None by default; `external` is possible |
-| [kubernetes](/runtimes/installations/#kubernetes) | A KMS key per log, named in the writer's ServiceAccount role | None by default; a `peer` witness is not independent within one cluster |
+| [kubernetes](/runtimes/installations/#kubernetes) | One KMS key per writer, named in the writer's ServiceAccount role | None by default; a `peer` witness is not independent within one cluster |
 
-A key per log is a consequence of the rule. KMS `Sign` takes no encryption context, and IAM cannot restrict which message gets signed, so "only the writer may sign this log" can only be expressed as a key policy on a key that exists for that one log.
+A key for the writer is a consequence of the rule. KMS `Sign` takes no encryption context, and IAM cannot restrict which message gets signed, so "only the writer may sign this log" can only be expressed as a key policy on a key that exists for that writer. One log key signs both log kinds, because they have one writer, one audience, one lifetime and one revocation, and the batch head's origin names the log it belongs to (decided by the maintainer on 2026-11-01). The log key rotates only on compromise.
 
 ## The transport
 
@@ -165,7 +165,7 @@ The record formats follow published standards too ([ADR 0064](/decisions/0064-au
 **The usage stream holds what was used,** as CloudEvents 1.0 events in structured JSON, canonical by RFC 8785, shaped like OpenMeter's usage events: the `type` selects a meter, the `subject` is the account, and `data` holds the unit, an integer amount with its sign, the request id and the subject's pseudonym. Its `id` is the audit record's id with the position of the event in the message.
 
 - **One call, one message, two logs.** The emitter builds the audit record and the usage events from one call, and sends one message. The writer splits it, and registers both logs' sealed batches in one atomic state batch with the duplicate ids, so the two logs never disagree. There is no dual write, no second writer, and no way to emit a usage event without its audit record.
-- **Each kind is a log of its own:** its own prefix or bucket, log key, checkpoints, retention, lock mode, readers and off-site copy. Every rule on this page holds for each kind. Witnesses cosign both, and usage entries are encrypted per company like audit entries.
+- **Each kind is a log of its own:** its own prefix or bucket, checkpoints, retention, lock mode, readers and off-site copy. Every rule on this page holds for each kind. Both kinds are signed with the installation's one log key, and each signed head names its log. Witnesses cosign both, and usage entries are encrypted per company like audit entries.
 - **Quota and finance read it,** and only quota writes balance effects into it. The usage log has no search index. The finance export is a table derived from it, in the style of FinOps FOCUS.
 
 The standards are on the [register](/standards/#transparency-and-audit). The class of each action is listed in [ADR 0064](/decisions/0064-audit-records-are-ocsf-events-with-one-unmapped-sluis-object-and-usage-is-a-separate-stream/#the-class-mapping).
@@ -194,7 +194,7 @@ The lock mode comes from the blob backend: `compliance` on AWS S3, `removable` o
 
 ## Companies, encryption and erasure
 
-There is one audit log per environment boundary, and each company is a reader tenant of it with its **own audit tenant key** ([ADR 0009](/decisions/0009-one-installation-per-boundary/)).
+There is one audit log per environment boundary, and each company is a reader tenant of it with its **own audit tenant key** ([ADR 0009](/decisions/0009-one-installation-per-boundary/)). That key is a data key wrapped under the sealing key with the company in the encryption context, not a key of its own in the key store (see [Keys](/concepts/keys/#when-keys-are-shared-and-when-separate)).
 
 - **Each entry is an envelope in clear plus the record, encrypted with HPKE to the company's key.** The envelope holds the record id, its times, the company, the action class, the outcome and the actor kind, with OCSF field names, and the boundary is the log's; the record itself is encrypted with a data key per (company, batch), sealed to the company's public key, so the writer cannot read back what it wrote. A machine-plane record is encrypted to the boundary's own audit key. A usage entry has the same form and the same company key.
 - **The tree hashes the whole entry, ciphertext included.** A company that leaves has its slice exported and its key crypto-shredded; its records stay in the log, still verifiable, and nobody can read them again.

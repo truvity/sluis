@@ -65,7 +65,7 @@ The package manager verifies the repository for you.
 
 Verify the key itself when you add it: a primary key's fingerprint is stable across subkey changes, so compare it with the copy attached to the GitHub release. The keyring package carries every active primary and every current subkey binding; use it, not one primary's certificate. See [Packages](/distribution/packages/) for the setup.
 
-A signing subkey lasts about 13 months and is renewed every year, and each renewal ships in a new keyring package. Refresh your keyring when a repository starts failing after the old subkey's expiry date.
+A signing subkey lasts about 13 months. Each year its expiry is extended with a new binding over the same subkey, and each extension ships in a new keyring package. The key itself changes only on an event or after three years at most. Refresh your keyring when a repository starts failing after the old subkey's expiry date.
 
 ### Binaries and Lambda zips
 
@@ -96,7 +96,7 @@ A Helm chart pins its images by digest, so verifying the chart and installing it
 The OpenPGP key is a **dedicated sluis release identity**, not anyone's personal key.
 
 - **The primaries are ritueel's.** There are two primary keys, one on each root card, held and used only at ritueel's yearly ceremony. They are redundancy, not two-person control. How they are made, why there are two, how the cards alternate and what to do when one is lost are taught at [ritueel.id](https://ritueel.id/concepts/openpgp-release-keys/). sluis does not hold a primary and does not run that ceremony.
-- **A signing subkey does the work.** It is generated on the signing key store (a node's YubiKey, or a cloud key service), bound by the primary of the year, and carries a back-signature that `key-holder` makes on the card ([ADR 0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)). It lasts about 13 months and is renewed every year, so years overlap. sluis warns 60, 30 and 14 days before it expires.
+- **A signing subkey does the work.** It is generated on the signing key store (a node's YubiKey, or a cloud key service), bound by the primary of the year, and carries a back-signature that `key-holder` makes on the card ([ADR 0031](/decisions/0031-intermediates-and-the-hand-off-to-root-custody/)). It lasts about 13 months, and each year a new binding over the same subkey extends its expiry, so years overlap. The subkey itself is replaced only on an event or after three years at most ([ADR 0011](/decisions/0011-authority-keys-sign-in-place-and-never-leave-their-store/#rotation)). sluis warns 60, 30 and 14 days before it expires.
 - **Users verify with the keyring package,** which carries both primaries and every current subkey binding. A verifier that holds only one primary's certificate cannot check a signature from a subkey that the other primary bound.
 - **A subkey is revoked by the primary of the year.** The revocation reaches users through a new keyring package.
 - **The maintainer's personal key certifies each release key** is an open question, tracked with the publication research (ritueel issue 28).
