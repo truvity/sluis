@@ -368,6 +368,11 @@ adapters-doc:
 tidy:
     go mod tidy
 
+# Run go mod tidy in every Go module of the repository, dependencies first (what
+# renovate runs after a Go dependency update; see hack/tidy-modules.sh)
+tidy-modules:
+    hack/tidy-modules.sh
+
 # Clean build artifacts
 clean:
     rm -rf dist/ frontend/dist/ ts/dist/ coverage.out

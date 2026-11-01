@@ -36,6 +36,31 @@
     },
     {
       "description": [
+        "gomodTidy tidies only the module whose go.mod renovate edited. This repository has seven",
+        "Go modules and most of them replace one another with a path, so one bump moves the go.sum of",
+        "modules renovate never touched: #759 left five of them untidy (stale hashes kept, new ones",
+        "missing) and failed the check, console and audit e2e jobs until it was redone by hand (#1084).",
+        "hack/tidy-modules.sh runs `go mod tidy` in every module, dependencies first, after renovate's",
+        "own pass, once per branch. The command is allowlisted by the caller's `allowed-commands`",
+        "(truvity/ci-caller, renovate-public.yaml); without that entry renovate refuses it and reports",
+        "an artifact error on the pull request."
+      ],
+      "matchManagers": [
+        "gomod"
+      ],
+      "postUpgradeTasks": {
+        "commands": [
+          "bash hack/tidy-modules.sh"
+        ],
+        "fileFilters": [
+          "**/go.mod",
+          "**/go.sum"
+        ],
+        "executionMode": "branch"
+      }
+    },
+    {
+      "description": [
         "third_party/ holds patched copies of other projects' modules, kept as",
         "upstream wrote them at one version. Their go.mod files are upstream's and",
         "are not updated here; the root go.mod's require is."
