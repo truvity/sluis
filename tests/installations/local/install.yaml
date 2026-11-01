@@ -20,7 +20,7 @@ boundaries:
         kind: confidential
         redirects: [https://app.local.test/callback]
         secret: { credential: client-example-app }
-        requires: [dev:example-app:user]
+        requires: [dev:example-app:user, acme:example-app:user]
 
 drivers:
   keys: software
@@ -46,7 +46,7 @@ clients:
     kind: exchange
 
 policy:
-  files: [policy/local.cedar]   # written with the Cedar schema (#1008)
+  files: [policy/local.cedar]   # the Cedar schema is embedded; see https://sluis.id/reference/policy/
   vocabulary: policy/vocabulary.yaml
 
 trust:

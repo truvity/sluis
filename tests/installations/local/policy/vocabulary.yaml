@@ -1,0 +1,14 @@
+# The grant vocabulary of the local installation (ADR 0028): the scopes, the things with their
+# roles, and what each role implies. A grant is <scope>:<thing>:<role>, and every scope has every
+# thing. A role implies the roles listed under it, on the same scope and thing.
+scopes:
+  dev: {}
+  acme: {}                  # a company
+  prod: { sensitive: true } # named in full or not granted; a wildcard never reaches it
+
+things:
+  example-app:
+    roles:
+      user: []
+      operator: [user]
+      admin: [operator]
