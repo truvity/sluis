@@ -6,23 +6,23 @@ sidebar:
   order: 2
 ---
 
-Early sluis releases carry checksums and GitHub build provenance attestations only. Nothing is signed with a sluis key until [ritueel](https://ritueel.id) has held the root ceremony and its drill, because a signature that a later root does not vouch for teaches users to trust a key that is then thrown away. From then on, releases are signed through sluis's own signing API with a release subkey held in a cloud key service: detached signatures first, then signed apt and dnf metadata at the parity milestone ([ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/#signed-releases), [ADR 0019](/decisions/0019-release-train-packaging-and-distribution/#signing-and-checksums)).
+Releases before the roots exist carry checksums, SBOMs, GitHub build-provenance attestations and keyless cosign signatures on images, all made by the CI build with no stored key. Nothing is signed with a sluis key or with OpenPGP until [ritueel](https://ritueel.id) has held the root ceremony and its drill, because a signature that a later root does not vouch for teaches users to trust a key that is then thrown away. From then on, releases are signed through sluis's own signing API with a release subkey held in a cloud key service: detached signatures first, then signed apt and dnf metadata at the parity milestone ([ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/#signed-releases), [ADR 0019](/decisions/0019-release-train-packaging-and-distribution/#signing-and-checksums)).
 
 ## What a release carries
 
 | From | What | Verified with |
 |---|---|---|
 | The first release | A `.sha256` per file and a `SHA256SUMS` for the release | `sha256sum`, against the copy on GitHub Releases |
-| The first release | GitHub build provenance attestations for every artifact | `gh attestation verify` |
+| The first release | GitHub build provenance attestations for every artifact and image digest, and SBOM attestations bound to them | `gh attestation verify` |
+| The first release | An SPDX JSON SBOM per archive and per image, made by syft | Any SPDX reader |
+| The first release | A keyless cosign signature on each image digest | `cosign verify` |
 | The roots exist | `SHA256SUMS.asc`, a detached ASCII-armoured OpenPGP signature over `SHA256SUMS` | `gpgv` or `sqv` with the release keyring |
 | The parity milestone | Signed apt metadata (`InRelease`, `Release.gpg`) and dnf metadata (`repomd.xml.asc`) ([#1074](https://github.com/truvity/sluis/issues/1074)) | apt with `signed-by`, dnf with `repo_gpgcheck=1` |
 | Later | A header signature on each rpm package | dnf with `gpgcheck=1` |
 
 R2 serves the files and GitHub Releases is the immutable record; when they differ, the release is right. A provenance attestation says which workflow built a file. It is GitHub's statement, not a signature by a sluis key.
 
-:::note[Proposed]
-The role of Sigstore next to OpenPGP is not decided: whether images, charts and binaries also get cosign keyless signatures through GitHub OIDC, and when the signing API returns a Sigstore bundle. The signing-API record tracks it: [#1013](https://github.com/truvity/sluis/issues/1013).
-:::
+Sigstore says how a file was built, not who vouches for it: its trust rests on GitHub's OIDC identity and the public Sigstore instance, so it does not replace the OpenPGP release key ([ADR 0019](/decisions/0019-release-train-packaging-and-distribution/#signing-and-checksums)). GHCR has no OCI referrers API, so the attestations and signatures of an image are found through the fallback tag `sha256-<digest>`; a registry mirror must copy those tags too.
 
 ## How to verify
 
@@ -73,7 +73,7 @@ Use the digest, not a tag, and check the provenance:
 
 ```sh
 # Example
-gh attestation verify oci://ghcr.io/truvity/sluis/actors/entry@sha256:<digest> --repo truvity/sluis
+gh attestation verify oci://ghcr.io/truvity/sluis/actor-entry@sha256:<digest> --repo truvity/sluis
 ```
 
 A Helm chart pins its images by digest, so verifying the chart and installing it gives the images released with it.

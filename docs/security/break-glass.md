@@ -6,7 +6,7 @@ sidebar:
   order: 1
 ---
 
-**Break-glass recovery** is the operator's way back in when normal sign-in cannot work: the upstream directory is down, a federation is misconfigured, or no upstream can vouch for anyone. It is the one exception to the rule that sluis hosts no accounts and stores no passwords ([REQ-CIAM-017](/requirements/ciam/#REQ-CIAM-017), [Design principles](/principles/)). Its decision record is planned: [#1000](https://github.com/truvity/sluis/issues/1000).
+**Break-glass recovery** is the operator's way back in when normal sign-in cannot work: the upstream directory is down, a federation is misconfigured, or no upstream can vouch for anyone. It is the one exception to the rule that sluis hosts no accounts and stores no passwords ([REQ-CIAM-017](/requirements/ciam/#REQ-CIAM-017), [Design principles](/principles/)). Its decision record is [ADR 0024](/decisions/0024-break-glass-recovery-uses-passkeys-only/).
 
 ## Passkeys only
 

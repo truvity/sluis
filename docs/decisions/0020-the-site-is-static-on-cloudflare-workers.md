@@ -16,7 +16,7 @@ The project board has a single-select field, `Product milestone`, whose options 
 ## Decision
 
 - **Astro Starlight stays, and every docs page stays prerendered,** so Pagefind search keeps working. The static output is served by Cloudflare Workers with static assets, through the official `@astrojs/cloudflare` adapter.
-- **Only two things run as Worker code:** the `/api/*` routes and one server island on the status page. Every other request is a static asset and does not invoke the Worker. The adapter's route cache (`cacheCloudflare()`) is not used, because it turns on Workers Cache, which bills static asset requests.
+- **Only the `/api/*` routes run as Worker code** (`run_worker_first` lists `/api/*` and nothing else). Every other request is a static asset and does not invoke the Worker. The status page's live block is the Worker's HTML at `/api/status/live/`, which a bundled page script fetches and swaps in for the build-time snapshot; it is not an Astro server island, because the island's inline loader changes with every build and so cannot be listed in the hash-based Content-Security-Policy. The adapter's route cache (`cacheCloudflare()`) is not used, because it turns on Workers Cache, which bills static asset requests.
 - **GitHub Actions builds and deploys the site.** The deploy job runs on a push to `main`, or a manual run from `main`, after the site checks have passed, and runs `wrangler deploy`. Deploys never overlap.
 - **The deploy runs in the GitHub environment `cloudflare`, which allows `main` only** and holds the deploy's secrets: the Cloudflare API token, the account identifier and the KV namespace id. A pull request, a fork's included, never gets them.
 - **The token can deploy this one Worker only, and it expires.** The maintainer creates and rotates it.
@@ -34,7 +34,7 @@ The project board has a single-select field, `Product milestone`, whose options 
 - The deploy needs a long-lived Cloudflare API token, because Cloudflare accepts no OIDC federation for deploys. Its scope (one Worker, no create or delete), its expiry and the `main`-only environment limit a leak, but anyone who can merge to `main` or edit a workflow that runs there can use it. A deploy that fails authentication is the reminder to rotate it.
 - The deploy job rebuilds the site for the Worker, because the KV namespace id is written into the generated Worker configuration at build time from a secret only that job can read. One CI shows build and deploy together, and a broken deploy is a red check on the commit.
 - The Worker holds two secrets, the App's private key and the webhook secret. The App is read-only, so a leaked key gives read access and nothing more.
-- The server island needs a fixed `ASTRO_KEY`, so cached HTML can still decrypt its props after a redeploy; readers without JavaScript and crawlers see the snapshot.
+- The live block needs no `ASTRO_KEY` and no inline script, so the Content-Security-Policy stays hash-based. Readers without JavaScript and crawlers see the build-time snapshot, and so does everyone when the fetch fails; a note above the block says which one is shown.
 - The status page changes when the maintainer edits the board, with no pull request; decision and requirement status change only by a merged pull request. Work without an issue on the board is invisible there.
 - The static output, `_headers` and `_redirects` stay close to portable; the API (KV, cron, the adapter's bindings) is Cloudflare-specific.
 - No product requirement follows: this is the project's own site, not something sluis does.
@@ -44,6 +44,7 @@ The project board has a single-select field, `Product milestone`, whose options 
 - **GitHub Pages only, rebuilt on events.** No security headers beyond a meta CSP, no server-side redirects, and freshness of minutes at best.
 - **GitHub Pages plus a Worker on `/api/*`.** Two deploy systems, and headers patched on with zone rules instead of a file in the repository.
 - **Cloudflare Pages.** The platform both Cloudflare and the Astro adapter are moving away from.
+- **An Astro server island for the live block.** Its inline loader holds a random id and an encrypted token that change with every build, which a hash-listed Content-Security-Policy cannot allow, and it needs a fixed `ASTRO_KEY`.
 - **Full on-demand rendering on Workers.** Every request would be a billed Worker request, and `prerender: false` disables search; the docs change only on merge.
 - **Another docs engine.** Each would mean rewriting the components, the explorers and the requirements pages, with no gain over Astro's content layer.
 - **Cloudflare's own build service.** A second CI whose logs live in the dashboard, which deploys without waiting for the repository's checks and whose check links carry the account identifier.
@@ -52,4 +53,4 @@ The project board has a single-select field, `Product milestone`, whose options 
 
 ## Follow-ups
 
-- The live status API on the Worker (webhooks, KV, cron, the CI summaries): [#1037](https://github.com/truvity/sluis/issues/1037). Built on 2026-11-01 as described in [Tools: the live status API](/contributing/tools/#the-live-status-api). The live block of the status page is the Worker's HTML at `/api/status/live/`, swapped in by a bundled page script rather than by Astro's server island, whose inline loader changes with every build and so cannot be listed in the hash-based Content-Security-Policy; no `ASTRO_KEY` is needed. The webhook subscription and its secret are set by the maintainer.
+- The live status API on the Worker (webhooks, KV, cron, the CI summaries): [#1037](https://github.com/truvity/sluis/issues/1037). Built on 2026-11-01 as described in [Tools: the live status API](/contributing/tools/#the-live-status-api); the webhook subscription and its secret are set by the maintainer.

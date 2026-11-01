@@ -28,35 +28,42 @@ The research of 2026-10-30 found:
 - **R2. Rust at the unauthenticated edge**, where a process is reachable by unauthenticated network input and needs no protocol library that is mature only in Go: the slim `entry`, and the key-less edge relay on Kubernetes ([0018](/decisions/0018-runtimes-installations-and-delivery-order/#kubernetes)). An edge actor that needs an OpenID Connect provider stays Go until a Rust one exists.
 - **R3. Rust for the trusted base:** processes that run as root or as a shared mediator, speak a fixed local protocol and hold a PIN, a session or key material in memory: `sluis-node`, `key-holder` and `sluis-host`. One named exception: `key-holder` is Go (below).
 - **R4. Go where the deciding library is Go-only or best in Go:** the X.509 CA and its issuance log, the C2SP log writer and witness, the OpenID Connect provider and token exchange, PIV attestation, HPKE, age with post-quantum recipients, TPM, Kubernetes controllers and the cert-manager issuer, and the vendor SDKs.
-- **R5. Drivers follow their backend's best SDK, with one language per vendor SDK in the build.** AWS, GCP and Azure are Rust, so the build has one AWS SDK language. Local backends default to Go. One named exception: `cloud-cloudflare` is Go.
+- **R5. Drivers follow their backend's best SDK, with one language per vendor SDK in the build.** AWS, GCP and Azure are Rust, so the build has one AWS SDK language. Local backends have no vendor SDK and follow R11, because they run on the boards. One named exception: `cloud-cloudflare` is Go.
 - **R6. Go by default** for business logic, CRUD and integrations, except on the smallest board tier (R11): delivery speed, stable OpenTelemetry and the wider hiring pool.
 - **R7. No Rust where the only library for a security function is marked experimental or unaudited.** Use a standard interface such as PKCS#11, or stay in Go. The `yubikey` crate is the case in point.
 - **R8. No FIPS build in 2.0.** Rust components use current crates and rustls, with no FIPS pin, and keep to the approved algorithms of [0012](/decisions/0012-cryptography-and-authority-keys/#algorithms). A FIPS build of the Rust side would need aws-lc-rs in FIPS mode and an answer for the AWS SDK for Rust, which signs SigV4 requests and S3 checksums with RustCrypto, outside any module (spike S2, 2026-10-30).
 - **R9. Both kits pass one conformance suite:** Connect over Unix sockets with peer credentials, configuration from the JSON Schema, the CLI conventions, OpenTelemetry. A component may move language only once its language's kit passes the suite.
 - **R10. Contracts are on the wire, so a choice is reversible.** A language change replaces one component behind the same contract and suite.
-- **R11. Rust on the smallest board tier, unless a serious trade-off is named.** An actor that runs on a tier-0 board (2 GB, as in spike S5) prefers Rust. Go is used there only where the rules name a serious trade-off, such as a required library that exists only in Go. Where no trade-off is named yet, the component's language is chosen by R11 when its component is designed. Building the trusted base in Go first and swapping later is acceptable, under R9.
+- **R11. Rust on the smallest board tier, unless a serious trade-off is named.** An actor that runs on a tier-0 board (2 GB, as in spike S5) prefers Rust. Go is used there only where the rules name a serious trade-off, such as a required library that exists only in Go. The per-actor table below names the language of every component; a later design that names a serious trade-off changes its row. Building the trusted base in Go first and swapping later is acceptable, under R9.
 - **`GOMEMLIMIT` is a ceiling** at 2 to 3 times each process's steady private memory, with the default `GOGC` (24 to 32 MiB for rqlite, 24 MiB for an actor; decided 2026-10-31). A limit of 12 MiB cut throughput by 61 to 81 % through garbage collection.
 
 ### Per-actor table
 
-| Component | Language | Rule |
-|---|---|---|
-| `entry` (slim), the Kubernetes edge relay | Rust | R2 |
-| `sluis-node` | Rust. It verifies OpenPGP signatures on signed configuration and binaries, by a release subkey that a root primary in the keyring has bound; Sigstore provenance is a second signal, not the trust | R3 |
-| `sluis-host` | Rust | R3 |
-| `key-holder` | Go with `piv-go` for YubiKey PIV | R4: an exception to R3 |
-| `policy` | Rust | R4 (`cedar-policy`) |
-| `cloud` port drivers: web identity, platform role, GCP and Azure federation | Rust | R5 |
-| AWS-backed drivers of the other ports: `aws-kms`, `dynamodb` (state and lease), `sqs`, `s3-compatible` blob | Rust | R5 |
-| `cloud-cloudflare` | Go, sharing the library of the integration `cloudflare@<company>` | R4: an exception to R5 |
-| `session` | Go | R4: the embeddable OpenID Connect provider |
-| `exchange` | Go | R4: the proof verifiers, HPKE and the OpenID Connect provider; its HPKE key and the session cookie-sealing key stay behind the `keys` port |
-| `ca` | Go | R4: the X.509 CA and its issuance log |
-| `writer`, `witness` | Go | R4: the C2SP log writer and witness |
-| Integrations | Go | R4: the vendor SDKs |
-| Other drivers (local backends, indexes, witnesses, `nats-jetstream`, `age` export) | Go | R5, R6; R4 for `age` export (age with post-quantum recipients) |
-| `signer`, `ssh-ca`, `quota`, `console` (the actor; the single-page application is TypeScript), `indexer`, `reader`, the local drivers (rqlite state, lease and index, the spool, the local lock, the files blob, `sqlite`), `sluis agent` | R11: Rust unless the component's design names a serious trade-off | R11 |
-| The `sluis` CLI, the cert-manager issuer | Go | R4, R6; not resident on a tier-0 board |
+A Rust row holds once its spikes pass ([The spikes are gates](/decisions/0014-the-language-follows-the-executable/#the-spikes-are-gates)). A gate does not stop work: the component is built against its contract and the conformance suite meanwhile, and a failed gate moves it to the fallback candidate. Go rows have no gate.
+
+| Component | Language | Rule | Gate | First working version |
+|---|---|---|---|---|
+| `entry` (slim), the Kubernetes edge relay | Rust | R2 | S1, S3, S10 | `entry` |
+| `sluis-node` | Rust. It verifies OpenPGP signatures on signed configuration and binaries, by a release subkey that a root primary in the keyring has bound; Sigstore provenance is a second signal, not the trust | R3 | S1, S10 | no |
+| `sluis-host` | Rust | R3 | S1, S10 | no |
+| `key-holder` | Go with `piv-go` for YubiKey PIV | R4: an exception to R3 | none | yes |
+| `policy` | Rust | R4 (`cedar-policy`) | S1, S10 | yes |
+| `signer` | Rust: it signs through the `keys` port and needs no Go-only library | R11 | S1, S10 | yes |
+| `console` (the actor; the single-page application is TypeScript) | Rust, unless S1 shows that Connect for Rust lacks the server streaming the console needs; then Go | R11 | S1, S10 | yes |
+| `indexer`, `reader` | Rust: they read the log's tiles and verify its C2SP checkpoints, which needs no Go-only library | R11 | S1, S10 | yes |
+| The local drivers: `embedded` state and its local lock, `spool`, the `fs` blob, the `sqlite` index | Rust | R11 | S1, S10 | yes |
+| The rqlite drivers (state, lease and index) | Rust | R11 | S1, S10 | no |
+| `cloud` port drivers: web identity, platform role, GCP and Azure federation | Rust | R5 | S1, S10 | no |
+| AWS-backed drivers of the other ports: `aws-kms`, `dynamodb` (state and lease), `sqs`, `s3-compatible` blob | Rust | R5 | S1, S10 | no |
+| `cloud-cloudflare` | Go, sharing the library of the integration `cloudflare@<company>` | R4: an exception to R5 | none | no |
+| `session` | Go | R4: the embeddable OpenID Connect provider | none | yes |
+| `exchange` | Go | R4: the proof verifiers, HPKE and the OpenID Connect provider; its HPKE key and the session cookie-sealing key stay behind the `keys` port | none | yes |
+| `ca` | Go | R4: the X.509 CA and its issuance log | none | yes |
+| `writer`, `witness` | Go | R4: the C2SP log writer and witness | none | `writer` |
+| Integrations, among them `oidc@<name>` | Go | R4: the vendor SDKs and the OpenID Connect client | none | `oidc@<name>` |
+| Other drivers (`nats-jetstream`, the `postgres` index, witness drivers, `age` export) | Go | R5, R6; R4 for `age` export (age with post-quantum recipients) | none | no |
+| `ssh-ca`, `quota`, `sluis agent` | Rust | R11 | S1, S10 | no |
+| The `sluis` CLI, the cert-manager issuer | Go | R4, R6; not resident on a tier-0 board | none | the CLI |
 
 - **`key-holder` is Go with `piv-go`.** One `key-holder` owns each node's card, and `piv-go` enforces that by construction with its exclusive connection, where `ykcs11` resets the card when another client appears and keeps a PIN copy that cannot be wiped. `key-holder` keeps the PIN in locked memory and zeroes its own copy; Go cannot promise the runtime keeps no other, which the zeroisation review records. PKCS#11 stays only for the later YubiHSM 2 and Nitrokey drivers, whose language is chosen with them.
 - **Attestation verification is Go**, in the CLI at node initialisation and in the `yubikey-attestation` verifier of `exchange` ([0007](/decisions/0007-workload-identity-and-host-enrolment/#proofs-and-the-exchange)), anchored on Yubico Attestation Root 1 and its intermediates, supplied by sluis.
@@ -66,13 +73,13 @@ The research of 2026-10-30 found:
 
 ### The spikes are gates
 
-A conditional verdict holds once its spike passes; the languages are fixed before code of the first working version is written.
+A conditional verdict holds once its spike passes. The table above fixes the languages of the first working version; the gated components are built meanwhile against their contracts, and a spike that fails moves its components to a fallback candidate before their first release.
 
 | Spike | What it shows | Gates |
 |---|---|---|
-| S1 | Connect for Rust over Unix sockets: `connectrpc` server and client with a peer-credential extension and the default-deny interceptor, against connect-go both ways; the conformance runner; streaming | R2, R3, R5 |
-| S3 | A slim `entry` prototype in both languages, behind the tunnel client and the Lambda Web Adapter, with limits, timeouts and 24 hours of fuzzing; p99 latency, memory, cold start, binary size | `entry` |
-| S10 | GoReleaser with a Cargo workspace: every Rust binary for two architectures, with SBOM and provenance like the Go artefacts, and Lambda zips within the layer limits | Every Rust component |
+| S1 ([#939](https://github.com/truvity/sluis/issues/939)) | Connect for Rust over Unix sockets: `connectrpc` server and client with a peer-credential extension and the default-deny interceptor, against connect-go both ways; the conformance runner; streaming | R2, R3, R5 |
+| S3 ([#941](https://github.com/truvity/sluis/issues/941)) | A slim `entry` prototype in both languages, behind the tunnel client and the Lambda Web Adapter, with limits, timeouts and 24 hours of fuzzing; p99 latency, memory, cold start, binary size | `entry` |
+| S10 ([#947](https://github.com/truvity/sluis/issues/947)) | GoReleaser with a Cargo workspace: every Rust binary for two architectures, with SBOM and provenance like the Go artefacts, and Lambda zips within the layer limits | Every Rust component |
 
 Spikes S2 ([#940](https://github.com/truvity/sluis/issues/940)), S4 ([#942](https://github.com/truvity/sluis/issues/942)), S5 ([#943](https://github.com/truvity/sluis/issues/943)), S6 ([#944](https://github.com/truvity/sluis/issues/944)) and S7 ([#945](https://github.com/truvity/sluis/issues/945)) are done (results above) and in [0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/#pkl-and-json-schema) for configuration.
 
@@ -114,4 +121,4 @@ A fallback is not chosen in advance. When a spike fails, the maintainer picks th
 ## Follow-ups
 
 - The zeroisation review of the `key-holder` PIN paths, and the release-subkey slot on a real card: [#942](https://github.com/truvity/sluis/issues/942).
-- Spikes S1, S3 and S10 before code of the first working version.
+- Spikes S1 ([#939](https://github.com/truvity/sluis/issues/939)), S3 ([#941](https://github.com/truvity/sluis/issues/941)) and S10 ([#947](https://github.com/truvity/sluis/issues/947)), before the first release of the components they gate.

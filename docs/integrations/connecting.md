@@ -172,7 +172,7 @@ Accounts trust sluis as a web identity provider. Each account needs two kinds of
   "Effect": "Allow",
   "Principal": { "Federated": "arn:aws:iam::123456789012:oidc-provider/sluis.example.com" },
   "Action": "sts:AssumeRoleWithWebIdentity",
-  "Condition": { "StringEquals": { "sluis.example.com:aud": "aws:123456789012:deployer" } }
+  "Condition": { "StringEquals": { "sluis.example.com:aud": "aws:example-prod:deployer" } }
 }
 ```
 

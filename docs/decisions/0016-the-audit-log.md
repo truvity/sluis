@@ -86,6 +86,7 @@ The volume used for sizing on 2026-10-31 is about 2.4 records a second at peak a
 ### Pseudonyms
 
 - **A person or external actor is recorded under a keyed pseudonym, never by name, e-mail address or token** (REQ-AUDIT-003, REQ-AUDIT-023, REQ-AUDIT-037). A secret appears as a fingerprint and a revision, and a free-text field is bounded (REQ-AUDIT-046).
+- **The keyed function, its key, its monthly rotation and who may reverse a pseudonym are [0025](/decisions/0025-audit-pseudonyms-are-keyed-per-company-and-epoch/).**
 - **The mapping from a pseudonym to the person lives outside the log, and erasure of a person deletes it.** There are no per-subject keys in 2.0; the company's data key is the only key that shreds the log, and REQ-AUDIT-018, which asked for a per-subject key, is withdrawn in favour of this.
 
 ### Retention
@@ -129,9 +130,7 @@ The volume used for sizing on 2026-10-31 is about 2.4 records a second at peak a
 ## Follow-ups
 
 - Build of the writer, the blob drivers and the witnesses: [#837](https://github.com/truvity/sluis/issues/837), [#838](https://github.com/truvity/sluis/issues/838); the blob conformance suite: [#851](https://github.com/truvity/sluis/issues/851).
-- Pseudonymisation key providers: [#1005](https://github.com/truvity/sluis/issues/1005).
 - Framework (compliance) profiles, parity milestone: [#1027](https://github.com/truvity/sluis/issues/1027).
 - Lifecycle tiers and bucket layout, parity milestone: [#1016](https://github.com/truvity/sluis/issues/1016).
 - Backup and restore of a node and its witness state: [#1015](https://github.com/truvity/sluis/issues/1015).
-- Break-glass recovery with passkeys only: [#1000](https://github.com/truvity/sluis/issues/1000).
 - Garage as a blob backend, backlog: [#982](https://github.com/truvity/sluis/issues/982).
