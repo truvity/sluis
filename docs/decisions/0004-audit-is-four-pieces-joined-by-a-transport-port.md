@@ -6,7 +6,7 @@
 Decided by the maintainer. Proposal: [issue #903](https://github.com/truvity/sluis/issues/903). Rewritten in place on 2026-10-29 during the v2 design phase (see "Design phase" in the decisions README).
 Rewritten in place on 2026-10-30 (realignment pass).
 Rewritten in place on 2026-10-31 (links to ADR 0022, which decided the index drivers, the default index of each tested installation and the path from serverless to Postgres).
-Rewritten in place on 2026-11-01 (the emitter builds a message of an audit record and a usage part from one call, as [0064](/decisions/0064-audit-records-are-ocsf-events-with-a-sluis-extension-and-usage-is-a-separate-stream/) decides).
+Rewritten in place on 2026-11-01 (the emitter builds a message of an audit record and a usage part from one call, as [0064](/decisions/0064-audit-records-are-ocsf-events-with-one-unmapped-sluis-object-and-usage-is-a-separate-stream/) decides).
 
 ## Context
 
@@ -21,7 +21,7 @@ A cluster has several nodes. If every node wrote to one shared log, that log wou
 ### Four pieces and a transport
 
 - **Audit is four separate pieces.**
-  - **Emitter**: a library inside each end application, configured by that application. It is not a process. It builds one message from one call: an OCSF audit record and, for an action that uses something, usage events ([0064](/decisions/0064-audit-records-are-ocsf-events-with-a-sluis-extension-and-usage-is-a-separate-stream/)).
+  - **Emitter**: a library inside each end application, configured by that application. It is not a process. It builds one message from one call: an OCSF audit record and, for an action that uses something, usage events ([0064](/decisions/0064-audit-records-are-ocsf-events-with-one-unmapped-sluis-object-and-usage-is-a-separate-stream/)).
   - **Log**: writer, blob store and witness.
   - **Search**: indexer, index and reader.
   - **Quota**: quota engine and its state.

@@ -6,7 +6,8 @@
 Decided by the maintainer. Proposal: [issue #909](https://github.com/truvity/sluis/issues/909). Build and parity: [issue #839](https://github.com/truvity/sluis/issues/839).
 Rewritten in place on 2026-10-31 (the record format of [0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/) is decided: the core columns are mapped from OCSF paths, and the usage log needs no index).
 Rewritten in place on 2026-10-31 (the points that the previous rewrite marked as inferred are confirmed by the maintainer, and their markers are removed).
-Rewritten in place on 2026-11-01 (the record formats moved to [0064](/decisions/0064-audit-records-are-ocsf-events-with-a-sluis-extension-and-usage-is-a-separate-stream/): the index columns map from the OCSF record and the sluis extension, and the export link follows).
+Rewritten in place on 2026-11-01 (the record formats moved to [0064](/decisions/0064-audit-records-are-ocsf-events-with-one-unmapped-sluis-object-and-usage-is-a-separate-stream/): the index columns map from the OCSF record and the sluis extension, and the export link follows).
+Rewritten in place on 2026-11-01, later the same day (no OCSF extension and no catalogue: the boundary column is `metadata.log_name`, and the paths that the action table declares come from the code of the release a record names).
 
 ## Context
 
@@ -16,7 +17,7 @@ v1 built the same split. The indexer followed the bucket by listing it from a cu
 
 Since then:
 
-- **The log is a C2SP tiled log** ([0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)). Following it means following checkpoints and fetching new entry bundles, not listing objects. Each entry is a clear envelope plus the record encrypted to its company. A record is an OCSF event with the sluis extension, in RFC 8785 JSON, and a writer also writes a usage log of CloudEvents usage events beside the audit log.
+- **The log is a C2SP tiled log** ([0021](/decisions/0021-the-audit-log-is-sealed-batches-in-a-blob-with-a-lock-mode/)). Following it means following checkpoints and fetching new entry bundles, not listing objects. Each entry is a clear envelope plus the record encrypted to its company. A record is an OCSF event with its sluis-specific facts in `unmapped.sluis`, in RFC 8785 JSON, and a writer also writes a usage log of CloudEvents usage events beside the audit log.
 - **One log per node.** On the boards the indexer follows three logs.
 - **Full-text search works on rqlite.** FTS5 was tested on 2026-10-30 on rqlite 10.6.6 (SQLite 3.53.4), on one node and on a three-node cluster, with the arm64 image under emulation. Followers answer reads locally only at the `none` consistency level, so a reader uses a small freshness bound, and `weak` to read its own write. Writes are best batched. The search table is an external-content FTS table. Native arm64 hardware and the fsync cost on eMMC are not measured yet.
 - **Companies are reader tenants with their own keys** ([0009](/decisions/0009-one-installation-per-boundary/)), so the index holds data of several companies.
@@ -46,28 +47,28 @@ The threats this record answers are T-11, T-16 and T-26 of the [threat model](/s
 
 ### What the index stores
 
-- **Fixed columns for the core fields,** mapped from the OCSF record of [0064](/decisions/0064-audit-records-are-ocsf-events-with-a-sluis-extension-and-usage-is-a-separate-stream/):
+- **Fixed columns for the core fields,** mapped from the OCSF record of [0064](/decisions/0064-audit-records-are-ocsf-events-with-one-unmapped-sluis-object-and-usage-is-a-separate-stream/):
 
   | Column | Source |
   |---|---|
   | time | `time` |
   | recorded at | the writer's stamp in the envelope |
   | log | the log the entry came from |
-  | boundary | `sluis.boundary`, the sluis extension's field, which equals the log's boundary |
+  | boundary | `metadata.log_name`, which equals the log's boundary |
   | company | `metadata.tenant_uid` |
   | action | `metadata.event_code`, with `class_uid` and `activity_id` as columns of their own for OCSF-shaped queries |
   | outcome | `status_id` and `status_code` |
   | actor | `actor.user.uid` and `actor.user.type_id` |
-  | subject pseudonym | the subject path the catalogue entry declares, for example `user.uid` |
-  | target | the target path the catalogue entry declares, for example `entity.uid` or `resources[0].uid` |
-  | request id | the request-id path the catalogue entry declares, for example `api.request.uid` |
+  | subject pseudonym | the subject path the action table entry declares, for example `user.uid` |
+  | target | the target path the action table entry declares, for example `entity.uid` or `resources[0].uid` |
+  | request id | the request-id path the action table entry declares, for example `api.request.uid` |
   | trace id | `metadata.correlation_uid` |
   | record id | `metadata.uid` |
 
-  The column set is the same on every driver. (the table is from the research of 2026-10-31, adjusted to OCSF and the sluis extension)
-- **A typed attribute table** for the properties that the catalogue marks filterable or facetable, keyed by their OCSF path (a JSON Pointer).
+  The column set is the same on every driver. (the table is from the research of 2026-10-31, adjusted to OCSF)
+- **A typed attribute table** for the properties that the action table marks filterable or facetable, keyed by their OCSF path (a JSON Pointer).
 - **The record itself, once.** The full-text table is an external-content table over it.
-- **One full-text table over the fields that the catalogue marks searchable,** and no other field. A personal field is not searchable unless the catalogue says so.
+- **One full-text table over the fields that the action table marks searchable,** and no other field. A personal field is not searchable unless the action table says so.
 
 ### Companies in the index
 
@@ -81,7 +82,7 @@ The threats this record answers are T-11, T-16 and T-26 of the [threat model](/s
 
 ### Rebuilds
 
-- **A rebuild builds a new generation beside the serving one, from the log, then switches the reader to it atomically and drops the old one.** A failed rebuild leaves the old index serving. A rebuild runs after a restore, after a schema or tokenizer change, after a catalogue change that marks a new field, after a shred, and on demand (`sluis audit reindex`).
+- **A rebuild builds a new generation beside the serving one, from the log, then switches the reader to it atomically and drops the old one.** A failed rebuild leaves the old index serving. A rebuild runs after a restore, after a schema or tokenizer change, after an action table change that marks a new field, after a shred, and on demand (`sluis audit reindex`).
 
 ### Index drivers
 
@@ -114,7 +115,7 @@ The threats this record answers are T-11, T-16 and T-26 of the [threat model](/s
   - **Search,** with a closed filter grammar, keyset cursors whose next page never disappears, and the free-text `q` over the searchable fields;
   - **Facets;**
   - **Get,** which returns a record with its inclusion proof against a cosigned checkpoint, so a record can be proven to an outsider;
-  - **Export,** an asynchronous job that writes NDJSON of enriched OCSF events ([0064](/decisions/0064-audit-records-are-ocsf-events-with-a-sluis-extension-and-usage-is-a-separate-stream/#export)) and ends in a short-lived signed URL;
+  - **Export,** an asynchronous job that writes NDJSON of enriched OCSF events ([0064](/decisions/0064-audit-records-are-ocsf-events-with-one-unmapped-sluis-object-and-usage-is-a-separate-stream/#export)) and ends in a short-lived signed URL;
   - **a tail,** which is a repeated Search with the cursor.
 
   Server streaming may come later, as an option on long-lived hosts.
@@ -128,13 +129,13 @@ The threats this record answers are T-11, T-16 and T-26 of the [threat model](/s
 - Following checkpoints means the index never shows an entry the log has not sealed. The index lags the log by the seal interval plus the indexer's pass, a few seconds.
 - Four drivers and three provisioning modes need one conformance suite for the index port. The tokenizer is the same on every driver; ranking that differs between drivers is declared.
 - Word search without stemming finds names, ids and codes the same everywhere, but "login" does not find "logged".
-- A catalogue change that marks a new field filterable or searchable covers old records only after a rebuild.
+- An action table change that marks a new field filterable or searchable covers old records only after a rebuild.
 - The index holds readable copies of what the log holds encrypted per company, and the indexer can read every company's records. A shred has to reach the index too, which the purge does.
 - One policy language serves sluis and audit, and reads are accountable. A read costs a policy call, and reads of the log add records to the log.
 - The rqlite driver lets the reader run on any board, at the cost of one more small rqlite cluster per boundary and of reads that may lag the leader by tens of milliseconds.
 - Search works out of the box on every tested installation. Every lambda installation pays for an Aurora database and an RDS Proxy, and its indexer and reader run in the VPC with endpoints for the other AWS APIs. `sluis config check` probes the database; in the `external` mode its security and availability are the operator's.
 - A tail by polling costs a call per interval.
-- The index columns follow OCSF paths and the extension's, so an OCSF or extension version upgrade that moves a field changes the mapping and needs a rebuild, not a new column. A record of each OCSF version is indexed by the mapping of its own version.
+- The index columns follow OCSF paths and the paths under `unmapped.sluis`, so an OCSF upgrade or a sluis release that moves a field changes the mapping and needs a rebuild, not a new column. A record of each OCSF version and sluis release is indexed by the mapping of its own version.
 
 ## Roads not taken
 
@@ -160,7 +161,7 @@ The threats this record answers are T-11, T-16 and T-26 of the [threat model](/s
 
 - Pros: JSON needs no schema and makes any field searchable; no full text keeps the index smallest.
 - Cons: JSON functions differ per driver, so results differ, and full text over everything indexes personal fields. No full text gives up the search the FTS5 test was meant to unlock.
-- Why not: fixed columns, typed attributes and full text over catalogue-marked fields only.
+- Why not: fixed columns, typed attributes and full text over fields the action table marks only.
 
 ### An index per company, or only the clear envelope
 
