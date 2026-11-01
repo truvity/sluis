@@ -152,7 +152,7 @@ requirements:
     status: planned
     runtimes: [bare-metal, kubernetes]
     standards: []
-    issues: [914, 837]
+    issues: [914, 1120]
     verification:
       - {kind: integration-test, ref: "T-10: sign N times through two callers; the audit log holds N records with caller and purpose, and a signature without a record fails the test"}
   - id: REQ-ISO-012
@@ -298,7 +298,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    issues: [851, 837]
+    issues: [1121, 837, 851]
     verification:
       - {kind: test-vectors, ref: "T-12: a second write of an existing audit batch name; refused with a precondition failure"}
   - id: REQ-ISO-023
@@ -800,7 +800,7 @@ requirements:
     status: planned
     runtimes: all
     standards: []
-    issues: [837]
+    issues: [1121, 837]
     verification:
       - {kind: integration-test, ref: "T-26: export, then destroy the tenant key; the reader fails to decrypt every record of that company and still reads the others"}
   - id: REQ-ISO-060
