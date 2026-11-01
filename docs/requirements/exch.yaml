@@ -169,3 +169,39 @@ requirements:
     issues: [782]
     verification:
       - {kind: integration-test, ref: "disabled person exchange test"}
+  - id: REQ-EXCH-013
+    area: EXCH
+    statement: "A credential minter MUST refuse a request for a target or a catalogue entry that the install file does not declare, with the reason NOT_FOUND."
+    rationale: "A minter serves only what an operator declared (ADR 0036)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1011]
+    verification:
+      - {kind: integration-test, ref: "a mint for an undeclared target and for an undeclared entry"}
+  - id: REQ-EXCH-014
+    area: EXCH
+    statement: "A credential minter MUST refuse a catalogue entry that grants administration of tokens, billing, account settings, memberships or identity providers at its vendor."
+    rationale: "The minting credential is the sharpest edge of an integration, so the floor is in code (ADR 0036)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1011]
+    verification:
+      - {kind: test-vectors, ref: "catalogue entries on the refusal list"}
+  - id: REQ-EXCH-015
+    area: EXCH
+    statement: "A credential minter MUST NOT return a credential that outlasts the least of the lifetime of its grant, the policy cap and the vendor's maximum."
+    rationale: "A minted credential is never longer-lived than what authorised it (ADR 0036)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1011]
+    verification:
+      - {kind: integration-test, ref: "a mint request for a longer lifetime than each limit in turn"}

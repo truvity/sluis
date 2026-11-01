@@ -129,7 +129,11 @@ The lock mode comes from the blob backend: `compliance` on AWS S3, `removable` o
 - **Each log declares its retention, and a production log must** ([ADR 0016](/decisions/0016-the-audit-log/#retention)). There is no built-in default, and the audit log and the usage log declare theirs separately. S3 applies it as per-object retention, R2 as the bucket lock rule, `fs` through an expiry sweeper that may delete expired objects only. Try a period in governance mode first: a wrong period locked in compliance mode cannot be shortened.
 - **Legal holds stay outside sluis.** A hold is placed and lifted with the store's own means, under cloud IAM or a break-glass role, and recorded as an audit record under the name of the person who did it. Nothing in sluis stops a company-key shred during a hold, so the shred procedure checks for a standing hold first, and on a store with no hold flag (R2, `fs`) the operator suspends expiry for the held range by hand.
 
-Framework profiles and archive lifecycle tiers come in the parity milestone ([#1027](https://github.com/truvity/sluis/issues/1027), [#1016](https://github.com/truvity/sluis/issues/1016)).
+Compliance profiles (floors that `sluis config check` enforces) and lifecycle tiers (only cold, immutable objects move, and never the lock) are [ADR 0039](/decisions/0039-audit-lifecycle-tiers-move-only-cold-objects-and-compliance-profiles-are-floors-that-the-configuration-check-enforces/).
+
+:::note[Proposed]
+Which audit installation receives the audit of the workforce installation is a product fact that the design cannot set. It fixes the queue wiring, the audit data keys and the profiles that apply there, and is tracked in [#802](https://github.com/truvity/sluis/issues/802). Until it is decided, the serverless shape is specified up to the queue.
+:::
 
 ## Companies, encryption and erasure
 
