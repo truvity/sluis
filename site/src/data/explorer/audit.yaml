@@ -378,7 +378,7 @@ flows:
       - title: The writer takes the records
         nodes: [writer, transport]
         edges: ["writer>transport"]
-        text: The writer receives records, validates each against the catalogue, stamps recorded_at and the observer from the verified caller, and skips a record id it has already written.
+        text: The writer receives records, validates each against the schema generated from the action table, stamps recorded_at and the observer from the verified caller, and skips a record id it has already written.
         variants:
           - { shapes: [boards], text: "Each node's writer drains its own spool, into that node's own log." }
       - title: The batch object is put
@@ -633,7 +633,7 @@ index_notes:
     status: agreed
 
 compare:
-  - { topic: "Record, catalogue, profiles", v1: "one record format (a Protobuf core with JSON Schema slots), a catalogue per application, profile copies per purpose", v2: "an OCSF event with a sluis extension per record, a catalogue per application, and a separate usage log in CloudEvents for quota and billing (ADR 0064)" }
+  - { topic: "Record, action table, profiles", v1: "one record format (a Protobuf core with JSON Schema slots), a catalogue per application, profile copies per purpose", v2: "an OCSF event per record with the sluis facts in one unmapped.sluis object, a table of actions in code with a JSON Schema generated from it, and a separate usage log in CloudEvents for quota and billing (ADR 0064)" }
   - { topic: "How a record is accepted", v1: "emit library with block or async delivery to a receiver, JetStream or SQS", v2: "transport port (direct, or queue: spool, SQS, NATS JetStream); the request returns on transport durability" }
   - { topic: "Who runs it", v1: "pods or Lambda functions, a chart or a Pulumi library; a CronJob for the notary", v2: "actors started by the platform; drivers as services, no exec" }
   - { topic: "Coordination between parts", v1: "none: the bucket layout is the contract and each part lists the bucket", v2: "the ordered audit_batches sequence in replicated state" }

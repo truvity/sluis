@@ -499,3 +499,29 @@ requirements:
     issues: [913, 914]
     verification:
       - {kind: test-vectors, ref: "a token certificate from a test installation: basic constraints say not a CA, and key usage allows digital signature only"}
+  - id: REQ-PKI-037
+    area: PKI
+    statement: "`sluis config check`, `sluis key request` and node initialisation MUST each refuse a card slot map in which two purposes share one slot."
+    rationale: "Two purposes in one slot would overwrite each other's key, or let one purpose's key serve another."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: NC-10, section: "PIV", depth: Partial}
+    issues: [914]
+    verification:
+      - {kind: integration-test, ref: "a slot map with a collision, given to each of the three commands, is refused"}
+  - id: REQ-PKI-038
+    area: PKI
+    statement: "`sluis config check`, `sluis key request` and node initialisation MUST each refuse a key purpose that the card slot map gives no slot."
+    rationale: "A purpose with no slot would fall back to a slot chosen elsewhere, or fail only when a key is needed."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: ["bare-metal", "kubernetes"]
+    standards:
+      - {id: NC-10, section: "PIV", depth: Partial}
+    issues: [914]
+    verification:
+      - {kind: integration-test, ref: "a slot map that leaves a purpose without a slot, given to each of the three commands, is refused"}

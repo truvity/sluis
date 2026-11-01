@@ -14,7 +14,7 @@ requirements:
       - {id: ST-96, section: "2020-12", depth: Partial}
     issues: [833, 841]
     verification:
-      - {kind: integration-test, ref: "record-per-action test over the catalogue"}
+      - {kind: integration-test, ref: "record-per-action test over the action table"}
   - id: REQ-AUDIT-021
     area: AUDIT
     split_from: REQ-AUDIT-001
@@ -28,11 +28,11 @@ requirements:
       - {id: ST-96, section: "2020-12", depth: Partial}
     issues: [833, 841]
     verification:
-      - {kind: integration-test, ref: "refusal record test over the catalogue"}
+      - {kind: integration-test, ref: "refusal record test over the action table"}
   - id: REQ-AUDIT-002
     area: AUDIT
-    statement: "Every audit record MUST validate against the schema of its catalogue entry."
-    rationale: "A closed catalogue keeps records interpretable."
+    statement: "Every audit record MUST validate against the schema generated from its action table entry."
+    rationale: "A closed action table keeps records interpretable."
     level: MUST
     source: v1-parity
     status: planned
@@ -46,7 +46,7 @@ requirements:
     area: AUDIT
     split_from: REQ-AUDIT-002
     statement: "The emitter MUST refuse an unknown action."
-    rationale: "A closed catalogue keeps records interpretable."
+    rationale: "A closed action table keeps records interpretable."
     level: MUST
     source: v1-parity
     status: planned
@@ -925,7 +925,7 @@ requirements:
       - {kind: integration-test, ref: "merge order test"}
   - id: REQ-AUDIT-067
     area: AUDIT
-    statement: "The search index MUST keep full text only over the fields that the catalogue marks searchable."
+    statement: "The search index MUST keep full text only over the fields that the action table marks searchable."
     rationale: "Full text over everything would index personal fields."
     level: MUST
     source: design-decision
@@ -1167,13 +1167,14 @@ requirements:
     rationale: "A core class is read by any OCSF-aware tool, and the extension types what OCSF lacks."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-114, section: "base event and core classes", depth: Full}
     issues: [841]
+    superseded_by: [REQ-AUDIT-111, REQ-AUDIT-112]
     verification:
-      - {kind: test-vectors, ref: "catalogue example records through the OCSF schema validator"}
+      - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
   - id: REQ-AUDIT-087
     area: AUDIT
     statement: "The writer MUST store the canonical bytes of an audit record exactly as the emitter produced them."
@@ -1203,7 +1204,7 @@ requirements:
       - {kind: integration-test, ref: "pinned OCSF version test"}
   - id: REQ-AUDIT-089
     area: AUDIT
-    statement: "The build MUST fail when the audit catalogue or the sluis extension uses an OCSF class, attribute or enum value that the pinned OCSF version marks deprecated."
+    statement: "The build MUST fail when the action table or a field of `unmapped.sluis` uses an OCSF class, attribute or enum value that the pinned OCSF version marks deprecated."
     rationale: "OCSF deprecates often, and an upgrade must be a deliberate, checked change."
     level: MUST
     source: design-decision
@@ -1226,7 +1227,7 @@ requirements:
       - {id: ST-114, section: "actor", depth: Partial}
     issues: [841]
     verification:
-      - {kind: test-vectors, ref: "catalogue example records through the OCSF schema validator"}
+      - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
   - id: REQ-AUDIT-091
     area: AUDIT
     statement: "A stored audit record MUST hold enum ids only, with no enum captions, observables or enrichments."
@@ -1333,7 +1334,7 @@ requirements:
       - {kind: integration-test, ref: "indexer log kind test"}
   - id: REQ-AUDIT-099
     area: AUDIT
-    statement: "An audit emitter in Go or Rust MUST validate each record against the schema of its catalogue entry before it emits the record."
+    statement: "An audit emitter in Go or Rust MUST validate each record against the schema generated from its action table entry before it emits the record."
     rationale: "An ill-formed record is refused where it is made, before a blocking emit waits on it; the writer still validates and stays authoritative."
     level: MUST
     source: design-decision
@@ -1346,8 +1347,8 @@ requirements:
       - {kind: integration-test, ref: "emitter refuses an ill-formed record test"}
   - id: REQ-AUDIT-100
     area: AUDIT
-    statement: "The build MUST fail when an example record of the audit catalogue fails the OCSF toolkit's validation against the pinned OCSF version."
-    rationale: "The toolkit checks OCSF's cross-field rules, which the catalogue's JSON Schema does not, and it is pre-1.0, so it gates CI rather than the writer."
+    statement: "The build MUST fail when an example record of the action table fails the OCSF toolkit's validation against the pinned OCSF version."
+    rationale: "The toolkit checks OCSF's cross-field rules, which the generated JSON Schema does not, and it is pre-1.0, so it gates CI rather than the writer."
     level: MUST
     source: design-decision
     status: planned
@@ -1356,12 +1357,12 @@ requirements:
       - {id: ST-114, section: "validation", depth: Partial}
     issues: [841]
     verification:
-      - {kind: integration-test, ref: "OCSF toolkit check of the catalogue examples in CI"}
+      - {kind: integration-test, ref: "OCSF toolkit check of the action table examples in CI"}
   - id: REQ-AUDIT-101
     area: AUDIT
     split_from: REQ-AUDIT-100
-    statement: "The build MUST fail when the Go, Rust and TypeScript validators of the audit catalogue disagree on any catalogue test vector."
-    rationale: "One catalogue is enforced in three languages, and a disagreement means one of them accepts what another refuses."
+    statement: "The build MUST fail when the Go, Rust and TypeScript validators of the audit record schema disagree on any test vector."
+    rationale: "One schema is enforced in three languages, and a disagreement means one of them accepts what another refuses."
     level: MUST
     source: design-decision
     status: planned
@@ -1370,20 +1371,21 @@ requirements:
       - {id: ST-96, section: "2020-12", depth: Full}
     issues: [841]
     verification:
-      - {kind: test-vectors, ref: "catalogue vectors through every language's validator"}
+      - {kind: test-vectors, ref: "action table vectors through every language's validator"}
   - id: REQ-AUDIT-102
     area: AUDIT
     statement: "An audit record MUST declare every OCSF profile whose attributes it uses in `metadata.profiles`, among them `sluis/audit`."
     rationale: "OCSF validators refuse profile attributes that the record does not declare."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-114, section: "profiles", depth: Partial}
     issues: [841]
+    superseded_by: [REQ-AUDIT-120]
     verification:
-      - {kind: test-vectors, ref: "catalogue example records through the OCSF schema validator"}
+      - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
   - id: REQ-AUDIT-103
     area: AUDIT
     statement: "Every blob driver MUST refuse to overwrite an existing object on a create-if-absent write."
@@ -1403,23 +1405,25 @@ requirements:
     rationale: "A reader needs the extension version to compile the right schema for a record of any age."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-114, section: "extensions", depth: Partial}
     issues: [841]
+    superseded_by: [REQ-AUDIT-116]
     verification:
-      - {kind: test-vectors, ref: "catalogue example records through the OCSF schema validator"}
+      - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
   - id: REQ-AUDIT-105
     area: AUDIT
     statement: "The build MUST fail when a change to the sluis extension removes or retypes a field without a new major version of the extension."
     rationale: "Records are never rewritten, so a field of the extension has to keep its meaning for every record that carries it."
     level: MUST
     source: design-decision
-    status: planned
+    status: withdrawn
     runtimes: all
     standards: []
     issues: [841]
+    superseded_by: [REQ-AUDIT-119]
     verification:
       - {kind: integration-test, ref: "extension compatibility check in CI"}
   - id: REQ-AUDIT-106
@@ -1447,7 +1451,7 @@ requirements:
       - {id: ST-78, section: "8785", depth: Partial}
     issues: [841]
     verification:
-      - {kind: test-vectors, ref: "catalogue vectors with numbers at and beyond the bound"}
+      - {kind: test-vectors, ref: "action table vectors with numbers at and beyond the bound"}
   - id: REQ-AUDIT-108
     area: AUDIT
     statement: "The emitter MUST build the audit record and the usage events of an action from one call, with one message id."
@@ -1462,8 +1466,8 @@ requirements:
       - {kind: integration-test, ref: "single-call emit test"}
   - id: REQ-AUDIT-109
     area: AUDIT
-    statement: "The writer MUST refuse a message whose usage part carries a meter that its catalogue entry does not declare."
-    rationale: "The catalogue says what an action may meter, so a writer can check usage without parsing the security record."
+    statement: "The writer MUST refuse a message whose usage part carries a meter that its action table entry does not declare."
+    rationale: "The action table says what an action may meter, so a writer can check usage without parsing the security record."
     level: MUST
     source: design-decision
     status: planned
@@ -1485,3 +1489,181 @@ requirements:
     issues: [841, 915]
     verification:
       - {kind: integration-test, ref: "usage event id test"}
+  - id: REQ-AUDIT-111
+    area: AUDIT
+    statement: "Every audit record MUST be an OCSF event of a core class of the pinned OCSF version."
+    rationale: "A core class is read by any OCSF-aware tool, and sluis defines no class of its own."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "base event and core classes", depth: Full}
+    issues: [841]
+    verification:
+      - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
+  - id: REQ-AUDIT-112
+    area: AUDIT
+    statement: "A sluis field that the pinned OCSF version has no attribute for MUST be in the `unmapped.sluis` object and in no other part of `unmapped`."
+    rationale: "One namespaced object keeps sluis facts together and apart from other sources, and the record needs no OCSF extension."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "unmapped", depth: Partial}
+    issues: [841]
+    verification:
+      - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
+  - id: REQ-AUDIT-113
+    area: AUDIT
+    statement: "The writer MUST refuse an audit record whose `unmapped.sluis` object does not validate against the JSON Schema that the build generates from the action table."
+    rationale: "OCSF cannot type the object, so sluis's own schema must, and the writer stays authoritative."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [837, 841]
+    verification:
+      - {kind: test-vectors, ref: "unmapped.sluis negative vectors through the writer"}
+  - id: REQ-AUDIT-114
+    area: AUDIT
+    statement: "The build MUST generate the JSON Schema of the audit records, `unmapped.sluis` included, from the action table in code."
+    rationale: "One source keeps the table, the schema and the generated types from drifting apart."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [841]
+    verification:
+      - {kind: integration-test, ref: "generated schema equals the committed schema check in CI"}
+  - id: REQ-AUDIT-115
+    area: AUDIT
+    statement: "The audit log MUST NOT hold a catalogue document or a schema entry."
+    rationale: "The release identifies the action table, so a log needs no copy of it and no versioned document beside the records."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [837, 841]
+    verification:
+      - {kind: integration-test, ref: "log content test: no catalogue object and no schema entry"}
+  - id: REQ-AUDIT-116
+    area: AUDIT
+    statement: "An audit record MUST name the product that wrote it and its release in `metadata.product.name` and `metadata.product.version`."
+    rationale: "The release and `metadata.event_code` identify the action table entry in force, so a record needs no catalogue field."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "metadata", depth: Partial}
+    issues: [841]
+    verification:
+      - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
+  - id: REQ-AUDIT-117
+    area: AUDIT
+    statement: "An audit record MUST carry the boundary of its log in `metadata.log_name`."
+    rationale: "A record taken out of its log must still say which boundary it belongs to."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "metadata", depth: Partial}
+    issues: [841]
+    verification:
+      - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
+  - id: REQ-AUDIT-118
+    area: AUDIT
+    statement: "The writer MUST refuse an audit record whose `metadata.log_name` differs from the boundary of the log."
+    rationale: "A record written to the wrong boundary's log would be misattributed for as long as the log is kept."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "metadata", depth: Partial}
+    issues: [837]
+    verification:
+      - {kind: integration-test, ref: "boundary mismatch refusal test"}
+  - id: REQ-AUDIT-119
+    area: AUDIT
+    statement: "The build MUST fail when a change to the schema of `unmapped.sluis` removes or retypes a field without a new major version of sluis."
+    rationale: "Records are never rewritten, so a field has to keep its meaning for every record that carries it."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [841]
+    verification:
+      - {kind: integration-test, ref: "unmapped.sluis compatibility check against the previous release in CI"}
+  - id: REQ-AUDIT-120
+    area: AUDIT
+    statement: "An audit record MUST declare every OCSF profile whose attributes it uses in `metadata.profiles`."
+    rationale: "OCSF validators refuse profile attributes that the record does not declare."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "profiles", depth: Partial}
+    issues: [841]
+    verification:
+      - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
+  - id: REQ-AUDIT-121
+    area: AUDIT
+    statement: "An export of an audit log MUST be recorded as an Event Log Activity event with activity 3, Export."
+    rationale: "OCSF has an Export activity for the event log, which fits better than an API Activity with activity 99."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "Event Log Activity", depth: Partial}
+    issues: [839, 841]
+    verification:
+      - {kind: integration-test, ref: "audit export record test"}
+  - id: REQ-AUDIT-122
+    area: AUDIT
+    statement: "A step-up of a session MUST be recorded as an Authentication Logon event with `is_mfa` true, the `session.uid` of the session and the `activity_name` \"Step-Up\"."
+    rationale: "Authentication has no step-up activity, and the same session identifier joins the step-up to the sign-in it raises."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "authentication", depth: Partial}
+    issues: [841]
+    verification:
+      - {kind: integration-test, ref: "step-up record test"}
+  - id: REQ-AUDIT-123
+    area: AUDIT
+    statement: "An issued certificate MUST be recorded in `unmapped.sluis.certificate` and not in the `certificate` object of the event."
+    rationale: "In OCSF 1.9.0 the `certificate` object of Authentication is a certificate that was presented, not one that was issued."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "certificate", depth: Partial}
+    issues: [841]
+    verification:
+      - {kind: integration-test, ref: "certificate issue record test"}
+  - id: REQ-AUDIT-124
+    area: AUDIT
+    statement: "An audit record MUST NOT use the `delegation` object or declare the `ai_operation` profile."
+    rationale: "`delegation` exists only for AI operations and carries identifiers only, so the actor chain of an exchange is `actor`, `user` and `unmapped.sluis.actor_chain`."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-114, section: "delegation", depth: Partial}
+    issues: [841]
+    verification:
+      - {kind: test-vectors, ref: "action table example records through the OCSF schema validator"}
