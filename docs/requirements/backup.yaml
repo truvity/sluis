@@ -527,3 +527,63 @@ requirements:
     issues: [1015]
     verification:
       - {kind: integration-test, ref: "a production installation without an archive retention is refused"}
+  - id: REQ-BACKUP-040
+    area: BACKUP
+    statement: "A backup archive MUST be a tar file whose entries are a manifest and one RFC 8785 canonical JSON file for each boundary and record kind."
+    rationale: "A stable form can be compared byte for byte and read without sluis (ADR 0034)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1015]
+    verification:
+      - {kind: test-vectors, ref: "archive golden files"}
+  - id: REQ-BACKUP-041
+    area: BACKUP
+    statement: "A restore onto a driver other than the one that was backed up MUST yield the record counts and digests that the manifest states for every kind."
+    rationale: "The archive is logical, so a restore is also the way to move state between drivers (ADR 0034)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1015, 835]
+    verification:
+      - {kind: integration-test, ref: "a backup on one state driver restored on another, compared with the manifest"}
+  - id: REQ-BACKUP-042
+    area: BACKUP
+    statement: "A restore MUST refuse a destination that already holds records of the restored kinds unless the operator asks to overwrite."
+    rationale: "A restore into a live installation by mistake would replace newer state (ADR 0034)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [835]
+    verification:
+      - {kind: integration-test, ref: "a restore into a non-empty destination is refused"}
+  - id: REQ-BACKUP-043
+    area: BACKUP
+    statement: "A restore run as a plan MUST write nothing."
+    rationale: "An operator reads the plan before anything changes (ADR 0034)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [835]
+    verification:
+      - {kind: integration-test, ref: "a plan leaves every store as it was"}
+  - id: REQ-BACKUP-044
+    area: BACKUP
+    statement: "A restore MUST refuse an archive whose manifest names a format version that it does not support, naming that version."
+    rationale: "An archive read with the wrong rules would be restored wrongly (ADR 0034)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1015]
+    verification:
+      - {kind: test-vectors, ref: "manifests with an unknown format version"}

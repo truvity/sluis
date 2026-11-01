@@ -109,3 +109,39 @@ requirements:
     issues: [877]
     verification:
       - {kind: integration-test, ref: "hook contract test"}
+  - id: REQ-UX-009
+    area: UX
+    statement: "A console request that changes anything MUST be refused for a person who holds the viewer role only."
+    rationale: "The viewer role reads and cannot write (ADR 0040)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [831, 832]
+    verification:
+      - {kind: integration-test, ref: "every write endpoint called by a viewer"}
+  - id: REQ-UX-010
+    area: UX
+    statement: "Every console page that shows a configured value MUST show its origin and, for a declared value, that it is locked."
+    rationale: "An operator must see why a field cannot be changed and where it comes from (ADR 0040)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [831]
+    verification:
+      - {kind: integration-test, ref: "each page's data carries origin and lock"}
+  - id: REQ-UX-011
+    area: UX
+    statement: "A console role MUST be a grant of the declared vocabulary that the console has no action to assign."
+    rationale: "Authority is declared only (ADR 0040)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [831]
+    verification:
+      - {kind: integration-test, ref: "an attempt to bind a console role from the console"}

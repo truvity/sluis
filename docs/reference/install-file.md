@@ -130,7 +130,7 @@ A mapping from an upstream's name to its declaration. Each upstream is one integ
 
 ### `clients`
 
-A mapping from a client ID to its declaration, for the group issuer; `boundaries.<name>.clients` has the same shape for a boundary's issuer. Client IDs are readable, unique per issuer and the same in every environment ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#audiences)). Clients are declared only: authority is never operator-set ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/#origins)). The fields are v1's client model, cut to what the first working version reads; the rest comes at parity ([#789](https://github.com/truvity/sluis/issues/789)).
+A mapping from a client ID to its declaration, for the group issuer; `boundaries.<name>.clients` has the same shape for a boundary's issuer. Client IDs are readable, unique per issuer and the same in every environment ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#audiences)). Clients are declared only: authority is never operator-set ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/#origins)). The fields are v1's client model, cut to what the first working version reads; the rest comes at parity: the profiles, the added fields, `resources` and `client_documents` are [ADR 0038](/decisions/0038-clients-are-declared-resources-map-to-a-client-and-self-described-clients-are-admitted-only-from-allow-listed-origins/).
 
 | Field | Required | Meaning |
 |---|---|---|

@@ -117,11 +117,12 @@ requirements:
     rationale: "Operators change storage."
     level: MUST
     source: v1-parity
-    status: planned
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
     issues: [804]
+    superseded_by: [REQ-BACKUP-041]
     verification:
       - {kind: integration-test, ref: "migration round trip"}
   - id: REQ-OPS-006
@@ -386,3 +387,87 @@ requirements:
     issues: [1017]
     verification:
       - {kind: integration-test, ref: "the inventory run against a v1 fixture lists each relying party and each consumer of the sub claim"}
+  - id: REQ-OPS-031
+    area: OPS
+    statement: "A reconciler pass MUST change an external system only while its process holds the lease for that target."
+    rationale: "Two processes acting on one target would fight (ADR 0037)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1012]
+    verification:
+      - {kind: integration-test, ref: "a pass after the lease passed to another holder changes nothing"}
+  - id: REQ-OPS-032
+    area: OPS
+    statement: "A provisioner MUST refuse a change that carries a fencing token lower than one it has seen."
+    rationale: "A paused holder must not write over its successor (ADR 0037)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1012]
+    verification:
+      - {kind: conformance-suite, ref: "provisioner suite: a stale fencing token"}
+  - id: REQ-OPS-033
+    area: OPS
+    statement: "A reconciler pass in dry run MUST NOT change the external system."
+    rationale: "An operator reads a dry run before enabling a target (ADR 0037)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1012]
+    verification:
+      - {kind: conformance-suite, ref: "provisioner suite: dry run against the fake vendor"}
+  - id: REQ-OPS-034
+    area: OPS
+    statement: "A second reconciler pass on an unchanged desired state and an unchanged external system MUST make no change."
+    rationale: "A pass that is not idempotent flaps and floods the vendor and the audit log (ADR 0037)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1012]
+    verification:
+      - {kind: conformance-suite, ref: "provisioner suite: idempotence"}
+  - id: REQ-OPS-035
+    area: OPS
+    statement: "A reconciler MUST NOT remove a member when the directory fact about that member is unavailable or stale."
+    rationale: "An unreadable directory must not look like an empty one (ADR 0037)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1012]
+    verification:
+      - {kind: conformance-suite, ref: "provisioner suite: UNAVAILABLE removes no one"}
+  - id: REQ-OPS-036
+    area: OPS
+    statement: "A reconciler MUST hold a pass that would remove more than half of a container's members until an operator confirms it."
+    rationale: "A directory error or a policy mistake must not empty a team unseen (ADR 0037)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1012]
+    verification:
+      - {kind: conformance-suite, ref: "provisioner suite: breaker at the threshold"}
+  - id: REQ-OPS-037
+    area: OPS
+    statement: "A provisioner outcome MUST carry a reason from the closed list, never vendor error text."
+    rationale: "Vendor text could leak a tenant's data into a caller's response (ADR 0037)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1012]
+    verification:
+      - {kind: conformance-suite, ref: "provisioner suite: outcome of a vendor error"}

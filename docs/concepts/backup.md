@@ -48,8 +48,10 @@ The archive is encrypted with a fresh data key, and the data key is wrapped for 
 - **An installation declares how long it keeps an archive.** An erasure reaches the copies in archives when they expire, and a restore re-applies every shred and erasure that the audit log records after the archive was taken.
 
 :::note[Proposed]
-The archive format, the escrow copies, the recipient set of each installation and the restore tooling are fixed by the planned backup decision record ([#1015](https://github.com/truvity/sluis/issues/1015)). The steps below are the design it starts from.
+The recovery time and recovery point targets of each installation shape are a product fact that the design cannot set; they are tracked in [#834](https://github.com/truvity/sluis/issues/834). Until they are set, the schedule, the number of archives kept and the rehearsal period are declared per installation and have no default.
 :::
+
+The format of the archive (an age-encrypted tar with a manifest and canonical JSON per record kind), the escrow records, the recipients and the plan and refusals of a restore are fixed by [ADR 0034](/decisions/0034-a-backup-is-an-age-encrypted-tar-of-canonical-json-per-kind-and-restores-onto-any-driver/). A restore onto another driver replaces v1's `sluis migrate`.
 
 ## Recovery targets
 
@@ -59,7 +61,7 @@ The recovery time and the recovery point that an installation promises are not s
 
 ## Restoring
 
-A restore is started by an operator, never by the console, so that it works when `entry` and `signer` are down. It runs as its own actor with its own identity. The order follows [ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/#backup-and-restore-by-origin):
+A restore is started by an operator, never by the console, so that it works when `entry` and `signer` are down. It runs as its own actor with its own identity ([ADR 0034](/decisions/0034-a-backup-is-an-age-encrypted-tar-of-canonical-json-per-kind-and-restores-onto-any-driver/#the-restore)). The order follows [ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/#backup-and-restore-by-origin):
 
 1. **Maintenance mode.** Every actor refuses writes and sign-in stops. A failure at any later step leaves maintenance mode on. The restore preview lists every secret written since the archive was taken, with an alarm: audit never carries secrets, so those cannot be rolled forward and have to be rotated or reconnected.
 2. **Provenance check.** The archive is accepted only if the audit log has a `backup.completed` record carrying its digest, under a checkpoint that a witness has cosigned where the installation has one. When the log cannot be reached, the operator can override, and the override is recorded first.

@@ -119,7 +119,7 @@ A secret's origin decides who wrote it and whether it is backed up ([ADR 0010](/
 
 ### Sealed state
 
-A **`sealed-state`** driver is a `secrets` driver that keeps its ciphertext in `state`. Sealed state is allowed on every runtime ([ADR 0011](/decisions/0011-state-is-one-port-with-compare-and-set/#sealed-secrets)); a store the cloud provides is still the usual choice where there is one. On the [boards](/runtimes/installations/#boards) it is the store, because there is no cloud store for vendor-issued secrets.
+A **`sealed-state`** driver is a `secrets` driver that keeps its ciphertext in `state`. Sealed state is allowed on every runtime ([ADR 0011](/decisions/0011-state-is-one-port-with-compare-and-set/#sealed-secrets)) and is the one `secrets` store in 2.0 ([ADR 0035](/decisions/0035-the-secrets-port-has-one-driver-sealed-state-and-the-export-port-publishes-only-kinds-marked-external/#one-driver-sealed-state)).
 
 - **A sealed value uses the same envelope as every value**, with `purpose=secret` in the encryption context and the additional authenticated data, so it cannot be read as an ordinary value or the other way round.
 - **Each version of a secret is one immutable item**, and the record that names the current version changes by compare-and-set, so a rotated secret can overlap with its predecessor.
@@ -145,9 +145,7 @@ Exports are **typed and versioned**: a document has a kind, a schema and a versi
 
 A **file drop** (a file in a directory that a node-local consumer reads) and a **bucket drop** (an object in a bucket) are **age-encrypted to the consumer's own recipient**, a named exception to sluis's algorithm rules ([ADR 0012](/decisions/0012-cryptography-and-authority-keys/#named-exceptions)). The consumer's private key can sit on a hardware token (an `age-plugin-yubikey` recipient); sluis holds only the public recipient. A drop is therefore safe in a bucket others can read, and a stolen copy of sluis's state does not open it.
 
-:::note[Proposed]
-The interfaces of the `secrets` and `export` ports are fixed by a planned decision record ([#1014](https://github.com/truvity/sluis/issues/1014)). It must fix the `secrets` operations (`get`, `put` against a revision, `delete`, `list` of names only); writable **stores** (one per installation, such as a cloud parameter store or `sealed-state`) against read-only **sources** (a systemd credential, a mounted file) for referenced and bootstrap secrets, a store's own credentials always coming from a source; the flags `writable`, `encryption`, `versioned`, `consumer-readable` and `per-path-grants`; and the `export` operations (`put`, `delete`, `status`) with the drop drivers.
-:::
+The operations of the two ports, the writable **stores** against read-only **sources**, the driver flags, and the rule that `sealed-state` is the one `secrets` store and that only a kind marked external is exported are [ADR 0035](/decisions/0035-the-secrets-port-has-one-driver-sealed-state-and-the-export-port-publishes-only-kinds-marked-external/). A drop driver is built when an issue names its consumer; none has one today.
 
 ## What is backed up
 

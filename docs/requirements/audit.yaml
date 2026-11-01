@@ -1784,3 +1784,63 @@ requirements:
     issues: [837, 1016]
     verification:
       - {kind: integration-test, ref: "a deletion of a usage key before its retention ends is refused"}
+  - id: REQ-AUDIT-136
+    area: AUDIT
+    statement: "sluis config check MUST refuse, in a production boundary, a log retention below the floor of a declared compliance profile, naming the profile."
+    rationale: "A profile is a floor that the installation must not go below (ADR 0039)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [840]
+    verification:
+      - {kind: test-vectors, ref: "installations with a retention below each profile floor"}
+  - id: REQ-AUDIT-137
+    area: AUDIT
+    statement: "sluis config check MUST refuse, in a production boundary, a lock mode below the floor of a declared compliance profile unless the witness that the profile allows in its place is declared."
+    rationale: "A profile that demands an immutable log must not run on a removable one unwitnessed (ADR 0039)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [840]
+    verification:
+      - {kind: test-vectors, ref: "installations with a lock below each profile floor"}
+  - id: REQ-AUDIT-138
+    area: AUDIT
+    statement: "A transition of an audit object to a colder storage class MUST NOT change the object's lock or retention."
+    rationale: "A tier saves cost and must never shorten evidence (ADR 0039)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [851, 837]
+    verification:
+      - {kind: conformance-suite, ref: "blob suite: a transitioned locked object keeps its lock"}
+  - id: REQ-AUDIT-139
+    area: AUDIT
+    statement: "The checkpoints, the partial tiles and the hash tiles above level 0 of an audit log MUST stay in the hot storage class."
+    rationale: "A proof and the newest entries must never wait for a retrieval (ADR 0039)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [837]
+    verification:
+      - {kind: integration-test, ref: "the rendered lifecycle rule names only entry bundles and level-0 tiles"}
+  - id: REQ-AUDIT-140
+    area: AUDIT
+    statement: "The audit reader MUST answer a read of an object in a cold storage class with a pending state, not by holding the request until the retrieval ends."
+    rationale: "A request must not hang for hours on an archive (ADR 0039)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [837]
+    verification:
+      - {kind: integration-test, ref: "a read of a cold object"}

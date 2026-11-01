@@ -85,6 +85,13 @@ On 2026-11-01, before any code was written, the maintainer had the 32 records ac
 | [0031](0031-declared-and-issued-configuration-authority-is-declared-and-instances-are-issued.md) | Declared and issued configuration: authority is declared and delivered through a configuration service, and instances are issued at run time under declared templates | Accepted |
 | [0032](0032-data-lifecycle-and-evidence-never-share-a-key-with-personal-data.md) | Data lifecycle and evidence: evidence and personal data never share a key, erasure is shredding the key, and v1's history stays where it is | Accepted |
 | [0033](0033-evolution-and-compatibility-n-and-n-1-inside-a-major-and-parallel-cutover.md) | Evolution and compatibility: N and N-1 inside a major version, a parallel cutover from v1, and neutral artifacts as the deliverable | Accepted |
+| [0034](0034-a-backup-is-an-age-encrypted-tar-of-canonical-json-per-kind-and-restores-onto-any-driver.md) | A backup is an age-encrypted tar of canonical JSON per record kind, with two recipients, and a restore writes it onto any driver | Accepted |
+| [0035](0035-the-secrets-port-has-one-driver-sealed-state-and-the-export-port-publishes-only-kinds-marked-external.md) | The secrets port has one driver, sealed state, and the export port publishes only kinds marked external | Accepted |
+| [0036](0036-credential-minters-mint-only-for-declared-targets-whose-entitlement-sluis-governs.md) | Credential minters mint only for declared targets whose entitlement sluis governs, and never where the vendor can trust sluis directly | Accepted |
+| [0037](0037-a-reconciler-manages-membership-only-one-per-target-under-a-lease-through-the-provisioner-contract.md) | A reconciler manages membership only, one per target under a lease, through the Provisioner contract | Accepted |
+| [0038](0038-clients-are-declared-resources-map-to-a-client-and-self-described-clients-are-admitted-only-from-allow-listed-origins.md) | Clients are declared, a resource maps to a registered client, and a self-described client is admitted only from an allow-listed origin | Accepted |
+| [0039](0039-audit-lifecycle-tiers-move-only-cold-objects-and-compliance-profiles-are-floors-that-the-configuration-check-enforces.md) | Audit lifecycle tiers move only cold objects, and compliance profiles are floors that the configuration check enforces | Accepted |
+| [0040](0040-console-roles-are-declared-grants-and-its-pages-are-organised-by-the-origin-of-what-they-show.md) | Console roles are declared grants, and its pages are organised by the origin of what they show | Accepted |
 
 ## Where the old records went
 
