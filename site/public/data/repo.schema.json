@@ -42,13 +42,14 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "area", "level", "status", "issues"],
+        "required": ["id", "area", "level", "status", "issues", "auto"],
         "properties": {
           "id": { "type": "string", "pattern": "^REQ-[A-Z0-9]+-\\d{3}$" },
           "area": { "type": "string", "pattern": "^[A-Z0-9]+$" },
           "level": { "enum": ["MUST", "SHOULD", "MAY"] },
           "status": { "enum": ["done", "planned", "partial", "open", "out-of-scope", "withdrawn"] },
-          "issues": { "description": "The issues that deliver the record.", "type": "array", "uniqueItems": true, "items": { "type": "integer", "minimum": 1 } }
+          "issues": { "description": "The issues that deliver the record.", "type": "array", "uniqueItems": true, "items": { "type": "integer", "minimum": 1 } },
+          "auto": { "description": "Whether something other than a person can verify the record: a verification that is not manual review.", "type": "boolean" }
         }
       }
     },

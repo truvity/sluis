@@ -114,7 +114,5 @@ export function coverage() {
   };
 }
 
-// A record the status page counts: not withdrawn and not a refusal kept as out of scope.
-export const counted = (r: Req) => r.status !== 'withdrawn' && r.status !== 'out-of-scope';
 // A record that something other than a person can verify: a suite, vectors or an integration test.
 export const autoVerifiable = (r: Req) => r.verification.some((v) => v.kind !== 'manual');

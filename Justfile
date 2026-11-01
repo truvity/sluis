@@ -74,20 +74,27 @@ site-all: site-check site-v1
 # The Cloudflare Workers build (ADR 0020), as the deploy job of site.yaml makes it, and
 # a dry-run deploy that uploads nothing and needs no Cloudflare credential: the strict
 # build for the Worker into site/dist/client, v1 under /v1/ when v1-src holds a v1 tag
-# (see site-v1), the build checks (headers, redirects, Git LFS) and
-# `wrangler deploy --dry-run` on the generated configuration. The KV id is a fake one:
-# the real id is a secret of the deploy environment.
-site-workers: site-install
+# (see site-v1), the build checks (headers, redirects, Git LFS), the Worker's tests and
+# `wrangler deploy --dry-run` on the generated configuration, which bundles the Worker.
+# The KV id is a fake one: the real id is a secret of the deploy environment.
+site-workers: site-install site-test-worker
     SLUIS_TARGET=workers SLUIS_STATUS_KV_ID=ffffffffffffffffffffffffffffffff site/scripts/strict-build.sh
     if [ -d v1-src ]; then site/scripts/build-v1.sh v1-src site/dist/client; fi
     site/scripts/check-built.sh site/dist/client
     cd site && WRANGLER_SEND_METRICS=false yarn wrangler deploy --dry-run
 
+# The tests of the site's Worker (site/src/worker/: the status API, the webhook and CI
+# checks, the KV write rules), in Node with GitHub and KV faked. No network, no credential.
+site-test-worker: site-install
+    site/scripts/check-worker.mjs
+
 # Deploy the Workers build in site/dist/client to Cloudflare. Only the deploy job of
 # site.yaml runs this, on an output that was built with the real KV id in
-# SLUIS_STATUS_KV_ID. Needs CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID.
-site-deploy:
-    cd site && WRANGLER_SEND_METRICS=false yarn wrangler deploy
+# SLUIS_STATUS_KV_ID. Needs CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID. `secrets` is
+# a JSON file of Worker secrets to upload with the version (absolute path); the deploy job
+# writes it from GitHub secrets and deletes it afterwards.
+site-deploy secrets='':
+    cd site && WRANGLER_SEND_METRICS=false yarn wrangler deploy {{ if secrets != '' { '--secrets-file ' + quote(secrets) } else { '' } }}
 
 # Repository rules (tools/checks/). Each check fails when it finds nothing to check.
 

@@ -52,4 +52,4 @@ The project board has a single-select field, `Product milestone`, whose options 
 
 ## Follow-ups
 
-- The live status API on the Worker (webhooks, KV, cron, the CI summaries): [#1037](https://github.com/truvity/sluis/issues/1037).
+- The live status API on the Worker (webhooks, KV, cron, the CI summaries): [#1037](https://github.com/truvity/sluis/issues/1037). Built on 2026-11-01 as described in [Tools: the live status API](/contributing/tools/#the-live-status-api). The live block of the status page is the Worker's HTML at `/api/status/live/`, swapped in by a bundled page script rather than by Astro's server island, whose inline loader changes with every build and so cannot be listed in the hash-based Content-Security-Policy; no `ASTRO_KEY` is needed. The webhook subscription and its secret are set by the maintainer.

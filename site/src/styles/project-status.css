@@ -1,4 +1,4 @@
-/* The project status page (src/pages/status.astro). Only Starlight's colour, type and
+/* The project status page (src/pages/status.astro, src/components/status/StatusBody.astro). Only Starlight's colour, type and
    font variables are used, so light and dark both work. */
 .ps-legend { font-size: var(--sl-text-sm); color: var(--sl-color-gray-2); }
 .ps-asof { display: block; font-size: var(--sl-text-xs); font-weight: 400; color: var(--sl-color-gray-3); white-space: nowrap; }
@@ -54,3 +54,17 @@ a.ps-chip:hover { border-color: var(--sl-color-accent); color: var(--sl-color-wh
 .ps-chip.ps-blocked { border-color: var(--sl-color-red); }
 .ps-no { font-family: var(--sl-font-mono); color: var(--sl-color-accent-high); }
 .ps-state { color: var(--sl-color-gray-3); }
+
+/* the live block (src/scripts/status-live.ts) and the checks on main */
+.ps-live-note { font-size: var(--sl-text-sm); color: var(--sl-color-gray-2); border-left: 3px solid var(--sl-color-orange); padding-left: .75rem; }
+.ps .ps-checks { display: grid; gap: .5rem; margin: .5rem 0 1rem; }
+.ps .ps-checks > div { display: grid; grid-template-columns: minmax(12rem, 16rem) 1fr; gap: .5rem; align-items: baseline; }
+.ps .ps-checks dt { font-weight: 600; font-size: var(--sl-text-sm); margin: 0; }
+.ps .ps-checks dd { margin: 0; font-size: var(--sl-text-sm); }
+/* The tags of src/lib/status-html.ts, in the colours of Starlight's badges (the page's legend
+   loads their variables). The Worker draws the same markup, so no Astro component is used. */
+.ps-tag { display: inline-block; border: 1px solid; border-radius: .25rem; padding: .0625rem .25rem; font-family: var(--sl-font-system-mono);
+  font-size: var(--sl-text-xs); font-weight: 400; line-height: normal; color: #fff; vertical-align: middle; }
+.ps-tag-live { border-color: var(--sl-badge-tip-border); background-color: var(--sl-badge-tip-bg); }
+.ps-tag-build { border-color: var(--sl-badge-note-border); background-color: var(--sl-badge-note-bg); }
+.ps-tag-current { border-color: var(--sl-badge-success-border); background-color: var(--sl-badge-success-bg); }
