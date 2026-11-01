@@ -1,4 +1,4 @@
-# PKI: Internal PKI and ceremonies
+# PKI: Intermediates and certificates
 schema: 1
 area: PKI
 requirements:
@@ -375,3 +375,88 @@ requirements:
     issues: [914]
     verification:
       - {kind: manual, ref: "ceremony dry-run with a throwaway root"}
+  - id: REQ-PKI-027
+    area: PKI
+    statement: "sluis MUST NOT generate, hold or export a root key."
+    rationale: "Roots are made and kept by the separate root-custody product, so no sluis process can sign as a root."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1066, 1071]
+    verification:
+      - {kind: integration-test, ref: "a scan of the key purposes and drivers finds no root purpose, and a request to create one is refused"}
+  - id: REQ-PKI-028
+    area: PKI
+    statement: "The key request command MUST write a PKCS#10 request and a proof of where the key lives for each intermediate."
+    rationale: "The certifier checks the proof before it signs, so the request must carry it."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1066, 1069]
+    verification:
+      - {kind: test-vectors, ref: "hand-off fixtures: a request and a proof from a test card and from a test KMS key verify"}
+  - id: REQ-PKI-029
+    area: PKI
+    statement: "The key install command MUST refuse a certificate whose chain does not lead to a root in the root list or whose public key does not match the key."
+    rationale: "A wrong certificate would make sluis serve with a key that no verifier trusts, or with someone else's."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1066]
+    verification:
+      - {kind: test-vectors, ref: "hand-off fixtures: a chain to an unknown root and a certificate for another key; both refused and nothing changes"}
+  - id: REQ-PKI-030
+    area: PKI
+    statement: "sluis MUST refuse a hand-off document whose major version it does not know."
+    rationale: "The two products release separately, so an unknown version must fail closed."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1066, 1070]
+    verification:
+      - {kind: test-vectors, ref: "hand-off fixtures: a document with an unknown major version; refused"}
+  - id: REQ-PKI-031
+    area: PKI
+    statement: "sluis MUST raise a notice 60 days, an alert 30 days and a critical alert 14 days before an intermediate certificate or OpenPGP subkey expires."
+    rationale: "Renewal needs a person at the root-custody side, so the warning has to come early."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1068]
+    verification:
+      - {kind: integration-test, ref: "a clock-moving test shows each level once at its lead time and clears it after a renewal"}
+  - id: REQ-PKI-032
+    area: PKI
+    statement: "The key install command MUST refuse an intermediate certificate whose validity exceeds the maximum that the hand-off specification sets."
+    rationale: "About thirteen months keeps the yearly renewal the main control for a lost board."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1066]
+    verification:
+      - {kind: test-vectors, ref: "hand-off fixtures: a certificate valid for longer than the maximum; refused"}
+  - id: REQ-PKI-033
+    area: PKI
+    statement: "Each entry of a published key set that holds an intermediate MUST carry an x5c chain up to a root."
+    rationale: "A verifier that wants to can then check custody down to the root, and a standard client ignores the member."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-62, section: "4", depth: Partial}
+    issues: [774]
+    verification:
+      - {kind: integration-test, ref: "the key set of a test installation: every entry has an x5c chain that verifies against the root list"}
