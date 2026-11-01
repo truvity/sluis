@@ -4,7 +4,7 @@ import Chips from '../../components/requirements/Chips.astro';
 import { catalogue, issueUrl, KIND_LABEL, reqPath, type Req } from '../../lib/requirements';
 
 const c = catalogue();
-const link = (r: Req) => ({ id: r.id, href: reqPath(r), open: c.areaByCode.get(r.area)!.scopeOpen, level: r.level });
+const link = (r: Req) => ({ id: r.id, href: reqPath(r), level: r.level });
 const group = (key: (r: Req) => string[]) => {
   const m = new Map<string, Req[]>();
   for (const r of c.reqs) for (const k of key(r)) m.set(k, [...(m.get(k) ?? []), r]);
@@ -37,8 +37,7 @@ const views = [
   description="Traceability from each sluis v2 requirement to the standards it implements, the issues and features that deliver it and the verification that proves it."
 >
   <p>
-    One matrix, four ways to read it. Every cell links both ways: an id goes to its row on the page of its area. Requirements of the
-    account-hosting areas (scope open) are marked with a dagger.
+    One matrix, four ways to read it. Every cell links both ways: an id goes to its row on the page of its area.
   </p>
 
   <div class="rq-tabs" role="tablist" aria-label="Matrix views" data-rq-tabs hidden>
@@ -52,7 +51,7 @@ const views = [
         <tbody>
           {c.reqs.map((r) => (
             <tr>
-              <td data-label="Id"><a href={reqPath(r)}>{r.id}</a>{c.areaByCode.get(r.area)!.scopeOpen && <sup title="Scope open"> &dagger;</sup>}</td>
+              <td data-label="Id"><a href={reqPath(r)}>{r.id}</a></td>
               <td data-label="Level">{r.level}</td>
               <td data-label="Standards" class="rq-chips">{r.standards.length ? <Chips req={r} only="standards" /> : <span class="rq-none">none</span>}</td>
               <td data-label="Issues and features" class="rq-chips"><Chips req={r} only="issues" /><Chips req={r} only="features" /></td>
@@ -78,7 +77,7 @@ const views = [
                   <div class="rq-note">{byStandard.get(id)!.length} requirements{s && !s.register ? '; not yet a row of the register' : ''}</div>
                 </td>
                 <td data-label="Requirements" class="rq-chips">
-                  {byStandard.get(id)!.map((r) => { const l = link(r); return <a class="rq-chip" href={l.href}>{l.id}{l.open ? '†' : ''}</a>; })}
+                  {byStandard.get(id)!.map((r) => { const l = link(r); return <a class="rq-chip" href={l.href}>{l.id}</a>; })}
                 </td>
               </tr>
             );
@@ -98,7 +97,7 @@ const views = [
             <tr>
               <td data-label="Issue or feature">{f.startsWith('#') ? <a href={issueUrl(Number(f.slice(1)))}>{f}</a> : <b>{f}</b>}<div class="rq-note">{byFeature.get(f)!.length} requirements</div></td>
               <td data-label="Requirements" class="rq-chips">
-                {byFeature.get(f)!.map((r) => { const l = link(r); return <a class="rq-chip" href={l.href}>{l.id}{l.open ? '†' : ''}</a>; })}
+                {byFeature.get(f)!.map((r) => { const l = link(r); return <a class="rq-chip" href={l.href}>{l.id}</a>; })}
               </td>
             </tr>
           ))}
@@ -120,7 +119,7 @@ const views = [
                 <tr>
                   <td data-label="Reference">{ref}</td>
                   <td data-label="Requirements" class="rq-chips">
-                    {rs.map((r) => { const l = link(r); return <a class="rq-chip" href={l.href}>{l.id}{l.open ? '†' : ''}</a>; })}
+                    {rs.map((r) => { const l = link(r); return <a class="rq-chip" href={l.href}>{l.id}</a>; })}
                   </td>
                 </tr>
               ))}

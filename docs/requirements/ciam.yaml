@@ -1,4 +1,4 @@
-# CIAM: Customer account hosting: scope and boundaries (open scope)
+# CIAM: Customer account hosting: scope and boundaries
 schema: 1
 area: CIAM
 requirements:
@@ -63,16 +63,15 @@ requirements:
   - id: REQ-CIAM-003
     area: CIAM
     statement: "An installation MAY keep a registry of sectors, each with its own non-rotating key for pairwise subjects."
-    rationale: "Pairwise subjects need a key per sector."
+    rationale: "Pairwise subjects need a key per sector, and sites that must recognise the same user share one sector."
     level: MAY
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Partial}
       - {id: NC-06, section: "2104", depth: Full}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: test-vectors, ref: "own subject vectors"}
   - id: REQ-CIAM-004
@@ -81,13 +80,12 @@ requirements:
     rationale: "Consent is local to the entity."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2.4", depth: Partial}
       - {id: ST-25, section: "auth", depth: Partial}
     issues: [794]
-    gap: account-hosting-scope
     verification:
       - {kind: integration-test, ref: "consent flow tests"}
   - id: REQ-CIAM-012
@@ -97,13 +95,12 @@ requirements:
     rationale: "Consent is local to the entity."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2.4", depth: Partial}
       - {id: ST-25, section: "auth", depth: Partial}
     issues: [794]
-    gap: account-hosting-scope
     verification:
       - {kind: integration-test, ref: "consent record location test"}
   - id: REQ-CIAM-005
@@ -141,13 +138,12 @@ requirements:
     rationale: "Receivers want push notification."
     level: MAY
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-26, section: "1", depth: Full}
       - {id: NC-03, section: "8417", depth: Full}
     issues: [927]
-    gap: account-hosting-scope
     verification:
       - {kind: conformance-suite, ref: "SSF plans"}
   - id: REQ-CIAM-007

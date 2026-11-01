@@ -14,7 +14,7 @@ generates its pages from them and test tools read the same data.
 ## What the build makes from it
 
 - [sluis.id/requirements/](https://sluis.id/requirements/): counts, the areas, and one table of all records with a filter by area,
-  level, status, source and runtime. The account-hosting areas (CIAM, ACCT, SUBJ, VAULT, REG) carry a "scope open" badge and can be hidden.
+  level, status, source and runtime.
 - `/requirements/<area>/`: one page per area, with standards, features, decisions and verification for each record.
 - `/requirements/matrix/`: requirement to standard, issue or feature, and verification, and back.
 - `/requirements/coverage/`: statistics, MUST records without a conformance suite or test vectors, open records by decision,

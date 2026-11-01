@@ -13,11 +13,9 @@ export interface Req {
   standards: StandardRef[]; features: ('parity' | 'design')[]; decisions?: string[]; issues?: number[]; tests?: string[]; verification: Verification[];
   gap?: string; manual_reason?: string; superseded_by?: string[];
 }
-export interface Area { code: string; title: string; file: string; scopeOpen: boolean; reqs: Req[] }
+export interface Area { code: string; title: string; file: string; reqs: Req[] }
 export interface Standard { id: string; name: string; group: string; register: boolean; url?: string }
 
-// The gap key of the account-hosting groups: an area with such a record waits for the scope decision.
-export const SCOPE_GAP = 'account-hosting-scope';
 export const ISSUES = 'https://github.com/truvity/sluis/issues/';
 export const SOURCE = 'https://github.com/truvity/sluis/blob/main/docs/requirements/';
 
@@ -53,7 +51,7 @@ export function catalogue(): Catalogue {
   const areas: Area[] = Object.entries<{ title: string; file: string }>(c.areas).map(([code, a]) => {
     // features is optional in the YAML (issue numbers live in issues); the pages and requirements.json always see a list.
     const reqs: Req[] = read(a.file).requirements.map((r: Req) => ({ ...r, features: r.features ?? [] }));
-    return { code, title: a.title, file: a.file, scopeOpen: reqs.some((r) => r.gap === SCOPE_GAP), reqs };
+    return { code, title: a.title, file: a.file, reqs };
   });
   const reqs = areas.flatMap((a) => a.reqs);
   const standards: Standard[] = read('standards.yaml').standards;
@@ -93,9 +91,9 @@ export function exportJson() {
       status: Object.fromEntries(count(c.reqs, (r) => r.status)),
       source: Object.fromEntries(count(c.reqs, (r) => r.source)),
     },
-    areas: c.areas.map((a) => ({ code: a.code, title: a.title, scopeOpen: a.scopeOpen, requirements: a.reqs.length })),
+    areas: c.areas.map((a) => ({ code: a.code, title: a.title, requirements: a.reqs.length })),
     standards: c.standards,
-    requirements: c.reqs.map((r) => ({ ...r, scopeOpen: c.areaByCode.get(r.area)!.scopeOpen, url: `https://sluis.id${reqPath(r)}` })),
+    requirements: c.reqs.map((r) => ({ ...r, url: `https://sluis.id${reqPath(r)}` })),
   };
 }
 

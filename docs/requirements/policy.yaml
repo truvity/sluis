@@ -92,12 +92,11 @@ requirements:
     rationale: "Risky changes need two people."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-49, section: "7", depth: Partial}
-    features: ["design"]
-    gap: stakeholder-only
+    issues: [1052]
     verification:
       - {kind: integration-test, ref: "attestation tests"}
       - {kind: manual, ref: "process review"}

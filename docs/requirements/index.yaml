@@ -40,13 +40,12 @@ catalogue:
     DEPLOY: {title: "Deployment and packaging", file: deploy.yaml}
     SUPPLY: {title: "Release and supply chain", file: supply.yaml}
     TEST: {title: "Conformance and test strategy", file: test.yaml}
-    CIAM: {title: "Customer account hosting: scope and boundaries (open scope)", file: ciam.yaml}
-    ACCT: {title: "Customer accounts (open scope)", file: acct.yaml}
-    SUBJ: {title: "Subjects and sectors (open scope)", file: subj.yaml}
-    VAULT: {title: "Fallback credential vault (open scope)", file: vault.yaml}
-    REG: {title: "Registration, recovery and lifecycle (open scope)", file: reg.yaml}
+    CIAM: {title: "Customer account hosting: scope and boundaries", file: ciam.yaml}
+    ACCT: {title: "Customer accounts", file: acct.yaml}
+    SUBJ: {title: "Subjects and sectors", file: subj.yaml}
+    VAULT: {title: "Fallback credential vault", file: vault.yaml}
+    REG: {title: "Registration, recovery and lifecycle", file: reg.yaml}
   gaps:
-    account-hosting-scope: "sluis does not host end-user accounts (REQ-CIAM-017); a record that still carries this gap waits for the pairwise-subject, subject-model or subject-lifecycle decision."
     stakeholder-only: "A stakeholder needs it but no v2 feature accepts it yet."
     register-gap: "The standards register or the feature plan is weaker than this requirement."
     proposed-design: "The design is proposed in research and not yet decided."

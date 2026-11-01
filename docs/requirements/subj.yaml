@@ -1,4 +1,4 @@
-# SUBJ: Subjects and sectors (open scope)
+# SUBJ: Subjects and sectors
 schema: 1
 area: SUBJ
 requirements:
@@ -36,12 +36,11 @@ requirements:
     rationale: "A forgotten sector must never fall back to a global identifier."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "sector assignment test"}
   - id: REQ-SUBJ-004
@@ -50,26 +49,24 @@ requirements:
     rationale: "A missing sector is a configuration error."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "missing sector load test"}
   - id: REQ-SUBJ-005
     area: SUBJ
     statement: "The loader MUST refuse a machine client that names a sector."
-    rationale: "Machine tokens carry the client identifier as subject."
+    rationale: "A machine token carries the machine's own identifier as its subject, so no sector applies."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "machine sector load test"}
   - id: REQ-SUBJ-006
@@ -78,28 +75,27 @@ requirements:
     rationale: "A machine has no person to hide."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CLIENT-023]
     verification:
       - {kind: integration-test, ref: "machine token subject test"}
   - id: REQ-SUBJ-007
     area: SUBJ
-    statement: "In an account-hosting hub the subject for a client in a sector MUST be a keyed MAC of the account identifier with the sector as tenant."
-    rationale: "Entities and products must not be able to join their customer lists."
+    statement: "The subject for a client in a sector MUST be a keyed MAC of the upstream subject with the sector as tenant."
+    rationale: "Sites in different sectors must not be able to join their customer lists."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Full}
       - {id: NC-06, section: "2104", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: test-vectors, ref: "own subject vectors"}
       - {kind: conformance-suite, ref: "OIDF Basic OP with pairwise subject"}
@@ -109,13 +105,12 @@ requirements:
     rationale: "A key that cannot be read cannot be brute-forced offline."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: NC-06, section: "2104", depth: Partial}
       - {id: ST-88, section: "1", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "key extraction negative test"}
   - id: REQ-SUBJ-009
@@ -124,68 +119,63 @@ requirements:
     rationale: "A fixed encoding makes the value verifiable by vector."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: NC-06, section: "2104", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: test-vectors, ref: "own subject vectors"}
   - id: REQ-SUBJ-010
     area: SUBJ
     statement: "Two clients in one sector MUST receive the same pairwise subject for a person."
-    rationale: "A sector is one audience."
+    rationale: "A sector is one audience, so sites that must recognise the same user share one sector."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Full}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "same-sector subject test"}
   - id: REQ-SUBJ-011
     area: SUBJ
     statement: "Clients in two different sectors MUST receive different pairwise subjects for a person."
-    rationale: "Different sectors must not be able to correlate a person."
+    rationale: "Sites in different sectors get different subjects by design, so they cannot correlate a person."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Full}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "cross-sector subject test"}
   - id: REQ-SUBJ-012
     area: SUBJ
     statement: "A pairwise subject MUST stay the same across sign-in, refresh, exchange and logout tokens."
-    rationale: "Relying parties key their records by subject."
+    rationale: "Relying parties key their records by subject, and single sign-on follows the sluis session, so pairwise subjects do not affect it."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Full}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "subject stability test"}
   - id: REQ-SUBJ-013
     area: SUBJ
-    statement: "A pairwise subject MUST NOT equal the account identifier."
-    rationale: "The subject must not expose the internal key."
+    statement: "A pairwise subject MUST NOT equal the upstream subject."
+    rationale: "The subject must not expose the upstream identifier."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Full}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "subject distinctness test"}
   - id: REQ-SUBJ-014
@@ -194,28 +184,27 @@ requirements:
     rationale: "Discovery must tell the truth about the subject type."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Full}
       - {id: ST-29, section: "3", depth: Full}
       - {id: ST-104, section: "test plan", depth: Full}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-AUTHN-006]
     verification:
       - {kind: conformance-suite, ref: "OIDF Config OP"}
   - id: REQ-SUBJ-015
     area: SUBJ
-    statement: "The loader MUST refuse a change of a sector's key backend, key identifier or tenant while accounts exist."
+    statement: "The loader MUST refuse a change of a sector's key backend, key identifier or tenant while subjects exist."
     rationale: "Such a change would change every stored subject of the sector."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: NC-06, section: "2104", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "sector identity change load test"}
   - id: REQ-SUBJ-016
@@ -224,12 +213,11 @@ requirements:
     rationale: "Subject stability is worth more than key hygiene here."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: NC-06, section: "2104", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "migration through export test"}
   - id: REQ-SUBJ-017
@@ -428,58 +416,55 @@ requirements:
       - {kind: integration-test, ref: "user handle independence test"}
   - id: REQ-SUBJ-031
     area: SUBJ
-    statement: "In workforce mode the subject MUST be the staff account identifier, a random version 4 UUID."
-    rationale: "Resource servers key their staff records by it."
+    statement: "A subject MUST be an opaque random identifier that sluis assigns when it first sees a directory person."
+    rationale: "Resource servers key their records by it."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
-      - {id: NC-02, section: "9562", depth: Full}
-    features: ["design"]
-    gap: account-hosting-scope
+      - {id: ST-28, section: "2", depth: Partial}
+    issues: [776]
     verification:
-      - {kind: integration-test, ref: "staff subject format test"}
+      - {kind: integration-test, ref: "subject format test"}
   - id: REQ-SUBJ-032
     area: SUBJ
-    statement: "The staff creation operation MUST return the subject before the first sign-in."
-    rationale: "Resource servers create their records before the person signs in."
+    statement: "sluis MUST make the subject of a directory person available before that person's first sign-in."
+    rationale: "Resource servers and reconcilers create their records before the person signs in."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: NC-02, section: "9562", depth: Full}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [776]
     verification:
-      - {kind: integration-test, ref: "staff create subject equality test"}
+      - {kind: integration-test, ref: "subject before first sign-in test"}
   - id: REQ-SUBJ-033
     area: SUBJ
     statement: "In partner mode the subject MUST be the client identifier."
     rationale: "A partner token represents the partner."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: withdrawn
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Partial}
     features: ["design"]
-    gap: account-hosting-scope
+    superseded_by: [REQ-CLIENT-023]
     verification:
       - {kind: integration-test, ref: "partner subject test"}
   - id: REQ-SUBJ-034
     area: SUBJ
-    statement: "An e-mail address MUST NOT be used as a subject in workforce, partner or context mode."
+    statement: "An e-mail address MUST NOT be used as a subject."
     rationale: "E-mail addresses change and are personal data."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [776]
     verification:
       - {kind: integration-test, ref: "subject scan for e-mail"}
   - id: REQ-SUBJ-035

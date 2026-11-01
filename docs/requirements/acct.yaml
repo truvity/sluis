@@ -1,4 +1,4 @@
-# ACCT: Customer accounts (open scope)
+# ACCT: Customer accounts
 schema: 1
 area: ACCT
 requirements:
@@ -144,44 +144,41 @@ requirements:
       - {kind: integration-test, ref: "crash-between-steps recovery test"}
   - id: REQ-ACCT-011
     area: ACCT
-    statement: "Account state transitions MUST be limited to those of the defined state machine."
+    statement: "Subject state transitions MUST be limited to those of the defined state machine."
     rationale: "Every gate depends on one unambiguous standing."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "5", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "state-pair unit test"}
   - id: REQ-ACCT-012
     area: ACCT
-    statement: "An undefined account state transition MUST be refused with failed_precondition."
+    statement: "An undefined subject state transition MUST be refused with failed_precondition."
     rationale: "A refused transition must be distinguishable from a failure."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "5", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "undefined transition refusal test"}
   - id: REQ-ACCT-013
     area: ACCT
-    statement: "A sign-in MUST complete only for a live account that has no security hold."
-    rationale: "A held or suspended account must not obtain tokens."
+    statement: "A sign-in MUST complete only for a live subject that has no security hold."
+    rationale: "A held or suspended subject must not obtain tokens."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2.1", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "sign-in by state test"}
   - id: REQ-ACCT-014
@@ -400,12 +397,11 @@ requirements:
     rationale: "A cached live standing must not survive a disable."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "5", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "disable-then-refresh test"}
   - id: REQ-ACCT-030
@@ -466,30 +462,28 @@ requirements:
       - {kind: integration-test, ref: "accounts-down unknown-account test"}
   - id: REQ-ACCT-034
     area: ACCT
-    statement: "A non-live account MUST be refused at hub sign-in with the uniform refusal page."
+    statement: "A non-live subject MUST be refused at sign-in with the uniform refusal page."
     rationale: "Disable is a security control, not a hint."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2.1", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "disabled sign-in test"}
   - id: REQ-ACCT-035
     area: ACCT
-    statement: "A non-live account MUST be refused at refresh with invalid_grant."
-    rationale: "A refresh must not outlive the account's standing."
+    statement: "A non-live subject MUST be refused at refresh with invalid_grant."
+    rationale: "A refresh must not outlive the subject's standing."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-01, section: "5.2", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "disabled refresh test"}
   - id: REQ-ACCT-036
@@ -508,30 +502,28 @@ requirements:
       - {kind: integration-test, ref: "disabled context leg test"}
   - id: REQ-ACCT-037
     area: ACCT
-    statement: "A non-live account MUST be refused at token exchange."
-    rationale: "An exchange must not extend the reach of a disabled account."
+    statement: "A non-live subject MUST be refused at token exchange."
+    rationale: "An exchange must not extend the reach of a disabled subject."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-07, section: "2", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "disabled exchange test"}
   - id: REQ-ACCT-038
     area: ACCT
-    statement: "A non-live account MUST be refused at federated sign-in through an organisation connection, on a sluis error page."
+    statement: "A non-live subject MUST be refused at federated sign-in through an organisation connection, on a sluis error page."
     rationale: "The relying party must not learn why a person was refused."
     level: MUST
     source: stakeholder-ciam
-    status: open
+    status: planned
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2.1", depth: Partial}
-    features: ["design"]
-    gap: account-hosting-scope
+    issues: [1024]
     verification:
       - {kind: integration-test, ref: "disabled federated sign-in test"}
   - id: REQ-ACCT-039
@@ -819,7 +811,7 @@ requirements:
       - {kind: integration-test, ref: "accounts-down begin test"}
   - id: REQ-ACCT-059
     area: ACCT
-    statement: "Profile claims MUST be released only to clients whose release list names them."
+    statement: "Profile claims MUST be released only to clients whose declared claims name them."
     rationale: "Names are personal data."
     level: MUST
     source: stakeholder-ciam
