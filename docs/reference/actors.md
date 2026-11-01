@@ -187,7 +187,7 @@ Seals the records it takes from the transport into its audit log and usage log i
 - **Decisions:** [ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/), [ADR 0012](/decisions/0012-cryptography-and-authority-keys/), [ADR 0014](/decisions/0014-the-language-follows-the-executable/), [ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/), [ADR 0016](/decisions/0016-the-audit-log/).
 - **Requirement areas:** [AUDIT](/requirements/audit/).
 - **Standards:** ST-71 C2SP signed-note; ST-72 C2SP tlog-checkpoint; ST-73 C2SP tlog-cosignature; ST-75 C2SP tlog-tiles; ST-114 OCSF 1.x.
-- **Issues:** [#837](https://github.com/truvity/sluis/issues/837), [#838](https://github.com/truvity/sluis/issues/838); label `actor:writer`.
+- **Issues:** [#837](https://github.com/truvity/sluis/issues/837), [#838](https://github.com/truvity/sluis/issues/838), [#1121](https://github.com/truvity/sluis/issues/1121); label `actor:writer`.
 
 ### `witness`
 
@@ -215,7 +215,7 @@ Follows each audit log of its boundary by signed checkpoint and applies the entr
 - **Decisions:** [ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/), [ADR 0014](/decisions/0014-the-language-follows-the-executable/), [ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/).
 - **Requirement areas:** [AUDIT](/requirements/audit/).
 - **Standards:** ST-72 C2SP tlog-checkpoint; ST-75 C2SP tlog-tiles.
-- **Issues:** [#839](https://github.com/truvity/sluis/issues/839); label `actor:indexer`.
+- **Issues:** [#839](https://github.com/truvity/sluis/issues/839), [#1122](https://github.com/truvity/sluis/issues/1122); label `actor:indexer`.
 
 ### `reader`
 
@@ -229,7 +229,7 @@ Answers audit queries from the search index, filtered by the caller's grant, and
 - **Decisions:** [ADR 0003](/decisions/0003-core-actors-with-one-responsibility-each/), [ADR 0014](/decisions/0014-the-language-follows-the-executable/), [ADR 0015](/decisions/0015-audit-pieces-transport-search-and-front/).
 - **Requirement areas:** [AUDIT](/requirements/audit/).
 - **Standards:** ST-114 OCSF 1.x.
-- **Issues:** [#839](https://github.com/truvity/sluis/issues/839), [#985](https://github.com/truvity/sluis/issues/985); label `actor:reader`.
+- **Issues:** [#839](https://github.com/truvity/sluis/issues/839), [#985](https://github.com/truvity/sluis/issues/985), [#1122](https://github.com/truvity/sluis/issues/1122); label `actor:reader`.
 
 ### `key-holder`
 
