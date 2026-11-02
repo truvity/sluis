@@ -4,8 +4,8 @@
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import '../../styles/requirements.css';
 
-interface Props { title: string; description: string; current?: 'overview' | 'matrix' | 'coverage' | 'area'; jump?: [string, string][] }
-const { title, description, current = 'area', jump = [] } = Astro.props;
+interface Props { title: string; description: string; current?: 'overview' | 'matrix' | 'coverage' | 'area'; jump?: [string, string][]; editUrl?: string }
+const { title, description, current = 'area', jump = [], editUrl } = Astro.props;
 const links = [
   ['overview', '/requirements/', 'Overview and areas'],
   ['matrix', '/requirements/matrix/', 'Matrix'],
@@ -13,7 +13,7 @@ const links = [
 ] as const;
 ---
 
-<StarlightPage frontmatter={{ title, description, status: 'target', tableOfContents: false }}>
+<StarlightPage frontmatter={{ title, description, status: 'target', tableOfContents: false, editUrl }}>
   <nav class="rq-nav" aria-label="Requirements views">
     {links.map(([key, href, label]) => <a href={href} aria-current={current === key ? 'page' : undefined}>{label}</a>)}
     <a href="/requirements.json">requirements.json</a>

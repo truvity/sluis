@@ -22,6 +22,12 @@ Moving or renaming a page needs a line in the `redirects` map of `site/astro.con
 
 A home page, or the top of a section, starts from the reader's pain: what goes wrong for them today. Then comes the mission, then what the project does about each pain, with an honest status for each (designed, built, planned). It does not open with the architecture. Changes to the site's layout, home page, Worker or headers follow [Changing the site](/contributing/tools/#changing-the-site).
 
+## Page format
+
+Pages are Markdown (`.md`). A page is MDX (`.mdx`) only when it places components, which today is the home page (`docs/index.mdx`) and the two explorer pages. The reasons: `.md` renders readably on GitHub and in other tools, reviews stay text-only, and a broken component in `.mdx` breaks the whole build. Starlight's Markdown already has asides, code blocks, tables and links, so a page that wants any of those stays `.md`. `just check-mdx-pages` fails an `.mdx` file that imports no component or places none ("use .md: MDX only for pages that place components").
+
+The "Edit page" link of each page opens the file in `docs/` (`docs/<page>.md`, or `.mdx`). `site/src/route-middleware.ts` builds it, because Starlight alone would use the path of the symlink under `site/src/content/docs/`; the generated decision and requirements pages set their own source file, and the other generated pages have no edit link. `check-built.sh` fails when a link does not point at a file in the repository.
+
 ## Status
 
 Every page has a required `status` in its front matter, shown as a badge next to the title and checked in CI:

@@ -30,6 +30,9 @@ export function decisionDescription(entry: Decision): string {
 export const sourceUrl = (entry: Decision): string =>
   `https://github.com/truvity/sluis/blob/main/docs/decisions/${entry.id}.md`;
 
+export const editUrl = (entry: Decision): string =>
+  `https://github.com/truvity/sluis/edit/main/docs/decisions/${entry.id}.md`;
+
 // A record keeps its status and date as the `**Status:**` and `**Date:**` lines
 // under its heading (docs/decisions/README.md, checked by tools/checks/decisions.mjs),
 // and links its proposal issue in the context as "Proposal: [issue #N](...)".

@@ -164,7 +164,7 @@ export default defineConfig({
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/truvity/sluis' },
       ],
-      editLink: { baseUrl: 'https://github.com/truvity/sluis/edit/main/docs/' },
+      editLink: { baseUrl: 'https://github.com/truvity/sluis/edit/main/' },
       lastUpdated: false,
       // The 404 page is src/pages/404.astro.
       disable404Route: true,
