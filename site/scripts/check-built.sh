@@ -77,6 +77,9 @@ fi
 # /data/repo.json: valid against its schema and equal to the records it is built from.
 site/scripts/check-repo-json.mjs "$dist" || bad "/data/repo.json does not match its schema or its sources (above)"
 
+# "Edit page" links: each one is a file in this checkout (and the page's own source).
+site/scripts/check-edit-links.mjs "$dist" || bad "an edit link does not point at its file in the repository (above)"
+
 # The decisions index lists records, not the template, and shows each record's status.
 if [ -s "$dist/decisions/index.html" ]; then
   if grep -q '0000-template' "$dist/decisions/index.html"; then bad "decisions/index.html lists the template"; fi

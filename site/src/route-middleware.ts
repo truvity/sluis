@@ -25,8 +25,18 @@ type TocItem = { children?: TocItem[] };
 const countHeadings = (items: TocItem[]): number =>
   items.reduce((n, item) => n + 1 + countHeadings(item.children ?? []), 0);
 
+// The symlink the docs collection is loaded through (src/content.config.ts), and where
+// it points in the repository.
+const CONTENT_DIR = 'src/content/docs/';
+const REPO_DIR = 'docs/';
+
 export const onRequest = defineRouteMiddleware(async (context) => {
   const route = context.locals.starlightRoute;
+  const { filePath } = route.entry;
+  if (route.editUrl && typeof route.entry.data.editUrl !== 'string' && filePath.startsWith(CONTENT_DIR)) {
+    const base = route.editUrl.href.slice(0, route.editUrl.href.length - filePath.length);
+    route.editUrl = new URL(base + REPO_DIR + filePath.slice(CONTENT_DIR.length));
+  }
   if (route.toc && countHeadings(route.toc.items.slice(1)) < 2) {
     route.toc = undefined;
   }

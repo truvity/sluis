@@ -11,6 +11,7 @@ Checklist:
 - [ ] Decided and proposed points are marked the way the page describes; every proposed note links its open issue.
 - [ ] A rule is stated once on the page that owns it; the other pages link there. A moved page has its redirect in `site/astro.config.mjs`.
 - [ ] A home page starts from the reader's pain. A change to the site's layout, Worker or headers uses the `site-change` skill instead.
+- [ ] The page is `.md`; `.mdx` is only for a page that places components ("Page format" in `docs/contributing/pages.md`).
 - [ ] Diagrams keep to the size limits on the page.
 - [ ] Links to other pages use site paths, and the linked pages exist.
 - [ ] `devbox run -- just check` passes; then follow `docs/contributing/workflow.md`.
