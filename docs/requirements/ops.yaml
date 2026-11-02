@@ -471,3 +471,41 @@ requirements:
     issues: [1012]
     verification:
       - {kind: conformance-suite, ref: "provisioner suite: outcome of a vendor error"}
+  - id: REQ-OPS-038
+    area: OPS
+    statement: "A token-signing key of an installation MUST be a single-Region key."
+    rationale: "A multi-Region key copies key material to another Region, against principle 1."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1061]
+    verification:
+      - {kind: integration-test, ref: "key description scan of a test installation"}
+  - id: REQ-OPS-039
+    area: OPS
+    statement: "The documentation of an installation MUST state the recovery point and recovery time that its latest recovery drill measured, with the drill's date and versions."
+    rationale: "No page promises a recovery time that no drill measured."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1015]
+    manual_reason: "A statement in published documentation is checked by reading it."
+    verification:
+      - {kind: manual, ref: "documentation review"}
+  - id: REQ-OPS-040
+    area: OPS
+    statement: "A recovery drill MUST run at least once a year and after a change to the backup or restore path."
+    rationale: "A restore that has not been tried is not a recovery plan."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1015]
+    manual_reason: "A drill is a procedure whose record is checked by reading it."
+    verification:
+      - {kind: manual, ref: "drill record review"}

@@ -836,3 +836,15 @@ requirements:
     superseded_by: [REQ-CIAM-017]
     verification:
       - {kind: integration-test, ref: "context load refusal test"}
+  - id: REQ-ACCT-061
+    area: ACCT
+    statement: "The retention between left and erased MUST be declared, with a default of 30 days and a maximum of 365 days."
+    rationale: "Retention is a lifecycle rule, kept in a policy table."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1024]
+    verification:
+      - {kind: integration-test, ref: "config check negative test above the maximum"}

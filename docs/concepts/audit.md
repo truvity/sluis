@@ -87,7 +87,7 @@ The transport is a port, not a piece: it joins the emitter to the writer ([ADR 0
 | `direct-mtls` | The SPIFFE ID in the client certificate |
 | `spool` | A spool directory per producer uid |
 | `sqs` | A queue policy per sender role, and a queue per boundary |
-| `nats-jetstream` | NATS accounts and permission templates: an operator per environment, an account per tenant, the company as an account tag, the user `<actor>@<boundary>` |
+| `nats-jetstream` | NATS accounts and permission templates: an operator per environment, an account per boundary, the company as an account tag, the user `<actor>@<boundary>` |
 
 ## Records
 

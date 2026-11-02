@@ -46,7 +46,7 @@ Tokens are standard JWS and JWT, signed by the token-signing keys of [0012](/dec
 - **The directory account and `email` are claims of their own.** Tokens carry `acr`, `amr` and `auth_time`, and `cnf.jkt` when the audience declares binding to a DPoP key; an audience that declares none gets a bearer token ([0003](/decisions/0003-core-actors-with-one-responsibility-each/#the-actors), [0028](/decisions/0028-grants-come-from-a-declared-vocabulary-and-a-token-carries-fixed-claims-for-one-audience/#binding)).
 - **A token carries only the grants of its own boundary.** Grants are names declared in a vocabulary and narrowed per audience, continuing v1 ADR 0010; the vocabulary, the claims of a token and its lifetimes are [0028](/decisions/0028-grants-come-from-a-declared-vocabulary-and-a-token-carries-fixed-claims-for-one-audience/).
 - **Workload tokens come from the same issuer.** A JWT-SVID has the boundary's URL as `iss` and the workload's `spiffe://` ID as `sub` ([0007](/decisions/0007-workload-identity-and-host-enrolment/#spiffe-identities)).
-- **Pairwise subjects per sector, for customers that come through a CIAM upstream, are out of scope**, tracked with the end-user subject lifecycle in [#1024](https://github.com/truvity/sluis/issues/1024). That design must keep one sign-in working across several sites.
+- **Pairwise subjects per sector exist only for a client that declares a sector,** and none does yet. The public `sub` above is what keeps one sign-in working across several sites; the pairwise design is [0050](/decisions/0050-an-end-user-is-a-person-record-with-five-states-erased-by-deleting-its-records/#pairwise-subjects).
 
 ### Passkeys
 
@@ -82,7 +82,7 @@ sluis claims a conformance plan only when it passes, and discovery says only wha
 - **Front-channel logout is not supported.** Back-channel logout, with RP-Initiated Logout, is the logout path; discovery does not advertise front-channel logout, and a registration that names a `frontchannel_logout_uri` is refused by the configuration check.
 - **CIBA is Later, in poll mode only, and only when a real consumer exists, after the parity milestone.** The person would approve with a passkey on the approving device; a notification tap alone is not an approval. Until then discovery does not advertise CIBA and its endpoint is not served.
 - **Device login (RFC 8628) is postponed** ([#855](https://github.com/truvity/sluis/issues/855)); the standards register lists it as planned.
-- **FAPI 2.0 comes after the parity milestone** ([#1025](https://github.com/truvity/sluis/issues/1025)).
+- **FAPI 2.0 comes after the parity milestone,** in the customer-identity milestone ([0055](/decisions/0055-fapi-2-is-a-profile-a-client-declares/)).
 
 ## Consequences
 
@@ -115,6 +115,6 @@ sluis claims a conformance plan only when it passes, and discovery says only wha
 ## Follow-ups
 
 - The generic OpenID Connect upstream for the first working version: [#1106](https://github.com/truvity/sluis/issues/1106); directory sync and subjects before the first sign-in: [#805](https://github.com/truvity/sluis/issues/805).
-- End-user subject lifecycle and pairwise subjects: [#1024](https://github.com/truvity/sluis/issues/1024).
-- FAPI 2 profile, after the parity milestone: [#1025](https://github.com/truvity/sluis/issues/1025).
+- End-user subject lifecycle: [0050](/decisions/0050-an-end-user-is-a-person-record-with-five-states-erased-by-deleting-its-records/), [#1024](https://github.com/truvity/sluis/issues/1024).
+- FAPI 2 profile, in the customer-identity milestone after parity: [0055](/decisions/0055-fapi-2-is-a-profile-a-client-declares/), [#1025](https://github.com/truvity/sluis/issues/1025).
 - Device login: [#855](https://github.com/truvity/sluis/issues/855).

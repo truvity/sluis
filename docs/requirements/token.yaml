@@ -436,7 +436,7 @@ requirements:
       - {kind: integration-test, ref: "introspection tests"}
   - id: REQ-TOKEN-015
     area: TOKEN
-    statement: "sluis MAY issue pairwise subject identifiers per sector, derived from the upstream subject with a keyed hash that is never rotated, so that two sectors cannot correlate a person."
+    statement: "sluis MAY issue pairwise subject identifiers per sector, derived from the sluis subject with a keyed hash of one non-rotating key per boundary, so that two sectors cannot correlate a person."
     rationale: "Pairwise subjects prevent cross-service tracking, while single sign-on follows the sluis session and does not depend on the subject."
     level: MAY
     source: stakeholder-ciam
@@ -561,3 +561,30 @@ requirements:
     issues: [776]
     verification:
       - {kind: integration-test, ref: "a token for an undeclared audience has no cnf"}
+  - id: REQ-TOKEN-040
+    area: TOKEN
+    statement: "An access token for an audience of profile fapi2 MUST be sender-constrained by DPoP or mutual TLS."
+    rationale: "The profile demands bound tokens (ADR 0055)."
+    level: MUST
+    source: standard
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-37, depth: Partial}
+      - {id: ST-18, depth: Partial}
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "unbound token for a fapi2 audience is never issued"}
+  - id: REQ-TOKEN-041
+    area: TOKEN
+    statement: "sluis MUST NOT sign a token for an audience of profile fapi2 with an algorithm other than PS256, ES256 or EdDSA."
+    rationale: "The profile does not allow ES384."
+    level: MUST
+    source: standard
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-37, depth: Partial}
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "algorithm test for a fapi2 audience"}

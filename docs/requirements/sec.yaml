@@ -275,3 +275,87 @@ requirements:
     issues: [962]
     verification:
       - {kind: integration-test, ref: "cross-installation negative test"}
+  - id: REQ-SEC-020
+    area: SEC
+    statement: "sluis MUST bound the sign-in starts of each connection with a token bucket kept in its state."
+    rationale: "One tenant's burst must cost that tenant (ADR 0053)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [916]
+    verification:
+      - {kind: integration-test, ref: "burst test on two connections"}
+  - id: REQ-SEC-021
+    area: SEC
+    statement: "sluis MUST bound the token requests of each client with a token bucket kept in its state."
+    rationale: "One client's loop must not use another's capacity."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [916]
+    verification:
+      - {kind: integration-test, ref: "burst test on two clients"}
+  - id: REQ-SEC-022
+    area: SEC
+    statement: "sluis MUST bound the pending sign-in records of one source address."
+    rationale: "One source must not fill the state with unfinished sign-ins."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [916]
+    verification:
+      - {kind: integration-test, ref: "pending cap per source test"}
+  - id: REQ-SEC-023
+    area: SEC
+    statement: "A pending sign-in record MUST expire within 10 minutes."
+    rationale: "Unfinished sign-ins must not accumulate."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [916]
+    verification:
+      - {kind: integration-test, ref: "expiry test with a moved clock"}
+  - id: REQ-SEC-024
+    area: SEC
+    statement: "A request refused by a limit MUST receive status 429 with a Retry-After header."
+    rationale: "A client needs to know when to retry."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [916]
+    verification:
+      - {kind: integration-test, ref: "limit refusal response test"}
+  - id: REQ-SEC-025
+    area: SEC
+    statement: "sluis config check MUST warn when an internet-facing production installation declares no edge."
+    rationale: "Volumetric protection is the edge's, and an installation without one is exposed."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [916]
+    verification:
+      - {kind: integration-test, ref: "config check warning test"}
+  - id: REQ-SEC-026
+    area: SEC
+    statement: "An open circuit breaker of a connection MUST refuse its new sign-ins with UNAVAILABLE without calling the upstream."
+    rationale: "A failing provider must not hold the pool's workers."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [916]
+    verification:
+      - {kind: integration-test, ref: "breaker test with a failing upstream"}

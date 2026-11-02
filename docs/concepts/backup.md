@@ -56,7 +56,7 @@ The format of the archive (an age-encrypted tar with a manifest and canonical JS
 ## Recovery targets
 
 :::note[Proposed]
-The recovery time and the recovery point that an installation promises are not set. They depend on a measured restore and on what the operator accepts, and they are tracked with the backup decision record ([#1015](https://github.com/truvity/sluis/issues/1015)). Installations run in one region for now, and a regional outage stops signing there ([ADR 0030](/decisions/0030-tenancy-and-scale-a-boundary-holds-keys-and-a-tenant-is-a-record/#where-installations-run)).
+Targets for the customer-identity installation before its first recovery drill ([ADR 0056](/decisions/0056-a-regional-outage-is-accepted-public-keys-outlive-it-and-a-drill-measures-recovery/#recovery)). For the loss of the state: a recovery point of 5 minutes and a recovery time of 4 hours. For the loss of a bucket: a recovery point of 24 hours (the archive interval) and a recovery time of 8 hours. For the loss of the region there is no failover, and a rebuild in a second region needs new intermediates through the hand-off, so no figure is proposed until a drill has measured the rebuild. Each is replaced by the measured figure after the first drill, which depends on a measured restore and on what the operator accepts; they are tracked with the backup decision record ([#1015](https://github.com/truvity/sluis/issues/1015)). Installations run in one region for now, and a regional outage stops signing there ([ADR 0030](/decisions/0030-tenancy-and-scale-a-boundary-holds-keys-and-a-tenant-is-a-record/#where-installations-run)).
 :::
 
 ## Restoring

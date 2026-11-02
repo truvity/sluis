@@ -26,9 +26,9 @@ Principle 3 keeps things apart where their audience, lifetime and revocation dif
 
 ### Human sessions
 
-- **An absolute limit from `auth_time`, never reset by use:** default 24 hours, as in v1, which is also its maximum: an installation may only shorten it. A token's `exp` is capped at the limit, a refresh past it is refused, and a silent authorization past it ends the browser session.
-- **An idle limit on each refresh token, under the absolute limit:** default 12 hours, as in v1, and never above the absolute limit. A per-client session ends at the earlier of the last refresh plus the idle limit and `auth_time` plus the absolute limit, recomputed at every rotation.
-- **Step-up re-authentication** follows [0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#step-up). A step-up refreshes the freshness of the authentication, not `auth_time`, so it does not extend the absolute limit.
+- **An absolute limit from the start of the session, never reset by use:** the start is the moment sluis accepted the sign-in that began the session, and the `auth_time` of a token stays the upstream's ([0028](/decisions/0028-grants-come-from-a-declared-vocabulary-and-a-token-carries-fixed-claims-for-one-audience/#the-claims-of-a-token)). Default 24 hours, as in v1, which is also its maximum: an installation may only shorten it. A token's `exp` is capped at the limit, a refresh past it is refused, and a silent authorization past it ends the browser session.
+- **An idle limit on each refresh token, under the absolute limit:** default 12 hours, as in v1, and never above the absolute limit. A per-client session ends at the earlier of the last refresh plus the idle limit and the session's start plus the absolute limit, recomputed at every rotation.
+- **Step-up re-authentication** follows [0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#step-up). A step-up refreshes the freshness of the authentication, not the session's start, so it does not extend the absolute limit.
 - **The person's sign-out ends the browser session and every human session under it,** at every client, with back-channel logout to the clients that registered for it.
 - **The limits bind the browser session and its refresh tokens alike.** The console's session is a human session.
 
@@ -45,13 +45,13 @@ Principle 3 keeps things apart where their audience, lifetime and revocation dif
 
 ### Across boundaries
 
-- **A boundary's session never outlives the session that seeded it.** The exchange into a boundary carries the original `auth_time` and class, and the boundary applies its own limits under them, so it can shorten and never lengthen.
+- **A boundary's session never outlives the session that seeded it.** The exchange into a boundary carries the original start and class of the session, and the boundary applies its own limits under them, so it can shorten and never lengthen.
 
 ### Customers
 
 A customer is a human session like any other: sluis adds no class and no limit longer than 24 hours for the people of a customer-identity product ([REQ-CIAM-017](/requirements/ciam/#REQ-CIAM-017)).
 
-- **The upstream holds the long single-sign-on session.** sluis keeps the 24-hour absolute limit above. When it ends, sluis authenticates the person at the upstream again, silently with `prompt=none` while the upstream's own session is valid, and interactively otherwise. A silent authentication starts a new session with a fresh check of the upstream and of the person's state; it does not extend the old one (REQ-SESS-035).
+- **The upstream holds the long single-sign-on session.** sluis keeps the 24-hour absolute limit above. When it ends, sluis authenticates the person at the upstream again, silently with `prompt=none` while the upstream's own session is valid, and interactively otherwise. A silent authentication starts a new session with a fresh check of the upstream and of the person's state; it does not extend the old one (REQ-SESS-035). The renewal is for connections of trust `customer` and `partner`; an `internal` connection keeps the periodic full sign-in of [0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#passkeys) ([0049](/decisions/0049-a-domain-routes-only-after-dns-proof-and-a-connection-has-a-trust-level/#connection-trust)).
 - **A customer's step-up is a re-authentication at the upstream** with the `acr_values` and `max_age` that policy asked for ([0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#step-up)). sluis enrols no factor and asks for no passkey of a person who signs in through a customer upstream (REQ-SESS-036, REQ-SESS-037).
 
 ### Configuration

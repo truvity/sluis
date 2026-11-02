@@ -32,8 +32,8 @@ requirements:
       - {kind: integration-test, ref: "issued token scan"}
   - id: REQ-SUBJ-003
     area: SUBJ
-    statement: "Every person-profile client MUST name exactly one sector."
-    rationale: "A forgotten sector must never fall back to a global identifier."
+    statement: "A client that receives a pairwise subject MUST name exactly one sector."
+    rationale: "A pairwise subject without a sector would fall back to a global identifier."
     level: MUST
     source: stakeholder-ciam
     status: planned
@@ -45,7 +45,7 @@ requirements:
       - {kind: integration-test, ref: "sector assignment test"}
   - id: REQ-SUBJ-004
     area: SUBJ
-    statement: "The loader MUST refuse a person-profile client that names no sector."
+    statement: "The loader MUST refuse a client that asks for a pairwise subject and names no sector."
     rationale: "A missing sector is a configuration error."
     level: MUST
     source: stakeholder-ciam
@@ -85,7 +85,7 @@ requirements:
       - {kind: integration-test, ref: "machine token subject test"}
   - id: REQ-SUBJ-007
     area: SUBJ
-    statement: "The subject for a client in a sector MUST be a keyed MAC of the upstream subject with the sector as tenant."
+    statement: "The subject for a client in a sector MUST be a keyed MAC of the sluis subject with the sector in the message."
     rationale: "Sites in different sectors must not be able to join their customer lists."
     level: MUST
     source: stakeholder-ciam
@@ -627,3 +627,112 @@ requirements:
     issues: [805]
     verification:
       - {kind: integration-test, ref: "a snapshot with 40 percent of the known persons is held, reported and not applied"}
+  - id: REQ-SUBJ-048
+    area: SUBJ
+    statement: "The state of a person MUST be one of live, held, suspended, left or erased."
+    rationale: "One defined state machine replaces the account states that were withdrawn (ADR 0050)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1024]
+    verification:
+      - {kind: integration-test, ref: "state table and transition matrix"}
+  - id: REQ-SUBJ-049
+    area: SUBJ
+    statement: "Erasing a person MUST delete their person record, upstream link, holds, statuses, sessions, refresh records and consents."
+    rationale: "After erasure nothing ties an audit pseudonym to a person."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1024]
+    verification:
+      - {kind: integration-test, ref: "erasure test that scans every record kind for the subject"}
+  - id: REQ-SUBJ-050
+    area: SUBJ
+    statement: "Erasing a person MUST write a tombstone."
+    rationale: "A repeated erasure must be idempotent, and the tombstone says why a stale token is refused."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1024]
+    verification:
+      - {kind: integration-test, ref: "repeated erasure test"}
+  - id: REQ-SUBJ-051
+    area: SUBJ
+    statement: "sluis MUST refuse a token or a refresh that names an erased subject."
+    rationale: "A stale token must not read as an unknown subject."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1024]
+    verification:
+      - {kind: integration-test, ref: "stale token and refresh test after an erasure"}
+  - id: REQ-SUBJ-052
+    area: SUBJ
+    statement: "The schema MUST NOT mark a field personal in any record kind outside the end-user inventory of ADR 0050."
+    rationale: "The inventory is what an erasure and an export must cover."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1024]
+    verification:
+      - {kind: integration-test, ref: "schema scan for personal fields"}
+  - id: REQ-SUBJ-053
+    area: SUBJ
+    statement: "The subject export MUST list the state, the times, the connection, the sessions and the consents of one subject."
+    rationale: "An export answers a data-subject request for what sluis holds."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1024]
+    verification:
+      - {kind: integration-test, ref: "export test"}
+  - id: REQ-SUBJ-054
+    area: SUBJ
+    statement: "The key for pairwise subjects MUST be one non-extractable key per boundary rather than one per sector or per tenant."
+    rationale: "A key per sector is a key per tenant, and KMS GenerateMac takes no encryption context to separate shared uses."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-06, section: "2104", depth: Full}
+    issues: [1024]
+    verification:
+      - {kind: integration-test, ref: "key count before and after a sector is added; unchanged"}
+  - id: REQ-SUBJ-055
+    area: SUBJ
+    statement: "sluis MUST erase a left person when the declared retention ends."
+    rationale: "Retention bounds how long records of a person who left are kept."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1024]
+    verification:
+      - {kind: integration-test, ref: "retention test with a moved clock"}
+  - id: REQ-SUBJ-056
+    area: SUBJ
+    statement: "A status call MUST name a person by connection and subject-claim value, never by e-mail address."
+    rationale: "An e-mail address identifies no one (ADR 0027)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [916]
+    verification:
+      - {kind: integration-test, ref: "status call with an e-mail address is refused"}

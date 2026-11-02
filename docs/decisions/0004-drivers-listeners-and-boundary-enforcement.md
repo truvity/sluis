@@ -83,7 +83,7 @@ A node's YubiKey, or a key file in development, is the one backend left that can
 | transport | `direct-mtls` | The SPIFFE ID in the client certificate | |
 | transport | `spool` | A directory per producer uid | |
 | transport | `sqs` | Queue policy per sender role | A queue per boundary. Proved by the workforce installation on serverless |
-| transport | `nats-jetstream` | NATS accounts plus permission templates | An operator per environment, an account per tenant. Proved by the customer-identity installation on Kubernetes |
+| transport | `nats-jetstream` | NATS accounts plus permission templates | An operator per environment, an account per boundary. Proved by the customer-identity installation on Kubernetes |
 | index | `sqlite` | A file per indexer uid; the reader opens it read-only | |
 | index | `rqlite` | As for state | |
 | index | `postgres` | Grants and row-level security (below) | |
@@ -116,7 +116,7 @@ A dash means no layer-2 check is named for that driver yet. Each driver is prove
 ### NATS JetStream
 
 - **Layer 2 of the `nats-jetstream` transport driver is NATS itself:** accounts and permission templates on scoped signing keys. The broker refuses a publish outside the template, so the driver needs no mediator and runs `per-actor`.
-- **The mapping:** one operator per environment, an account per tenant, the company as an account tag, the user named `<actor>@<boundary>`, and a scoped signing key per role.
+- **The mapping:** one operator per environment, an account per boundary, the company as an account tag, the user named `<actor>@<boundary>`, and a scoped signing key per role.
 - The key that NATS requires is a named exception in [0012](/decisions/0012-cryptography-and-authority-keys/#named-exceptions).
 
 ## Consequences
