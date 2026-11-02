@@ -785,7 +785,7 @@ requirements:
       - {kind: integration-test, ref: "lifecycle policy load test"}
   - id: REQ-REG-057
     area: REG
-    statement: "A subject that came through a corporate connection MUST be disabled when the connection is removed or after an idle period, and deleted after retention."
+    statement: "A person whose only connection is removed MUST be made left."
     rationale: "An orphaned subject is a standing credential."
     level: MUST
     source: stakeholder-ciam

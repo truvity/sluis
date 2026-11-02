@@ -26,7 +26,7 @@ An installation serves one [boundary](/concepts/boundaries/) at L4, or the front
 | Shape | Runtime and keys | Notes |
 |---|---|---|
 | A **workforce** installation with a few tenants | [serverless](/runtimes/serverless/), AWS KMS | Functions behind the edge, no hosts to operate |
-| A **customer-identity** installation with thousands of tenants | [kubernetes](/runtimes/kubernetes/), AWS KMS | The tenants share one sealing key: each tenant's data keys are wrapped under it with the tenant in the encryption context, and no tenant has a key of its own |
+| A **customer-identity** installation with a few customer boundaries and thousands of key-less tenants | [kubernetes](/runtimes/kubernetes/), AWS KMS | The tenants share one sealing key: each tenant's data keys are wrapped under it with the tenant in the encryption context, and no tenant has a key of its own ([ADR 0047](/decisions/0047-a-customer-identity-installation-is-a-front-a-few-customer-boundaries-and-key-less-tenants/)) |
 | **Audit-with-quota** installations, one for each product | [kubernetes](/runtimes/kubernetes/), AWS KMS | Each holds only its own log key and uses the account's sealing key under its own alias and context |
 | A **self-hosted** installation on small boards | [bare-metal](/runtimes/bare-metal/), a YubiKey in each node | No AWS account; blobs on R2 through the `s3-compatible` driver |
 | **Development** | [bare-metal](/runtimes/bare-metal/), software keys | The code refuses a software key in production ([ADR 0012](/decisions/0012-cryptography-and-authority-keys/#floors-in-code)) |
