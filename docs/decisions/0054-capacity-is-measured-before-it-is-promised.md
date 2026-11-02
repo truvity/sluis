@@ -43,7 +43,7 @@ In this order, each only if the one before it cannot meet the measured need:
 
 1. **Ask for a higher quota.** It is a request to the provider and changes nothing in the design.
 2. **Sign fewer tokens.** Do not sign an ID token that the client did not ask for, and let a resource server that can introspect take a reference token ([REQ-TOKEN-014](/requirements/token/#REQ-TOKEN-014)), which signs nothing.
-3. **Spread across accounts.** A customer boundary in its own account (L4, [0047](/decisions/0047-a-customer-identity-installation-is-a-front-a-few-customer-boundaries-and-key-less-tenants/#promotion)) has its own quota.
+3. **Spread across accounts.** A customer boundary in its own account (L4, [0047](/decisions/0047-a-customer-identity-installation-is-a-front-a-few-customer-boundaries-and-key-less-tenants/#moving)) has its own quota.
 4. **Change [0012](/decisions/0012-cryptography-and-authority-keys/#keys-sign-in-place).** A new record that weighs a short-lived online key against principle 1. It is the last road and needs its own measurement.
 
 ## Consequences
