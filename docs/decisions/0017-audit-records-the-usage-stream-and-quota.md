@@ -176,5 +176,5 @@ Checked against OCSF 1.9.0 on 2026-11-01.
 
 - Emitter, action table and metering: [#841](https://github.com/truvity/sluis/issues/841).
 - Quota service, its contract and the finance export: [#915](https://github.com/truvity/sluis/issues/915).
-- A conditional counter adjust on the state port, only if the load test shows contention on balances ([0045](/decisions/0045-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on/#pending-decision-lines)): [#915](https://github.com/truvity/sluis/issues/915). Delete, list and watch are v1 parity: [#1009](https://github.com/truvity/sluis/issues/1009).
+- A conditional counter adjust on the state port, only if the load test shows contention on balances ([0045](/decisions/0045-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on/#pending-decision-lines)): [#1145](https://github.com/truvity/sluis/issues/1145). Delete, list and watch are v1 parity: [#1009](https://github.com/truvity/sluis/issues/1009).
 - The quota installation's front ([0043](/decisions/0043-a-quota-installation-is-fronted-by-service-identity-for-services-and-exchanged-tokens-for-people/)): [#1026](https://github.com/truvity/sluis/issues/1026).

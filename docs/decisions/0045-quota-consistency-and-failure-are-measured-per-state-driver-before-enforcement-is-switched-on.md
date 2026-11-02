@@ -92,6 +92,6 @@ Each line is filled when the measurement exists, with its date and versions, and
 
 ## Follow-ups
 
-- The load test per driver, its report and the pending lines: [#915](https://github.com/truvity/sluis/issues/915).
-- A conditional adjust on the state port, only if the load test shows contention that compare-and-set cannot meet: [#915](https://github.com/truvity/sluis/issues/915).
-- The product's expected peak per balance, the target of the test: [#915](https://github.com/truvity/sluis/issues/915).
+- The load test per driver, its report and the pending lines: [#1144](https://github.com/truvity/sluis/issues/1144).
+- A conditional adjust on the state port, only if the load test shows contention that compare-and-set cannot meet: [#1145](https://github.com/truvity/sluis/issues/1145).
+- The product's expected peak per balance, the target of the test: [#1144](https://github.com/truvity/sluis/issues/1144).
