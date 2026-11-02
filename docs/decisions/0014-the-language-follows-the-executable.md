@@ -69,7 +69,7 @@ A Rust row holds once its spikes pass ([The spikes are gates](/decisions/0014-th
 - **Attestation verification is Go**, in the CLI at node initialisation and in the `yubikey-attestation` verifier of `exchange` ([0007](/decisions/0007-workload-identity-and-host-enrolment/#proofs-and-the-exchange)), anchored on Yubico Attestation Root 1 and its intermediates, supplied by sluis.
 - **`cloud-cloudflare` is Go:** one vendor library in one language weighs more than one language for every `cloud` driver.
 - **The cloud and AWS-backed drivers are one group** in Rust. They run as Lambda extensions and as sidecars, where start-up time adds to every cold start.
-- **OpenTelemetry from Rust** uses a small Connect instrumentation crate of sluis's own, offered upstream, and OTLP over HTTP/protobuf; about 3 MiB more per Rust actor is accepted (spike S6, 2026-10-31).
+- **OpenTelemetry from Rust** uses a Connect instrumentation crate of sluis's own, offered upstream, and OTLP over HTTP/protobuf; about 3 to 4 MiB more per Rust actor is accepted (MEASURED 2026-11-02, spike S6: 3.4 MiB at idle and 4.0 MiB after 22,000 calls). The measured CPU and size of the crate are in [0022](/decisions/0022-telemetry-is-opentelemetry-with-fixed-conventions/#consequences).
 
 ### The spikes are gates
 
