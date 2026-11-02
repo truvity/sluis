@@ -117,6 +117,6 @@ How the rqlite clusters are run:
 ## Follow-ups
 
 - Further state operations (delete, list by prefix, watch), v1 parity: [#1009](https://github.com/truvity/sluis/issues/1009).
-- A conditional adjust, only if the quota load test shows contention: [#915](https://github.com/truvity/sluis/issues/915).
+- A conditional adjust, only if the quota load test shows contention: [#1145](https://github.com/truvity/sluis/issues/1145).
 - Interface details of the `secrets` and `export` ports: [#1014](https://github.com/truvity/sluis/issues/1014).
 - Backup archive format, escrow copies and restore tooling: [#1015](https://github.com/truvity/sluis/issues/1015).

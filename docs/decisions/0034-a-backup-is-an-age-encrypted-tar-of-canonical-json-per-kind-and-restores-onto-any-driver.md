@@ -27,7 +27,7 @@ The forces:
 - **A secret is archived sealed.** A sealed value travels as the item the `secrets` port holds ([0035](/decisions/0035-the-secrets-port-has-one-driver-sealed-state-and-the-export-port-publishes-only-kinds-marked-external/)); the backup side never unwraps it.
 - **Escrow.** When the port library creates the data key of a sealed secret (`purpose=secret`), it also writes an escrow record of kind `data-key-escrow`: the data key encrypted with age to the installation's archive recipients, bound to the key's boundary, kind and version. The record is issued and durable, so it is in every archive, and the backup side copies it without reading it. What may be escrowed is bounded by [0032](/decisions/0032-data-lifecycle-and-evidence-never-share-a-key-with-personal-data/#backups) (REQ-BACKUP-037); no authority key is ever escrowed (principle 1).
 - **The recipients are those that 0032 requires,** declared in the install file as `backup.recipients`. `sluis config check` reads the list and refuses a production installation with fewer than two (REQ-BACKUP-007). The data key of the archive is wrapped through the `keys` port (REQ-BACKUP-017), and the archive and its recipients preferably live apart from the installation's account (REQ-BACKUP-022).
-- **The schedule and the rehearsal period are declared per installation and have no built-in default.** `sluis config check` refuses a production installation that declares none. How long an archive is kept is declared too (REQ-BACKUP-039). Where the values come from for each installation shape is a product fact that the design cannot set: [#834](https://github.com/truvity/sluis/issues/834).
+- **The schedule and the rehearsal period are declared per installation and have no built-in default.** `sluis config check` refuses a production installation that declares none. How long an archive is kept is declared too (REQ-BACKUP-039). Where the values come from for each installation shape is a product fact that the design cannot set: [#1142](https://github.com/truvity/sluis/issues/1142).
 - **Each archive is announced in the audit log.** The record `backup.completed` carries the archive's digest and the recipients' fingerprints. A restore uses it to prove provenance (REQ-BACKUP-009).
 
 ### The restore
@@ -60,6 +60,6 @@ The forces:
 
 ## Follow-ups
 
-- Recovery time and recovery point targets per installation shape: [#834](https://github.com/truvity/sluis/issues/834).
+- Recovery time and recovery point targets per installation shape: [#1142](https://github.com/truvity/sluis/issues/1142).
 - Build of the backup and restore actors: [#834](https://github.com/truvity/sluis/issues/834), [#835](https://github.com/truvity/sluis/issues/835).
 - The `secrets` and `export` ports: [0035](/decisions/0035-the-secrets-port-has-one-driver-sealed-state-and-the-export-port-publishes-only-kinds-marked-external/).

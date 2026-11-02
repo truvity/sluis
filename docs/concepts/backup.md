@@ -48,7 +48,7 @@ The archive is encrypted with a fresh data key, and the data key is wrapped for 
 - **An installation declares how long it keeps an archive.** An erasure reaches the copies in archives when they expire, and a restore re-applies every shred and erasure that the audit log records after the archive was taken.
 
 :::note[Proposed]
-The recovery time and recovery point targets of each installation shape are a product fact that the design cannot set; they are tracked in [#834](https://github.com/truvity/sluis/issues/834). Until they are set, the schedule, the number of archives kept and the rehearsal period are declared per installation and have no default.
+The recovery time and recovery point targets of each installation shape are a product fact that the design cannot set; they are tracked in [#1142](https://github.com/truvity/sluis/issues/1142). Until they are set, the schedule, the number of archives kept and the rehearsal period are declared per installation and have no default.
 :::
 
 The format of the archive (an age-encrypted tar with a manifest and canonical JSON per record kind), the escrow records, the recipients and the plan and refusals of a restore are fixed by [ADR 0034](/decisions/0034-a-backup-is-an-age-encrypted-tar-of-canonical-json-per-kind-and-restores-onto-any-driver/). A restore onto another driver replaces v1's `sluis migrate`.

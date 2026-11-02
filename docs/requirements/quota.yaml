@@ -161,7 +161,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
-    issues: [915]
+    issues: [1144]
     verification:
       - {kind: integration-test, ref: "load test"}
   - id: REQ-QUOTA-013

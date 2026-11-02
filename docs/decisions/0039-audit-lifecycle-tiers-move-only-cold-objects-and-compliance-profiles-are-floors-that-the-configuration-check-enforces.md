@@ -53,6 +53,6 @@ The forces: a lock or a retention period is never shortened (0016); the reader a
 
 ## Follow-ups
 
-- Which audit installation receives the audit of the workforce installation, and so which profiles apply there: [#802](https://github.com/truvity/sluis/issues/802).
+- Which audit installation receives the audit of the workforce installation, and so which profiles apply there: [#1143](https://github.com/truvity/sluis/issues/1143).
 - Time-stamp anchoring of checkpoints (REQ-AUDIT-031), later: [#1027](https://github.com/truvity/sluis/issues/1027).
 - Build: the profile files and the check [#840](https://github.com/truvity/sluis/issues/840); the tier declaration and the rendered rule [#837](https://github.com/truvity/sluis/issues/837).

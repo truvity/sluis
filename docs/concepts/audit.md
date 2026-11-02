@@ -132,7 +132,7 @@ The lock mode comes from the blob backend: `compliance` on AWS S3, `removable` o
 Compliance profiles (floors that `sluis config check` enforces) and lifecycle tiers (only cold, immutable objects move, and never the lock) are [ADR 0039](/decisions/0039-audit-lifecycle-tiers-move-only-cold-objects-and-compliance-profiles-are-floors-that-the-configuration-check-enforces/).
 
 :::note[Proposed]
-Which audit installation receives the audit of the workforce installation is a product fact that the design cannot set. It fixes the queue wiring, the audit data keys and the profiles that apply there, and is tracked in [#802](https://github.com/truvity/sluis/issues/802). Until it is decided, the serverless shape is specified up to the queue.
+Which audit installation receives the audit of the workforce installation is a product fact that the design cannot set. It fixes the queue wiring, the audit data keys and the profiles that apply there, and is tracked in [#1143](https://github.com/truvity/sluis/issues/1143). Until it is decided, the serverless shape is specified up to the queue.
 :::
 
 ## Companies, encryption and erasure
