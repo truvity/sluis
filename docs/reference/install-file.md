@@ -22,16 +22,19 @@ A path inside the file (a policy file, the root list, the CA bundle) is relative
 
 - **YAML that is plain JSON data, read by one strict profile.** Go and Rust read the file with different parsers ([Approved libraries](/reference/approved-libraries/#yaml-reader)), and a YAML parser as it comes does not give the same document in both: `010` is the number 8 in one and 10 in another, `yes` is a string or a boolean, an alias is expanded or kept. The profile removes the choice, and the readers give the same verdict on every document below:
   1. **One document.** A second document is refused.
-  2. **No anchors, aliases, merge keys (`<<`), explicit tags or duplicate keys.**
-  3. **Every mapping key is a string,** written plain or quoted; a key that is a mapping or a sequence is refused.
+  2. **No anchors, aliases, merge keys (`<<`), explicit tags or duplicate keys.** The bare tag `!` is a tag too: `a: ! 12` is refused, and not read as the number 12.
+  3. **Every mapping key is a string,** written plain or quoted; a key that is a mapping or a sequence is refused, and so is an empty plain key (`: 1`).
   4. **A plain scalar is `null` (`null`, `~` or empty), a boolean (`true`, `false`) or a number that matches the JSON grammar, and any other plain scalar is a string.** So `yes`, `y`, `010`, `0x1F`, `+1`, `.inf`, `1_000` and `2026-11-01` are strings, and a field that wants a number refuses them with a type error. A quoted or block scalar is always a string.
-  5. **An error names the path or the line and column, never the value.** The reader's own messages are not shown, because some print the source line.
+  5. **No directive.** A `%YAML`, `%TAG` or any other `%` line before the content is refused.
+  6. **No tab character.** A tab anywhere is refused, so write `\t` inside a double-quoted string.
+  7. **Flow collections (`[...]` and `{...}`) nest at most 64 levels deep.** The Rust reader stops at about 250 levels and the Go reader at 10,000, so the profile sets the limit.
+  8. **An error names the path or the line and column, never the value.** The reader's own messages are not shown, because some print the source line. A syntax error names its kind only, because the two readers place it differently; every other error of the profile has the same line and column in both.
 - **The schema is JSON Schema draft 2020-12** with the `$id` `https://sluis.id/schema/install/v1/install.schema.json`, generated from the Pkl sources in `schema/` and embedded in every binary that reads the file ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/#pkl-and-json-schema)).
 - **Strict:** `unevaluatedProperties: false` on every object, so an unknown key is an error that names its path; format assertions are on. An error never shows the value.
 - **`$schema`** may name the `$id` above, for editors. A file that names another `$id` is refused.
 - **Names** of boundaries, upstreams and clients are lower-case kebab-case, 1 to 32 characters, starting with a letter: they appear in unit names, sockets and record keys (`<actor>@<boundary>`).
-- **Durations** are strings such as `90s`, `15m`, `12h` or `30d`.
-- **The profile's vectors** (measured 2026-11-01 with `go.yaml.in/yaml/v3` v3.0.6 and `saphyr-parser` 0.3.3; the conformance kit starts from them):
+- **Durations** are ISO 8601 duration strings, the JSON Schema `duration` format ([ADR 0010](/decisions/0010-configuration-and-data-pkl-schema-origins-and-sensitivities/#pkl-and-json-schema)): `PT90S`, `PT15M`, `PT12H` or `P30D`. A string such as `90s` is refused. Every duration field also has a `pattern` beside the format, because the two validators disagree on some valid strings: Go accepts `PT1H1S` and Rust refuses it, so the pattern decides (MEASURED 2026-11-02). A maximum, such as the one hour of `token_ttl`, is not expressible by the format and is checked by `sluis config check` ([below](#what-sluis-config-check-checks)).
+- **The profile's vectors** (measured 2026-11-01 and again 2026-11-02 with `go.yaml.in/yaml/v3` v3.0.6 and `saphyr-parser` 0.3.3; the conformance kit starts from them):
 
   | Document | Verdict |
   |---|---|
@@ -39,7 +42,7 @@ A path inside the file (a policy file, the root list, the CA bundle) is relative
   | `a: 1` twice | refused: duplicate key |
   | `a: &x [1,2]` and `b: *x` | refused: anchor |
   | a key `<<` | refused: merge key |
-  | `a: !foo bar`, `a: !!str 12` | refused: tag |
+  | `a: !foo bar`, `a: !!str 12`, `a: ! 12` | refused: tag |
   | `a: yes`, `b: 0o17`, `c: 010`, `d: y` | read, all four strings |
   | `a: ~`, `c: 0x1F`, `d:` | read: `null`, the string `"0x1F"`, `null` |
   | `a: 1.5e3`, `b: .inf`, `c: +1`, `d: -0`, `e: 1_000` | read: the numbers `1.5e3` and `-0`, the strings `".inf"`, `"+1"` and `"1_000"` |
@@ -49,6 +52,10 @@ A path inside the file (a policy file, the root list, the CA bundle) is relative
   | two documents separated by `---` | refused: more than one document |
   | `? [a, b]` as a key | refused: key is not a scalar |
   | `a: [1,` | refused: syntax error |
+  | `%YAML 1.2` before the content | refused: directive |
+  | `a:`, a tab, then `1` | refused: tab |
+  | `: 1` | refused: empty key |
+  | 65 levels of `[` | refused: too deep |
 
 - **A secret is a reference, never a value:** `{ credential: NAME }` names a read-only source. On bare-metal it is the systemd credential `NAME` of the unit; in Compose it is the file `/run/secrets/NAME`. The writable secret stores and the other sources come with the `secrets` port ([#1014](https://github.com/truvity/sluis/issues/1014)).
 
@@ -75,7 +82,7 @@ A path inside the file (a policy file, the root list, the CA bundle) is relative
 |---|---|---|
 | `host` | yes | The host of the group issuer. The issuer URL is `https://<host>`, with no path ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#issuers)) |
 | `rp_id` | yes | The passkey relying-party ID: the registrable parent domain of the front host and every boundary host ([ADR 0006](/decisions/0006-identity-issuers-audiences-and-sign-in/#passkeys)) |
-| `token_ttl` | no | The default lifetime of the access and ID tokens of the group issuer. Default and maximum `1h`; it can only be shortened ([ADR 0028](/decisions/0028-grants-come-from-a-declared-vocabulary-and-a-token-carries-fixed-claims-for-one-audience/#lifetimes)) |
+| `token_ttl` | no | The default lifetime of the access and ID tokens of the group issuer, a duration. Default and maximum `PT1H`; it can only be shortened ([ADR 0028](/decisions/0028-grants-come-from-a-declared-vocabulary-and-a-token-carries-fixed-claims-for-one-audience/#lifetimes)) |
 
 ### `boundaries`
 
@@ -138,7 +145,7 @@ A mapping from a client ID to its declaration, for the group issuer; `boundaries
 | `redirects` | `public` and `confidential` | Exact redirect URIs. `https` only, except `http://127.0.0.1` and `http://[::1]` with any port for a public native client (RFC 8252) |
 | `secret` | `confidential` only | A reference: `{ credential: NAME }`. Generated client secrets come with [#790](https://github.com/truvity/sluis/issues/790) |
 | `requires` | no | The grants of which a subject needs at least one to get a token for this client, as in v1 |
-| `ttl_cap` | no | The longest lifetime of a token for this client |
+| `ttl_cap` | no | The longest lifetime of a token for this client, a duration |
 
 ### `policy`
 
@@ -160,7 +167,7 @@ A key purpose that an installation does not enable gets no key ([ADR 0012](/deci
 
 ## What `sluis config check` checks
 
-Beyond the schema:
+Beyond the schema, which checks the shape of each value and not what depends on another key or on the runtime. The schema accepts these cases, and `sluis config check` refuses them (the last also stops the process at start): a `runtime` other than `bare-metal`, `nodes` other than `1`, a repeated `uid_block`, an `org` that names no `company` boundary, a `token_ttl` or a `ttl_cap` above one hour ([REQ-TOKEN-038](/requirements/token/#REQ-TOKEN-038)) and the `software` keys driver when `environment` is `production`. The full list:
 
 - every boundary host and the front host are siblings under `rp_id`, each host is one origin, and no two issuers share a host;
 - a boundary of kind `company` has no `host`, and every `environment` boundary has one;

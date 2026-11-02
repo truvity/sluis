@@ -63,7 +63,7 @@ clients:
 resources:
   https://mcp.example.org/metrics:
     requires: [observability-user]
-    ttl_cap: 5m
+    ttl_cap: PT5M
 ```
 
 1. Declare the client and its groups.

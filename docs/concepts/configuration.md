@@ -75,7 +75,7 @@ Declared configuration may **live-reload as whole versioned snapshots**, from a 
 
 Both are **offline by default**, so CI runs them with no call to sluis. With `--live` they also read the operator-set records through the console API, with an operator's credentials: `check --live` lists held objects and the records a new declared fragment would lock or hold, and `explain --live` shows, for an operator-set value, the record id, its revision, who set it and when.
 
-A part of an install file, `/etc/sluis/install.yaml`, in the keys of [install-file schema v1](/reference/install-file/), which lists every key:
+An excerpt of an install file, `/etc/sluis/install.yaml`, in the keys of [install-file schema v1](/reference/install-file/), which lists every key. It is not a valid file on its own: v1 also requires `boundaries`, `clients`, `policy` and `trust`, and `org` on an upstream, and it accepts only `software` as the `keys` driver; `yubikey-piv` arrives with the boards installation.
 
 ```yaml
 runtime: bare-metal
@@ -90,6 +90,7 @@ drivers:
 upstreams:
   workforce:
     kind: oidc
+    org: example                                       # a company boundary, omitted here
     issuer: https://idp.example.org
     client_id: sluis-example
     client_secret: { credential: idp-client-secret }   # a reference, never the secret
