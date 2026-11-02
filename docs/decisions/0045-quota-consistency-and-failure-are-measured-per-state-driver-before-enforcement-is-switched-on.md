@@ -64,7 +64,7 @@ Each line is filled when the measurement exists, with its date and versions, and
 
 | Decision line | Recommendation | Decided by |
 |---|---|---|
-| The target: the admits a second per balance, and the latency budget of `Admit` | Ten times the platform product's expected peak per balance, which the product states | The product's number, then the test |
+| The target: the admits a second per balance, and the latency budget of `Admit` | Target set on 2026-11-02: 1,000 admits a second for one balance, ten times a generous maximum of about 100 a second; typical load is 5 to 10 admits a second for one balance. These are the maintainer's estimate on 2026-11-02, not a measurement. The latency budget stays open | The measured p99 of `Admit` on each driver, against the target above, then the test |
 | Soft mode in 2.0 | No: strict only | Whether any driver misses the target on a hot balance |
 | A conditional adjust on the state port | Not added | Whether compare-and-set misses the target while a conditional adjust meets it, on one driver or more |
 | The outbox bound, by count and by age, and the warning level | The depth that the longest writer outage the installation tolerates would build at its peak rate, with the state's capacity as a ceiling | The measured relay and drain rates, and the state driver's item and table limits |
@@ -94,4 +94,4 @@ Each line is filled when the measurement exists, with its date and versions, and
 
 - The load test per driver, its report and the pending lines: [#915](https://github.com/truvity/sluis/issues/915).
 - A conditional adjust on the state port, only if the load test shows contention that compare-and-set cannot meet: [#915](https://github.com/truvity/sluis/issues/915).
-- The product's expected peak per balance, the target of the test: [#915](https://github.com/truvity/sluis/issues/915).
+- A measured peak per balance, to check or replace the maintainer's estimate of the target (2026-11-02): [#915](https://github.com/truvity/sluis/issues/915).
