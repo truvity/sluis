@@ -10,7 +10,7 @@ These are the principles that the decision records follow. Each one is short, an
 
 **Shared with ritueel.**
 
-An authority key is made inside its key service or its card, signs in place, and cannot be exported. A transition, such as a new store or a new key, makes a new key that the old one vouches for. It never moves the old key. See [ADR 0012](/decisions/0012-cryptography-and-authority-keys/) and [ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/).
+An authority key is made inside its key service or its card, signs in place, and cannot be exported. A transition, such as a new store or a new key, makes a new key that the old one vouches for. It never moves the old key. Wrapped data keys in a backup are escrow of data, not of keys: the wrapping key never leaves its store ([ADR 0034](/decisions/0034-a-backup-is-an-age-encrypted-tar-of-canonical-json-per-kind-and-restores-onto-any-driver/)). See [ADR 0012](/decisions/0012-cryptography-and-authority-keys/) and [ADR 0013](/decisions/0013-the-hand-off-to-root-custody-and-the-signing-api/).
 
 ## 2. Trust is layered, and redundancy is not a defence against compromise
 
