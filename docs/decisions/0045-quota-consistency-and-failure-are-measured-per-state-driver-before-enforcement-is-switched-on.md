@@ -42,7 +42,7 @@ These follow from the principles and the records above, and need no number.
 
   | Driver | Reference installation | What it is |
   |---|---|---|
-  | `dynamodb` | A quota installation on Kubernetes ([0018](/decisions/0018-runtimes-installations-and-delivery-order/#kubernetes)) | The hot item is bounded by the per-partition write limit of DynamoDB (about 1,000 write units a second per item, UNVERIFIED: re-read AWS's documentation on the day of the test) |
+  | `dynamodb` | A quota installation on Kubernetes ([0018](/decisions/0018-runtimes-installations-and-delivery-order/#kubernetes)) | The hot item is bounded by the per-partition write limit of DynamoDB (1,000 write units a second per partition, READ on 2026-11-02 in AWS's developer guide, "Best practices for designing and using partition keys"; re-read it on the day of the test) |
   | `rqlite` | A three-node cluster on the boards ([Bare metal](/runtimes/bare-metal/)) | A consensus round per commit; about 430 commits a second measured for the cluster on 2026-10-31 for all writes ([0011](/decisions/0011-state-is-one-port-with-compare-and-set/#consequences)) |
   | `embedded` | The local installation | One writer and a sync per commit |
 
@@ -57,6 +57,26 @@ These follow from the principles and the records above, and need no number.
   - the same `Admit` with the reservation written durably and not ephemerally.
 - **A strictness run on every driver:** a limit is set, many clients admit against it at the same time on several quota instances, an instance is restarted during the run, and the admitted total is checked against the limit ([REQ-QUOTA-002](/requirements/quota/#REQ-QUOTA-002)).
 - **The result is posted in the shape of a research result** ([Decisions, requirements and research](/contributing/decisions/#the-shape-of-a-result)), with each claim labelled READ, MEASURED or UNVERIFIED and what the setup over- and under-counts. It is dated, and it is repeated when a driver's major version changes.
+
+### What the first measurement shows
+
+A harness measured the balance step alone on 2026-11-02, before the load test above, to see the order of magnitude. One operation, `Admit(account, request id, 1)`, took one unit from a balance with a cap, from many concurrent writers on one hot account; after every run the store was read back and no cap was over and no admitted unit was lost, in more than 100 runs on the three drivers (MEASURED). The target is the one in the table below: 1,000 admits a second for one balance, against a typical 5 to 10 and a generous peak of about 100 (the maintainer's estimate). Three shapes were run on each driver: a **conditional update** (take the unit only if the balance covers it, in one store operation); the same with an **idempotency record written in the same atomic step**; and **read, then compare-and-set** on the version, retried on conflict.
+
+| Driver and setup (MEASURED 2026-11-02) | Conditional update | With the idempotency record | Read, then compare-and-set |
+|---|---|---|---|
+| SQLite file, one committer that batches (group commit, up to 256 admits per `fsync`), `synchronous=FULL`, 32 to 128 writers | 3,800 to 15,400 a second | **3,400 to 13,200 a second**, p99 16 to 19 ms | about 220 to 230 a second on a single connection |
+| rqlite 10.6.6, one node, 32 to 128 writers | **about 11,800 a second** at 32 writers, p99 5.7 ms; 28,000 at 128 | 2,700 at 32, 10,800 at 128 | 61 to 165 a second; callers give up after 100 retries from 32 writers |
+| rqlite, three nodes on one host | 780 at 32, 4,000 at 128 | 1,200 at 32, 2,300 at 128, p99 114 to 335 ms | 27 to 88 a second |
+| DynamoDB, on-demand table, from a function in one region, 8 to 128 writers | **about 1,000 to 1,080 a second**, flat at every writer count; the rest of the calls are throttled | **91 to 149 a second** (a transaction; 76 uncontended), conflicts on 8 to 36 % of the calls | 101 to 281 a second (236 uncontended), p99 up to 1.3 s |
+
+What it says:
+
+- **A conditional update reaches the target on every driver, and read-then-compare-and-set reaches it on none.** The conditional update gives 3,800 a second or more on SQLite with group commit and 11,800 or more on one rqlite node, and DynamoDB stops at the target; three rqlite nodes on one host stay under it at 32 writers (780 a second) and pass it at 128. The compare-and-set shape stays below 300 a second on SQLite and DynamoDB and below 170 on rqlite, and its conflicts grow with the writers.
+- **SQLite needs one committer that batches.** A pool of connections gives 600 to 780 a second with a starvation tail (p99.9 of 8 to 10 s from 8 writers), and a single connection about 250.
+- **DynamoDB is capped at about 1,000 a second per item,** which is the per-partition limit of 1,000 write units (READ above), and the target sits exactly on it. A throttled call is neither an admit nor a refusal: `quota` answers `unavailable` for it, never "over the limit".
+- **A DynamoDB transaction per admit is the trap.** It gives 91 to 149 a second, 7 to 11 times below the plain conditional update, so the idempotent form cannot be a transaction on a hot balance. An idempotency scheme without a transaction was not measured.
+- **The pending line on a conditional adjust has its condition met in this harness:** compare-and-set misses the target while a conditional update meets it, on every driver. The line stays pending, and the record stays `Proposed`, until the load test of this record has run on the reference installations.
+- The setup over- and under-counts. SQLite and rqlite ran on one workstation (x86_64, 32 threads, NVMe under ext4, real `fsync`), not on the reference installations of the table above; the three-node rqlite ran on one host and one disk, with no network. DynamoDB ran from a function with 3.5 GB of memory, SDK retries off, on a table created minutes before, so the many-balances figures there (1,100 to 2,000 a second) are a new table's. Not run: several quota instances on one store, a restart during a run, the real `quota` actor, a sustained run, and the load test of this record.
 
 ### Pending decision lines
 
