@@ -464,3 +464,81 @@ requirements:
     issues: [792]
     verification:
       - {kind: integration-test, ref: "an oversized document"}
+  - id: REQ-CLIENT-035
+    area: CLIENT
+    statement: "A client of profile fapi2 MUST authenticate with private_key_jwt or mutual TLS rather than a client secret."
+    rationale: "The profile forbids shared secrets."
+    level: MUST
+    source: standard
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-37, depth: Partial}
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "client authentication matrix for a fapi2 client"}
+  - id: REQ-CLIENT-036
+    area: CLIENT
+    statement: "The authorization endpoint MUST accept for a client of profile fapi2 only a request_uri that a pushed authorization request returned."
+    rationale: "The profile requires pushed authorization requests."
+    level: MUST
+    source: standard
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-16, depth: Partial}
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "direct authorization request from a fapi2 client is refused"}
+  - id: REQ-CLIENT-037
+    area: CLIENT
+    statement: "sluis MUST accept a request_uri only once."
+    rationale: "A replayed request_uri must fail."
+    level: MUST
+    source: standard
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-16, depth: Partial}
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "request_uri replay test"}
+  - id: REQ-CLIENT-038
+    area: CLIENT
+    statement: "A client assertion of a client of profile fapi2 MUST be refused unless iss and sub equal the client and aud equals the issuer."
+    rationale: "The assertion rules are MUST for the profile."
+    level: MUST
+    source: standard
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-20, depth: Partial}
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "assertion matrix for a fapi2 client"}
+  - id: REQ-CLIENT-039
+    area: CLIENT
+    statement: "A client assertion of a client of profile fapi2 MUST have a lifetime of at most 60 seconds."
+    rationale: "A short assertion limits replay."
+    level: MUST
+    source: standard
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-20, depth: Partial}
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "assertion lifetime test"}
+  - id: REQ-CLIENT-040
+    area: CLIENT
+    statement: "A client assertion of a client of profile fapi2 MUST carry a jti that is accepted once."
+    rationale: "A replayed assertion must fail."
+    level: MUST
+    source: standard
+    status: planned
+    runtimes: all
+    standards:
+      - {id: ST-20, depth: Partial}
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "assertion replay test"}

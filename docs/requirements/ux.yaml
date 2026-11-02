@@ -145,3 +145,40 @@ requirements:
     issues: [831]
     verification:
       - {kind: integration-test, ref: "an attempt to bind a console role from the console"}
+  - id: REQ-UX-012
+    area: UX
+    statement: "The locale of a page MUST be chosen from ui_locales, then the product default, then Accept-Language, then English."
+    rationale: "The request carries the best signal of a person's language (ADR 0052)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [927]
+    verification:
+      - {kind: integration-test, ref: "locale order test"}
+  - id: REQ-UX-013
+    area: UX
+    statement: "The loader MUST refuse a theme whose colours fall below the WCAG AA contrast ratio."
+    rationale: "Hosted pages must meet WCAG 2.1 AA whatever the theme."
+    level: MUST
+    source: stakeholder-ciam
+    status: planned
+    runtimes: all
+    standards:
+      - {id: NC-04, depth: Partial}
+    issues: [927]
+    verification:
+      - {kind: integration-test, ref: "contrast check on a failing and a passing theme"}
+  - id: REQ-UX-014
+    area: UX
+    statement: "sluis MUST NOT serve a stylesheet, script or template that comes from a client or a tenant."
+    rationale: "A tenant could otherwise rebuild a page into a phishing page on sluis's origin."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [927]
+    verification:
+      - {kind: integration-test, ref: "theme with markup or a stylesheet is refused"}

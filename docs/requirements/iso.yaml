@@ -689,7 +689,7 @@ requirements:
   # ---- integrations
   - id: REQ-ISO-051
     area: ISO
-    statement: "Each integration instance MUST run as its own process with its own platform identity, one per vendor tenant."
+    statement: "Each dedicated integration instance MUST run as its own process with its own platform identity, one per vendor tenant."
     rationale: "A compromised integration then reaches only its own tenant's credential and state."
     level: MUST
     source: design-decision
@@ -998,3 +998,87 @@ requirements:
     issues: [1023]
     verification:
       - {kind: integration-test, ref: "a configuration that gives a customer boundary the host or a key of another boundary is refused by sluis config check"}
+  - id: REQ-ISO-076
+    area: ISO
+    statement: "sluis MUST refuse a record issued for a tenant that widens a field its template bounds."
+    rationale: "A tenant must not widen its own claims, trust ceiling or redirect rules (ADR 0047)."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1023]
+    verification:
+      - {kind: integration-test, ref: "a tenant record that raises each bounded field in turn is refused"}
+  - id: REQ-ISO-077
+    area: ISO
+    statement: "A client ID of a tenant MUST be the tenant's name, a colon and the client's name, each 1 to 32 characters."
+    rationale: "Client IDs stay unique per issuer when thousands of tenants each have a web client."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1023]
+    verification:
+      - {kind: integration-test, ref: "client ID format and uniqueness test"}
+  - id: REQ-ISO-078
+    area: ISO
+    statement: "A person who signed in through a connection of one tenant MUST NOT hold a grant in the scope of another tenant."
+    rationale: "A tenant's identity provider is controlled by that tenant and must not reach another tenant's data."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [1023]
+    verification:
+      - {kind: integration-test, ref: "ceiling guard negative test across two tenants"}
+  - id: REQ-ISO-079
+    area: ISO
+    statement: "A pooled connector MUST serve the connections of one customer boundary only."
+    rationale: "A compromised pool then reaches the connections of one customer boundary only."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [916]
+    verification:
+      - {kind: integration-test, ref: "a connection of a second boundary is refused by a pool"}
+  - id: REQ-ISO-080
+    area: ISO
+    statement: "A pooled connector MUST open the client secret of a connection only for the duration of one call, with the connection in the encryption context."
+    rationale: "A pool must not hold every connection's secret in memory or open one connection's secret for another."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [916]
+    verification:
+      - {kind: integration-test, ref: "unwrap with another connection's context is refused; no secret is cached after the call"}
+  - id: REQ-ISO-081
+    area: ISO
+    statement: "The egress proxy of a pooled connector MUST refuse a request to a host that the discovery document of an existing connection does not name."
+    rationale: "A pool cannot list its hosts in a network policy, so the proxy is the allow-list."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [916]
+    verification:
+      - {kind: integration-test, ref: "request to an unnamed host and to a private address is refused"}
+  - id: REQ-ISO-082
+    area: ISO
+    statement: "sluis config check MUST refuse a private_key_jwt key for a pooled connection."
+    rationale: "A key per pooled connection would be a key per tenant."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [916]
+    verification:
+      - {kind: integration-test, ref: "config check negative test"}

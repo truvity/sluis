@@ -28,3 +28,29 @@ requirements:
     issues: [1062]
     verification:
       - {kind: integration-test, ref: "100000-session revocation test"}
+  - id: REQ-PERF-003
+    area: PERF
+    statement: "The documentation of an installation MUST state its measured token-signing rate with the date, the versions and the key service quota in force."
+    rationale: "A capacity figure rots and depends on a quota."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [878]
+    manual_reason: "A statement in published documentation is checked by reading it."
+    verification:
+      - {kind: manual, ref: "documentation review"}
+  - id: REQ-PERF-004
+    area: PERF
+    statement: "The capacity result of an installation MUST name the first bottleneck and what the test setup over- and under-counts."
+    rationale: "A figure without its limit and its bias cannot be used."
+    level: MUST
+    source: design-decision
+    status: planned
+    runtimes: all
+    standards: []
+    issues: [878]
+    manual_reason: "A result is checked by reading it against the shape of a result."
+    verification:
+      - {kind: manual, ref: "result review"}
