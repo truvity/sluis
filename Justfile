@@ -390,7 +390,7 @@ check-code: rust-toolchain rqlite-fetch
     rust_packages=$(cargo metadata --format-version 1 --no-deps | jq '.workspace_members | length')
     [ "$rust_packages" -gt 0 ] || { echo "::error::cargo metadata found no workspace member" >&2; exit 1; }
     echo "$go_packages Go packages, $rust_packages Rust packages"
-    for step in proto-check registry-check audit-check audit-compat; do
+    for step in proto-check registry-check audit-check audit-compat config-schema-check config-schema-compat; do
         if just --summary | tr ' ' '\n' | grep -qx "$step"; then
             just "$step"
         else
@@ -469,6 +469,42 @@ audit-compat:
     git show "$tag:docs/architecture/audit-actions.yaml" > "$old"
     go run ./tools/gen/audit -against "$old"
     echo "audit-compat: the table is compatible with $tag"
+
+# The JSON Schema of the configuration files (ADR 0004, "Schemas are Protobuf"), generated from their Protobuf messages into
+# schema/<name>/<version>/<name>.schema.json: the golden files that CI compares, the public identifiers of the schemas, and what
+# every binary embeds. Run it after a message of tools/gen/configschema/schema.go (roots) changes. It runs `buf build`.
+config-schema-gen:
+    go run ./tools/gen/configschema
+
+# The schemas are what the messages make (REQ-DATA-037): fails while a committed schema differs from the messages, no message
+# makes a committed schema, or a generated schema is not committed.
+config-schema-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    go run ./tools/gen/configschema -check
+    [ -z "$(git ls-files --others --exclude-standard -- schema)" ] || { echo "::error::a generated schema is not committed" >&2; exit 1; }
+
+# The published schemas do not change (REQ-DATA-040): against the schema directory of the newest release tag of the same major
+# version, every schema is still there with the same $id, and accepts whatever the release's accepted. A key may be added and a
+# bound loosened; anything else is a new version under a new path, beside the old one. With no release tag yet it says so and
+# does not pass: a check that cannot run is reported as not run.
+config-schema-compat:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tag=$(git tag --list 'v2.*' --sort=-v:refname | head -n 1)
+    if [ -z "$tag" ]; then
+        echo "config-schema-compat: NOT RUN, there is no release tag v2.* yet to compare the schemas with"
+        exit 0
+    fi
+    dir=$(mktemp -d)
+    trap 'rm -rf "$dir"' EXIT
+    if ! git cat-file -e "$tag:schema" 2>/dev/null; then
+        echo "config-schema-compat: $tag published no schema, so nothing can have changed"
+        exit 0
+    fi
+    git archive "$tag" schema | tar -x -C "$dir"
+    go run ./tools/gen/configschema -against "$dir/schema"
+    echo "config-schema-compat: the schemas are compatible with $tag"
 
 # Contracts: the Protobuf services under proto/ and the Go code generated from them (gen/go/).
 

@@ -27,9 +27,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if files.is_empty() {
         return Err(format!("no .proto file under {}", root.display()).into());
     }
+    // The messages import the protovalidate options (buf/validate/validate.proto), which are vendored so that no build
+    // reaches an outside service (third_party/protovalidate/README.md). Only the files of proto/ are generated.
+    let vendored = manifest.join("../../../third_party/protovalidate");
+    println!("cargo:rerun-if-changed={}", vendored.display());
     connectrpc_build::Config::new()
         .files(&files)
-        .includes(&[&root])
+        .includes(&[&root, &vendored])
         .include_file("_connectrpc.rs")
         .compile()?;
     Ok(())
