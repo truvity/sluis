@@ -413,23 +413,52 @@ jobs:
           devbox run -- just local-status || true
           devbox run -- just local-logs || true
 
-  # The dry run of the release train (ADR 0013; REQ-DEPLOY-038): GoReleaser builds every executable of actors/, drivers/
-  # and cli/ for amd64 and arm64 as static musl or CGO-off binaries, archives them and writes the checksums, from this
-  # commit, with no tag, no token and nothing published. `tools/release` then checks every archive, its hash, that each
-  # executable is a static ELF of its architecture and that the version is stamped in it. A change that breaks the release
-  # fails here, not on the day of a tag. A pull request has no id-token permission (REQ-SUPPLY-044); this job reads only.
+  # The rehearsal of the release train (ADR 0013; REQ-DEPLOY-038): `just release-rehearsal` runs GoReleaser as a tag does,
+  # minus the GitHub release, from this commit: every executable of actors/, drivers/ and cli/ built for amd64 and arm64 as
+  # static musl or CGO-off binaries, archived with their checksums, and one image per actor and driver, and the engine,
+  # pushed to a registry that the recipe starts on the runner and removes. No tag, no token, nothing published. `tools/release`
+  # then checks every archive, its hash, that each executable is a static ELF of its architecture with the version stamped
+  # in it, and the release test of the images: the version as the only tag, both platforms, and the executable in each image
+  # is the file of its archive. A change that breaks the release fails here, not on the day of a tag. A pull request has no
+  # id-token permission (REQ-SUPPLY-044); this job reads only.
   release:
-    name: 'release (GoReleaser dry run: archives and checksums, no tag)'
+    name: 'release (GoReleaser rehearsal: archives, checksums, images, no tag)'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
+    env:
+      SLUIS_LOCAL_SUBNET: 10.99.203.0/24
+      SLUIS_UPSTREAM_TARGET: 10.99.203.1:8180
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The history, to list what a pull request changes.
+          fetch-depth: 0
           persist-credentials: false
-      - uses: truvity/ci-actions/setup-devbox@eae9926515d96296eeed99aa358d2957a89647e8 # v3.3.1
+      # The cost control: this job is the longest of the run (28 minutes cold, a few warm), so a pull request that changes
+      # only documentation, the site or Markdown files skips the steps below. The job itself still runs and succeeds, so
+      # the job `checks` counts it as a success (a skipped job would fail that gate) and nothing needs a path filter on the
+      # gate. A push to main and a merge group always run it in full, and the release workflow's gate requires that run.
+      - name: What the change touches
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          run=true
+          if [ "$EVENT" = pull_request ]; then
+            others=$(git diff --name-only "$BASE" HEAD | grep -v -E '^(docs/|site/)|\.md$' || true)
+            [ -n "$others" ] || run=false
+          fi
+          echo "run=$run" >>"$GITHUB_OUTPUT"
+          echo "the rehearsal runs: $run"
+      - if: ${{ steps.scope.outputs.run == 'true' }}
+        uses: truvity/ci-actions/setup-devbox@eae9926515d96296eeed99aa358d2957a89647e8 # v3.3.1
       # The Rust toolchain, by itself, before any other step runs cargo (see the job `code`).
-      - run: devbox run -- just rust-toolchain
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - if: ${{ steps.scope.outputs.run == 'true' }}
+        run: devbox run -- just rust-toolchain
+      - if: ${{ steps.scope.outputs.run == 'true' }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/go/pkg/mod
@@ -438,10 +467,24 @@ jobs:
             ~/.cargo/git
             ~/.cache/zig
             target/
+            .cache/rqlite
           key: release-${{ runner.os }}-${{ hashFiles('go.sum', 'Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: |
             release-${{ runner.os }}-
-      - run: devbox run -- just release-snapshot
+      - if: ${{ steps.scope.outputs.run == 'true' }}
+        run: devbox run -- shellcheck tools/release/*.sh
+      # The upstream the smokes need, made as the job smokes makes it.
+      - name: The upstream, Keycloak 26.8 with the realm of the test users
+        if: ${{ steps.scope.outputs.run == 'true' }}
+        run: |
+          echo "SLUIS_KEYCLOAK_SECRETS=$RUNNER_TEMP/upstream.env" >>"$GITHUB_ENV"
+          tests/installations/local/idp/start.sh "$RUNNER_TEMP/upstream.env"
+      # SLUIS_REHEARSAL_LOCAL: after the checks of the images, the local installation starts from them, nothing built, and both
+      # smokes pass (the first "done when" line of the first working version).
+      - if: ${{ steps.scope.outputs.run == 'true' }}
+        run: devbox run -- just release-rehearsal
+        env:
+          SLUIS_REHEARSAL_LOCAL: '1'
 
   # The advisory gate (REQ-SUPPLY-030): govulncheck over every Go module (twice: the default build, and the card driver
   # with the tag sluis_card), cargo audit over every Cargo.lock and osv-scanner over the lock files, failing on a known

@@ -211,9 +211,9 @@ func TestWhichWorkflowsRunOnAPushToMain(t *testing.T) {
 	}
 }
 
-// The dry run of the release train is a job of checks.yaml that runs on every pull request, and the one name to require
+// The rehearsal of the release train is a job of checks.yaml that runs on every pull request, and the one name to require
 // needs it: a change that breaks the release must fail before a tag, not on the day of one.
-func TestTheReleaseDryRunIsAJobOfChecksAndIsRequiredByIt(t *testing.T) {
+func TestTheReleaseRehearsalIsAJobOfChecksAndIsRequiredByIt(t *testing.T) {
 	w, err := parse(workflowFiles(t)["checks.yaml"])
 	if err != nil {
 		t.Fatal(err)
@@ -227,15 +227,58 @@ func TestTheReleaseDryRunIsAJobOfChecksAndIsRequiredByIt(t *testing.T) {
 	}
 	runs := false
 	for _, s := range job.Steps {
-		if r, _ := s["run"].(string); strings.Contains(r, "just release-snapshot") {
+		if r, _ := s["run"].(string); strings.Contains(r, "just release-rehearsal") {
 			runs = true
 		}
 	}
 	if !runs {
-		t.Error("the job release does not run `just release-snapshot`")
+		t.Error("the job release does not run `just release-rehearsal`")
 	}
 	needs, _ := w.Jobs["checks"].Needs.([]any)
 	if !slices.Contains(needs, any("release")) {
 		t.Error("the job checks, the one name to require, does not need release")
+	}
+}
+
+// The rehearsal is the longest job of the run, so a pull request that changes only documentation, the site or Markdown skips
+// its steps; the job itself still runs, because the job `checks` counts a skipped job as a failure. A push to main and a merge
+// group are never narrowed: the release workflow's gate needs that run to be a full one.
+func TestTheReleaseRehearsalIsNarrowedForDocsOnlyPullRequestsAndNeverOnMain(t *testing.T) {
+	var raw map[string]any
+	if err := yaml.Unmarshal(workflowFiles(t)["checks.yaml"], &raw); err != nil {
+		t.Fatal(err)
+	}
+	jobs, _ := raw["jobs"].(map[string]any)
+	rel, _ := jobs["release"].(map[string]any)
+	if _, has := rel["if"]; has {
+		t.Fatal("the job release has an if: a skipped job fails the job checks; narrow its steps instead")
+	}
+	steps, _ := rel["steps"].([]any)
+	scoped := false
+	for _, s := range steps {
+		st, _ := s.(map[string]any)
+		run, _ := st["run"].(string)
+		if st["id"] == "scope" {
+			scoped = true
+			if !strings.Contains(run, `"$EVENT" = pull_request`) || strings.Contains(run, "push") || strings.Contains(run, "merge_group") {
+				t.Errorf("the scope step must narrow a pull_request and nothing else: %s", run)
+			}
+			continue
+		}
+		if !scoped {
+			continue
+		}
+		if cond, _ := st["if"].(string); !strings.Contains(cond, "steps.scope.outputs.run == 'true'") {
+			t.Errorf("a step after the scope step is not conditional on it: %v", st)
+		}
+	}
+	if !scoped {
+		t.Error("the job release has no scope step")
+	}
+	checks, _ := jobs["checks"].(map[string]any)
+	steps2, _ := checks["steps"].([]any)
+	body := fmt.Sprint(steps2)
+	if !strings.Contains(body, `"$r" = "success"`) || strings.Contains(body, "skipped") {
+		t.Errorf("the job checks must accept success alone: %s", body)
 	}
 }

@@ -166,13 +166,40 @@ What a layer or an extension bundles is in the [runtime dependency matrix](/dist
 One image per process, so a container can run its one executable only. Multi-arch images are on GHCR as `ghcr.io/truvity/sluis/<kind>-<name>`, for example `ghcr.io/truvity/sluis/actor-entry`, from the first working version. No image is named `sluis`: that name belongs to v1. The tag is the release version, with no `latest`; pull by digest, and find every digest of a release in its `release-images.txt`.
 
 - The base is distroless `static`, or distroless with glibc and a pinned `pcsc-lite` for a cgo executable. What an image installs, and what stays on the host (pcscd, the CCID driver, polkit), is in the [runtime dependency matrix](/distribution/dependencies/).
-- The executable sits at the package's path, byte for byte, and a label names its source package. A release test compares the images' binaries with the packages' files by hash.
+- The executable sits at the package's path, `/usr/libexec/sluis/actors/<name>` or `/usr/libexec/sluis/drivers/<owner>/<name>`, byte for byte, and a label names its source package. A release test compares the images' binaries with the packages' files by hash.
 - One image set serves the local installation and Kubernetes.
+
+| Image | Holds |
+|---|---|
+| `actor-<name>` | The actor's executable |
+| `driver-<owner>-<name>` | The driver's executable |
+| `vendor-rqlite` | `rqlited`, the engine of the rqlite store driver on the local installation, at `/usr/libexec/sluis/vendor/rqlited`, from the release archive that `just rqlite-fetch` checks against its SHA-256. It is on a distroless base with glibc and a busybox, because the engine has no command for its health check |
+
+The card driver has no image yet ([Gaps](/distribution/dependencies/#gaps)). The command-line tool is a tarball only.
 
 ```sh
 # Example
 docker pull ghcr.io/truvity/sluis/actor-entry@sha256:<digest>
 ```
+
+### How the images are built and tested
+
+`.goreleaser.yaml` builds each image with `dockers_v2` from the binaries of the same run, and `tools/gen/release` writes the Dockerfiles in `deploy/release/` with it: one `COPY` of one executable and an `ENTRYPOINT`, on the base that `deploy/local/Dockerfile` pins. Buildx adds no provenance or SBOM of its own to an image, so the one statement of provenance is the GitHub attestation ([Release signing](/distribution/release-signing/)).
+
+`just release-rehearsal` runs the release as a tag does, minus the GitHub release, and pushes to a registry that it starts on a free loopback port, with no credential. CI runs it on every pull request. `tools/release check-images` then reads that registry and fails unless, for every image:
+
+- the repository holds the release version as its only tag, so there is no `latest`, and no repository is named `sluis`;
+- the index holds `linux/amd64` and `linux/arm64` and nothing else, and its digest is the one in `digests.txt`;
+- the entrypoint is the install path, the user is the nonroot user of the base, and the labels name the image, the version and the source package;
+- the layer the build added holds the executable and nothing else, and the executable is the file of the archive of the same architecture, hash for hash.
+
+`tools/release release-images` writes `release-images.txt` from the digests: one line per image, `<repository>:<tag>@sha256:<digest>`.
+
+### SBOMs
+
+Each archive has an SPDX 2.3 JSON SBOM beside it, `<archive>.sbom.spdx.json`, and each image has one made from the registry by digest. syft makes them. It reads the Go modules from the build information of an executable and the Rust crates from the list that `cargo auditable` records in it (`tools/release/cargo-auditable.sh` is the tool GoReleaser's Rust builder runs). The archives' documents are listed in `SHA256SUMS` with the archives.
+
+`tools/release check-sboms` validates every document in the rehearsal: the fields SPDX 2.3 requires of a document and of each package, unique ids, relationships that name elements the document has, syft as the creator, and at least one crate (`pkg:cargo/`) in the SBOM of a Rust executable or one Go module (`pkg:golang/`) in that of a Go one, so a build that recorded nothing fails. It is a structural check of the format, not a run of the SPDX project's own validator.
 
 ## Helm charts
 
@@ -185,6 +212,31 @@ From the parity milestone the chart is an OCI artifact at `ghcr.io/truvity/sluis
 # Example
 helm pull oci://ghcr.io/truvity/sluis/charts/sluis --version <version>
 ```
+
+## Releasing
+
+A release is a tag `v2.<minor>.<patch>` or `v2.0.0-alpha.<n>` that the maintainer signs and pushes. Nothing else makes one: no workflow creates a tag, and a pull request never runs the release workflow. The first versions are not signed beyond the tag: no keyless signature and no provenance attestation, until the OpenPGP part is decided (owner decision, 2026-11-07), so the workflow has no `id-token` permission.
+
+Before the first tag, once:
+
+- **ghcr.io.** The workflow's own token pushes the images, with `packages: write`. The first push creates one package per image, linked to this repository through the `org.opencontainers.image.source` label. A package starts private: open each of them in the organisation's package settings and change its visibility to public, or the local installation cannot pull them without a login.
+- **Immutable releases.** Turn on "Immutable releases" in the repository settings so that a published release cannot change. `main` already protects its commits.
+
+For each release:
+
+1. Rename `## Unreleased` in `CHANGELOG.md` to the version, in a pull request that merges to `main`, and wait for the run of `Checks` on `main` for that commit to finish green.
+2. Tag that commit and push the tag, one tag per push (GitHub starts no workflow for a push of more than three tags):
+
+   ```sh
+   # Example
+   git tag -s v2.0.0-alpha.1 <commit on main>
+   git push origin v2.0.0-alpha.1
+   ```
+
+3. The `Release` workflow runs three things in order. The gate refuses a commit that is not an ancestor of `main`, or whose run of `Checks` on `main` is not a finished success ([REQ-SUPPLY-032](/requirements/supply/#REQ-SUPPLY-032)). The release job runs `just release`: GoReleaser builds, archives and pushes, and creates the GitHub release as a draft; the checks of the rehearsal then run against what was published (the archives, the image list, the images by digest, the SBOMs); and only then does the draft become a public pre-release. A check that fails leaves a draft and the pushed images, and announces nothing.
+4. Check the result: the release holds the archives, `SHA256SUMS`, a `.sha256` and an SPDX SBOM for each archive, `release-images.txt`, and an SBOM for each image.
+
+The workflow has an empty permission block at its top, and only its `release` job can write ([REQ-SUPPLY-033](/requirements/supply/#REQ-SUPPLY-033), [REQ-SUPPLY-041](/requirements/supply/#REQ-SUPPLY-041)); its checkouts keep no credential ([REQ-SUPPLY-042](/requirements/supply/#REQ-SUPPLY-042)); and no cache is restored, so a release builds from the sources and the locked dependencies alone. Tests over the workflow files hold those rules.
 
 ## GitHub Releases
 
