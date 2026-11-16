@@ -243,6 +243,12 @@ release:
     name: sluis
   mode: keep-existing
   prerelease: auto
+  # The root config's run leaves the release a draft (immutable once
+  # published); this run finds that draft and leaves it one. Without
+  # use_existing_draft goreleaser looks the release up by its tag, which
+  # never returns a draft, and would create a second release.
+  draft: true
+  use_existing_draft: true
   # Set by hack/e2e-snapshot.sh only: a commit that is not a tag has
   # nothing to attach a GitHub release to, and the kind tier's snapshot
   # build needs none. Empty (the default, every real release) leaves this

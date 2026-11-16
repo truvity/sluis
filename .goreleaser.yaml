@@ -367,6 +367,13 @@ release:
   # vX.Y.Z-rc.N is a pre-release on GitHub (never "Latest"); the pulumi-tag
   # job and the gates run on it exactly as on a release.
   prerelease: auto
+  # The release stays a draft here. Releases on this repository are immutable
+  # once published (repository setting), and four jobs still add assets after
+  # this run: the Nix flake, audit's run, the merged checksums.txt and the
+  # cosign bundle. The `publish` job of release.yaml publishes it last.
+  # use_existing_draft: a re-run finds the draft this run left.
+  draft: true
+  use_existing_draft: true
   header: |
     ## sluis {{ .Tag }}
 

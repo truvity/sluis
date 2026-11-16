@@ -11,6 +11,8 @@
 #            <dir>/vX.Y.Z at the release commit, which `just release-pin`
 #            made: every go.mod already requires this release
 #            (hack/tag-modules.sh)
+#   publish  the GitHub release, a draft until every job above passed: a
+#            published release is immutable, so it is published last
 #
 # Release machinery is exercised only by a tag, so `just release-check vX.Y.Z`
 # runs everything that does not need one, and `gate` runs the chain's pin first.
@@ -442,3 +444,30 @@ jobs:
           REPO: ${{ github.repository }}
           GOEXPERIMENT: jsonv2
         run: ./hack/tag-modules.sh "$GITHUB_REF_NAME"
+
+  # Releases on this repository are immutable once published (repository
+  # setting, on since 2026-11-08): nothing can be added to a published release
+  # and its tag can never be used again. So goreleaser (both configs) leaves
+  # the release a draft, every job above adds to the draft, and this job
+  # publishes it once all of them passed. A failed job leaves a draft, which a
+  # re-run of the failed jobs completes; v1.82.0 was published by goreleaser
+  # before the Nix flake could be added, and is incomplete for good.
+  publish:
+    needs: [release, audit, attest, attest-sboms, attest-oci, module-images, npm, modules]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: publish the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          draft=$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)
+          if [ "$draft" != "true" ]; then
+            echo "$GITHUB_REF_NAME is already published"
+            exit 0
+          fi
+          gh release edit "$GITHUB_REF_NAME" --draft=false

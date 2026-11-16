@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **The release is published last.** Releases on this repository are immutable once published, and v1.82.0 failed because goreleaser published it before the Nix flake, audit's assets, the merged `checksums.txt` and the cosign bundle were added; v1.82.0 stays incomplete and its tag cannot be used again. Both goreleaser configs now leave the release a draft (`draft`, `use_existing_draft`), every job adds to the draft, and a new `publish` job publishes it once every other job of the release workflow passed. A failed job leaves a draft that a re-run completes. **Upgrade:** none.
+
 ## v1.82.0
 
 A minor release: a company's access fragment can carry its GitHub App grants and its sign-in gates, checked against new ceiling fields (ADR 0079). Non-major dependency updates move with it. Upgrade notes: none.
