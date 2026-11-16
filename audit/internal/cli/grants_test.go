@@ -160,3 +160,22 @@ presets: [{name: access-roster}]
 		t.Fatal("an unknown preset was accepted")
 	}
 }
+
+// The preset is called sluis in version 2; its old name, access-roster, is
+// still read as sluis there (and is all a frozen version 1 file knows).
+func TestLoadAccessAcceptsTheOldPresetName(t *testing.T) {
+	profiles := map[string]*profile.Profile{"sec": {Name: "sec", Frameworks: []string{"security"}}}
+	for _, name := range []string{"sluis", "access-roster"} {
+		body := "apiVersion: audit.truvity.github.io/audit-grants/v2\nissuers: [{url: https://staff.example, audience: audit}]\npresets: [{name: " + name + "}]\n"
+		access, err := LoadAccess(grantsFile(t, body), profiles)
+		if err != nil {
+			t.Fatalf("preset %s: %v", name, err)
+		}
+		if len(access.Rules.Presets) != 1 || access.Rules.Presets[0].Name() != "sluis" {
+			t.Fatalf("preset %s did not load as sluis: %+v", name, access.Rules.Presets)
+		}
+	}
+	if _, err := LoadAccess(grantsFile(t, "apiVersion: audit.truvity.github.io/audit-grants/v2\nissuers: [{url: https://staff.example, audience: audit}]\npresets: [{name: roster}]\n"), profiles); err == nil {
+		t.Fatal("an unknown preset was accepted")
+	}
+}

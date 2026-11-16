@@ -484,7 +484,7 @@ query:
   #    - url: https://id.example.com
   #      audience: audit
   #  presets:
-  #    - name: access-roster
+  #    - name: sluis
   #      issuer: https://id.example.com
   # Mount the writer's key directory read-only, so that resolve can open what
   # the writer sealed with the local key provider. Needs `keysVolume` with

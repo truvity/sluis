@@ -107,12 +107,12 @@ A grants preset replaces a rule per group. It needs `deployment` in the query co
 
 ```yaml
 presets:
-  - name: access-roster
+  - name: sluis
     issuer: https://id.example.com       # required once more than one issuer is trusted
     claim: groups                        # the default
 ```
 
-The `access-roster` grants preset reads groups named `<scope>:audit:<role>`, the grant grammar from sluis. The name is a legacy identifier, renamed in v1.75–v1.76. The scope is `all` or an audit tenant id, byte for byte.
+The `sluis` grants preset reads groups named `<scope>:audit:<role>`, the grant grammar from sluis. Until v1.82 it was called `access-roster`; that name is still accepted in a version 2 grants file (and is the only one a version 1 file knows), and is removed in a later release. The scope is `all` or an audit tenant id, byte for byte.
 
 | Role | Profiles built from | Operations | `all` allowed |
 |---|---|---|---|

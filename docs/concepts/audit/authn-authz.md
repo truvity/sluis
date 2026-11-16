@@ -77,7 +77,7 @@ The HTTP and stream paths differ: the receiver verifies the caller's token and s
 | authorizer | status | reads |
 |---|---|---|
 | `declarative` (default) | built | configuration mapping claim values to grants, plus grant presets |
-| `access-roster` grants preset | built | `<scope>:audit:<role>` from the groups claim |
+| `sluis` grants preset (formerly `access-roster`) | built | `<scope>:audit:<role>` from the groups claim |
 | policy-engine adapter | optional | an engine whose query plan returns a filter and whose decision log names the rule |
 
 An authorizer answers with every grant the caller holds. `auth.Effective` picks, per request, the grants covering the profile and operation asked. Tenants union within a profile and never across profiles. A time window never unions.
@@ -87,7 +87,7 @@ An authorizer answers with every grant the caller holds. `auth.Effective` picks,
 | one covers another's tenants and window | the covered one is set aside |
 | the rest differ in window | the request is refused |
 
-The `access-roster` grants preset (legacy identifier, renamed in v1.75–v1.76) reads the estate's grant grammar, which sluis defines. `authn.SplitGroup` splits it. Roles bind to the framework profiles a profile is composed from, not to profile names. `viewer` must be tenant-scoped. `resolve` and time-boxed grants are explicit rules only. The reference lists the role table.
+The `sluis` grants preset (called `access-roster` until v1.82; the old name is still accepted) reads the estate's grant grammar, which sluis defines. `authn.SplitGroup` splits it. Roles bind to the framework profiles a profile is composed from, not to profile names. `viewer` must be tenant-scoped. `resolve` and time-boxed grants are explicit rules only. The reference lists the role table.
 
 ## Exports
 

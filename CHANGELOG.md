@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Changed
+
+- **The audit grants preset is called `sluis`.** The query service's grants preset that reads the `<scope>:audit:<role>` groups was still named `access-roster`, the hub's name before the rename (ADR 0035). `sluis` is now its name: the version 2 grants schema accepts `presets: [{name: sluis}]`, error messages and `Preset.Name()` say `sluis`, and the reference and concept pages use it. `access-roster` is still accepted in a version 2 grants file and read exactly the same; a frozen version 1 grants file knows only the old name. Nothing else changes: the grants read, the records written and the groups recognised are identical. **Upgrade:** rename `access-roster` to `sluis` in the audit grants file (`presets[].name`); the old name still works and is removed in a later release.
+
 ## v1.82.4
 
 A patch release that completes the release fix. v1.82.3 stayed an unpublished draft: the SBOM attestation job (`attest-sboms`) read the release with a read-only token, and a draft release is visible only to a token that can write contents, so every matrix job failed with "release not found" and `publish` did not run. Use v1.82.4 instead of v1.82.0 to v1.82.3. Upgrade notes: none.

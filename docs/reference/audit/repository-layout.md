@@ -39,7 +39,7 @@ Paths are under `audit/`.
 | `sdk/sink/` | Write contract, durability, Connect client, memory sinks, `logsink`, `sinktest` |
 | `sdk/auth/` | `Principal`, `Authenticator`, `Authorizer`, grants, workload tokens |
 | `sdk/telemetry/`, `sdk/metaschema/`, `sdk/schemas/` | Span names and interceptors; meta-schema validation; meta-schemas |
-| `authn/` | JWT authenticator and the `access-roster` grants preset (legacy identifier, renamed in v1.75–v1.76) |
+| `authn/` | JWT authenticator and the `sluis` grants preset (formerly `access-roster`) |
 | `sinkserver/` | `SinkService` handler, the receiver, and `SourceBound`, which holds a caller to the source its workload is listed for |
 | `sink/natssink/`, `sink/sqssink/` | Stream publishers |
 | `dedupe/dynamodbdedupe/` | Deduplication on DynamoDB |
