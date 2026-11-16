@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.84.0
+
+A minor release with one breaking change: the hub reads only the `sluis` spelling of its groups (`all:sluis:operator`, `all:sluis:viewer`) and of the audit grants preset; the old name `access-roster` is no longer read, and the default STS role-session name is `sluis`. Upgrade notes: move every policy and audit grants file to the new names on v1.83.0 first (it reads both), then upgrade.
+
 ### Changed
 
 - **Breaking: the old name `access-roster` is no longer read in the hub's groups or the audit grants preset.** Only `all:sluis:operator` and `all:sluis:viewer` (and the scoped `<workspace>:sluis:<role>`) confer the console's roles; a group spelled `all:access-roster:*` is now an ordinary group of another thing and grants nothing here. `policy.IsOperators`, `policy.IsViewers` and `policy.SplitScopedGroup` read only the sluis spelling, and `policy.ThingSelf` is a deprecated alias of `policy.ThingSluis`. The built-in bootstrap policy and the console's first-run checklist name `all:sluis:operator`. A version-2 audit grants file refuses the preset name `access-roster`; a version-1 file's `access-roster` is still read as `sluis`. The default STS role-session name of a token exchange is `sluis` (was `access-roster`). The GitHub App catalogue ID `access-roster` and the `urn:access-roster:...` token-type spellings are unchanged. **Upgrade:** first move every hub group to `all:sluis:*` (and its clients to grants of their own, since no client should require the console's role), and the audit grants preset to `sluis`, on a release that reads both spellings (v1.83.0); then take this release.. Check that no IAM trust policy matches the role-session name `access-roster`.
