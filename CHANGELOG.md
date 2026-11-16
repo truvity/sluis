@@ -1,5 +1,13 @@
 ## Unreleased
 
+## v1.82.4
+
+A patch release that completes the release fix. v1.82.3 stayed an unpublished draft: the SBOM attestation job (`attest-sboms`) read the release with a read-only token, and a draft release is visible only to a token that can write contents, so every matrix job failed with "release not found" and `publish` did not run. Use v1.82.4 instead of v1.82.0 to v1.82.3. Upgrade notes: none.
+
+### Changed
+
+- **`attest-sboms` can see the draft release.** The job gets `contents: write`; it still only downloads assets. Every other job that reads the release (`audit`, `attest`, `publish`) already had it. **Upgrade:** none.
+
 ## v1.82.3
 
 A patch release that completes the release fix of v1.82.1 and v1.82.2. v1.82.2 stayed an unpublished draft: the Nix flake step added the archives to the Nix store by paths relative to the checkout while running in another directory, and failed. Use v1.82.3 instead of v1.82.0, v1.82.1 and v1.82.2. Upgrade notes: none.

@@ -300,7 +300,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: read
+      # write, although this job only reads (gh release download): the release
+      # is a draft until `publish`, and a draft is visible only to a token that
+      # can write contents (v1.82.3: "release not found" in every matrix job).
+      contents: write
       id-token: write
       attestations: write
     strategy:
