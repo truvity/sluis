@@ -1,5 +1,13 @@
 ## Unreleased
 
+## v1.82.3
+
+A patch release that completes the release fix of v1.82.1 and v1.82.2. v1.82.2 stayed an unpublished draft: the Nix flake step added the archives to the Nix store by paths relative to the checkout while running in another directory, and failed. Use v1.82.3 instead of v1.82.0, v1.82.1 and v1.82.2. Upgrade notes: none.
+
+### Changed
+
+- **The Nix flake step finds the local archives.** `release-public` moves to truvity/ci-workflows v6.5.2, and the actions to truvity/ci-actions v3.14.2, whose `publish-nix-flakes` passes absolute archive paths to `nix-store --add-fixed`. The published flakes are unchanged. **Upgrade:** none.
+
 ## v1.82.2
 
 A patch release that completes the release fix of v1.82.1. The v1.82.1 run kept its release a draft as intended, but the Nix flake step downloaded the archives from the draft's URLs, which answer 404, so v1.82.1 was never published and has no module tags, npm packages or module images. Use v1.82.2 instead of v1.82.0 and v1.82.1. Upgrade notes: none.
