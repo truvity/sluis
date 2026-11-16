@@ -28,7 +28,8 @@ type GrantsFile struct {
 	// issuers able to satisfy it; see auth.Rule.Issuer.
 	Issuers []IssuerEntry `json:"issuers,omitempty"`
 	// Presets read grants out of a claim's vocabulary rather than one value
-	// each. Only access-roster's exists.
+	// each. Only sluis's exists (named access-roster before the rename,
+	// which is still accepted).
 	Presets []PresetEntry `json:"presets,omitempty"`
 	Rules   []GrantRule   `json:"rules,omitempty"`
 }
@@ -87,8 +88,13 @@ func LoadAccess(path string, profiles map[string]*profile.Profile) (Access, erro
 		return Access{}, err
 	}
 	for _, entry := range file.Presets {
-		if entry.Name != "access-roster" {
-			return Access{}, fmt.Errorf("%s: preset %q does not exist; access-roster is the one there is", path, entry.Name)
+		switch entry.Name {
+		case "sluis":
+		case "access-roster":
+			// The preset's name before the hub was renamed sluis: read the
+			// same, and removed in a later release.
+		default:
+			return Access{}, fmt.Errorf("%s: preset %q does not exist; sluis is the one there is", path, entry.Name)
 		}
 		if len(profiles) == 0 {
 			return Access{}, fmt.Errorf(

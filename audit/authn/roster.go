@@ -118,8 +118,9 @@ func (r role) covers(presets []string) bool {
 	return false
 }
 
-// Name implements Preset.
-func (AccessRoster) Name() string { return "access-roster" }
+// Name implements Preset. The preset was called "access-roster" before the
+// hub was renamed sluis; a grants file may still say so (see the loader).
+func (AccessRoster) Name() string { return "sluis" }
 
 // Issuer implements Preset.
 func (a AccessRoster) Issuer() string { return a.From }
