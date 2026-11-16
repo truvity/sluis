@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.83.0
+
+A minor release: the audit grants preset is called `sluis`; `access-roster` is still accepted and read the same way, and goes in a later release. Upgrade notes: rename the preset in the audit grants config when convenient.
+
 ### Changed
 
 - **The audit grants preset is called `sluis`.** The query service's grants preset that reads the `<scope>:audit:<role>` groups was still named `access-roster`, the hub's name before the rename (ADR 0035). `sluis` is now its name: the version 2 grants schema accepts `presets: [{name: sluis}]`, error messages and `Preset.Name()` say `sluis`, and the reference and concept pages use it. `access-roster` is still accepted in a version 2 grants file and read exactly the same; a frozen version 1 grants file knows only the old name. Nothing else changes: the grants read, the records written and the groups recognised are identical. **Upgrade:** rename `access-roster` to `sluis` in the audit grants file (`presets[].name`); the old name still works and is removed in a later release.
