@@ -166,7 +166,8 @@ presets: [{name: access-roster}]
 func TestLoadAccessAcceptsTheOldPresetName(t *testing.T) {
 	profiles := map[string]*profile.Profile{"sec": {Name: "sec", Frameworks: []string{"security"}}}
 	for _, name := range []string{"sluis", "access-roster"} {
-		body := "apiVersion: audit.truvity.github.io/audit-grants/v2\nissuers: [{url: https://staff.example, audience: audit}]\npresets: [{name: " + name + "}]\n"
+		body := "apiVersion: audit.truvity.github.io/audit-grants/v2\n" +
+			"issuers: [{url: https://staff.example, audience: audit}]\npresets: [{name: " + name + "}]\n"
 		access, err := LoadAccess(grantsFile(t, body), profiles)
 		if err != nil {
 			t.Fatalf("preset %s: %v", name, err)
@@ -175,7 +176,9 @@ func TestLoadAccessAcceptsTheOldPresetName(t *testing.T) {
 			t.Fatalf("preset %s did not load as sluis: %+v", name, access.Rules.Presets)
 		}
 	}
-	if _, err := LoadAccess(grantsFile(t, "apiVersion: audit.truvity.github.io/audit-grants/v2\nissuers: [{url: https://staff.example, audience: audit}]\npresets: [{name: roster}]\n"), profiles); err == nil {
+	unknown := "apiVersion: audit.truvity.github.io/audit-grants/v2\n" +
+		"issuers: [{url: https://staff.example, audience: audit}]\npresets: [{name: roster}]\n"
+	if _, err := LoadAccess(grantsFile(t, unknown), profiles); err == nil {
 		t.Fatal("an unknown preset was accepted")
 	}
 }
