@@ -20,8 +20,8 @@ func TestAWorkloadIsWhatItsMatchersMakeItAndNeverRecovery(t *testing.T) {
 	declared, err := policy.Parse([]byte(`
 version: 1
 groups:
-  all:access-roster:operator: { members: [platform@example.com] }
-  all:access-roster:viewer:
+  all:sluis:operator: { members: [platform@example.com] }
+  all:sluis:viewer:
     matchers:
       - service_account: { cluster: mgmt, namespace: access-issuer, name: github-roster }
 `))
@@ -76,7 +76,7 @@ func TestAnAWSRoleIsWhatItsMatchersMakeIt(t *testing.T) {
 	declared, err := policy.Parse([]byte(`
 version: 1
 groups:
-  all:access-roster:viewer:
+  all:sluis:viewer:
     matchers:
       - aws: { account: "111122223333", role: sluis-github }
 `))

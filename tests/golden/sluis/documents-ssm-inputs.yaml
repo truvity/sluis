@@ -198,10 +198,10 @@ data:
   policy.yaml: |
     apiVersion: sluis.truvity.github.io/policy/v2
     groups:
-      all:access-roster:operator:
+      all:sluis:operator:
         members:
           - admin@example.test
-      all:access-roster:viewer:
+      all:sluis:viewer:
         matchers:
           - email_domain: example.test
       all:argocd:admin:
@@ -262,7 +262,7 @@ data:
         redirects:
           - https://access.example.test/console/callback
         requires:
-          - all:access-roster:viewer
+          - all:sluis:viewer
       argocd:
         kind: confidential
         secret: clients/argocd/secret
@@ -366,7 +366,7 @@ data:
         redirects:
           - http://localhost:8017/callback
         requires:
-          - all:access-roster:viewer
+          - all:sluis:viewer
       vmauth:
         kind: confidential
         secret: clients/vmauth/secret
@@ -383,10 +383,10 @@ data:
     github:
       example-forms:
         members:
-          - all:access-roster:viewer
+          - all:sluis:viewer
       example-org:
         members:
-          - all:access-roster:viewer
+          - all:sluis:viewer
     slack:
       workspaces:
         example:
@@ -394,7 +394,7 @@ data:
             ops:
               private: true
               from:
-                - all:access-roster:operator
+                - all:sluis:operator
     exchange:
       clusters:
         - name: staging
@@ -630,7 +630,7 @@ spec:
         # Each document is read once, at start: a change to it, or to the
         # policy, is a rollout.
         checksum/config: ebfea01ea6c21b19b0e3df686abe26ec1cf6343af7b6e890602d17ab201bd768
-        checksum/policy: 264a1aa58a2c2090b55ab756166be63b6f0027f8aac4406a0fbc6a4525656c0a
+        checksum/policy: f1bd6ebff3a9d0ba42e9ceb531bd399a012856722c66caa462a0dbd1a7ff3993
         checksum/verify-keys: 18ec558ab1c2237d4c0fb00f26dfabc2e1a44002e46a9029553e8a19605e08cd
     spec:
       serviceAccountName: sluis-issuer

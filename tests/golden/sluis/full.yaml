@@ -514,7 +514,7 @@ data:
         redirects:
         - https://access.example/console/
         requires:
-        - all:access-roster:operator
+        - all:sluis:operator
         secret: access-console-client
       accessctl:
         kind: public
@@ -579,13 +579,13 @@ data:
             members:
             - all:platform:engineer
     groups:
-      all:access-roster:operator:
-        members:
-        - platform@acme.example
       all:platform:engineer:
         members:
         - engineering@acme.example
         - engineering@globex.example
+      all:sluis:operator:
+        members:
+        - platform@acme.example
     slack:
       workspaces:
         acme: {}
@@ -877,7 +877,7 @@ spec:
         # Each document is read once, at start: a change to it, or to the
         # policy, is a rollout.
         checksum/config: ee61e281d7d33e0699162761850ee17980d6ea60000a2ad429d1aafe48c33da0
-        checksum/policy: 2c846a6716d710dcf04ffdd5a8e6fc35df2f5b64c71965da33336a6c45e5d4db
+        checksum/policy: a80b98d0e4732ec3ba937e34ad835c89d481f4504e953c7739f0de00efe2d24e
         example.com/scrape: "false"
     spec:
       serviceAccountName: issuer
@@ -1058,7 +1058,7 @@ spec:
         # Each document is read once, at start: a change to it, or to the
         # policy, is a rollout.
         checksum/config: bd2f0e94ef4763273f645f0f7f8f6502f0f1659df98b9578f264421c34665473
-        checksum/policy: 2c846a6716d710dcf04ffdd5a8e6fc35df2f5b64c71965da33336a6c45e5d4db
+        checksum/policy: a80b98d0e4732ec3ba937e34ad835c89d481f4504e953c7739f0de00efe2d24e
         example.com/scrape: "false"
     spec:
       serviceAccountName: sluis-github
@@ -1235,7 +1235,7 @@ spec:
         # Each document is read once, at start: a change to it, or to the
         # policy, is a rollout.
         checksum/config: cafd22272c4861ad4388ac7a189116f8d9fb8ad854883971e9cdd8ef91bfd983
-        checksum/policy: 2c846a6716d710dcf04ffdd5a8e6fc35df2f5b64c71965da33336a6c45e5d4db
+        checksum/policy: a80b98d0e4732ec3ba937e34ad835c89d481f4504e953c7739f0de00efe2d24e
         example.com/scrape: "false"
     spec:
       serviceAccountName: sluis-slack

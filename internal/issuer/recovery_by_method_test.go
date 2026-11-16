@@ -30,7 +30,7 @@ groups:
     members: [engineering@north.example]
     matchers:
       - service_account: { namespace: sluis, name: recovery }
-  all:access-roster:operator:
+  all:sluis:operator:
     matchers:
       - service_account: { namespace: sluis, name: recovery }
 clients:
@@ -40,7 +40,7 @@ clients:
     requires: [devel:k8s:viewer]
 `
 
-const operators = "all:access-roster:operator"
+const operators = "all:sluis:operator"
 
 // groupsIn reads a JWT's `groups`.
 func groupsIn(t *testing.T, raw string) []string {

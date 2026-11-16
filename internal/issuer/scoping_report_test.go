@@ -118,14 +118,14 @@ func serveScoping(
 // requiring only that one group: `local-dev` requires only
 // devel:k8s:viewer, so mgmt:k8s:admin (a different thing), rung:platform
 // and rung:engineering (not grants at all — see docs/reference/sluis/taxonomy.md) and
-// all:access-roster:operator (a different pair) are all outside the
+// all:sluis:operator (a different pair) are all outside the
 // devel:k8s pair it names. devel:k8s:admin survives: it shares that SAME
 // pair, which is requires-pair matching across roles — the rule
 // docs/decisions/0006-groups-claim-scoped-per-audience.md states and
 // [policy.Policy.ScopeGroups] implements.
 var (
 	wantScopingKept    = []string{"devel:k8s:admin", "devel:k8s:viewer"}
-	wantScopingDropped = []string{"all:access-roster:operator", "mgmt:k8s:admin", "rung:engineering", "rung:platform"}
+	wantScopingDropped = []string{"all:sluis:operator", "mgmt:k8s:admin", "rung:engineering", "rung:platform"}
 )
 
 // Report mode must leave a token's `groups` claim BYTE IDENTICAL to what

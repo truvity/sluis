@@ -58,11 +58,11 @@ controllers:
 
 access:
   groups:
-    all:access-roster:operator:
+    all:sluis:operator:
       members: [admin@example.test]
       matchers:
         - service_account: {namespace: access-issuer, name: access-issuer-recovery}
-    all:access-roster:viewer:
+    all:sluis:viewer:
       matchers: [{email_domain: example.test}]
     all:audit:security:
       members: [admin@example.test]
@@ -76,7 +76,7 @@ access:
     access-console:
       kind: public
       redirects: [https://access.example.test/console/callback]
-      requires: [all:access-roster:viewer]
+      requires: [all:sluis:viewer]
     audit:
       kind: exchange
       requires: [all:audit:security]
@@ -87,4 +87,4 @@ access:
       requires: [all:grafana:admin]
   github:
     example-org:
-      members: [all:access-roster:viewer]
+      members: [all:sluis:viewer]

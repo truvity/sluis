@@ -29,7 +29,7 @@ func TestAnAddressOutsideEveryServedDomainIsNotFound(t *testing.T) {
 	// it may still carry groups from a stale read. The issuer must see
 	// "not found", because its own rules turn that into no groups — and
 	// never into a reason to take anything away.
-	f := &fake{result: hub.UserResult{InDomain: false, Found: true, Groups: []string{"all:access-roster:operator"}}}
+	f := &fake{result: hub.UserResult{InDomain: false, Found: true, Groups: []string{"all:sluis:operator"}}}
 	standing, err := hublocal.New(f, 0).ResolveUser(context.Background(), "someone@elsewhere.example")
 	if err != nil {
 		t.Fatalf("ResolveUser: %v", err)

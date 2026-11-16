@@ -76,7 +76,7 @@ const person: JWTPayload = {
   name: "Ada Lovelace",
   given_name: "Ada",
   family_name: "Lovelace",
-  groups: ["all:access-roster:viewer", "devel:url-shortener:deployer"],
+  groups: ["all:sluis:viewer", "devel:url-shortener:deployer"],
 };
 
 describe("Issuer", () => {
@@ -90,7 +90,7 @@ describe("Issuer", () => {
       name: "Ada Lovelace",
       givenName: "Ada",
       familyName: "Lovelace",
-      groups: ["all:access-roster:viewer", "devel:url-shortener:deployer"],
+      groups: ["all:sluis:viewer", "devel:url-shortener:deployer"],
     });
   });
 
@@ -319,7 +319,7 @@ describe("middleware, requireGroups and whoami", () => {
       name: "Ada Lovelace",
       givenName: "Ada",
       familyName: "Lovelace",
-      groups: ["all:access-roster:viewer", "devel:url-shortener:deployer"],
+      groups: ["all:sluis:viewer", "devel:url-shortener:deployer"],
     });
   });
 

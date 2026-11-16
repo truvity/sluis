@@ -199,7 +199,7 @@ func TestGroupsScopingEnforceScopesMintFor(t *testing.T) {
 
 	// aws:1111:power requires mgmt:k8s:admin alone, so ONLY that pair
 	// survives -- every other group ada holds (devel:k8s:*, rung:*,
-	// all:access-roster:operator) is dropped.
+	// all:sluis:operator) is dropped.
 	want := []string{"mgmt:k8s:admin"}
 	if got := groupsOf(t, payloadOf(t, token)); !slices.Equal(got, want) {
 		t.Errorf("MintFor groups = %v, want %v", got, want)
@@ -236,7 +236,7 @@ func TestGroupsScopingEnforceOverrideAllCarriesEverything(t *testing.T) {
 func TestGroupsScopingEnforceOverrideThingsWidens(t *testing.T) {
 	t.Parallel()
 	const from = "local-dev:\n    kind: public\n    redirects: [http://localhost:8000/callback]\n    requires: [devel:k8s:viewer]\n"
-	widened := strings.Replace(demo.Policy, from, from+"    groups: [access-roster]\n", 1)
+	widened := strings.Replace(demo.Policy, from, from+"    groups: [sluis]\n", 1)
 	if widened == demo.Policy {
 		t.Fatal("the replacement did not match; the fixture drifted")
 	}
@@ -246,10 +246,10 @@ func TestGroupsScopingEnforceOverrideThingsWidens(t *testing.T) {
 	body := signedInTokens(t, server, iss, "local-dev")
 	accessToken, _ := body["access_token"].(string)
 
-	want := append(slices.Clone(wantScopingKept), "all:access-roster:operator")
+	want := append(slices.Clone(wantScopingKept), "all:sluis:operator")
 	slices.Sort(want)
 	if got := groupsOf(t, claimsOf(t, server, accessToken)); !slices.Equal(got, want) {
-		t.Errorf("groups = %v, want the pair match plus every access-roster group", got)
+		t.Errorf("groups = %v, want the pair match plus every sluis group", got)
 	}
 }
 

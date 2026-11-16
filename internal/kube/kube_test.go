@@ -248,8 +248,8 @@ func TestMembershipsRoundTrip(t *testing.T) {
 		t.Fatalf("a fresh install = %v, %v; want empty and no error", got, err)
 	}
 	want := map[string][]string{
-		"all:access-roster:operator": {"platform@one.example", "ada@one.example"},
-		"all:access-roster:viewer":   {"everyone@one.example"},
+		"all:sluis:operator": {"platform@one.example", "ada@one.example"},
+		"all:sluis:viewer":   {"everyone@one.example"},
 	}
 	if err := store.SetMemberships(ctx, want); err != nil {
 		t.Fatalf("SetMemberships: %v", err)
@@ -258,11 +258,11 @@ func TestMembershipsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Memberships: %v", err)
 	}
-	if !slices.Equal(slices.Sorted(maps.Keys(got)), []string{"all:access-roster:operator", "all:access-roster:viewer"}) {
+	if !slices.Equal(slices.Sorted(maps.Keys(got)), []string{"all:sluis:operator", "all:sluis:viewer"}) {
 		t.Fatalf("groups = %v", slices.Sorted(maps.Keys(got)))
 	}
-	if !slices.Equal(got["all:access-roster:operator"], []string{"ada@one.example", "platform@one.example"}) {
-		t.Errorf("members = %v, want them sorted and complete", got["all:access-roster:operator"])
+	if !slices.Equal(got["all:sluis:operator"], []string{"ada@one.example", "platform@one.example"}) {
+		t.Errorf("members = %v, want them sorted and complete", got["all:sluis:operator"])
 	}
 
 	// Setting the client works when the deployment left it to the console.

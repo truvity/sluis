@@ -94,7 +94,7 @@ type Record struct {
 	TeamID string `json:"team_id,omitempty"`
 	// Owner is the directory workspace id that owns this Slack workspace,
 	// chosen when it was connected: the workspace whose SCOPED operator
-	// (`<id>:access-roster:operator`) may operate it beside the
+	// (`<id>:sluis:operator`) may operate it beside the
 	// installation-wide operator, and whose served domains a person is
 	// looked up by. Empty, only the installation-wide roles operate it and
 	// its people are held until an owner is set. Only the installation-wide

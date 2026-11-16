@@ -77,11 +77,11 @@ func bootWithForwardedOperator(t *testing.T, gw *gateway) http.Handler {
 	if err := os.WriteFile(filepath.Join(dir, "policy.yaml"), []byte(`
 version: 1
 groups:
-  all:access-roster:operator: { matchers: [{ email: platform@north.example }] }
-  all:access-roster:viewer: { matchers: [{ email: viewer@north.example }] }
+  all:sluis:operator: { matchers: [{ email: platform@north.example }] }
+  all:sluis:viewer: { matchers: [{ email: viewer@north.example }] }
 lifetimes: { default: 12h }
 clients:
-  console: { kind: public, requires: [all:access-roster:operator], redirects: ["https://access.example/console/callback"] }
+  console: { kind: public, requires: [all:sluis:operator], redirects: ["https://access.example/console/callback"] }
 `), 0o600); err != nil {
 		t.Fatalf("write the policy: %v", err)
 	}

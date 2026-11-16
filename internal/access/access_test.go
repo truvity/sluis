@@ -24,13 +24,13 @@ func (d *directory) ResolveUser(_ context.Context, email string, _ *time.Duratio
 const declared = `
 version: 1
 groups:
-  all:access-roster:operator: { members: [platform@example.com] }
-  all:access-roster:viewer:   { matchers: [{ email_domain: example.com }] }
+  all:sluis:operator: { members: [platform@example.com] }
+  all:sluis:viewer:   { matchers: [{ email_domain: example.com }] }
 claims:
-  all:access-roster:operator: { groups: [hub:operator] }
+  all:sluis:operator: { groups: [hub:operator] }
 lifetimes:
   default: 12h
-  all:access-roster:operator: 4h
+  all:sluis:operator: 4h
 `
 
 func setup(t *testing.T, result hub.UserResult) (*access.Authorizer, *directory, *time.Time) {
@@ -75,7 +75,7 @@ func TestMembershipGrantsOperator(t *testing.T) {
 		t.Errorf("lifetime = %v, want the operators' exception", got.Lifetime)
 	}
 	// Both internal group names, plus the one fragment that adds to the
-	// claim: all:access-roster:viewer contributes only its own name.
+	// claim: all:sluis:viewer contributes only its own name.
 	if groups, _ := got.Claims["groups"].([]any); len(groups) != 3 {
 		t.Errorf("claims groups = %v, want the two group names and the operators' fragment", groups)
 	}
@@ -171,7 +171,7 @@ func TestExplainReportsWhyAndDoesNotRefuse(t *testing.T) {
 	}
 	var via []string
 	for _, held := range got.Result.Held {
-		if held.Group == "all:access-roster:operator" {
+		if held.Group == "all:sluis:operator" {
 			via = held.Via
 		}
 	}
@@ -187,12 +187,12 @@ version: 1
 groups:
   all:gitops:deployer:
     matchers: [{ github: { repository: example-org/gitops, ref: refs/heads/master } }]
-  all:access-roster:operator: { members: [platform@example.com] }
-  all:access-roster:viewer: {}
+  all:sluis:operator: { members: [platform@example.com] }
+  all:sluis:viewer: {}
 lifetimes: { default: 12h, all:gitops:deployer: 1h }
 clients:
   aws:1111:deployer: { kind: exchange, requires: [all:gitops:deployer] }
-  k8s:mgmt:        { kind: public, requires: [all:access-roster:operator], ttl_cap: 30m }
+  k8s:mgmt:        { kind: public, requires: [all:sluis:operator], ttl_cap: 30m }
 `
 	p, err := policy.Parse([]byte(withMachines))
 	if err != nil {

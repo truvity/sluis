@@ -1249,8 +1249,8 @@ func mountOf(publicURL string) string {
 const builtinPolicy = `
 version: 1
 groups:
-  all:access-roster:operator: {}
-  all:access-roster:viewer: {}
+  all:sluis:operator: {}
+  all:sluis:viewer: {}
 lifetimes:
   default: 12h
 `

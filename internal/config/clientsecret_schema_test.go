@@ -31,12 +31,12 @@ func TestThePolicySchemaChecksAClientSecret(t *testing.T) {
 			t.Parallel()
 			doc := map[string]any{
 				"apiVersion": config.APIVersion("policy"),
-				"groups":     map[string]any{"all:access-roster:operator": map[string]any{}},
+				"groups":     map[string]any{"all:sluis:operator": map[string]any{}},
 				"clients": map[string]any{
 					"grafana": map[string]any{
 						"kind":     "confidential",
 						"secret":   tc.secret,
-						"requires": []any{"all:access-roster:operator"},
+						"requires": []any{"all:sluis:operator"},
 					},
 				},
 			}

@@ -349,7 +349,7 @@ config:
   #   # chart requires and prints when it is wrong. A controller reads the
   #   # console as a workload with this pod's ServiceAccount token: the
   #   # policy's exchange must name this cluster and put the account in
-  #   # `all:access-roster:viewer`. What a controller CHANGES is the policy
+  #   # `all:sluis:viewer`. What a controller CHANGES is the policy
   #   # document's `controllers.<kind>.enabledOrgs` / `enabledWorkspaces`.
   #   # More than one replica needs the tick leases in a shared State
   #   # (`ports.adapter: dynamodb`); the chart refuses it otherwise.

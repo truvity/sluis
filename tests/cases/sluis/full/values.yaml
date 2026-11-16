@@ -180,7 +180,7 @@ policy:
       acme: {}
       globex-eu: {}
   groups:
-    all:access-roster:operator:
+    all:sluis:operator:
       members:
         - platform@acme.example
     all:platform:engineer:
@@ -194,7 +194,7 @@ policy:
       redirects:
         - https://access.example/console/
       requires:
-        - all:access-roster:operator
+        - all:sluis:operator
     reports:
       kind: confidential
       secret: reports-client

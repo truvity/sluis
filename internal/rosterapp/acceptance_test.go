@@ -40,11 +40,11 @@ func boot(t *testing.T) *rosterapp.App {
 	if err := os.WriteFile(filepath.Join(dir, "policy.yaml"), []byte(`
 version: 1
 groups:
-  all:access-roster:operator: { members: [platform@north.example] }
-  all:access-roster:viewer: {}
+  all:sluis:operator: { members: [platform@north.example] }
+  all:sluis:viewer: {}
 lifetimes: { default: 12h }
 clients:
-  console: { kind: public, requires: [all:access-roster:operator], redirects: ["https://access.example/console/callback"] }
+  console: { kind: public, requires: [all:sluis:operator], redirects: ["https://access.example/console/callback"] }
 `), 0o600); err != nil {
 		t.Fatalf("write the policy: %v", err)
 	}

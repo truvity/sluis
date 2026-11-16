@@ -190,16 +190,16 @@ func coldStartWith(t *testing.T, fake *ssmFake, l layout, extra string) (*lambda
 	dir := t.TempDir()
 	clients := ""
 	for _, id := range []string{"grafana", "argocd", "vault"} {
-		clients += fmt.Sprintf("  %s: { kind: confidential, secret: clients/%s/secret, requires: [all:access-roster:operator] }\n", id, id)
+		clients += fmt.Sprintf("  %s: { kind: confidential, secret: clients/%s/secret, requires: [all:sluis:operator] }\n", id, id)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "policy.yaml"), []byte(`
 version: 1
 groups:
-  all:access-roster:operator: { members: [platform@north.example] }
-  all:access-roster:viewer: {}
+  all:sluis:operator: { members: [platform@north.example] }
+  all:sluis:viewer: {}
 lifetimes: { default: 12h }
 clients:
-  console: { kind: public, requires: [all:access-roster:operator], redirects: ["https://access.example/console/callback"] }
+  console: { kind: public, requires: [all:sluis:operator], redirects: ["https://access.example/console/callback"] }
 `+clients), 0o600); err != nil {
 		t.Fatal(err)
 	}

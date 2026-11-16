@@ -96,7 +96,8 @@ func versionOf(doc any, name string) (version, error) {
 // upgrade turns a valid version-1 document into version 2: the fields that named
 // an environment variable (`passwordEnv`, `credentialsEnv`, `tokenEnv`) name a
 // secret (`passwordSecret`, ...), and the file's `secrets` is the environment,
-// which is where version 1 read them from.
+// which is where version 1 read them from; a grants file's preset
+// `access-roster` is `sluis`.
 func upgrade(doc map[string]any) (map[string]any, error) {
 	if a, ok := doc["archive"].(map[string]any); ok {
 		if _, v1 := a["bucket"]; v1 || a["lockMode"] != nil || a["prefix"] != nil || a["credentials"] != nil {
@@ -137,6 +138,16 @@ func upgrade(doc map[string]any) (map[string]any, error) {
 		return v
 	}
 	out := walk(doc).(map[string]any)
+	// A grants file's one preset was named access-roster in version 1, the
+	// hub's name before the rename; version 2 names it sluis and refuses the
+	// old name.
+	if presets, ok := out["presets"].([]any); ok {
+		for _, p := range presets {
+			if entry, ok := p.(map[string]any); ok && entry["name"] == "access-roster" {
+				entry["name"] = "sluis"
+			}
+		}
+	}
 	if renamed {
 		out["secrets"] = map[string]any{"source": SourceEnv}
 		// One warning for every conversion, naming the field and not what it holds.

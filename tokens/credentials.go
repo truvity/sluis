@@ -122,7 +122,7 @@ func AssumeRoleWithWebIdentity(
 	if strings.TrimSpace(sessionName) == "" {
 		// STS requires one, and an empty value is refused with a
 		// validation error that does not say which field.
-		sessionName = "access-roster"
+		sessionName = "sluis"
 	}
 
 	form := url.Values{

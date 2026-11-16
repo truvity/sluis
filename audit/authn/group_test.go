@@ -7,7 +7,7 @@ import (
 )
 
 // The cases are those of sluis's TestSplitGroupReadsAnyGrant (policy_test.go,
-// v1.63.0), with the one sluis constant it names (`all:access-roster:operator`)
+// v1.63.0), with the one sluis constant it names (`all:sluis:operator`)
 // spelled out, and the answers it expects. This module does not require sluis, so
 // the proof that the two readers agree is this table: when sluis's changes, so
 // does this, and a reader that drifts fails here before it grants differently.
@@ -18,7 +18,7 @@ func TestSplitGroupAgreesWithSluis(t *testing.T) {
 		ok                     bool
 		scope, thing, wantRole string
 	}{
-		{"sluis's own", "all:access-roster:operator", true, "all", "access-roster", "operator"},
+		{"sluis's own", "all:sluis:operator", true, "all", "sluis", "operator"},
 		{"a cluster role", "mgmt:k8s:admin", true, "mgmt", "k8s", "admin"},
 		{"a project role", "prod:shop:deployer", true, "prod", "shop", "deployer"},
 		{"another relying party, tenant-scoped", "C0north:audit:viewer", true, "C0north", "audit", "viewer"},
@@ -27,7 +27,7 @@ func TestSplitGroupAgreesWithSluis(t *testing.T) {
 		{"an employee", "emp:otsar", false, "", "", ""},
 		{"an ordinary name", "platform", false, "", "", ""},
 		{"an address", "team@north.example", false, "", "", ""},
-		{"an empty scope", ":access-roster:operator", false, "", "", ""},
+		{"an empty scope", ":sluis:operator", false, "", "", ""},
 		{"an empty role", "mgmt:k8s:", false, "", "", ""},
 		{"four segments", "mgmt:k8s:admin:extra", false, "", "", ""},
 		// What the table above does not say but the code does, so that a change to

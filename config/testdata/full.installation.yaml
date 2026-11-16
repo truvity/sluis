@@ -90,28 +90,28 @@ controllers:
     enabledWorkspaces: [wiki]
 access:
   groups:
-    all:access-roster:operator:
+    all:sluis:operator:
       members: [admin@example.test]
   clients:
     access-console:
       kind: public
       redirects: [https://access.example.test/console/callback]
-      requires: [all:access-roster:operator]
+      requires: [all:sluis:operator]
   github:
     example-org:
-      members: [all:access-roster:operator]
+      members: [all:sluis:operator]
   slack:
     workspaces:
       example:
         channels:
-          ops: {private: true, from: [all:access-roster:operator]}
+          ops: {private: true, from: [all:sluis:operator]}
   outline:
     workspaces:
       wiki:
-        roles: {admin: [all:access-roster:operator]}
+        roles: {admin: [all:sluis:operator]}
         ignore: [key.owner@example.com]
         collections:
-          General: {mode: strict, read_write: [all:access-roster:operator]}
+          General: {mode: strict, read_write: [all:sluis:operator]}
 cloudflare:
   remote:
     function: sluis-cloudflare

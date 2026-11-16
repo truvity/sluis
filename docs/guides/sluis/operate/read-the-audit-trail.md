@@ -6,7 +6,7 @@ Find who did what in an installation, through the console's Audit page or the lo
 
 - sluis records into an [audit installation](../../../concepts/audit/README.md) (`audit.writer` and `audit.query` in the chart) and keeps no trail of its own ([audit actions](../../../reference/sluis/audit-actions.md)).
 
-- The Audit page needs a [connected installation](../connect-audit-installation.md) and a person its grants admit, with groups `<scope>:audit:<role>` in the `access-roster` grants preset. A recovery sign-in cannot read it.
+- The Audit page needs a [connected installation](../connect-audit-installation.md) and a person its grants admit, with groups `<scope>:audit:<role>` in the `sluis` grants preset. A recovery sign-in cannot read it.
 
 - The log lines need `kubectl logs` and `jq`. With no installation connected they are the only copy.
 

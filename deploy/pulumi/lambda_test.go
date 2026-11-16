@@ -112,7 +112,7 @@ func sha(t *testing.T, path string) string {
 // testKeyAdmin administers the keys the library creates in these tests.
 var testKeyAdmin = arnp + "iam::" + account + ":role/key-admin"
 
-const minimalPolicy = "apiVersion: sluis.truvity.github.io/policy/v2\ngroups:\n  all:access-roster:operator: {}\n"
+const minimalPolicy = "apiVersion: sluis.truvity.github.io/policy/v2\ngroups:\n  all:sluis:operator: {}\n"
 
 type estate struct {
 	pkg                 string
@@ -736,7 +736,7 @@ func TestADocumentChangesTheLayerAndNeverThePackage(t *testing.T) {
 		"serve": {config: "issuerURL: https://other.example.test\n"},
 		"controller": {config: "issuerURL: https://access.example.test\n" +
 			"controllers: {github: {interval: 5m, consoleURL: \"https://access.example.test/console\"}}\n"},
-		"policy": {policy: minimalPolicy + "  all:access-roster:viewer: {}\n"},
+		"policy": {policy: minimalPolicy + "  all:sluis:viewer: {}\n"},
 	} {
 		c, changed := build(e)
 		if reflect.DeepEqual(base, changed) {
@@ -799,7 +799,7 @@ func TestTheDocumentsAreTheLibrarysAndHeldToTheBinarysLoader(t *testing.T) {
 func TestThePolicyComesFromADocumentOrARenderedDirectory(t *testing.T) {
 	dir := t.TempDir()
 	for name, body := range map[string]string{
-		"10-policy.yaml":   "version: 1\ngroups:\n  all:access-roster:operator: {}\n",
+		"10-policy.yaml":   "version: 1\ngroups:\n  all:sluis:operator: {}\n",
 		"20-clusters.yaml": "apiVersion: sluis.truvity.github.io/policy/v2\nexchange: {clusters: [{name: devel, issuer: 'https://k.example'}]}\n",
 	} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
@@ -807,7 +807,7 @@ func TestThePolicyComesFromADocumentOrARenderedDirectory(t *testing.T) {
 		}
 	}
 	rec, _ := mustLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.Policy, a.PolicyPath = "", dir }})
-	if p := layerFiles(t, rec)["sluis/policy.yaml"]; !strings.Contains(p, "issuer: https://k.example") || !strings.Contains(p, "all:access-roster:operator") {
+	if p := layerFiles(t, rec)["sluis/policy.yaml"]; !strings.Contains(p, "issuer: https://k.example") || !strings.Contains(p, "all:sluis:operator") {
 		t.Errorf("the rendered policy: %s", p)
 	}
 	if _, _, err := buildLambda(t, estate{mutate: func(a *arp.LambdaArgs) { a.PolicyPath = dir }}); err == nil {

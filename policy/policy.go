@@ -32,7 +32,7 @@ import (
 // Every grant in this policy is named `<scope>:<thing>:<role>` — role,
 // on thing, in scope. `dev:k8s:admin` is admin of dev's Kubernetes;
 // `prod:shop:deployer` deploys the shop project on prod;
-// `all:access-roster:operator` operates this hub across every directory
+// `all:sluis:operator` operates this hub across every directory
 // it serves. The reasoning is in docs/concepts/sluis/trust.md under "Naming";
 // what matters here is that the name is the whole of the fact, carried
 // verbatim into a token's `groups` claim and out of it into a relying
@@ -42,22 +42,22 @@ import (
 // session lifetime and `emp:<slug>` is a person, neither being a role on
 // a thing. A reader who sees two segments knows.
 const (
-	// ThingSelf is what this hub calls itself in the `thing` position.
+	// ThingSluis is what this hub calls itself in the `thing` position.
 	// It holds no role vocabulary of its own — an identity is an operator
 	// because the policy puts it in the operators group, exactly as any
 	// other relying party's roles work — so its own two roles are named
-	// by the same rule as everyone else's.
-	ThingSelf = "access-roster"
-
-	// ThingSluis is the sluis spelling of [ThingSelf]. The hub reads both
-	// during the dual-name window and the old one goes in v1.76; a policy
-	// moves its groups (`all:sluis:operator`) once every estate runs a
-	// release that reads the new name.
+	// by the same rule as everyone else's. The old spelling `access-roster`
+	// (the hub's name before the rename of 2026-10-03) is no longer read.
 	ThingSluis = "sluis"
+
+	// ThingSelf is [ThingSluis].
+	//
+	// Deprecated: use [ThingSluis]. It was `access-roster` until v1.84.0.
+	ThingSelf = ThingSluis
 
 	// ScopeAll is the scope of a role over the whole installation rather
 	// than one directory in it. A real answer, not a placeholder:
-	// `all:access-roster:operator` operates every connected directory,
+	// `all:sluis:operator` operates every connected directory,
 	// which is exactly what the name says.
 	ScopeAll = "all"
 
@@ -104,16 +104,16 @@ var (
 	GroupReporters = ScopedGroup(ScopeAll, RoleReporter)
 )
 
-// IsOperators reports whether name is the installation-wide operators group
-// under either spelling of the thing.
+// IsOperators reports whether name is the installation-wide operators group,
+// `all:sluis:operator`.
 func IsOperators(name string) bool {
-	return name == GroupOperators || name == ScopedGroupOf(ThingSluis, ScopeAll, RoleOperator)
+	return name == GroupOperators
 }
 
-// IsViewers reports whether name is the installation-wide viewers group under
-// either spelling of the thing.
+// IsViewers reports whether name is the installation-wide viewers group,
+// `all:sluis:viewer`.
 func IsViewers(name string) bool {
-	return name == GroupViewers || name == ScopedGroupOf(ThingSluis, ScopeAll, RoleViewer)
+	return name == GroupViewers
 }
 
 // ScopedGroupOf is [ScopedGroup] with the thing spelled by the caller.
@@ -122,7 +122,7 @@ func ScopedGroupOf(thing, workspace, role string) string {
 }
 
 // ScopedGroup names the group that grants one of this hub's roles over
-// one workspace — `C0example:access-roster:operator` administers that
+// one workspace — `C0example:sluis:operator` administers that
 // tenant and no other — or over the whole installation, with [ScopeAll].
 //
 // The scope is a naming convention over the ordinary groups table rather
@@ -135,7 +135,7 @@ func ScopedGroupOf(thing, workspace, role string) string {
 // It is a workspace **id**, never a domain: a tenant is identified by
 // what its backend calls it, and a domain can move between tenants.
 func ScopedGroup(workspace, role string) string {
-	return workspace + Separator + ThingSelf + Separator + role
+	return workspace + Separator + ThingSluis + Separator + role
 }
 
 // ValidWorkspaceID reports whether s can stand in the scope position of
@@ -158,7 +158,7 @@ func ValidWorkspaceID(s string) bool {
 // named "all".
 func SplitScopedGroup(name string) (workspace, role string, mine bool) {
 	scope, thing, role, ok := SplitGroup(name)
-	if !ok || (thing != ThingSelf && thing != ThingSluis) {
+	if !ok || thing != ThingSluis {
 		return "", "", false
 	}
 
@@ -1482,8 +1482,8 @@ func conventional(name string) bool {
 //     [GitHubTeam.Members]/[GitHubTeam.Maintainers])
 //   - any Slack binding (a channel's [SlackChannel.From])
 //   - any Outline binding (a workspace's admin role, or a collection's grants)
-//   - this hub's own roles (groups whose [thing] segment is [ThingSelf] or
-//     [ThingSluis] and whose role is [RoleOperator] or [RoleViewer], which the hub reads
+//   - this hub's own roles (groups whose [thing] segment is [ThingSluis]
+//     and whose role is [RoleOperator] or [RoleViewer], which the hub reads
 //     directly from the token)
 //   - catalogueGroups — see below
 //
@@ -1643,7 +1643,7 @@ func (p Policy) Unconsumed(catalogueGroups ...string) []string {
 	for name := range p.Groups {
 		for _, target := range p.groupKeyTargets(name) {
 			_, thing, role, ok := SplitGroup(target)
-			if ok && (thing == ThingSelf || thing == ThingSluis) && hubRoles[role] {
+			if ok && thing == ThingSluis && hubRoles[role] {
 				consumed[target] = true
 			}
 		}

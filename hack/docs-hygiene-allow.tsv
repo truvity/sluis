@@ -8,13 +8,12 @@ allow	*	(github|slack)_roster	the metric names github_roster.* and slack_roster.
 allow	*	ACCESS_ROSTER_\w*	the ACCESS_ROSTER_* environment fallback and the ACCESS_ROSTER_ISSUER repository variable of the release workflow, still read in v1.75
 allow	*	(__Host-)?access_(roster_recovery|issuer_sso)	the cookies `access_issuer_sso` and `__Host-access_roster_recovery`, wire values in v1.75
 allow	docs/reference/sluis/contracts.md	directoryroster\.v1	the proto package, still served in v1.75 (gen/directoryroster/v1)
-allow	docs/reference/sluis/policy-ownership.md	all:access-roster:(operator|viewer)	the old group spelling the service still reads in v1.75 beside `sluis`, removed in v1.76
 allow	*	access-roster\.truvity\.github\.io/	the Kubernetes label and annotation keys the service still writes in v1.75 (internal/kube)
 allow	*	/var/run/(secrets/)?(access-issuer|github-roster|slack-roster)/	the chart's mount paths, still rendered in v1.75 (tests/golden/sluis)
 allow	*	migrate-from-the-access-issuer-chart\.md	the migration guide's file name, which stays so that links to it hold (the guide is named for the chart it migrates from)
 allow	docs/guides/sluis/migrate/migrate-from-the-access-issuer-chart.md	access-issuer	the guide is about the chart `access-issuer` (nameOverride, old object names)
 allow	docs/guides/sluis/run-conformance.md	access-issuer	hack/conformance-plans.sh and conformance_drive.py hard-code the namespace, ServiceAccount, Secret and plan alias `access-issuer`
-allow	*	`access-roster` grants preset|grants preset `access-roster`|name: access-roster|formerly `access-roster`|called `access-roster`	the grants preset's old name: the only value of the frozen version 1 grants schema, and an alias of `sluis` in version 2 (audit/schemas/config/audit-grants.schema.json), removed in a later release
+allow	*	`access-roster` grants preset|grants preset `access-roster`|name: access-roster|formerly `access-roster`|called `access-roster`	the grants preset's old name: the only value of the frozen version 1 grants schema, read as `sluis`; version 2 refuses it (audit/schemas/config/audit-grants.schema.json)
 allow	docs/reference/sluis/chart-values.md	access-issuer	the page is generated from values.schema.json, whose nameOverride and fullnameOverride descriptions name the chart a migration comes from
 allow	docs/reference/sluis/sluisctl-wrappers.md	accessctl	the managed known-hosts file's old name, which sluisctl copies from once
 allow	docs/reference/sluis/sluisctl.md	(?i:accessctl)	the alias binary, default client id, ACCESSCTL_* variables and config directory sluisctl still reads

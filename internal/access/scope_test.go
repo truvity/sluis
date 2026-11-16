@@ -21,13 +21,13 @@ func TestARoleMayBeHeldOverOneWorkspace(t *testing.T) {
 	set, err := policy.Parse([]byte(`
 version: 1
 groups:
-  all:access-roster:operator:
+  all:sluis:operator:
     matchers:
       - email: boss@north.example
-  C0north:access-roster:operator:
+  C0north:sluis:operator:
     matchers:
       - email: ada@north.example
-  C0south:access-roster:viewer:
+  C0south:sluis:viewer:
     matchers:
       - email: ada@north.example
 `))
@@ -145,7 +145,7 @@ func TestOnlyTheHubsOwnGroupsCarryAScope(t *testing.T) {
 		{"sluis spelling, scoped", "C0north:sluis:operator", true, policy.RoleOperator, "C0north"},
 		{"sluis spelling, installation-wide", "all:sluis:viewer", true, policy.RoleViewer, ""},
 		{"a role this hub does not have", "C0north:access-roster:auditor", false, "", ""},
-		{"an empty scope", ":access-roster:operator", false, "", ""},
+		{"an empty scope", ":sluis:operator", false, "", ""},
 	} {
 		scope, role, mine := policy.SplitScopedGroup(tc.group)
 		if mine != tc.mine || role != tc.wantRole || scope != tc.wantScope {
@@ -155,9 +155,10 @@ func TestOnlyTheHubsOwnGroupsCarryAScope(t *testing.T) {
 	}
 }
 
-// The old and the new spelling of the installation-wide groups confer the
-// same roles, so a policy can be moved to `sluis` group by group.
-func TestBothSpellingsOfTheHubsGroupsConferTheRoles(t *testing.T) {
+// Only the sluis spelling of the hub's groups confers a role. The old spelling,
+// `access-roster` (the hub's name before the rename), is an ordinary group of
+// another thing since v1.84.0: its members hold nothing here.
+func TestOnlyTheSluisSpellingOfTheHubsGroupsConfersTheRoles(t *testing.T) {
 	t.Parallel()
 
 	set, err := policy.Parse([]byte(`
@@ -175,6 +176,9 @@ groups:
   C0north:sluis:operator:
     matchers:
       - email: scoped@north.example
+  C0north:access-roster:operator:
+    matchers:
+      - email: oldscoped@north.example
 `))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
@@ -186,7 +190,6 @@ groups:
 	authorizer := access.NewAuthorizer(compiled, nil, 0)
 
 	for email, want := range map[string]access.Role{
-		"old@north.example":    access.RoleOperator,
 		"new@north.example":    access.RoleOperator,
 		"reader@north.example": access.RoleViewer,
 	} {
@@ -204,5 +207,14 @@ groups:
 	}
 	if !scoped.CanFor(access.RoleOperator, "C0north") || scoped.Can(access.RoleViewer) {
 		t.Error("a workspace operator under the sluis spelling holds the wrong scope")
+	}
+	for _, email := range []string{"old@north.example", "oldscoped@north.example"} {
+		got, err := authorizer.Authorize(context.Background(), access.Principal{Email: email})
+		if err != nil {
+			t.Fatalf("Authorize %s: %v", email, err)
+		}
+		if got.Can(access.RoleViewer) || got.CanFor(access.RoleViewer, "C0north") {
+			t.Errorf("%s holds a role through the old spelling", email)
+		}
 	}
 }
