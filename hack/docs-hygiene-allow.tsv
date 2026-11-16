@@ -14,7 +14,7 @@ allow	*	/var/run/(secrets/)?(access-issuer|github-roster|slack-roster)/	the char
 allow	*	migrate-from-the-access-issuer-chart\.md	the migration guide's file name, which stays so that links to it hold (the guide is named for the chart it migrates from)
 allow	docs/guides/sluis/migrate/migrate-from-the-access-issuer-chart.md	access-issuer	the guide is about the chart `access-issuer` (nameOverride, old object names)
 allow	docs/guides/sluis/run-conformance.md	access-issuer	hack/conformance-plans.sh and conformance_drive.py hard-code the namespace, ServiceAccount, Secret and plan alias `access-issuer`
-allow	*	`access-roster` grants preset|grants preset `access-roster`|name: access-roster	the grants preset's name, the only value of the audit configuration's preset enum (audit/schemas/config/audit-grants.schema.json), still read in v1.75
+allow	*	`access-roster` grants preset|grants preset `access-roster`|name: access-roster|formerly `access-roster`|called `access-roster`	the grants preset's old name: the only value of the frozen version 1 grants schema, and an alias of `sluis` in version 2 (audit/schemas/config/audit-grants.schema.json), removed in a later release
 allow	docs/reference/sluis/chart-values.md	access-issuer	the page is generated from values.schema.json, whose nameOverride and fullnameOverride descriptions name the chart a migration comes from
 allow	docs/reference/sluis/sluisctl-wrappers.md	accessctl	the managed known-hosts file's old name, which sluisctl copies from once
 allow	docs/reference/sluis/sluisctl.md	(?i:accessctl)	the alias binary, default client id, ACCESSCTL_* variables and config directory sluisctl still reads
