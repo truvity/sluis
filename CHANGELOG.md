@@ -1,8 +1,13 @@
 ## Unreleased
 
+## v1.82.1
+
+A patch release: the release workflow keeps the GitHub release a draft until every job passed, because a published release on this repository is immutable. It replaces v1.82.0, whose release is incomplete (no Nix flake, no audit archives, no merged `checksums.txt` or signature bundle) and whose npm packages, module images and module tags were never published. Non-major dependency updates move with it. Upgrade notes: use v1.82.1 instead of v1.82.0.
+
 ### Changed
 
 - **The release is published last.** Releases on this repository are immutable once published, and v1.82.0 failed because goreleaser published it before the Nix flake, audit's assets, the merged `checksums.txt` and the cosign bundle were added; v1.82.0 stays incomplete and its tag cannot be used again. Both goreleaser configs now leave the release a draft (`draft`, `use_existing_draft`), every job adds to the draft, and a new `publish` job publishes it once every other job of the release workflow passed. A failed job leaves a draft that a re-run completes. **Upgrade:** none.
+- **Non-major dependency updates.** `truvity/ci-actions` v3.14.0 in the CI and release workflows, Node 24.22.3 in CI, and `vite` 8.3.8 in the lock file of `frontend`. **Upgrade:** none.
 
 ## v1.82.0
 
