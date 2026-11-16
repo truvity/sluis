@@ -52,12 +52,12 @@ func TestARefreshEventReconcilesTheGeneratedClientSecrets(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "policy.yaml"), []byte(`
 version: 1
 groups:
-  all:access-roster:operator: { members: [platform@north.example] }
-  all:access-roster:viewer: {}
+  all:sluis:operator: { members: [platform@north.example] }
+  all:sluis:viewer: {}
 lifetimes: { default: 12h }
 clients:
-  console: { kind: public, requires: [all:access-roster:operator], redirects: ["https://access.example/console/callback"] }
-  grafana: { kind: confidential, secret: { generate: true }, requires: [all:access-roster:operator] }
+  console: { kind: public, requires: [all:sluis:operator], redirects: ["https://access.example/console/callback"] }
+  grafana: { kind: confidential, secret: { generate: true }, requires: [all:sluis:operator] }
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}

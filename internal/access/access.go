@@ -438,7 +438,7 @@ func roleOf(result policy.Result) Role {
 
 // scopesOf reads the roles held over one workspace each, from the same
 // table and by the same rule: an identity administers C0example because
-// it is in `C0example:access-roster:operator`.
+// it is in `C0example:sluis:operator`.
 //
 // An installation-wide name reports no workspace and is skipped here —
 // it is the identity's ordinary role, read elsewhere, and a scope map

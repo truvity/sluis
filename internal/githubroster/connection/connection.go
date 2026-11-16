@@ -55,7 +55,7 @@ type Record struct {
 	ConnectedBy    string    `json:"connected_by"`
 	// Owner is the directory workspace id that owns this organisation,
 	// chosen when it was connected: the workspace whose SCOPED operator
-	// (`<id>:access-roster:operator`) may operate it beside the
+	// (`<id>:sluis:operator`) may operate it beside the
 	// installation-wide operator. Empty, only the installation-wide roles
 	// operate it. Only the installation-wide operator changes it
 	// afterwards. The field is optional in version 1, so a record written

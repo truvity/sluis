@@ -1,21 +1,21 @@
 apiVersion: sluis.truvity.github.io/policy/v2
 groups:
-  all:access-roster:operator:
-    members:
-      - admin@example.test
-    matchers:
-      - service_account:
-          namespace: access-issuer
-          name: access-issuer-recovery
-  all:access-roster:viewer:
-    matchers:
-      - email_domain: example.test
   all:audit:security:
     members:
       - admin@example.test
   all:grafana:admin:
     members:
       - admin@example.test
+  all:sluis:operator:
+    members:
+      - admin@example.test
+    matchers:
+      - service_account:
+          namespace: access-issuer
+          name: access-issuer-recovery
+  all:sluis:viewer:
+    matchers:
+      - email_domain: example.test
   example:k8s:admin:
     members:
       - admin@example.test
@@ -27,7 +27,7 @@ clients:
     redirects:
       - https://access.example.test/console/callback
     requires:
-      - all:access-roster:viewer
+      - all:sluis:viewer
   audit:
     kind: exchange
     requires:
@@ -42,7 +42,7 @@ clients:
 github:
   example-org:
     members:
-      - all:access-roster:viewer
+      - all:sluis:viewer
 exchange:
   github:
     owners:

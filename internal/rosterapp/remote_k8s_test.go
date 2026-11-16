@@ -41,9 +41,9 @@ func TestTheIssuerReachesAKubernetesGitHubModuleAndHoldsNoGitHubStore(t *testing
 	dir := t.TempDir()
 	policyFile := e2eWrite(t, dir, "policy.yaml", `apiVersion: sluis.truvity.github.io/policy/v2
 groups:
-  all:access-roster:operator: { members: [`+e2eLinkUser+`] }
-  all:access-roster:viewer: {}
-github: { `+e2eOrg+`: { members: [all:access-roster:operator] } }
+  all:sluis:operator: { members: [`+e2eLinkUser+`] }
+  all:sluis:viewer: {}
+github: { `+e2eOrg+`: { members: [all:sluis:operator] } }
 apps:
   github:
     apps:
@@ -52,10 +52,10 @@ apps:
         org: `+e2eOrg+`
         permissions: { contents: read, metadata: read }
         grants:
-          - { group: all:access-roster:operator, repositories: ["*"], permissions: { contents: read } }
+          - { group: all:sluis:operator, repositories: ["*"], permissions: { contents: read } }
 lifetimes: { default: 12h }
 clients:
-  console: { kind: public, requires: [all:access-roster:operator], redirects: ["`+e2eMount+`/callback"] }
+  console: { kind: public, requires: [all:sluis:operator], redirects: ["`+e2eMount+`/callback"] }
 `)
 
 	// The module: its own store, the real mint and console servers, behind modserve
@@ -128,7 +128,7 @@ github: {remote: {url: ` + module.URL + `, tokenFile: ` + tokenFile + `}}
 	})
 
 	t.Run("the mint is the module's over modserve", func(t *testing.T) {
-		minted, err := app.Issuer().MintGitHubToken(context.Background(), []string{"all:access-roster:operator"},
+		minted, err := app.Issuer().MintGitHubToken(context.Background(), []string{"all:sluis:operator"},
 			issuer.GitHubTokenRequest{App: "renovate", Permissions: map[string]string{"contents": "read"}})
 		if err != nil {
 			t.Fatalf("mint: %v", err)

@@ -80,13 +80,13 @@ func (h *Harness) IssuerDocument(t *testing.T) string {
 	if err := os.WriteFile(policy, []byte(`
 version: 1
 groups:
-  all:access-roster:operator:
+  all:sluis:operator:
     members: [platform@acme.example]
     matchers: [{service_account: {namespace: sluis, name: recovery}}]
-  all:access-roster:viewer: {}
+  all:sluis:viewer: {}
 lifetimes: { default: 12h }
 clients:
-  console: { kind: public, requires: [all:access-roster:operator], redirects: ["https://access.acme.example/console/callback"] }
+  console: { kind: public, requires: [all:sluis:operator], redirects: ["https://access.acme.example/console/callback"] }
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}

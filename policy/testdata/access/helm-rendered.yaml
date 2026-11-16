@@ -9,7 +9,7 @@ groups:
     matchers:
       - email: ada@example.com
       - email: grace@example.com
-  "all:access-roster:viewer":
+  "all:sluis:viewer":
     matchers:
       - email: lin@example.com
       - email_domain: example.com
@@ -44,7 +44,7 @@ groups:
           path: "/"
   "alpha:docs:reader":
 
-  "all:access-roster:operator":
+  "all:sluis:operator":
     matchers:
       - service_account:
           name: access-issuer-recovery
@@ -150,7 +150,7 @@ clients:
     backchannel_logout_uri: "https://console.example.com/oauth2/backchannel-logout"
     ttl_cap: "8h"
     requires:
-      - all:access-roster:viewer
+      - all:sluis:viewer
     groups:
       - k8s
       - docs

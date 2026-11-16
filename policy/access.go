@@ -34,7 +34,7 @@ import (
 //	      emails: [ada@example.com]
 //	overlay:
 //	  groups:
-//	    all:access-roster:operator:
+//	    all:sluis:operator:
 //	      matchers: [...]
 type AccessDocument struct {
 	// Version is the policy schema's, as in [Policy.Version].

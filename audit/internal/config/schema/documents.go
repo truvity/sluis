@@ -95,9 +95,9 @@ func grantsSchema() m {
 		m{
 			"issuers": issuers("The token issuers trusted to say who a caller is. They live in this file, beside the rules, because a rule is only as safe as the issuers able to satisfy it."),
 			"presets": m{
-				"type": "array", "description": "Grant presets, which read grants out of a claim's vocabulary rather than one value each. Only `sluis` exists; `access-roster`, its name before the rename, is still accepted and is removed in a later release.",
+				"type": "array", "description": "Grant presets, which read grants out of a claim's vocabulary rather than one value each. Only `sluis` exists. Its name before the rename, `access-roster`, is refused here; only a version-1 file may still use it.",
 				"items": obj("A grant preset.", m{
-					"name":   m{"enum": []string{"sluis", "access-roster"}, "description": "The preset. `access-roster` is the old name of `sluis`."},
+					"name":   m{"enum": []string{"sluis"}, "description": "The preset."},
 					"issuer": str("The issuer whose claims it reads."),
 					"claim":  str("The claim it reads."),
 				}, "name"),

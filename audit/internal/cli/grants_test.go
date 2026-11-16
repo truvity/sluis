@@ -161,20 +161,28 @@ presets: [{name: access-roster}]
 	}
 }
 
-// The preset is called sluis in version 2; its old name, access-roster, is
-// still read as sluis there (and is all a frozen version 1 file knows).
-func TestLoadAccessAcceptsTheOldPresetName(t *testing.T) {
+// The preset is called sluis. Its old name, access-roster, is refused in a
+// version-2 file and still read as sluis in a frozen version-1 file, the only
+// name that version knows.
+func TestLoadAccessReadsTheOldPresetNameOnlyInVersion1(t *testing.T) {
 	profiles := map[string]*profile.Profile{"sec": {Name: "sec", Frameworks: []string{"security"}}}
-	for _, name := range []string{"sluis", "access-roster"} {
-		body := "apiVersion: audit.truvity.github.io/audit-grants/v2\n" +
-			"issuers: [{url: https://staff.example, audience: audit}]\npresets: [{name: " + name + "}]\n"
+	for _, body := range []string{
+		"apiVersion: audit.truvity.github.io/audit-grants/v2\n" +
+			"issuers: [{url: https://staff.example, audience: audit}]\npresets: [{name: sluis}]\n",
+		"issuers: [{url: https://staff.example, audience: audit}]\npresets: [{name: access-roster}]\n",
+	} {
 		access, err := LoadAccess(grantsFile(t, body), profiles)
 		if err != nil {
-			t.Fatalf("preset %s: %v", name, err)
+			t.Fatalf("%q: %v", body, err)
 		}
 		if len(access.Rules.Presets) != 1 || access.Rules.Presets[0].Name() != "sluis" {
-			t.Fatalf("preset %s did not load as sluis: %+v", name, access.Rules.Presets)
+			t.Fatalf("%q did not load as sluis: %+v", body, access.Rules.Presets)
 		}
+	}
+	old := "apiVersion: audit.truvity.github.io/audit-grants/v2\n" +
+		"issuers: [{url: https://staff.example, audience: audit}]\npresets: [{name: access-roster}]\n"
+	if _, err := LoadAccess(grantsFile(t, old), profiles); err == nil {
+		t.Fatal("a version-2 file with the old preset name was accepted")
 	}
 	unknown := "apiVersion: audit.truvity.github.io/audit-grants/v2\n" +
 		"issuers: [{url: https://staff.example, audience: audit}]\npresets: [{name: roster}]\n"

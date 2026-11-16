@@ -54,7 +54,7 @@ change.
 - `ACCESS_ROSTER_ISSUER` as a name in the contract, `token-source: access-roster`
   on the GitHub Action, the `access-roster-issuer` input of the shared release
   workflow, and the grants preset `access-roster`.
-- The group names `all:access-roster:*`, `<scope>:access-roster:operator|viewer`:
+- The group names `all:sluis:*`, `<scope>:sluis:operator|viewer`:
   the *thing* segment of a group (`policy.ThingSelf`, `groups: [access-roster]`)
   is read by every relying party's RBAC.
 - The Kubernetes label and annotation keys `access-roster.truvity.github.io/*`.

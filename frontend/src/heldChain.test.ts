@@ -43,11 +43,11 @@ describe("formatChain", () => {
 
   it("reads a matcher's own description as it is, never as a directory group", () => {
     const held = create(HeldGroupSchema, {
-      group: "all:access-roster:operator",
+      group: "all:sluis:operator",
       via: ["signed in as ada@example.com"],
-      grantedByKey: "all:access-roster:operator",
+      grantedByKey: "all:sluis:operator",
     });
-    expect(formatChain(held, [held])).toBe("all:access-roster:operator ← signed in as ada@example.com");
+    expect(formatChain(held, [held])).toBe("all:sluis:operator ← signed in as ada@example.com");
   });
 
   it("joins more than one directory group behind the same key", () => {

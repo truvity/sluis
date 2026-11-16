@@ -14,7 +14,7 @@ import (
 func TestPolicyRenderWritesADocumentTheServiceLoads(t *testing.T) {
 	dir := t.TempDir()
 	for name, body := range map[string]string{
-		"policy.yaml":   "version: 1\ngroups:\n  all:access-roster:operator: {}\n",
+		"policy.yaml":   "version: 1\ngroups:\n  all:sluis:operator: {}\n",
 		"clusters.yaml": "apiVersion: sluis.truvity.github.io/policy/v2\nexchange: {clusters: [{name: devel, issuer: 'https://k.example'}]}\n",
 	} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {

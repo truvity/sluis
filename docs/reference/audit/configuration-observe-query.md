@@ -112,7 +112,7 @@ presets:
     claim: groups                        # the default
 ```
 
-The `sluis` grants preset (formerly `access-roster`, still accepted) reads groups named `<scope>:audit:<role>`, the grant grammar from sluis. The scope is `all` or an audit tenant id, byte for byte.
+The `sluis` grants preset (formerly `access-roster`, accepted only in a version-1 file) reads groups named `<scope>:audit:<role>`, the grant grammar from sluis. The scope is `all` or an audit tenant id, byte for byte.
 
 | Role | Profiles built from | Operations | `all` allowed |
 |---|---|---|---|

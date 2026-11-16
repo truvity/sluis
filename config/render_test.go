@@ -475,18 +475,17 @@ func TestCloudflareIsSplitBetweenTheTwoDocuments(t *testing.T) {
 	}
 }
 
-// A policy may name the hub's own groups with either spelling: render keeps
-// both in the policy document and refuses neither.
-func TestRenderAcceptsBothSpellingsOfTheHubsGroups(t *testing.T) {
+// A policy names the hub's own groups with the sluis spelling: render keeps
+// them in the policy document.
+func TestRenderKeepsTheHubsGroups(t *testing.T) {
 	in := installation(t, "example")
-	in.Access.Groups["all:access-roster:operator"] = policy.Group{}
 	in.Access.Groups["all:sluis:operator"] = policy.Group{}
 	in.Access.Groups["C0north:sluis:viewer"] = policy.Group{}
 	_, pol, err := config.Render(in)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"all:access-roster:operator", "all:sluis:operator", "C0north:sluis:viewer"} {
+	for _, name := range []string{"all:sluis:operator", "C0north:sluis:viewer"} {
 		if !strings.Contains(string(pol), name) {
 			t.Errorf("the policy document lost %s:\n%s", name, pol)
 		}

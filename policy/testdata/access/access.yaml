@@ -14,7 +14,7 @@ access:
     emails:
     - ada@example.com
     - grace@example.com
-  - name: all:access-roster:viewer
+  - name: all:sluis:viewer
     emails:
     - lin@example.com
   - name: alpha:ci:release
@@ -116,7 +116,7 @@ access:
     backchannelLogout: https://console.example.com/oauth2/backchannel-logout
     ttlCap: 8h
     requires:
-    - all:access-roster:viewer
+    - all:sluis:viewer
     groups:
     - k8s
     - docs
@@ -150,7 +150,7 @@ access:
     groups: all
 overlay:
   groups:
-    all:access-roster:operator:
+    all:sluis:operator:
       matchers:
       - &id001
         service_account:
@@ -165,7 +165,7 @@ overlay:
           cluster: beta
           namespace: sluis-probe
           name: exchange-probe
-    all:access-roster:viewer:
+    all:sluis:viewer:
       matchers:
       - email_domain: example.com
       - service_account:

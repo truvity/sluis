@@ -127,13 +127,13 @@ controllers:
 
 access:
   groups:
-    all:access-roster:viewer:
+    all:sluis:viewer:
       matchers: [{email_domain: example.test}]
     all:ci:runner:
       matchers:
         - github: {owner: example-org, ref: refs/heads/main}
         - github: {owner: example-forms, ref: refs/heads/main}
-    all:access-roster:operator:
+    all:sluis:operator:
       members: [admin@example.test]
     all:argocd:admin:
       members: [admin@example.test]
@@ -169,7 +169,7 @@ access:
     access-console:
       kind: public
       redirects: [https://access.example.test/console/callback]
-      requires: [all:access-roster:viewer]
+      requires: [all:sluis:viewer]
     argocd:
       kind: confidential
       secret: clients/argocd/secret
@@ -240,7 +240,7 @@ access:
     sluisctl:
       kind: public
       redirects: [http://localhost:8017/callback]
-      requires: [all:access-roster:viewer]
+      requires: [all:sluis:viewer]
     mcp-docs:
       kind: public
       redirects: [http://localhost:8018/callback]
@@ -255,11 +255,11 @@ access:
       requires: [all:github:reader]
   github:
     example-org:
-      members: [all:access-roster:viewer]
+      members: [all:sluis:viewer]
     example-forms:
-      members: [all:access-roster:viewer]
+      members: [all:sluis:viewer]
   slack:
     workspaces:
       example:
         channels:
-          ops: {private: true, from: [all:access-roster:operator]}
+          ops: {private: true, from: [all:sluis:operator]}

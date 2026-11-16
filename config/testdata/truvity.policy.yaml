@@ -1,11 +1,5 @@
 apiVersion: sluis.truvity.github.io/policy/v2
 groups:
-  all:access-roster:operator:
-    members:
-      - admin@example.test
-  all:access-roster:viewer:
-    matchers:
-      - email_domain: example.test
   all:argocd:admin:
     members:
       - admin@example.test
@@ -50,6 +44,12 @@ groups:
   all:registry:admin:
     members:
       - admin@example.test
+  all:sluis:operator:
+    members:
+      - admin@example.test
+  all:sluis:viewer:
+    matchers:
+      - email_domain: example.test
   all:ssh:operator:
     members:
       - admin@example.test
@@ -64,7 +64,7 @@ clients:
     redirects:
       - https://access.example.test/console/callback
     requires:
-      - all:access-roster:viewer
+      - all:sluis:viewer
   argocd:
     kind: confidential
     secret: clients/argocd/secret
@@ -168,7 +168,7 @@ clients:
     redirects:
       - http://localhost:8017/callback
     requires:
-      - all:access-roster:viewer
+      - all:sluis:viewer
   vmauth:
     kind: confidential
     secret: clients/vmauth/secret
@@ -185,10 +185,10 @@ clients:
 github:
   example-forms:
     members:
-      - all:access-roster:viewer
+      - all:sluis:viewer
   example-org:
     members:
-      - all:access-roster:viewer
+      - all:sluis:viewer
 slack:
   workspaces:
     example:
@@ -196,7 +196,7 @@ slack:
         ops:
           private: true
           from:
-            - all:access-roster:operator
+            - all:sluis:operator
 exchange:
   clusters:
     - name: staging

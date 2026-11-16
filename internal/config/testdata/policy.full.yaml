@@ -6,7 +6,7 @@ vocabulary:
     all: {}
     prod: {sensitive: true}
   things:
-    access-roster:
+    sluis:
       scopes: [all]
       roles:
         operator: [viewer]
@@ -17,16 +17,16 @@ vocabulary:
       roles:
         deployer: {implies: [], scopes: [prod]}
 groups:
-  all:access-roster:operator:
+  all:sluis:operator:
     members: [ops@example.com]
     matchers:
       - service_account: {cluster: devel, namespace: access-issuer, name: access-issuer-recovery}
       - github: {repository: example-org/infra, ref: refs/heads/main, workflow_ref: "example-org/infra/.github/workflows/*@refs/heads/main"}
-  all:access-roster:viewer:
+  all:sluis:viewer:
     matchers:
       - aws: {account: "111122223333", role: sluis-github}
       - email_domain: example.com
-  all:access-roster:releaser:
+  all:sluis:releaser:
     matchers:
       - github: {repository: example-org/example-repo, ref: "refs/tags/v*", job_workflow_ref: "example-org/example-repo/.github/workflows/release.yml@refs/tags/v*"}
   prod:shop:deployer:
@@ -44,18 +44,18 @@ resources:
     ttl_cap: 30m
 client_documents:
   origins: [apps.example]
-  requires: [all:access-roster:viewer]
+  requires: [all:sluis:viewer]
 clients:
   access-console:
     kind: public
     redirects: [https://access.example/console/callback]
-    requires: [all:access-roster:viewer]
+    requires: [all:sluis:viewer]
     groups: all
 github:
   example-org:
-    members: [all:access-roster:viewer]
+    members: [all:sluis:viewer]
     teams:
-      platform: {members: [all:access-roster:operator], maintainers: [all:access-roster:operator]}
+      platform: {members: [all:sluis:operator], maintainers: [all:sluis:operator]}
     ignore: [bot@example.com]
 people:
   ada: [ada@example.com, ada@other.example]
@@ -63,15 +63,15 @@ slack:
   workspaces:
     example:
       channels:
-        ops: {private: true, from: [all:access-roster:operator]}
+        ops: {private: true, from: [all:sluis:operator]}
 outline:
   workspaces:
     wiki:
       client: access-console
-      roles: {admin: [all:access-roster:operator]}
+      roles: {admin: [all:sluis:operator]}
       ignore: [key.owner@example.com]
       collections:
-        General: {mode: strict, read_write: [all:access-roster:viewer], admin: [all:access-roster:operator]}
+        General: {mode: strict, read_write: [all:sluis:viewer], admin: [all:sluis:operator]}
         Shop: {mode: strict, directory: example.com, read: [prod:shop:deployer]}
 exchange_limits:
   - match: {aws: {account: "111122223333", role: sluis-github, path: /}}
@@ -109,7 +109,7 @@ apps:
         events: [push]
         installation: selected
         grants:
-          - {group: "all:access-roster:operator", repositories: ["*"], permissions: {contents: read}}
+          - {group: "all:sluis:operator", repositories: ["*"], permissions: {contents: read}}
   slack:
     catalogue:
       - {id: alerts, workspace: example, name: example-alerts, description: Alerts, botScopes: ["chat:write"]}
@@ -119,9 +119,9 @@ controllers:
   outline: {enabledWorkspaces: [wiki]}
 cloudflare:
   grants:
-    - group: "all:access-roster:operator"
+    - group: "all:sluis:operator"
       presets: [dns-example, r2-archive]
-    - group: "all:access-roster:releaser"
+    - group: "all:sluis:releaser"
       presets: [dns-example]
 backup:
-  runGroups: ["all:access-roster:operator"]
+  runGroups: ["all:sluis:operator"]

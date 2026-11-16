@@ -7,7 +7,7 @@ import (
 	"github.com/truvity/sluis/audit/sdk/auth"
 )
 
-// AccessRoster reads grants out of access-roster's group vocabulary.
+// AccessRoster reads grants out of sluis's group vocabulary.
 //
 // Every grant there is named `<scope>:<thing>:<role>` — role, on thing, in
 // scope — and this preset reads the ones whose thing is "audit". The scope is
@@ -119,7 +119,7 @@ func (r role) covers(presets []string) bool {
 }
 
 // Name implements Preset. The preset was called "access-roster" before the
-// hub was renamed sluis; a grants file may still say so (see the loader).
+// hub was renamed sluis; only a version-1 grants file may still say so.
 func (AccessRoster) Name() string { return "sluis" }
 
 // Issuer implements Preset.

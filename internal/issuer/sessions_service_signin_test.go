@@ -34,7 +34,7 @@ const (
 const accountsPolicy = `
 version: 1
 groups:
-  all:access-roster:operator:
+  all:sluis:operator:
     members: [directory-admins@north.example]
     matchers:
       - service_account: { namespace: sluis, name: recovery }

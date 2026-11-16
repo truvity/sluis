@@ -25,7 +25,7 @@ import (
 
 var (
 	operatorBearer = "ada@north.example|" + policy.GroupOperators
-	viewerBearer   = "bob@north.example|engineers,all:access-roster:viewer"
+	viewerBearer   = "bob@north.example|engineers,all:sluis:viewer"
 )
 
 type secretsRig struct {

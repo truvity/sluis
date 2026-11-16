@@ -212,7 +212,7 @@ func compareKeys(t *testing.T, at string, node map[string]any, typ reflect.Type)
 
 // What the checks refuse, each named in the error.
 func TestThePolicyDocumentChecksItsReferences(t *testing.T) {
-	base := "apiVersion: sluis.truvity.github.io/policy/v2\ngroups:\n  all:access-roster:operator: {}\n"
+	base := "apiVersion: sluis.truvity.github.io/policy/v2\ngroups:\n  all:sluis:operator: {}\n"
 	for name, c := range map[string]struct{ body, want string }{
 		"a grant naming an undeclared group": {
 			base + "apps: {github: {catalogue: [{id: a, org: o, permissions: {contents: read}, " +
@@ -270,7 +270,7 @@ func TestThePolicyDocumentIsStrict(t *testing.T) {
 // A v1 policy file, and an access document, are each one layer: a policy
 // document of tables alone.
 func TestAV1PolicyFileLoadsAsADocument(t *testing.T) {
-	d, err := config.Load[config.PolicyDocument](write(t, "version: 1\ngroups:\n  all:access-roster:operator: {}\n"))
+	d, err := config.Load[config.PolicyDocument](write(t, "version: 1\ngroups:\n  all:sluis:operator: {}\n"))
 	if err != nil || d.APIVersion != config.APIVersion("policy") || len(d.Policy.Groups) != 1 || d.Exchange != nil {
 		t.Fatalf("%+v %v", d, err)
 	}
@@ -314,12 +314,12 @@ func TestAV1ServeDocumentConvertsWithItsFiles(t *testing.T) {
 	if err := os.Mkdir(policyDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	writeIn(t, policyDir, "policy.yaml", "version: 1\ngroups:\n  all:access-roster:operator: {}\nslack: {workspaces: {example: {}}}\n")
+	writeIn(t, policyDir, "policy.yaml", "version: 1\ngroups:\n  all:sluis:operator: {}\nslack: {workspaces: {example: {}}}\n")
 	writeIn(t, policyDir, "access.yaml", "version: 1\naccess:\n  groups:\n    - name: all:shop:viewer\n      emails: [ada@example.com]\n")
 	clusters := writeIn(t, dir, "clusters.yaml", "clusters:\n  - {name: devel, issuer: 'https://k.example'}\n")
 	aws := writeIn(t, dir, "aws.yaml", "audience: x\nmaxAge: 5m\naccounts:\n  - {account: '111122223333', name: apps, issuer: 'https://i.example'}\n")
 	gh := writeIn(t, dir, "gh.yaml", "apps:\n  - {id: renovate, org: example-org, permissions: {contents: read}, "+
-		"grants: [{group: 'all:access-roster:operator', repositories: ['*'], permissions: {contents: read}}]}\n")
+		"grants: [{group: 'all:sluis:operator', repositories: ['*'], permissions: {contents: read}}]}\n")
 	sl := writeIn(t, dir, "slack.yaml", "apps:\n  - {id: alerts, workspace: example, botScopes: ['chat:write']}\n")
 	overlay := writeIn(t, dir, "overlay.yaml", "workspaces:\n  - {backend: google, admin: a@example.com, keySecret: directory/acme/key}\n")
 	serve := writeIn(t, dir, "serve.yaml", "issuerURL: https://access.example\n"+
@@ -383,7 +383,7 @@ func TestAV2ServeDocumentReadsItsPolicyDocument(t *testing.T) {
 	if c.Policy == nil || len(c.Policy.Policy.Groups) != 4 {
 		t.Errorf("the policy document was not read: %+v", c.Policy)
 	}
-	fallback := policy.Policy{Version: 1, Groups: map[string]policy.Group{"all:access-roster:operator": {}}}
+	fallback := policy.Policy{Version: 1, Groups: map[string]policy.Group{"all:sluis:operator": {}}}
 	none := writeIn(t, dir, "none.yaml", "apiVersion: sluis.truvity.github.io/serve/v2\nissuerURL: https://access.example\n")
 	if c, err = config.LoadConfig[config.Serve](none, &fallback); err != nil || len(c.Policy.Policy.Groups) != 1 {
 		t.Errorf("a document naming no policy decides by the fallback: %+v %v", c.Policy, err)
@@ -394,7 +394,7 @@ func TestAV2ServeDocumentReadsItsPolicyDocument(t *testing.T) {
 // same checks.
 func TestRenderMergesEveryKindOfLayer(t *testing.T) {
 	dir := t.TempDir()
-	writeIn(t, dir, "10-policy.yaml", "version: 1\ngroups:\n  all:access-roster:operator: {}\ngithub: {example-org: {members: ['all:access-roster:operator']}}\n")
+	writeIn(t, dir, "10-policy.yaml", "version: 1\ngroups:\n  all:sluis:operator: {}\ngithub: {example-org: {members: ['all:sluis:operator']}}\n")
 	writeIn(t, dir, "20-access.yaml", "version: 1\naccess:\n  groups:\n    - name: all:shop:viewer\n      emails: [ada@example.com]\n")
 	writeIn(t, dir, "30-clusters.yaml", "apiVersion: sluis.truvity.github.io/policy/v2\n"+
 		"exchange: {clusters: [{name: devel, issuer: 'https://k.example'}], github: {owners: [a]}}\n")

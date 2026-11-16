@@ -63,9 +63,9 @@ func signInHarness(t *testing.T, email string) *ConsoleServer {
 	declared, err := policy.Parse([]byte(`
 version: 1
 groups:
-  all:access-roster:operator: { members: [platform@north.example] }
+  all:sluis:operator: { members: [platform@north.example] }
 claims:
-  all:access-roster:operator: { groups: [hub:operator] }
+  all:sluis:operator: { groups: [hub:operator] }
 lifetimes: { default: 12h }
 `))
 	if err != nil {

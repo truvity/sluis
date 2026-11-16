@@ -21,11 +21,11 @@ func open(t *testing.T, extra string) *lambdaapp.Function {
 	policy := filepath.Join(dir, "policy.yaml")
 	if err := os.WriteFile(policy, []byte(`apiVersion: sluis.truvity.github.io/policy/v2
 groups:
-  all:access-roster:operator: { members: [platform@north.example] }
-  all:access-roster:viewer: {}
-github: { acme: { members: [all:access-roster:operator] } }
+  all:sluis:operator: { members: [platform@north.example] }
+  all:sluis:viewer: {}
+github: { acme: { members: [all:sluis:operator] } }
 clients:
-  console: { kind: public, requires: [all:access-roster:operator], redirects: ["https://access.example/console/callback"] }
+  console: { kind: public, requires: [all:sluis:operator], redirects: ["https://access.example/console/callback"] }
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}

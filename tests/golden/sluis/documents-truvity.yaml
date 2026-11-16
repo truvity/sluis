@@ -195,12 +195,6 @@ data:
   policy.yaml: |
     apiVersion: sluis.truvity.github.io/policy/v2
     groups:
-      all:access-roster:operator:
-        members:
-          - admin@example.test
-      all:access-roster:viewer:
-        matchers:
-          - email_domain: example.test
       all:argocd:admin:
         members:
           - admin@example.test
@@ -245,6 +239,12 @@ data:
       all:registry:admin:
         members:
           - admin@example.test
+      all:sluis:operator:
+        members:
+          - admin@example.test
+      all:sluis:viewer:
+        matchers:
+          - email_domain: example.test
       all:ssh:operator:
         members:
           - admin@example.test
@@ -259,7 +259,7 @@ data:
         redirects:
           - https://access.example.test/console/callback
         requires:
-          - all:access-roster:viewer
+          - all:sluis:viewer
       argocd:
         kind: confidential
         secret: clients/argocd/secret
@@ -363,7 +363,7 @@ data:
         redirects:
           - http://localhost:8017/callback
         requires:
-          - all:access-roster:viewer
+          - all:sluis:viewer
       vmauth:
         kind: confidential
         secret: clients/vmauth/secret
@@ -380,10 +380,10 @@ data:
     github:
       example-forms:
         members:
-          - all:access-roster:viewer
+          - all:sluis:viewer
       example-org:
         members:
-          - all:access-roster:viewer
+          - all:sluis:viewer
     slack:
       workspaces:
         example:
@@ -391,7 +391,7 @@ data:
             ops:
               private: true
               from:
-                - all:access-roster:operator
+                - all:sluis:operator
     exchange:
       clusters:
         - name: staging
@@ -627,7 +627,7 @@ spec:
         # Each document is read once, at start: a change to it, or to the
         # policy, is a rollout.
         checksum/config: e5625062454330c4cd52685e7167d9a1dbaf1c1b111f8bf08624e4a823bb6648
-        checksum/policy: 264a1aa58a2c2090b55ab756166be63b6f0027f8aac4406a0fbc6a4525656c0a
+        checksum/policy: eb427443ee3d69bdbb51df6204e2a9e98f237fe52e4db72f042a81d1e031c6fd
         checksum/verify-keys: 18ec558ab1c2237d4c0fb00f26dfabc2e1a44002e46a9029553e8a19605e08cd
     spec:
       serviceAccountName: sluis-issuer

@@ -36,7 +36,7 @@
       "type": "array"
     },
     "presets": {
-      "description": "Grant presets, which read grants out of a claim's vocabulary rather than one value each. Only `sluis` exists; `access-roster`, its name before the rename, is still accepted and is removed in a later release.",
+      "description": "Grant presets, which read grants out of a claim's vocabulary rather than one value each. Only `sluis` exists. Its name before the rename, `access-roster`, is refused here; only a version-1 file may still use it.",
       "items": {
         "additionalProperties": false,
         "description": "A grant preset.",
@@ -52,10 +52,9 @@
             "type": "string"
           },
           "name": {
-            "description": "The preset. `access-roster` is the old name of `sluis`.",
+            "description": "The preset.",
             "enum": [
-              "sluis",
-              "access-roster"
+              "sluis"
             ]
           }
         },

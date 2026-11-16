@@ -56,8 +56,8 @@ groups:
   rung:platform:       { members: [directory-admins@north.example] }
   rung:engineering:    { members: [engineering@north.example, engineering@south.example] }
   rung:security:       { members: [security@south.example] }
-  all:access-roster:operator: { members: [directory-admins@north.example] }
-  all:access-roster:viewer:   { members: [everyone@north.example, everyone@south.example] }
+  all:sluis:operator: { members: [directory-admins@north.example] }
+  all:sluis:viewer:   { members: [everyone@north.example, everyone@south.example] }
   all:gitops:deployer:
     matchers:
       - github: { repository: example-org/gitops, ref: refs/heads/master }
@@ -95,7 +95,7 @@ clients:
     requires: [devel:k8s:viewer]
 github:
   example-org:
-    members: [all:access-roster:viewer]
+    members: [all:sluis:viewer]
     teams:
       team-engineering:
         members: [devel:k8s:viewer]

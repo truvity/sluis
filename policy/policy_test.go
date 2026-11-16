@@ -21,9 +21,9 @@ groups:
     members: [role-sre@a.example, role-sre@b.example]
   dpo:
     members: [role-security@a.example]
-  all:access-roster:operator:
+  all:sluis:operator:
     members: [directory-admins@a.example]
-  all:access-roster:viewer:
+  all:sluis:viewer:
     members: [all@a.example]
     matchers: [{ email_domain: a.example }]
   all:gitops:deployer:
@@ -32,7 +32,7 @@ groups:
 claims:
   sre: { groups: [mgmt:k8s:admin, prod:k8s:admin], tailnet: { tiers: [vpc, service] } }
   dpo: { groups: [mgmt:k8s:auditor], tailnet: { tiers: [vpc] } }
-  all:access-roster:operator: { groups: [hub:operator] }
+  all:sluis:operator: { groups: [hub:operator] }
 lifetimes:
   default: 12h
   sre: 8h
@@ -66,19 +66,19 @@ func TestDirectoryMembershipNeedsAuthority(t *testing.T) {
 	}
 
 	got := s.Evaluate(in)
-	if !got.Has("sre") || !got.Has("all:access-roster:operator") {
-		t.Fatalf("groups = %v, want sre and all:access-roster:operator", got.Groups)
+	if !got.Has("sre") || !got.Has("all:sluis:operator") {
+		t.Fatalf("groups = %v, want sre and all:sluis:operator", got.Groups)
 	}
-	if !got.Has("all:access-roster:viewer") {
+	if !got.Has("all:sluis:viewer") {
 		t.Error("the email-domain matcher should hold regardless of the directory")
 	}
 
 	in.Authoritative = false
 	got = s.Evaluate(in)
-	if got.Has("sre") || got.Has("all:access-roster:operator") {
+	if got.Has("sre") || got.Has("all:sluis:operator") {
 		t.Errorf("groups = %v, want no directory-derived group when the answer is not authoritative", got.Groups)
 	}
-	if !got.Has("all:access-roster:viewer") {
+	if !got.Has("all:sluis:viewer") {
 		t.Error("a matcher on a verified sign-in does not need the directory")
 	}
 }
@@ -93,7 +93,7 @@ func TestClaimsDeepMerge(t *testing.T) {
 
 	groups, _ := got.Claims["groups"].([]any)
 	want := []string{
-		"all:access-roster:viewer", "dpo", "mgmt:k8s:admin",
+		"all:sluis:viewer", "dpo", "mgmt:k8s:admin",
 		"mgmt:k8s:auditor", "prod:k8s:admin", "sre",
 	}
 	if len(groups) != len(want) {
@@ -180,7 +180,7 @@ func TestAGroupsMembersAreExactlyWhatWasDeclared(t *testing.T) {
 
 	var operators policy.GroupView
 	for _, view := range s.Groups() {
-		if view.Name == "all:access-roster:operator" {
+		if view.Name == "all:sluis:operator" {
 			operators = view
 		}
 	}
@@ -198,7 +198,7 @@ func TestAGroupsMembersAreExactlyWhatWasDeclared(t *testing.T) {
 	got := s.Evaluate(policy.Input{
 		Email: "bob@b.example", DirectoryGroups: []string{"platform@b.example"}, Authoritative: true,
 	})
-	if got.Has("all:access-roster:operator") {
+	if got.Has("all:sluis:operator") {
 		t.Errorf("groups = %v: an undeclared directory group granted operator", got.Groups)
 	}
 }
@@ -936,7 +936,7 @@ func TestSplitGroupReadsAnyGrant(t *testing.T) {
 		ok                     bool
 		scope, thing, wantRole string
 	}{
-		{"this hub's own", policy.GroupOperators, true, "all", "access-roster", "operator"},
+		{"this hub's own", policy.GroupOperators, true, "all", "sluis", "operator"},
 		{"a cluster role", "mgmt:k8s:admin", true, "mgmt", "k8s", "admin"},
 		{"a project role", "prod:shop:deployer", true, "prod", "shop", "deployer"},
 		{"another relying party, tenant-scoped", "C0north:audit:viewer", true, "C0north", "audit", "viewer"},
@@ -947,7 +947,7 @@ func TestSplitGroupReadsAnyGrant(t *testing.T) {
 		{"an employee", "emp:otsar", false, "", "", ""},
 		{"an ordinary name", "platform", false, "", "", ""},
 		{"an address", "team@north.example", false, "", "", ""},
-		{"an empty scope", ":access-roster:operator", false, "", "", ""},
+		{"an empty scope", ":sluis:operator", false, "", "", ""},
 		{"an empty role", "mgmt:k8s:", false, "", "", ""},
 		{"four segments", "mgmt:k8s:admin:extra", false, "", "", ""},
 	} {
@@ -1070,7 +1070,7 @@ clients:
 			"the hub's operator role is not reported (consumed by hub itself)",
 			`version: 1
 groups:
-  all:access-roster:operator: {}
+  all:sluis:operator: {}
   team-a:app:user: {}
 clients:
   app: { kind: public, requires: [team-a:app:user] }
@@ -1081,7 +1081,7 @@ clients:
 			"the hub's viewer role (scoped) is not reported (consumed by hub itself)",
 			`version: 1
 groups:
-  team-a:access-roster:viewer: {}
+  team-a:sluis:viewer: {}
   team-b:app:user: {}
 clients:
   app: { kind: public, requires: [team-b:app:user] }
@@ -1092,11 +1092,11 @@ clients:
 			"an unrelated role on sluis is reported",
 			`version: 1
 groups:
-  all:access-roster:unknownrole: {}
+  all:sluis:unknownrole: {}
 clients:
-  app: { kind: public, requires: [all:access-roster:operator] }
+  app: { kind: public, requires: [all:sluis:operator] }
 `,
-			[]string{"all:access-roster:unknownrole"},
+			[]string{"all:sluis:unknownrole"},
 		},
 		{
 			"a rung group is never reported",
@@ -1104,7 +1104,7 @@ clients:
 groups:
   rung:sre: {}
 clients:
-  app: { kind: public, requires: [all:access-roster:operator] }
+  app: { kind: public, requires: [all:sluis:operator] }
 `,
 			[]string{},
 		},
@@ -1114,7 +1114,7 @@ clients:
 groups:
   emp:alice: {}
 clients:
-  app: { kind: public, requires: [all:access-roster:operator] }
+  app: { kind: public, requires: [all:sluis:operator] }
 `,
 			[]string{},
 		},
@@ -1152,7 +1152,7 @@ groups:
   team:a:admin: {}
   team:m:admin: {}
 clients:
-  app: { kind: public, requires: [all:access-roster:operator] }
+  app: { kind: public, requires: [all:sluis:operator] }
 `,
 			[]string{"team:a:admin", "team:m:admin", "team:z:admin"},
 		},

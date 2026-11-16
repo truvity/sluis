@@ -28,11 +28,11 @@ func tryBootWithPolicy(t *testing.T, clients, extra string) (*rosterapp.App, err
 	if err := os.WriteFile(filepath.Join(dir, "policy.yaml"), []byte(`
 version: 1
 groups:
-  all:access-roster:operator: { members: [platform@north.example] }
-  all:access-roster:viewer: {}
+  all:sluis:operator: { members: [platform@north.example] }
+  all:sluis:viewer: {}
 lifetimes: { default: 12h }
 clients:
-  console: { kind: public, requires: [all:access-roster:operator], redirects: ["https://access.example/console/callback"] }
+  console: { kind: public, requires: [all:sluis:operator], redirects: ["https://access.example/console/callback"] }
 `+clients), 0o600); err != nil {
 		t.Fatalf("write the policy: %v", err)
 	}
@@ -50,8 +50,8 @@ probes: {address: ":0"}
 // issuer's, reached through the service that joins the issuer to the
 // directory.
 func TestReconcileClientSecretsIsTheIssuersPass(t *testing.T) {
-	app := bootWithPolicy(t, `  grafana: { kind: confidential, secret: { generate: true }, requires: [all:access-roster:operator] }
-  argocd:  { kind: confidential, secret: argocd-oidc, requires: [all:access-roster:operator] }
+	app := bootWithPolicy(t, `  grafana: { kind: confidential, secret: { generate: true }, requires: [all:sluis:operator] }
+  argocd:  { kind: confidential, secret: argocd-oidc, requires: [all:sluis:operator] }
 `)
 	// New makes no record; the first scheduled pass makes it and the next finds
 	// it, for the generated client only.
@@ -74,7 +74,7 @@ func TestReconcileClientSecretsWithNoGeneratedClientDoesNothing(t *testing.T) {
 // Without a secrets adapter that can create only if absent the roster does not
 // start with a generated client: the same refusal the issuer alone gives.
 func TestAGeneratedClientIsRefusedWithNoSecretsAdapter(t *testing.T) {
-	app, err := tryBootWithPolicy(t, `  grafana: { kind: confidential, secret: { generate: true }, requires: [all:access-roster:operator] }
+	app, err := tryBootWithPolicy(t, `  grafana: { kind: confidential, secret: { generate: true }, requires: [all:sluis:operator] }
 `, "")
 	if err == nil {
 		app.Close()
@@ -88,7 +88,7 @@ func TestAGeneratedClientIsRefusedWithNoSecretsAdapter(t *testing.T) {
 // A rotation and an orphan mark are serialised by a lease on the State; held in
 // this process only it would not keep a second replica off, so start is refused.
 func TestAGeneratedClientIsRefusedWhereTheStateIsNotShared(t *testing.T) {
-	app, err := tryBootWithPolicy(t, `  grafana: { kind: confidential, secret: { generate: true }, requires: [all:access-roster:operator] }
+	app, err := tryBootWithPolicy(t, `  grafana: { kind: confidential, secret: { generate: true }, requires: [all:sluis:operator] }
 `, "adapters:\n  secrets: {adapter: ssm, settings: {root: /sluis/test}}\n")
 	if err == nil {
 		app.Close()
@@ -102,7 +102,7 @@ func TestAGeneratedClientIsRefusedWhereTheStateIsNotShared(t *testing.T) {
 // Memory secrets are this process's too, so a State that is not shared has no
 // second replica to exclude: the roster starts, and the pass finds the record.
 func TestAGeneratedClientStartsWithMemorySecretsBesideANonSharedState(t *testing.T) {
-	app, err := tryBootWithPolicy(t, `  grafana: { kind: confidential, secret: { generate: true }, requires: [all:access-roster:operator] }
+	app, err := tryBootWithPolicy(t, `  grafana: { kind: confidential, secret: { generate: true }, requires: [all:sluis:operator] }
 `, "adapters:\n  secrets: {adapter: memory}\n")
 	if err != nil {
 		t.Fatalf("New: %v", err)

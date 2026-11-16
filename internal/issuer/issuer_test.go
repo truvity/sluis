@@ -133,7 +133,7 @@ func TestExchangeMergesClaimsAndCapsLifetime(t *testing.T) {
 	}
 	groups, _ := grant.Claims["groups"].([]any)
 	want := map[string]bool{
-		"rung:platform": true, "rung:engineering": true, "all:access-roster:operator": true,
+		"rung:platform": true, "rung:engineering": true, "all:sluis:operator": true,
 		"mgmt:k8s:admin": true, "devel:k8s:admin": true, "devel:k8s:viewer": true,
 	}
 	for _, g := range groups {
