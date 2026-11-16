@@ -1,5 +1,13 @@
 ## Unreleased
 
+## v1.82.2
+
+A patch release that completes the release fix of v1.82.1. The v1.82.1 run kept its release a draft as intended, but the Nix flake step downloaded the archives from the draft's URLs, which answer 404, so v1.82.1 was never published and has no module tags, npm packages or module images. Use v1.82.2 instead of v1.82.0 and v1.82.1. Upgrade notes: none.
+
+### Changed
+
+- **The Nix flakes are built from the local archives.** `release-public` moves to truvity/ci-workflows v6.5.1, and the actions to truvity/ci-actions v3.14.1, whose `publish-nix-flakes` adds each archive to the Nix store (`nix-store --add-fixed`) before building the flake, instead of downloading it from the release. A draft release's assets cannot be downloaded by URL, and the release stays a draft until the `publish` job, so the flake step failed on v1.82.1 (`cannot download sluisctl_1.82.1_linux_amd64.tar.gz from any mirror`). The published flakes are unchanged: the same URLs and hashes. **Upgrade:** none.
+
 ## v1.82.1
 
 A patch release: the release workflow keeps the GitHub release a draft until every job passed, because a published release on this repository is immutable. It replaces v1.82.0, whose release is incomplete (no Nix flake, no audit archives, no merged `checksums.txt` or signature bundle) and whose npm packages, module images and module tags were never published. Non-major dependency updates move with it. Upgrade notes: use v1.82.1 instead of v1.82.0.
