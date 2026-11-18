@@ -86,112 +86,6 @@ func (x *Address) GetId() string {
 	return ""
 }
 
-// IndexEntry is one declared index of an item, computed by the writer.
-type IndexEntry struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`   // the declared index
-	Value         []byte                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"` // the value to match under that index
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *IndexEntry) Reset() {
-	*x = IndexEntry{}
-	mi := &file_sluis_type_v2alpha1_type_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *IndexEntry) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*IndexEntry) ProtoMessage() {}
-
-func (x *IndexEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_sluis_type_v2alpha1_type_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use IndexEntry.ProtoReflect.Descriptor instead.
-func (*IndexEntry) Descriptor() ([]byte, []int) {
-	return file_sluis_type_v2alpha1_type_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *IndexEntry) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *IndexEntry) GetValue() []byte {
-	if x != nil {
-		return x.Value
-	}
-	return nil
-}
-
-// Refusal is the detail of every Connect error inside sluis (contracts.md "Errors").
-type Refusal struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Reason        string                 `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`                        // from a closed list; never a value
-	FieldPath     string                 `protobuf:"bytes,2,opt,name=field_path,json=fieldPath,proto3" json:"field_path,omitempty"` // the path of the field at fault; never its value
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Refusal) Reset() {
-	*x = Refusal{}
-	mi := &file_sluis_type_v2alpha1_type_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Refusal) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Refusal) ProtoMessage() {}
-
-func (x *Refusal) ProtoReflect() protoreflect.Message {
-	mi := &file_sluis_type_v2alpha1_type_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Refusal.ProtoReflect.Descriptor instead.
-func (*Refusal) Descriptor() ([]byte, []int) {
-	return file_sluis_type_v2alpha1_type_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *Refusal) GetReason() string {
-	if x != nil {
-		return x.Reason
-	}
-	return ""
-}
-
-func (x *Refusal) GetFieldPath() string {
-	if x != nil {
-		return x.FieldPath
-	}
-	return ""
-}
-
 // Header is one HTTP header of an HttpReply.
 type Header struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -203,7 +97,7 @@ type Header struct {
 
 func (x *Header) Reset() {
 	*x = Header{}
-	mi := &file_sluis_type_v2alpha1_type_proto_msgTypes[3]
+	mi := &file_sluis_type_v2alpha1_type_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -215,7 +109,7 @@ func (x *Header) String() string {
 func (*Header) ProtoMessage() {}
 
 func (x *Header) ProtoReflect() protoreflect.Message {
-	mi := &file_sluis_type_v2alpha1_type_proto_msgTypes[3]
+	mi := &file_sluis_type_v2alpha1_type_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -228,7 +122,7 @@ func (x *Header) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Header.ProtoReflect.Descriptor instead.
 func (*Header) Descriptor() ([]byte, []int) {
-	return file_sluis_type_v2alpha1_type_proto_rawDescGZIP(), []int{3}
+	return file_sluis_type_v2alpha1_type_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Header) GetName() string {
@@ -259,7 +153,7 @@ type HttpReply struct {
 
 func (x *HttpReply) Reset() {
 	*x = HttpReply{}
-	mi := &file_sluis_type_v2alpha1_type_proto_msgTypes[4]
+	mi := &file_sluis_type_v2alpha1_type_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -271,7 +165,7 @@ func (x *HttpReply) String() string {
 func (*HttpReply) ProtoMessage() {}
 
 func (x *HttpReply) ProtoReflect() protoreflect.Message {
-	mi := &file_sluis_type_v2alpha1_type_proto_msgTypes[4]
+	mi := &file_sluis_type_v2alpha1_type_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -284,7 +178,7 @@ func (x *HttpReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HttpReply.ProtoReflect.Descriptor instead.
 func (*HttpReply) Descriptor() ([]byte, []int) {
-	return file_sluis_type_v2alpha1_type_proto_rawDescGZIP(), []int{4}
+	return file_sluis_type_v2alpha1_type_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *HttpReply) GetStatus() int32 {
@@ -340,7 +234,7 @@ type Grant struct {
 
 func (x *Grant) Reset() {
 	*x = Grant{}
-	mi := &file_sluis_type_v2alpha1_type_proto_msgTypes[5]
+	mi := &file_sluis_type_v2alpha1_type_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -352,7 +246,7 @@ func (x *Grant) String() string {
 func (*Grant) ProtoMessage() {}
 
 func (x *Grant) ProtoReflect() protoreflect.Message {
-	mi := &file_sluis_type_v2alpha1_type_proto_msgTypes[5]
+	mi := &file_sluis_type_v2alpha1_type_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -365,7 +259,7 @@ func (x *Grant) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Grant.ProtoReflect.Descriptor instead.
 func (*Grant) Descriptor() ([]byte, []int) {
-	return file_sluis_type_v2alpha1_type_proto_rawDescGZIP(), []int{5}
+	return file_sluis_type_v2alpha1_type_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Grant) GetBoundary() string {
@@ -439,15 +333,7 @@ const file_sluis_type_v2alpha1_type_proto_rawDesc = "" +
 	"\aAddress\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x16\n" +
 	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12\x0e\n" +
-	"\x02id\x18\x03 \x01(\tR\x02id\"6\n" +
-	"\n" +
-	"IndexEntry\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\fR\x05value\"@\n" +
-	"\aRefusal\x12\x16\n" +
-	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x1d\n" +
-	"\n" +
-	"field_path\x18\x02 \x01(\tR\tfieldPath\"2\n" +
+	"\x02id\x18\x03 \x01(\tR\x02id\"2\n" +
 	"\x06Header\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\"\xac\x01\n" +
@@ -484,20 +370,18 @@ func file_sluis_type_v2alpha1_type_proto_rawDescGZIP() []byte {
 	return file_sluis_type_v2alpha1_type_proto_rawDescData
 }
 
-var file_sluis_type_v2alpha1_type_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_sluis_type_v2alpha1_type_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_sluis_type_v2alpha1_type_proto_goTypes = []any{
 	(*Address)(nil),               // 0: sluis.type.v2alpha1.Address
-	(*IndexEntry)(nil),            // 1: sluis.type.v2alpha1.IndexEntry
-	(*Refusal)(nil),               // 2: sluis.type.v2alpha1.Refusal
-	(*Header)(nil),                // 3: sluis.type.v2alpha1.Header
-	(*HttpReply)(nil),             // 4: sluis.type.v2alpha1.HttpReply
-	(*Grant)(nil),                 // 5: sluis.type.v2alpha1.Grant
-	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
+	(*Header)(nil),                // 1: sluis.type.v2alpha1.Header
+	(*HttpReply)(nil),             // 2: sluis.type.v2alpha1.HttpReply
+	(*Grant)(nil),                 // 3: sluis.type.v2alpha1.Grant
+	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
 }
 var file_sluis_type_v2alpha1_type_proto_depIdxs = []int32{
-	3, // 0: sluis.type.v2alpha1.HttpReply.headers:type_name -> sluis.type.v2alpha1.Header
-	6, // 1: sluis.type.v2alpha1.Grant.issued_at:type_name -> google.protobuf.Timestamp
-	6, // 2: sluis.type.v2alpha1.Grant.expires_at:type_name -> google.protobuf.Timestamp
+	1, // 0: sluis.type.v2alpha1.HttpReply.headers:type_name -> sluis.type.v2alpha1.Header
+	4, // 1: sluis.type.v2alpha1.Grant.issued_at:type_name -> google.protobuf.Timestamp
+	4, // 2: sluis.type.v2alpha1.Grant.expires_at:type_name -> google.protobuf.Timestamp
 	3, // [3:3] is the sub-list for method output_type
 	3, // [3:3] is the sub-list for method input_type
 	3, // [3:3] is the sub-list for extension type_name
@@ -516,7 +400,7 @@ func file_sluis_type_v2alpha1_type_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sluis_type_v2alpha1_type_proto_rawDesc), len(file_sluis_type_v2alpha1_type_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

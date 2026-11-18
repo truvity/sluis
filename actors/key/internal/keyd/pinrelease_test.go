@@ -20,11 +20,11 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/truvity/atoom/common/refusal"
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
 	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
 	"github.com/truvity/sluis/v2/kits/go/pinrelease"
-	"github.com/truvity/sluis/v2/kits/go/refusal"
 )
 
 // The fake driver's side of the PIN release: the same calls as the card driver, over a PIN in memory, and an

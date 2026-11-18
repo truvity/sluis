@@ -9,6 +9,7 @@
 package storev2alpha1
 
 import (
+	v1alpha1 "github.com/truvity/atoom/common/gen/atoom/common/v1alpha1"
 	v2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/type/v2alpha1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -249,7 +250,7 @@ type Item struct {
 	Version       uint64                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`                     // 1 at create, plus 1 at each change; set by store@
 	Value         []byte                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`                          // the kind's Protobuf message; for a sealed kind, the envelope
 	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"` // set by store@ when the kind has a TTL
-	Indexes       []*v2alpha1.IndexEntry `protobuf:"bytes,5,rep,name=indexes,proto3" json:"indexes,omitempty"`                      // the declared indexes, computed by the writer
+	Indexes       []*v1alpha1.IndexEntry `protobuf:"bytes,5,rep,name=indexes,proto3" json:"indexes,omitempty"`                      // the declared indexes, computed by the writer
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -312,7 +313,7 @@ func (x *Item) GetExpiresAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *Item) GetIndexes() []*v2alpha1.IndexEntry {
+func (x *Item) GetIndexes() []*v1alpha1.IndexEntry {
 	if x != nil {
 		return x.Indexes
 	}
@@ -731,7 +732,7 @@ type Operation struct {
 	Value         []byte                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`                               // the kind's Protobuf message; for a sealed kind, the envelope
 	IfVersion     uint64                 `protobuf:"varint,4,opt,name=if_version,json=ifVersion,proto3" json:"if_version,omitempty"`     // UPDATE: the version read; DELETE: optional
 	Ttl           *durationpb.Duration   `protobuf:"bytes,5,opt,name=ttl,proto3" json:"ttl,omitempty"`                                   // optional: shorter than the kind's maximum; absent, the kind's default
-	Indexes       []*v2alpha1.IndexEntry `protobuf:"bytes,6,rep,name=indexes,proto3" json:"indexes,omitempty"`                           // the declared indexes, computed by the writer
+	Indexes       []*v1alpha1.IndexEntry `protobuf:"bytes,6,rep,name=indexes,proto3" json:"indexes,omitempty"`                           // the declared indexes, computed by the writer
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -801,7 +802,7 @@ func (x *Operation) GetTtl() *durationpb.Duration {
 	return nil
 }
 
-func (x *Operation) GetIndexes() []*v2alpha1.IndexEntry {
+func (x *Operation) GetIndexes() []*v1alpha1.IndexEntry {
 	if x != nil {
 		return x.Indexes
 	}
@@ -1100,14 +1101,14 @@ var File_sluis_store_v2alpha1_store_proto protoreflect.FileDescriptor
 
 const file_sluis_store_v2alpha1_store_proto_rawDesc = "" +
 	"\n" +
-	" sluis/store/v2alpha1/store.proto\x12\x14sluis.store.v2alpha1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1esluis/type/v2alpha1/type.proto\"\xe4\x01\n" +
+	" sluis/store/v2alpha1/store.proto\x12\x14sluis.store.v2alpha1\x1a\"atoom/common/v1alpha1/common.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1esluis/type/v2alpha1/type.proto\"\xe6\x01\n" +
 	"\x04Item\x126\n" +
 	"\aaddress\x18\x01 \x01(\v2\x1c.sluis.type.v2alpha1.AddressR\aaddress\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x04R\aversion\x12\x14\n" +
 	"\x05value\x18\x03 \x01(\fR\x05value\x129\n" +
 	"\n" +
-	"expires_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x129\n" +
-	"\aindexes\x18\x05 \x03(\v2\x1f.sluis.type.v2alpha1.IndexEntryR\aindexes\"x\n" +
+	"expires_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12;\n" +
+	"\aindexes\x18\x05 \x03(\v2!.atoom.common.v1alpha1.IndexEntryR\aindexes\"x\n" +
 	"\n" +
 	"Provenance\x12\x1d\n" +
 	"\n" +
@@ -1144,15 +1145,15 @@ const file_sluis_store_v2alpha1_store_proto_rawDesc = "" +
 	"\n" +
 	"operations\x18\x01 \x03(\v2\x1f.sluis.store.v2alpha1.OperationR\n" +
 	"operations\x12\x14\n" +
-	"\x05grant\x18\x02 \x01(\fR\x05grant\"\x90\x02\n" +
+	"\x05grant\x18\x02 \x01(\fR\x05grant\"\x92\x02\n" +
 	"\tOperation\x12.\n" +
 	"\x04verb\x18\x01 \x01(\x0e2\x1a.sluis.store.v2alpha1.VerbR\x04verb\x126\n" +
 	"\aaddress\x18\x02 \x01(\v2\x1c.sluis.type.v2alpha1.AddressR\aaddress\x12\x14\n" +
 	"\x05value\x18\x03 \x01(\fR\x05value\x12\x1d\n" +
 	"\n" +
 	"if_version\x18\x04 \x01(\x04R\tifVersion\x12+\n" +
-	"\x03ttl\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x03ttl\x129\n" +
-	"\aindexes\x18\x06 \x03(\v2\x1f.sluis.type.v2alpha1.IndexEntryR\aindexes\"A\n" +
+	"\x03ttl\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x03ttl\x12;\n" +
+	"\aindexes\x18\x06 \x03(\v2!.atoom.common.v1alpha1.IndexEntryR\aindexes\"A\n" +
 	"\rWriteResponse\x120\n" +
 	"\x05items\x18\x01 \x03(\v2\x1a.sluis.store.v2alpha1.ItemR\x05items\"z\n" +
 	"\fWatchRequest\x12\x12\n" +
@@ -1240,13 +1241,13 @@ var file_sluis_store_v2alpha1_store_proto_goTypes = []any{
 	(*GetSignedConfigResponse)(nil), // 16: sluis.store.v2alpha1.GetSignedConfigResponse
 	(*v2alpha1.Address)(nil),        // 17: sluis.type.v2alpha1.Address
 	(*timestamppb.Timestamp)(nil),   // 18: google.protobuf.Timestamp
-	(*v2alpha1.IndexEntry)(nil),     // 19: sluis.type.v2alpha1.IndexEntry
+	(*v1alpha1.IndexEntry)(nil),     // 19: atoom.common.v1alpha1.IndexEntry
 	(*durationpb.Duration)(nil),     // 20: google.protobuf.Duration
 }
 var file_sluis_store_v2alpha1_store_proto_depIdxs = []int32{
 	17, // 0: sluis.store.v2alpha1.Item.address:type_name -> sluis.type.v2alpha1.Address
 	18, // 1: sluis.store.v2alpha1.Item.expires_at:type_name -> google.protobuf.Timestamp
-	19, // 2: sluis.store.v2alpha1.Item.indexes:type_name -> sluis.type.v2alpha1.IndexEntry
+	19, // 2: sluis.store.v2alpha1.Item.indexes:type_name -> atoom.common.v1alpha1.IndexEntry
 	1,  // 3: sluis.store.v2alpha1.Provenance.layer:type_name -> sluis.store.v2alpha1.Layer
 	17, // 4: sluis.store.v2alpha1.GetRequest.address:type_name -> sluis.type.v2alpha1.Address
 	0,  // 5: sluis.store.v2alpha1.GetRequest.consistency:type_name -> sluis.store.v2alpha1.Consistency
@@ -1258,7 +1259,7 @@ var file_sluis_store_v2alpha1_store_proto_depIdxs = []int32{
 	2,  // 11: sluis.store.v2alpha1.Operation.verb:type_name -> sluis.store.v2alpha1.Verb
 	17, // 12: sluis.store.v2alpha1.Operation.address:type_name -> sluis.type.v2alpha1.Address
 	20, // 13: sluis.store.v2alpha1.Operation.ttl:type_name -> google.protobuf.Duration
-	19, // 14: sluis.store.v2alpha1.Operation.indexes:type_name -> sluis.type.v2alpha1.IndexEntry
+	19, // 14: sluis.store.v2alpha1.Operation.indexes:type_name -> atoom.common.v1alpha1.IndexEntry
 	4,  // 15: sluis.store.v2alpha1.WriteResponse.items:type_name -> sluis.store.v2alpha1.Item
 	3,  // 16: sluis.store.v2alpha1.WatchResponse.type:type_name -> sluis.store.v2alpha1.ChangeType
 	4,  // 17: sluis.store.v2alpha1.WatchResponse.item:type_name -> sluis.store.v2alpha1.Item

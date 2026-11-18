@@ -14,7 +14,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/truvity/sluis/v2/kits/go/refusal"
+	"github.com/truvity/atoom/common/refusal"
 )
 
 // The vector files are shared with kits/rust/sluis-audit (kits/conformance/audit): both suites must pass on them.

@@ -13,10 +13,10 @@ import (
 
 	"connectrpc.com/connect"
 
+	krefusal "github.com/truvity/atoom/common/refusal"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/cli"
-	krefusal "github.com/truvity/sluis/v2/kits/go/refusal"
 	"github.com/truvity/sluis/v2/kits/go/rpc"
 	"github.com/truvity/sluis/v2/kits/go/signedconfig"
 )

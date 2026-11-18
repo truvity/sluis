@@ -11,10 +11,11 @@ import (
 
 	sessionv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/session/v2alpha1"
 
+	commonv1alpha1 "github.com/truvity/atoom/common/gen/atoom/common/v1alpha1"
+	"github.com/truvity/atoom/common/refusal"
 	storev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1/storev2alpha1connect"
 	typev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/type/v2alpha1"
-	"github.com/truvity/sluis/v2/kits/go/refusal"
 	"github.com/truvity/sluis/v2/kits/go/registry"
 	"github.com/truvity/sluis/v2/kits/go/store"
 )
@@ -112,7 +113,7 @@ type newSealed struct {
 	plain    bool
 	// purpose is the key purpose that seals a value: "data" when empty. Only the kind StaffPasskey takes another (credential).
 	purpose string
-	indexes []*typev2alpha1.IndexEntry
+	indexes []*commonv1alpha1.IndexEntry
 }
 
 // createAll seals each value under the tenant's data key, or encodes a plain one, and creates all the items in one
@@ -233,7 +234,7 @@ func (s sealedStore) listIndex(ctx context.Context, kind, tenant, index string, 
 // updateSealed replaces the value of an item whose version is still the one read, under the grant. store.ErrVersion says
 // another writer moved it. store@ replaces the whole index set of an item on every put, so an update of a kind that has
 // indexes sends all of them again; one that sends none leaves the item with none, and no listing by index finds it.
-func (s sealedStore) updateSealed(ctx context.Context, kind, tenant, id string, version uint64, env []byte, grant []byte, indexes ...*typev2alpha1.IndexEntry) error {
+func (s sealedStore) updateSealed(ctx context.Context, kind, tenant, id string, version uint64, env []byte, grant []byte, indexes ...*commonv1alpha1.IndexEntry) error {
 	seg, err := segment(kind)
 	if err != nil {
 		return err

@@ -16,10 +16,10 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/truvity/atoom/common/refusal"
 	"github.com/truvity/sluis/v2/drivers/key/yubikey-piv/internal/card"
 	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1/keystorev2alpha1connect"
-	"github.com/truvity/sluis/v2/kits/go/refusal"
 )
 
 // AdminConfig is the local admin socket of the driver. It is not part of the actor call graph: the caller is a

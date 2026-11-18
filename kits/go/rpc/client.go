@@ -11,7 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/truvity/sluis/v2/kits/go/refusal"
+	"github.com/truvity/atoom/common/refusal"
 )
 
 // baseURL is the URL base of a client over a Unix socket; the host is not used.

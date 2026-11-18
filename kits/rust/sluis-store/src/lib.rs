@@ -15,11 +15,12 @@ use buffa_types::google::protobuf::Duration as PbDuration;
 use connectrpc::ConnectError;
 use connectrpc::error::ErrorCode;
 use sluis_kit::{Client, Transport, refusal_reason};
+use sluis_proto::atoom::common::v1alpha1::IndexEntry;
 use sluis_proto::sluis::store::v2alpha1::{
     Consistency, GetRequest, Item as WireItem, ListRequest, Operation, StoreServiceClient, Verb,
     WriteRequest,
 };
-use sluis_proto::sluis::r#type::v2alpha1::{Address, IndexEntry};
+use sluis_proto::sluis::r#type::v2alpha1::Address;
 use sluis_registry::Scope;
 
 pub mod ratebound;

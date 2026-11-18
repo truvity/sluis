@@ -9,18 +9,15 @@ use std::future::Future;
 use std::time::Duration;
 
 use anyhow::{Context, bail, ensure};
-use base64::Engine as _;
-use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD};
-use buffa::Message as _;
 use connectrpc::ConnectError;
 use connectrpc::error::ErrorCode;
 use sluis_kit::Client;
+use sluis_proto::atoom::common::v1alpha1::IndexEntry;
 use sluis_proto::sluis::port::item::v2alpha1::__buffa::oneof::condition::Expect;
 use sluis_proto::sluis::port::item::v2alpha1::{
     Condition, Delete, DriverItem, ItemGetRequest, ItemServiceClient, Put, QueryRequest,
     TailLogRequest, TailLogResponse, TransactRequest,
 };
-use sluis_proto::sluis::r#type::v2alpha1::{IndexEntry, Refusal};
 
 use crate::rules::{MAX_PAGE, ms_to_ts, now_ms};
 use crate::{Case, run_case};
@@ -1260,18 +1257,8 @@ fn index(name: &str, value: &[u8]) -> IndexEntry {
 }
 
 /// The `Refusal` detail of an error.
-fn refusal_of(err: &ConnectError) -> Option<Refusal> {
-    err.details.iter().find_map(|d| {
-        if d.type_url.rsplit('/').next()? != "sluis.type.v2alpha1.Refusal" {
-            return None;
-        }
-        let raw = d.value.as_deref()?;
-        let bytes = STANDARD_NO_PAD
-            .decode(raw)
-            .or_else(|_| STANDARD.decode(raw))
-            .ok()?;
-        Refusal::decode_from_slice(&bytes).ok()
-    })
+fn refusal_of(err: &ConnectError) -> Option<atoom_common::atoom::common::v1alpha1::Refusal> {
+    atoom_common::refusal::detail(err)
 }
 
 /// Checks that `res` is the refusal `code` with `reason` and, when given, `field_path`.

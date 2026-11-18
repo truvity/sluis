@@ -6,8 +6,8 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/truvity/atoom/common/refusal"
 	"github.com/truvity/sluis/v2/kits/go/audit"
-	"github.com/truvity/sluis/v2/kits/go/refusal"
 )
 
 // OCSF class 3002 is Authentication (0030 "The class mapping"): a sign-in is 3002 / 1 Logon; the stages of a token
