@@ -36,6 +36,15 @@ const EXCHANGE_TRUST_FULL: &str = "default:
     - { issuer: \"https://idp.example.com\", audiences: [sluis], proof_kind: jwks, jwks_uri: \"https://idp.example.com/jwks\" }
 ";
 
+/// A `RateBound` with every limit, which the local installation leaves out: the kind is optional.
+const RATE_BOUND_FULL: &str = "default:
+  token_client: { limit: 600, window: 1m }
+  token_address: { limit: 120, window: 1m }
+  authorize_client: { limit: 600, window: 1m }
+  authorize_address: { limit: 120, window: 1m }
+  recovery_address: { limit: 10, window: 15m }
+";
+
 /// A flow-style YAML text of a value: the strict profile reads it back to the same value. A string is written as a JSON
 /// string, which is a double-quoted YAML scalar.
 fn flow(v: &Value) -> String {
@@ -117,7 +126,8 @@ fn kinds() -> Vec<&'static Kind> {
         .collect()
 }
 
-/// The sources that carry the vectors, by kind name: the local documents, with the two richer ones in place of theirs.
+/// The sources that carry the vectors, by kind name: the local documents, with the two richer ones in place of theirs, and
+/// the one that the local installation does not declare.
 fn sources() -> Vec<(&'static str, String)> {
     LOCAL
         .iter()
@@ -130,6 +140,7 @@ fn sources() -> Vec<(&'static str, String)> {
             };
             (kind.name, text.to_owned())
         })
+        .chain([("RateBound", RATE_BOUND_FULL.to_owned())])
         .collect()
 }
 
