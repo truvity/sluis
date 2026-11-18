@@ -6,6 +6,7 @@ import (
 
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	"github.com/truvity/sluis/v2/kits/go/groupsclaim"
+	lifetimekit "github.com/truvity/sluis/v2/kits/go/lifetime"
 )
 
 // claims is the input of a token's claim set (0020 "The claims of a token"). The set is fixed: signer refuses a claim
@@ -68,14 +69,9 @@ func groupsOf(held []string, c *configv2alpha1.InstallationClient) []string {
 }
 
 // expiry is the exp of a token: the earliest of the issuer's lifetime for the type, the client's ttl_cap and the end
-// of the session chain that backs it (0020 "Lifetimes"). zero ttlCap means the client sets none.
-func expiry(now time.Time, lifetime, ttlCap time.Duration, chainEnd time.Time) time.Time {
-	exp := now.Add(lifetime)
-	if ttlCap > 0 && now.Add(ttlCap).Before(exp) {
-		exp = now.Add(ttlCap)
-	}
-	if chainEnd.Before(exp) {
-		exp = chainEnd
-	}
-	return exp
+// of the session chain that backs it (0020 "Lifetimes"). zero ttlCap means the client sets none. ok is false when the
+// token would not live a second. The rule is the one exchange applies (kits/go/lifetime).
+func expiry(now time.Time, lifetime, ttlCap time.Duration, chainEnd time.Time) (exp time.Time, ok bool) {
+	_, e, ok := lifetimekit.Expiry(now, lifetimekit.Limits{Issuer: lifetime, Caps: []time.Duration{ttlCap}, Ends: []time.Time{chainEnd}})
+	return time.Unix(e, 0), ok
 }

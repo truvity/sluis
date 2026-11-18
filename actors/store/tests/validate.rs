@@ -755,6 +755,113 @@ fn a_token_lifetime_or_a_ttl_cap_above_one_hour_is_refused_with_its_path() {
     assert_eq!(code, Some(0), "{all}");
 }
 
+/// The lifetimes of a boundary hold together before they run (ADR 0018 "Configuration", ADR 0020 "Lifetimes"): every
+/// value is positive and inside its built-in maximum, the idle limit is inside the absolute limit, and no token outlives
+/// the longest session. Each refused value names its field; the values on the edge of a rule are accepted.
+///
+/// verifies: REQ-TOKEN-038, REQ-TOKEN-050
+#[test]
+fn the_lifetimes_of_a_boundary_hold_together_and_each_refusal_names_its_field() {
+    let base = source("token-lifetime");
+    assert!(base.contains("id_token: 10m") && base.contains("access_token: 10m"));
+    assert!(base.contains("human_session_absolute: 12h") && base.contains("refresh_idle: 8h"));
+    let with = |changes: &[(&str, &str)]| {
+        let mut doc = base.to_string();
+        for (from, to) in changes {
+            assert!(doc.contains(from), "{from}");
+            doc = doc.replace(from, to);
+        }
+        doc
+    };
+    let refused = [
+        (
+            "an ID token above the cap",
+            with(&[("id_token: 10m", "id_token: 61m")]),
+            "default.id_token: above the built-in cap of one hour",
+        ),
+        (
+            "a session above 24 hours",
+            with(&[("human_session_absolute: 12h", "human_session_absolute: 25h")]),
+            "default.human_session_absolute: above the built-in cap of 24 hours",
+        ),
+        (
+            "an idle limit above the absolute limit",
+            with(&[("refresh_idle: 8h", "refresh_idle: 13h")]),
+            "default.refresh_idle: above human_session_absolute",
+        ),
+        (
+            "an idle limit above 24 hours, as long as the session is not",
+            with(&[
+                ("human_session_absolute: 12h", "human_session_absolute: 24h"),
+                ("refresh_idle: 8h", "refresh_idle: 25h"),
+            ]),
+            "default.refresh_idle: above human_session_absolute",
+        ),
+        (
+            "an access token that outlives the session",
+            with(&[
+                ("human_session_absolute: 12h", "human_session_absolute: 5m"),
+                ("refresh_idle: 8h", "refresh_idle: 5m"),
+            ]),
+            "default.id_token: above human_session_absolute",
+        ),
+        (
+            "an ID token of zero",
+            with(&[("id_token: 10m", "id_token: 0s")]),
+            "default.id_token: must be above zero",
+        ),
+        (
+            "an access token of zero",
+            with(&[("access_token: 10m", "access_token: 0s")]),
+            "default.access_token: must be above zero",
+        ),
+        (
+            "a session of zero",
+            with(&[("human_session_absolute: 12h", "human_session_absolute: 0s")]),
+            "default.human_session_absolute: must be above zero",
+        ),
+        (
+            "an idle limit of zero",
+            with(&[("refresh_idle: 8h", "refresh_idle: 0s")]),
+            "default.refresh_idle: must be above zero",
+        ),
+    ];
+    for (name, doc, want) in refused {
+        let e = env();
+        e.sign("token-lifetime", &doc);
+        let (code, checks, all) = run(&e.bootstrap(), e.docs.path());
+        assert_eq!(code, Some(3), "{name}: {all}");
+        let f = failures(&checks).join("\n");
+        assert!(f.contains(want), "{name}: want {want}, got {f}");
+    }
+
+    // The edges: one hour and 24 hours are the maxima, not above them; an idle limit of the whole session, and tokens
+    // of the whole session, are not above it.
+    for (name, doc) in [
+        (
+            "the maxima",
+            with(&[
+                ("id_token: 10m", "id_token: 1h"),
+                ("access_token: 10m", "access_token: 1h"),
+                ("human_session_absolute: 12h", "human_session_absolute: 24h"),
+                ("refresh_idle: 8h", "refresh_idle: 24h"),
+            ]),
+        ),
+        (
+            "tokens as long as the session",
+            with(&[
+                ("human_session_absolute: 12h", "human_session_absolute: 10m"),
+                ("refresh_idle: 8h", "refresh_idle: 10m"),
+            ]),
+        ),
+    ] {
+        let e = env();
+        e.sign("token-lifetime", &doc);
+        let (code, _, all) = run(&e.bootstrap(), e.docs.path());
+        assert_eq!(code, Some(0), "{name}: {all}");
+    }
+}
+
 /// verifies: REQ-KEYS-039
 #[test]
 fn a_key_cache_ttl_at_the_maximum_is_accepted_and_one_second_over_is_refused() {

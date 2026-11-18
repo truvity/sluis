@@ -405,9 +405,9 @@ func (s *Service) mint(ctx context.Context, tc *tokenCtx, in mintInput) (tokenRe
 		return tokenResponse{}, unavailable("key", err)
 	}
 	ttlCap := tc.client.GetTtlCap().AsDuration()
-	idExp := expiry(tc.now, tc.life.IDToken, ttlCap, in.chainEnd)
-	atExp := expiry(tc.now, tc.life.AccessToken, ttlCap, in.chainEnd)
-	if !idExp.After(tc.now) || !atExp.After(tc.now) {
+	idExp, idOK := expiry(tc.now, tc.life.IDToken, ttlCap, in.chainEnd)
+	atExp, atOK := expiry(tc.now, tc.life.AccessToken, ttlCap, in.chainEnd)
+	if !idOK || !atOK {
 		return tokenResponse{}, errSessionOver
 	}
 	jti, err := randomID()
@@ -418,7 +418,7 @@ func (s *Service) mint(ctx context.Context, tc *tokenCtx, in mintInput) (tokenRe
 		issuer: tc.boundary.GetIssuer(), audience: tc.client.GetId(), subject: sub, sid: in.sid,
 		issuedAt: tc.now, assure: in.assure, groups: in.groups,
 	}
-	out := tokenResponse{TokenType: "Bearer", ExpiresIn: int64(atExp.Sub(tc.now) / time.Second), RefreshToken: in.refresh, Scope: in.scope}
+	out := tokenResponse{TokenType: "Bearer", ExpiresIn: atExp.Unix() - tc.now.Unix(), RefreshToken: in.refresh, Scope: in.scope}
 	if hasScope(in.scope, "openid") {
 		c.expires, c.nonce = idExp, in.nonce
 		b, err := c.idToken()
