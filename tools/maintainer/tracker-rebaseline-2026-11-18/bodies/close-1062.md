@@ -1,0 +1,1 @@
+Not planned. The maintainer cancelled the customer-identity (CIAM) work on 2026-11-12. This is a CIAM-scale feature; listing and revocation of sessions stays in #793. Part of the tracker re-baseline of 2026-11-18, approved by the maintainer.

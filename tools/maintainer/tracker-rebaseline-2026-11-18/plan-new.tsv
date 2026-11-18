@@ -1,0 +1,50 @@
+# n<TAB>milestone<TAB>labels<TAB>title<TAB>body file. n is the number in section 3 of the re-baseline; {{ref:n}} in a body becomes the GitHub number.
+1	Core: lambda	type:feature,area:deploy,runtime:serverless,install:lambda	Lambda runtime: run an actor as a Lambda function	bodies/new-01.md
+2	Core: lambda	type:feature,area:driver,runtime:serverless,install:lambda	Store driver: dynamodb	bodies/new-02.md
+3	Core: lambda	type:feature,area:driver,runtime:serverless,install:lambda	Key driver: aws-kms	bodies/new-03.md
+4	Core: lambda	type:feature,area:driver,runtime:serverless,install:lambda	Secret and credential driver: ssm	bodies/new-04.md
+5	Core: lambda	type:feature,area:driver,runtime:serverless,install:lambda	Config source: appconfig on a Lambda function	bodies/new-05.md
+6	Core: lambda	type:feature,area:driver,runtime:serverless,install:lambda	Audit transport driver: sqs	bodies/new-06.md
+7	Core: lambda	type:feature,area:deploy,runtime:serverless,install:lambda	Exporter on Lambda: DynamoDB Streams trigger and a daily reconcile run	bodies/new-07.md
+8	Core: lambda	type:feature,area:deploy,runtime:serverless,install:lambda	Lambda installation as code and a deploy recipe	bodies/new-08.md
+9	Core: lambda	type:chore,area:conformance,runtime:serverless,install:lambda	Lambda test installation: the spine and person smokes against AWS	bodies/new-09.md
+10	Backlog	type:feature,area:driver	Cloudflare credential driver (cloud-cloudflare), split from #954	bodies/new-10.md
+11	Core: kubernetes	type:feature,area:deploy,runtime:kubernetes,install:kubernetes	Chart: workloads for the core actors	bodies/new-11.md
+12	Core: kubernetes	type:feature,area:deploy,runtime:kubernetes,install:kubernetes	Chart: sidecar drivers and unit sockets in the pod	bodies/new-12.md
+13	Core: kubernetes	type:feature,area:deploy,runtime:kubernetes,install:kubernetes	Chart: NetworkPolicies from the actor registry	bodies/new-13.md
+14	Core: kubernetes	type:feature,area:deploy,runtime:kubernetes,install:kubernetes	Chart: web identity for AWS (role per service account)	bodies/new-14.md
+15	Core: kubernetes	type:feature,area:deploy,runtime:kubernetes,install:kubernetes	Chart: config documents from a ConfigMap or secret	bodies/new-15.md
+16	Core: kubernetes	type:feature,area:driver,runtime:kubernetes,install:kubernetes	Audit transport driver: nats-jetstream	bodies/new-16.md
+17	Core: kubernetes	type:feature,area:driver,runtime:kubernetes,install:kubernetes	Audit index driver: postgres on CloudNativePG	bodies/new-17.md
+18	Core: kubernetes	type:chore,area:conformance,runtime:kubernetes,install:kubernetes	Kubernetes smoke: install the chart and run the spine and person smokes	bodies/new-18.md
+19	PKI/SSH/DB	type:decision,area:deploy	Mixed shape: design record and requirement rows	bodies/new-19.md
+20	PKI/SSH/DB	type:feature,area:deploy	Mixed shape: audit relay from the Lambda installation to the indexer on Kubernetes	bodies/new-20.md
+21	PKI/SSH/DB	type:feature,area:deploy	Mixed shape: audit indexer and reader pods beside CNPG	bodies/new-21.md
+22	Core: features	type:feature,area:core	Token certificate (x5c) as an optional switch, off in the core	bodies/new-22.md
+23	Core: features	type:chore,area:core	Installations without ca: registry, units, doctor and checks	bodies/new-23.md
+24	Core: features	type:feature,area:core,parity	C2: v1 contract points, tracker	bodies/new-24.md
+25	Core: features	type:feature,area:core,parity	C2: groups narrowing against the v1 contract	bodies/new-25.md
+26	Core: features	type:feature,area:core,parity	C2: sub formats against the v1 contract	bodies/new-26.md
+27	Core: features	type:feature,area:core,parity	C2: per-audience lifetimes against the v1 contract	bodies/new-27.md
+28	Core: features	type:feature,area:core,parity	C2: RS256 per audience against the v1 contract	bodies/new-28.md
+29	Core: features	type:feature,area:core,parity	C2: PKCE clients against the v1 contract	bodies/new-29.md
+30	Core: boards	type:chore,area:deploy,runtime:bare-metal,install:boards	Boards gate: firewall unit failing open at boot	bodies/new-30.md
+31	Core: boards	type:chore,area:deploy,runtime:bare-metal,install:boards	Boards gate: audit log on the local disk, R2 as the end state	bodies/new-31.md
+32	Core: boards	type:chore,area:deploy,runtime:bare-metal,install:boards	Boards gate: rqlite without TLS or authentication	bodies/new-32.md
+33	Core: boards	type:chore,area:deploy,runtime:bare-metal,install:boards	Boards gate: real-time clock loses its time on power loss	bodies/new-33.md
+34	Core: boards	type:chore,area:deploy,runtime:bare-metal,install:boards	Boards gate: strangers can write audit records through the token and revoke endpoints	bodies/new-34.md
+35	Core: boards	type:chore,area:deploy,runtime:bare-metal,install:boards	Boards gate: ca keeps permissions it does not use	bodies/new-35.md
+36	Core: boards	type:chore,area:conformance,runtime:bare-metal,install:boards	Boards: run the alpha.2 candidate on three boards with ca off	bodies/new-36.md
+37	Core: local	type:feature,area:deploy,install:local	Local development: one command from clone to a running core	bodies/new-37.md
+38	Core: local	type:chore,area:conformance,install:local	Local emulators for the AWS and Kubernetes drivers in CI	bodies/new-38.md
+39	Core: release	type:chore,area:deploy	Cut v2.0.0-alpha.2 after the core features	bodies/new-39.md
+40	Core: release	type:chore,area:deploy	New drivers join images, packages and the candidate checks	bodies/new-40.md
+41	Core: release	type:docs,area:docs	Rebaseline the docs: roadmap page, requirement milestone keys, board field	bodies/new-41.md
+42	Core: lambda	type:feature,area:driver,runtime:serverless,install:lambda	Postgres index in `aurora` mode: provisioning (Aurora Serverless v2), IAM auth from the indexer and reader functions in the VPC	bodies/new-42.md
+43	Core: kubernetes	type:feature,area:driver,runtime:kubernetes,install:kubernetes	Postgres store driver (durable/temp engine on CNPG): Get, Query, Transact, TailLog	bodies/new-43.md
+44	Core: kubernetes	type:feature,area:deploy,runtime:kubernetes,install:kubernetes	One CNPG cluster: store and audit index as separate databases and roles	bodies/new-44.md
+45	Core: lambda	type:feature,area:deploy,runtime:serverless,install:lambda	API Gateway side of the Cloudflare edge: custom domain with mutual TLS (authenticated-pull CA truststore), default execute-api endpoint off, cache headers	bodies/new-45.md
+46	Core: kubernetes	type:feature,area:deploy,runtime:kubernetes,install:kubernetes	Route entry's relay behind the cluster's own Cloudflare tunnel and gateway (HTTPRoute/Ingress)	bodies/new-46.md
+47	Core: kubernetes	type:feature,area:deploy,runtime:kubernetes,install:kubernetes	Optional `cloudflared` sidecar value in `entry`'s pod	bodies/new-47.md
+48	Core: boards	type:feature,area:deploy,runtime:bare-metal,install:boards	`cloudflared` deployed by the board scripts	bodies/new-48.md
+49	Core: release	type:docs,area:docs	Document the Cloudflare records, rules, rate limits and cache times each installation's IaC applies	bodies/new-49.md

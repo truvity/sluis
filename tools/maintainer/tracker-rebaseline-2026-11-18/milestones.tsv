@@ -1,0 +1,10 @@
+# title<TAB>description. Parity is the new name of v2.0-alpha (renamed, so its issues keep their links).
+Core: features	Alpha.2 core: actors and flows of the core (discovery, authorization, tokens, exchange, policy, store, keys, config, audit emitter, writer and search, the v1 contract points). Target v2.0.0-alpha.2, cut when all six Core milestones are closed.
+Core: local	Alpha.2 core: the local installation, its images, local development and the emulators for driver tests. Target v2.0.0-alpha.2.
+Core: boards	Alpha.2 core: the three-board installation tested, doctor, hardening, OS images, test harness, CI runner group and cloudflared on the boards. Target v2.0.0-alpha.2.
+Core: lambda	Alpha.2 core: the Lambda shape: runtime, the dynamodb, aws-kms, ssm, appconfig, s3-compatible and sqs drivers, exporter wake-up, the postgres index in aurora mode, the API Gateway side of the Cloudflare edge, packaging and a test installation. Target v2.0.0-alpha.2.
+Core: kubernetes	Alpha.2 core: the EKS shape: Helm chart pieces, the nats-jetstream audit transport, the postgres store driver and audit index on one CloudNativePG cluster, and the route behind the cluster's own Cloudflare tunnel and gateway. Target v2.0.0-alpha.2.
+Core: release	Alpha.2 core: release management: candidate and tag flow, packages, images, compatibility rules, the alpha.2 cut and the documented Cloudflare edge rules. Target v2.0.0-alpha.2.
+Parity	The v1 parity rows (integrations, clients, console, backup and restore, reconcilers, the rest of audit). A holding milestone, re-planned after alpha.2, with no dates.
+PKI/SSH/DB	The PKI, SSH and database add-on: ca, certificate profiles, SSH CA and host service, database client certificates, the KV add-on, hand-off to root custody, host enrolment. After parity.
+Backlog	Not scheduled: customer-identity leftovers, later drivers, staff keys, signing API, FIPS, TPM, device login.

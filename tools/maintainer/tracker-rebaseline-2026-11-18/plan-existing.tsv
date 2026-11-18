@@ -1,0 +1,241 @@
+# number<TAB>milestone<TAB>action (keep|done|notplanned)<TAB>expected title ('-' = not checked)<TAB>comment body file ('-' = none)
+774	Core: features	keep	Parity: OIDC discovery, key set and caller grants	-
+775	Core: features	keep	Parity: Authorization endpoint and PKCE	-
+776	Core: features	keep	Parity: Token endpoint and ID/access tokens	-
+779	Core: features	keep	Parity: RP-initiated logout and sign-out pages	-
+782	Core: features	keep	Parity: Token exchange grant (RFC 8693)	-
+785	Core: features	keep	Parity: Exchange controls: sign-in exchange and exchange limits	-
+786	Core: features	keep	Parity: Policy document: groups, members, matchers, claims, lifetimes	-
+787	Core: features	keep	Parity: Grant naming, declared vocabulary and wildcards	-
+788	Core: features	keep	Parity: Per-audience token shaping: groups scoping, delimiter, signing algorithm	-
+789	Core: features	keep	Parity: Client model: public, confidential, exchange	-
+793	Core: features	keep	Parity: Sessions: SSO, limits, listing and revocation	-
+796	Core: features	keep	Parity: Web surface hardening and uniform refusals	-
+797	Core: features	keep	Parity: State through the store service	-
+799	Core: features	keep	Parity: Blob port	-
+800	Core: features	keep	Parity: Keys port and key ring	-
+802	Core: features	keep	Parity: Audit transport (audit records)	-
+803	Core: features	keep	Parity: Driver selection and registry	-
+838	Core: features	keep	Parity: Audit: seals and verification	-
+846	Core: features	keep	Parity: Installation document, policy rendering and service configuration	-
+851	Core: features	keep	Parity: Port conformance suite	-
+859	Core: features	done	Foundation: source layout scaffold	bodies/close-859.md
+862	Core: features	keep	Foundation: driver IPC pattern with platform-started services	-
+863	Core: features	keep	Foundation: kind registry, actor registry and the generators	-
+885	Core: features	keep	Feature: passkeys and step-up for high-privilege grants	-
+941	Core: features	keep	Spike S3: a slim entry prototype in Go and in Rust	-
+949	Core: features	keep	Generator and drift test: scopes, ACLs, cloud policies, units, sockets and service accounts from the registries	-
+951	Core: features	keep	key@: one socket per caller, peer-uid check, content-aware signing	-
+958	Core: features	keep	The slim entry actor: parse, validate, route, and nothing else	-
+959	Core: features	keep	The session actor: session records, the cookie and per-boundary freshness	-
+961	Core: features	keep	The exchange actor: token exchange, enrolment and proof verifiers	-
+962	Core: features	keep	Issuers per boundary with static discovery and JWKS	-
+977	Core: features	keep	Reload the config snapshot of a running store on every runtime	-
+979	Core: features	keep	Form post response mode with its conformance plan	-
+1039	Core: features	keep	Approved cryptography and parser libraries: a declared list and a CI check against home-made primitives	-
+1040	Core: features	keep	Threat model and independent negative tests per security surface before merge	-
+1051	Core: features	keep	Dependency-down behaviour: fail closed, no weaker path, issued tokens stay valid	-
+1081	Core: features	keep	Subject and token basics for the first version	-
+1097	Core: features	keep	Design the sluis command tree and the configuration keys shown in examples	-
+1106	Core: features	keep	Generic OIDC upstream, sign-in only, for the first working version	-
+1120	Core: features	keep	Audit for the first working version: the emitter, with pseudonyms	-
+1121	Core: features	keep	Audit for the first working version: the writer on the files blob	-
+1122	Core: features	done	Audit for the first working version: Search with the sqlite index	bodies/close-1122.md
+1157	Core: features	keep	Config loading in store@: signed documents, the file and appconfig drivers and the check	-
+1202	Core: features	keep	Implement the kind registry and its checks (v2)	-
+1203	Core: features	keep	Implement the store service and its typed clients (v2)	-
+1205	Core: features	keep	Implement config and secret kinds: installation-wide documents, secret sources and retired fields (v2)	-
+1206	Core: features	keep	Implement treatment in the store: sealed, hashed and plain values (v2)	-
+1208	Core: features	keep	Implement data keys, DataKeyWrap and the recovery recipient (v2)	-
+1213	Core: features	keep	Implement unit separation and the fusion rules in the actor registry (v2)	-
+1215	Core: features	keep	Implement entry hardening and keyed rate windows (v2)	-
+1217	Core: features	keep	Implement the exporter rules (v2)	-
+1221	Core: features	keep	Implement session chains and the kinds that hold personal data (v2)	-
+1338	Core: features	keep	exporter: serve the key set with max-age 300 and cap the edge time to live at 300 seconds, and report when a key is published	-
+1361	Core: features	keep	keys: token-signing key compromise: the revoked state, the replacement and the any-node revoke	-
+1362	Core: features	keep	keys: sluis key revoke and the tighten-only KeyRevocation record	-
+1363	Core: features	keep	docs: the incident page and the first compromise drill of the token-signing key	-
+1419	Core: features	keep	sluis config check: the installation-model checks and config explain	-
+1625	Core: features	keep	Ending a browser sign-in stops silent re-admission (REQ-SESS-056)	-
+1726	Core: features	keep	Exporter tests: count against the engine, not the wall clock	-
+1728	Core: features	keep	Exporter: a refused read-back does not purge the destination on every retry	-
+849	Core: local	keep	Parity: Demonstration mode	-
+1100	Core: local	done	Conformance pipeline: suite runs on pull requests against the local installation, archived results	bodies/close-1100.md
+1123	Core: local	done	Container images for the first working version	bodies/close-1123.md
+1446	Core: local	keep	Retire the stale install file of the local installation	-
+866	Core: boards	keep	Foundation: systemd unit hardening baseline	-
+867	Core: boards	keep	Foundation: `sluis doctor` platform checks	-
+877	Core: boards	keep	Foundation: test installations harness	-
+881	Core: boards	keep	Foundation: board OS images for Ubuntu 26.04 and Rocky Linux 10.2	-
+891	Core: boards	keep	CI: integration tests on a private runner group (boards and AWS test installations)	-
+952	Core: boards	keep	rqlite engine for the boards and the local installation: one cluster per engine	-
+953	Core: boards	done	systemd template units and the instance generator	bodies/close-953.md
+1584	Core: boards	keep	Gate: close or accept the known limits of the boards before any real PIN or real data	-
+1735	Core: boards	keep	Boards scripts: remove the legacy directory, refuse a missing seed	-
+1755	Core: boards	keep	-	-
+842	Core: lambda	keep	Parity: AWS Lambda installation	-
+875	Core: lambda	keep	Foundation: Lambda packaging as zip per actor	-
+954	Core: lambda	keep	S3-compatible blob driver and the cloud-cloudflare credential driver	-
+970	Core: lambda	keep	Decision: re-test public API streaming on Lambda	-
+1182	Core: lambda	keep	AWS: open secret-source values at key@ instead of passing them through store@ in clear	-
+1211	Core: lambda	keep	Implement the slot plan, key purposes and the KMS baseline (v2)	-
+843	Core: kubernetes	keep	Parity: Kubernetes deployment with AWS storage	-
+844	Core: kubernetes	keep	Parity: Helm chart	-
+876	Core: kubernetes	keep	Foundation: the Helm chart, packaged by ocictl with digest-pinned images	-
+1236	Core: kubernetes	keep	Implement the Kubernetes installation on AWS (EKS): chart, pods per actor, sidecar drivers, NetworkPolicies, web identity (v2)	-
+848	Core: release	keep	Parity: Release artifacts and verification	-
+860	Core: release	keep	Foundation: build system with one repository version, GoReleaser v2 and per-architecture jobs	-
+986	Core: release	keep	Per-driver deb/rpm packages and installation meta-packages	-
+1223	Core: release	keep	Implement driver packages and mixed hosts (v2)	-
+1706	Core: release	keep	audit-compat: validate the example records of the last release as the tag holds them	-
+1715	Core: release	keep	Compatibility per artifact: what a patch, a minor and a major release may change	-
+780	Parity	keep	Parity: Back-channel logout	-
+783	Parity	keep	Parity: CI identity tokens as a proof	-
+784	Parity	keep	Parity: Workload proofs: Kubernetes ServiceAccount and AWS role tokens	-
+790	Parity	keep	Parity: Generated client secrets and rotation	-
+791	Parity	keep	Parity: Resources (RFC 8707)	-
+792	Parity	keep	Parity: Client ID Metadata Documents	-
+794	Parity	keep	Parity: Agent-class sessions and consent	-
+795	Parity	keep	Parity: Recovery sign-in	-
+801	Parity	keep	Parity: Platform scheduler and lease	-
+804	Parity	keep	Parity: State migration between storages	-
+805	Parity	keep	Parity: Google Workspace directory	-
+806	Parity	keep	Parity: Directory snapshots and freshness	-
+807	Parity	keep	Parity: Sign-in through the corporate directory	-
+808	Parity	keep	Parity: GitHub team and membership controller	-
+809	Parity	keep	Parity: GitHub account links	-
+810	Parity	keep	Parity: GitHub Apps catalogue and runner Apps	-
+811	Parity	keep	Parity: GitHub App installation tokens	-
+812	Parity	keep	Parity: Slack policy channels	-
+813	Parity	keep	Parity: Slack console channels and Slack Connect channels	-
+814	Parity	keep	Parity: Slack workspace connection and Apps catalogue	-
+815	Parity	keep	Parity: Outline workspace controller	-
+816	Parity	keep	Parity: Cloudflare API tokens	-
+817	Parity	keep	Parity: Cloudflare R2 credentials	-
+818	Parity	keep	Parity: Kubernetes API server sign-in	-
+819	Parity	keep	Parity: AWS roles through web identity	-
+820	Parity	keep	Parity: Argo CD and Kargo sign-in	-
+821	Parity	keep	Parity: Console applications and gateway OIDC	-
+822	Parity	keep	Parity: MCP authorization	-
+823	Parity	keep	Parity: MCP resource proxy sidecar	-
+826	Parity	keep	Parity: GitHub Actions exchange action	-
+827	Parity	keep	Parity: sluisctl sign-in, kubeconfig and AWS profiles	-
+828	Parity	keep	Parity: sluisctl token, exchange and github-token	-
+829	Parity	keep	Parity: sluisctl Cloudflare, OpenBao and database wrappers	-
+830	Parity	keep	Parity: Go and TypeScript client libraries	-
+831	Parity	keep	Parity: Console: read model and roles	-
+832	Parity	keep	Parity: Console: connect and manage actions	-
+833	Parity	keep	Parity: Audit recording and the Audit page	-
+834	Parity	keep	Parity: Backup module	-
+835	Parity	keep	Parity: Restore	-
+836	Parity	keep	Parity: Telemetry and health	-
+837	Parity	keep	Parity: Audit: ingest and archive	-
+839	Parity	keep	Parity: Audit: search and query	-
+840	Parity	keep	Parity: Audit: profiles and identity treatment	-
+841	Parity	keep	Parity: Audit: emitter SDK and usage stream	-
+845	Parity	keep	Parity: Pulumi library	-
+847	Parity	keep	Parity: High availability	-
+850	Parity	keep	Parity: OpenID conformance and standards coverage	-
+852	Parity	keep	Parity: Policy tests	-
+853	Parity	keep	Parity: Documentation set and upgrade guides	-
+854	Parity	keep	Parity: Generated references	-
+869	Parity	keep	Foundation: JOSE package and per-language verification demos	-
+870	Parity	keep	Foundation: workload identity with the boundary issuer and AWS exchange	-
+873	Parity	keep	Foundation: distribution site on R2	-
+890	Parity	keep	Feature: artifact signing API (OIDC-authorised callers, detached OpenPGP signatures, the key is never shown)	-
+899	Parity	keep	Parity: on-call notifications (GoAlert and Telegram)	-
+931	Parity	keep	Conformance pipeline, full set: nightly runs on the lambda installation, certification package and archived results	-
+950	Parity	keep	Isolation test vectors per independent check, with the other checks switched off	-
+955	Parity	keep	Peer witness driver	-
+960	Parity	keep	The console actor: the operator API (backend for the console)	-
+963	Parity	keep	Federation: boundary installations joined by declared trust	-
+965	Parity	keep	Verifier drivers for workload and host proofs	-
+974	Parity	keep	NATS credentials from sluis: auth callout and user-JWT minter	-
+985	Parity	keep	Audit installation front: slim entry router, reader API and its own console	-
+1011	Parity	keep	Downstream credentials: the first CredentialMinter, only for declared targets	-
+1017	Parity	keep	Cutover from v1: the inventory, the tooling and the data migration	-
+1061	Parity	keep	Region guard: every table, bucket, key replica and index in an allowed region	-
+1138	Parity	keep	Keep v1's audit and billing history readable: pinned final verifier and one-time billing export	-
+1143	Parity	keep	Decision: which audit installation receives the workforce installation's audit	-
+1207	Parity	keep	Implement profiles, layered kinds and the direction rule (v2)	-
+1212	Parity	keep	Implement sealed grants and spent markers (v2)	-
+1214	Parity	keep	Implement adapters without held credentials, and minters that record nothing (v2)	-
+1216	Parity	keep	Implement boundaries on the ladder: wrapping keys, promotion and engines (v2)	-
+1218	Parity	keep	Implement the audit-only installation (v2)	-
+1219	Parity	keep	Implement console routing, switches and log-level overrides (v2)	-
+1220	Parity	keep	Implement reconciler targets and the pause switch (v2)	-
+1330	Parity	keep	kits/go/store: take the sealed-store helper from session	-
+1331	Parity	keep	registry: give entry the edge to the reader, for the audit front	-
+1332	Parity	keep	reader: know the caller of the audit front (a token, then policy decides for the person)	-
+1333	Parity	keep	contracts: write the reader's contract and its route at the audit front	-
+1334	Parity	keep	audit: Get, Facets, Export and the tail of the reader, and the merge of the logs of a project	-
+1335	Parity	keep	obs: record each fetch of the key set by user-agent product and AS number, at the edge	-
+1336	Parity	keep	ops: a rotation drill in staging that lists the verifiers that fail	-
+1364	Parity	keep	backup: a restore re-applies key revocations	-
+1365	Parity	keep	keys: remove a lost board at once, refuse its PIN release, and a PIN change command	-
+1366	Parity	keep	keys: a compromised data key ends its generation, with a re-seal job	-
+1367	Parity	keep	audit: a log key is replaced by a key-change record, and sluis audit verify takes more than one key	-
+1370	Parity	keep	keys: detect key use outside key@ by reconciling the key service log with audit	-
+1371	Parity	keep	Decision: revisit the accepted risk of a compromised mac key after measuring a migration	-
+1372	Parity	keep	keys: replace an AWS wrapping key, wrap for the recovery recipient on AWS, and revisit the evidence key	-
+1454	Parity	keep	exporter@: the bucket driver, the edge purge for the boards and the confirmation of a revocation	-
+1624	Parity	keep	Console host: a hostname, a certificate and a passkey allow-list entry of its own	-
+1714	Parity	keep	exporter@ after its first version: the other destinations, the other exportable kinds, the Lambda trigger and the conformance suite	-
+1737	Parity	keep	Parity: key@ deletes an exited tenant's evidence wrap when its retention ends	-
+798	PKI/SSH/DB	keep	Parity: Secrets and typed export through store@ and exporter@	-
+913	PKI/SSH/DB	keep	The ca actor: the X.509 certificate authority	-
+925	PKI/SSH/DB	keep	SSH user and host certificates from the ssh-ca actor, with principals from the sluis-host service	-
+926	PKI/SSH/DB	keep	Database access: short-lived client certificates for self-run PostgreSQL and CloudNativePG	-
+964	PKI/SSH/DB	keep	SPIFFE IDs, X.509-SVIDs and JWT-SVIDs, with a trust domain per boundary	-
+966	PKI/SSH/DB	keep	Host enrolment API with end-to-end encryption and token proof	-
+967	PKI/SSH/DB	keep	Host enrolment client and console pages	-
+968	PKI/SSH/DB	keep	sluis trust sync: trust bundles onto hosts through a generic package	-
+969	PKI/SSH/DB	keep	ca issuance log on C2SP static-ct-api	-
+971	PKI/SSH/DB	keep	sluis-host: the root host service for SSH	-
+972	PKI/SSH/DB	keep	cert-manager issuer backed by sluis	-
+978	PKI/SSH/DB	keep	ca: ACME (RFC 8555) for host TLS certificates, after the first release	-
+1066	PKI/SSH/DB	keep	Hand-off to root custody: `sluis key request`, `install` and `status`	-
+1067	PKI/SSH/DB	keep	key@: the OpenPGP back-signature for a node subkey, with a test on a test card	-
+1068	PKI/SSH/DB	keep	Expiry warning for intermediates: metrics, alert rule and `sluis doctor`	-
+1069	PKI/SSH/DB	keep	KMS proof of key location for the hand-off	-
+1070	PKI/SSH/DB	keep	Hand-off conformance fixtures shared with ritueel	-
+1071	PKI/SSH/DB	keep	Tracker: the first version certifies against any CA that signs a PKCS#10; ritueel's software-root mode is the certifier CI runs when it exists	-
+1072	PKI/SSH/DB	keep	SSH CA keys as anchors: the signed list of SSH CA keys on hosts	-
+1222	PKI/SSH/DB	keep	Implement enrolment tokens and requests at key@ (v2)	-
+1368	PKI/SSH/DB	keep	ca: a compromised intermediate stops issuing and leaves the trust bundle	-
+1369	PKI/SSH/DB	keep	ssh-ca: a refresh interval for the SSH CA key list, an alert on a stale list, and the host CA procedure	-
+855	Backlog	keep	feat: device login for sluisctl (RFC 8628 device authorization grant)	-
+868	Backlog	keep	A FIPS build variant, when a customer needs it	-
+871	Backlog	keep	Foundation: GCP Workload Identity Federation exchange	-
+872	Backlog	keep	Foundation: Azure Entra federated credential exchange	-
+874	Backlog	keep	Foundation: OpenPGP release signing and CI upload credentials for R2	-
+882	Backlog	keep	Foundation: site explorers read the kind registry and the actor registry	-
+884	Backlog	keep	Foundation: optional TPM 2.0 key support (sealing and node identity)	-
+916	Backlog	keep	Generic OIDC upstream integration with acr/amr passthrough and step-up (RFC 9470)	-
+917	Backlog	keep	Connect client library for TypeScript (connect-es) for the public API	-
+918	Backlog	keep	Later: SAML 2.0 identity provider and SCIM provisioning for AWS IAM Identity Center	-
+973	Backlog	keep	Runbook: promoting a tenant to a boundary of its own	-
+980	Backlog	keep	CIBA in poll mode with a passkey on the approving device (after v2 parity)	-
+982	Backlog	keep	Garage as a later blob backend for the boards (blocked upstream on conditional writes and prefix-scoped keys)	-
+1013	Backlog	keep	Release signing: the keyring package and the OpenPGP payload for images	-
+1029	Backlog	keep	ADR: More keys drivers and post-quantum tokens and certificates	-
+1052	Backlog	keep	Tighten review rules before production use: code owners and two approvals on authentication, token, key and audit code	-
+1063	Backlog	keep	Issuer hosts: CAA records, Certificate Transparency monitoring and an incident rule	-
+1074	Backlog	keep	Signing API: apt `Release.gpg` and `InRelease`, and rpm `repomd.xml.asc`	-
+1075	Backlog	keep	Signing API, later: per-package rpm signatures and a `gpg.program` stand-in for git	-
+1117	Backlog	keep	Signing API: raw ECDSA signatures and Sigstore bundles, each with a key of its own	-
+1154	Backlog	keep	oidc upstream: send a configured `claims` request parameter (Google sends amr and auth_time only on request)	-
+1175	Backlog	keep	Docs: a Learn section for people new to identity brokers	-
+1224	Backlog	keep	Kubernetes: mutual TLS between callers (later work)	-
+1238	Backlog	keep	Later: Kubernetes without AWS - PostgreSQL via CNPG as the store engine, and a key source	-
+1329	Backlog	keep	Upstream: declare an assurance so session can cap acr	-
+1373	Backlog	keep	Decision: revisit the accepted risk of a compromised pairwise key, and the chain compromise rule	-
+1450	Backlog	keep	sluis config explain: the --live layers and the built-in layer of the documents	-
+1626	Backlog	keep	Access explorer and saved filters for the console, after parity	-
+1639	Backlog	keep	Refresh tokens: recognise any old token of a chain without storing every spent hash	-
+1713	Backlog	keep	Capacity spike, the rest of the path: signing from the pods, the hops to store@ and key@, the engines, the audit writer and the end to end rate	-
+1718	Backlog	keep	-	-
+1719	Backlog	keep	-	-
+1786	Backlog	keep	-	-
+927	-	notplanned	CIAM backlog: customer sign-in features not yet scheduled	bodies/close-927.md
+1062	-	notplanned	Mass session revocation: paginated, asynchronous and idempotent	bodies/close-1062.md

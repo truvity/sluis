@@ -1,0 +1,1 @@
+Not planned. The maintainer cancelled the customer-identity (CIAM) work on 2026-11-12, and none of the 19 requirement rows behind this backlog is built (16 planned, 3 withdrawn). Part of the tracker re-baseline of 2026-11-18, approved by the maintainer.
