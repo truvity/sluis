@@ -150,6 +150,7 @@ The log itself, its projects and buckets, sealing, witnesses, lock modes, encryp
 - **This replaces two sentences.** "A serverless indexer and reader reach Postgres through RDS Proxy with IAM authentication" reads "directly with IAM authentication", and the consequence "Every lambda installation pays for an Aurora database and an RDS Proxy" reads "an Aurora Serverless v2 database". The functions still run in the VPC and use endpoints for the other AWS APIs.
 - **The cost of auto-pause** is that the first read after an idle period waits for the database to resume; the Lambda installation's tests measure it.
 - **The allowance of the Context** ([0039](/decisions/0039-quota-allowance/)) is superseded by [0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/): the usage facts stay, the allowance facts are not built. The Kubernetes installation uses the `postgres` index in the `cnpg` mode of its CloudNativePG cluster, as a database and role of their own (K2 B).
+- **Requirements:** [REQ-AUDIT-192](/requirements/audit/#REQ-AUDIT-192) for Aurora Serverless v2 with auto-pause, and [REQ-AUDIT-076](/requirements/audit/#REQ-AUDIT-076), reworded to a direct connection with IAM authentication.
 
 ```mermaid
 flowchart LR
