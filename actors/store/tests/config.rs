@@ -462,47 +462,71 @@ fn the_secret_an_upstream_names_is_a_credential_name() {
 }
 
 /// A client's `signing_alg` is the algorithm of its ID tokens: left out or ES384 for the default, RS256 for a relying party
-/// that cannot take it, and no other word. An exchange client is given access tokens only, so it has none to name.
+/// that cannot take it, and no other word. An exchange client is given access tokens only, so it has none to name. The words
+/// are those of the shared vectors (`kits/conformance/token/signing-alg-vectors.json`, "config"): each accepted one records
+/// the algorithm the vector says for every kind it names, and each refused one is refused at the field, whatever else is
+/// true of the client, with no value in the message.
 ///
 /// verifies: REQ-CLIENT-046
 #[test]
-fn the_algorithm_of_a_clients_id_tokens_is_es384_or_rs256_and_an_exchange_client_has_none() {
-    let client = |ty: &str, line: &str| {
+fn the_algorithm_of_a_clients_id_tokens_is_what_the_shared_vectors_accept() {
+    let vectors: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../kits/conformance/token/signing-alg-vectors.json"
+    ))
+    .unwrap();
+    let (accepted, not_accepted) = (
+        vectors["config"]["accepted"].as_array().unwrap(),
+        vectors["config"]["refused"].as_array().unwrap(),
+    );
+    assert!(accepted.len() >= 5 && not_accepted.len() >= 15);
+    let client = |ty: &str, v: Option<&serde_json::Value>| {
+        // A JSON value is a YAML flow scalar or sequence, with the same escapes.
+        let line = v.map_or(String::new(), |v| format!("  signing_alg: {v}\n"));
         format!(
             "app:\n  kind: {ty}\n  redirects: [\"https://app.example.com/cb\"]\n  requires: [\"dev:app:user\"]\n{line}"
         )
     };
-    let alg = |ty: &str, line: &str| {
-        let items =
-            payload::decode(kind("InstallationClient"), client(ty, line).as_bytes()).unwrap();
+    let alg = |ty: &str, v: Option<&serde_json::Value>| {
+        let items = payload::decode(kind("InstallationClient"), client(ty, v).as_bytes()).unwrap();
         pb::InstallationClient::decode_from_slice(&items[0].1)
             .unwrap()
             .signing_alg
     };
-    for ty in ["public", "confidential"] {
-        assert_eq!(alg(ty, ""), "", "{ty}");
-        assert_eq!(alg(ty, "  signing_alg: ES384\n"), "ES384", "{ty}");
-        assert_eq!(alg(ty, "  signing_alg: RS256\n"), "RS256", "{ty}");
-        assert_eq!(alg(ty, "  signing_alg: \"\"\n"), "", "{ty}");
-        assert_eq!(alg(ty, "  signing_alg: null\n"), "", "{ty}");
+    for a in accepted {
+        let v = (!a["absent"].as_bool().unwrap_or(false)).then(|| &a["value"]);
+        for ty in a["kinds"].as_array().unwrap() {
+            assert_eq!(
+                alg(ty.as_str().unwrap(), v),
+                a["alg"].as_str().unwrap(),
+                "{a}"
+            );
+        }
     }
-    for bad in ["PS256", "rs256", "RS256 ", "none", "ES256", "EdDSA"] {
-        let e = refused(
-            "InstallationClient",
-            &client("confidential", &format!("  signing_alg: \"{bad}\"\n")),
-        );
-        assert_eq!(e, "app.signing_alg: not one of the values of the schema");
+    let words = [
+        (
+            "value",
+            "app.signing_alg: not one of the values of the schema",
+        ),
+        ("type", "app.signing_alg: must be a string"),
+        (
+            "exchange",
+            "app.signing_alg: an exchange client gets no ID token",
+        ),
+    ];
+    for r in not_accepted {
+        let want = words
+            .iter()
+            .find(|(class, _)| *class == r["class"].as_str().unwrap())
+            .unwrap_or_else(|| panic!("a class this test does not know: {r}"))
+            .1;
+        for ty in r["kinds"].as_array().unwrap() {
+            let e = refused(
+                "InstallationClient",
+                &client(ty.as_str().unwrap(), Some(&r["value"])),
+            );
+            assert_eq!(e, want, "{r}");
+        }
     }
-    let e = refused(
-        "InstallationClient",
-        &client("confidential", "  signing_alg: 1\n"),
-    );
-    assert_eq!(e, "app.signing_alg: must be a string");
-    for line in ["  signing_alg: RS256\n", "  signing_alg: ES384\n"] {
-        let e = refused("InstallationClient", &client("exchange", line));
-        assert_eq!(e, "app.signing_alg: an exchange client gets no ID token");
-    }
-    assert_eq!(alg("exchange", ""), "");
 }
 
 /// A client's `groups_delimiter` replaces each `:` of a grant name in the groups of its tokens, for a verifier that splits a

@@ -691,9 +691,10 @@ requirements:
     runtimes: all
     actors: [signer]
     standards: []
-    issues: [788]
+    issues: [788, 1818]
     tests: [actors/signer/tests/sign.rs]
     verification:
+      - {kind: test-vectors, ref: "kits/conformance/token/signing-alg-vectors.json, tokens: an RS256 audience's ID token is RS256 while its key is active; every other token is ES384 in every state of the key"}
       - {kind: integration-test, ref: "session and exchange get the same answers; go-jose verifies the RS256 ID token and the ES384 tokens (an_id_token_is_rs256_when_the_audience_says_so_and_every_other_token_stays_es384)"}
   - id: REQ-TOKEN-044
     area: TOKEN
@@ -706,9 +707,10 @@ requirements:
     runtimes: all
     actors: [signer]
     standards: []
-    issues: [788]
+    issues: [788, 1818]
     tests: [actors/signer/tests/sign.rs]
     verification:
+      - {kind: test-vectors, ref: "kits/conformance/token/signing-alg-vectors.json, tokens: an RS256 audience's ID token is refused (key_set, key_revoked), as is one for a signing_alg outside the list (config), never signed with ES384"}
       - {kind: integration-test, ref: "unlisted, no key, pre-published, revoked: each refused and audited, no ES384 token made (with_no_active_rs256_key_an_rs256_audience_is_refused_and_never_given_es384)"}
   - id: REQ-TOKEN-045
     area: TOKEN

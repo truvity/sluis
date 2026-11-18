@@ -3122,6 +3122,140 @@ async fn an_unknown_signing_alg_signs_no_id_token_and_falls_back_to_nothing() {
     assert_eq!(header_of(&at.token)["alg"], "ES384");
 }
 
+/// Which audiences are given RS256 is what the shared vectors say (`kits/conformance/token/signing-alg-vectors.json`,
+/// "tokens"), in every state of the RSA key, for both callers: the RSA key signs the ID tokens of an audience that says RS256
+/// in so many words and nothing else; a token the audience asked RS256 for, whose key is not live, is refused with the
+/// vector's closed reason and no ES384 token is made in its place; and every other token, an RS256 audience's access token
+/// included, is ES384 and never touches the RSA key. The two counts of what key@ signed at the end are the proof: one signature
+/// of the RSA purpose for each RS256 answer, one of the token purpose for each ES384 one.
+///
+/// verifies: REQ-TOKEN-043, REQ-TOKEN-044, REQ-KEYS-005
+#[tokio::test]
+async fn the_audiences_that_get_rs256_are_those_of_the_shared_vectors() {
+    let vectors: Value = serde_json::from_str(include_str!(
+        "../../../kits/conformance/token/signing-alg-vectors.json"
+    ))
+    .unwrap();
+    let cases = vectors["tokens"]["vectors"].as_array().unwrap();
+    let states: Vec<&str> = vectors["tokens"]["keys"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s.as_str().unwrap())
+        .collect();
+    assert_eq!(states.len(), 5);
+    let aud = |alg: &str| {
+        if alg.is_empty() {
+            "vector-default".to_owned()
+        } else {
+            format!("vector-{}", alg.to_lowercase())
+        }
+    };
+    for state in states {
+        let w = World::new().await;
+        let m = rs_material();
+        // One client for each algorithm that a vector names; it is the audience's declaration alone that decides.
+        let mut named: Vec<&str> = cases
+            .iter()
+            .map(|c| c["signing_alg"].as_str().unwrap())
+            .collect();
+        named.sort_unstable();
+        named.dedup();
+        for alg in &named {
+            let id = aud(alg);
+            w.store.put(
+                "installation-client",
+                &id,
+                InstallationClient {
+                    id: id.clone(),
+                    kind: "public".into(),
+                    signing_alg: (*alg).into(),
+                    ..InstallationClient::default()
+                }
+                .encode_to_vec(),
+            );
+        }
+        if matches!(state, "active" | "revoked") {
+            w.enable_rs256(m.clone());
+        }
+        let session = w.signer_as("by-session", "session", 0).await;
+        match state {
+            "unlisted" | "active" => {}
+            // The KeyPlan lists the purpose and key@ has no key for it.
+            "listed, no key" => w.store.put("key-plan", "default", key_plan(true)),
+            // key@ has the key, and a public destination has not read it back.
+            "pre-published" => {
+                w.store.put("key-plan", "default", key_plan(true));
+                w.store.put("export-manifest", "default", manifest("edge"));
+                *w.key.rs.lock().unwrap() = Some(m.clone());
+            }
+            "revoked" => {
+                let first = sign(&session, "JWT", w.claims("JWT", &aud("RS256"), 600))
+                    .await
+                    .unwrap();
+                assert_eq!(first.key_id, m.kid);
+                // The ID token above is one RS256 signature the counts below do not hold against the vectors.
+                w.key.rs_signed.lock().unwrap().clear();
+                w.store.revoke(&m.kid);
+            }
+            other => panic!("a state of the RSA key that this test does not know: {other}"),
+        }
+        let exchange = w.signer_as("by-exchange", "exchange", 0).await;
+        let (mut want_rs, mut want_es) = (0, 0);
+        let es_before = w.key.signed.lock().unwrap().len();
+        for case in cases {
+            let keys = case["keys"].as_array().unwrap();
+            if !keys.iter().any(|k| k == state) {
+                continue;
+            }
+            let (typ, alg) = (
+                case["typ"].as_str().unwrap(),
+                case["signing_alg"].as_str().unwrap(),
+            );
+            for (caller, c) in [("session", &session), ("exchange", &exchange)] {
+                w.clock.advance(31);
+                let what = format!("{state}, {caller}: {case}");
+                let got = sign(c, typ, w.claims(typ, &aud(alg), 600)).await;
+                match (case["alg"].as_str(), case["refused"].as_str()) {
+                    (Some(want), None) => {
+                        let got = got.unwrap_or_else(|e| panic!("{what}: refused {e}"));
+                        let head = header_of(&got.token);
+                        assert_eq!(head["alg"], want, "{what}");
+                        assert_eq!(head["typ"], typ, "{what}");
+                        let jwks = key_set(c).await;
+                        let verified = if want == "RS256" {
+                            want_rs += 1;
+                            verify_rs256(&w, &jwks, &got.token, &aud(alg))
+                        } else {
+                            want_es += 1;
+                            verify(&w, &jwks, &got.token, &aud(alg), typ)
+                        };
+                        assert_eq!(verified, Ok(got.key_id.clone()), "{what}");
+                        // The RSA key is the key of the RS256 answers alone.
+                        assert_eq!(got.key_id == m.kid, want == "RS256", "{what}");
+                    }
+                    (None, Some(reason_code)) => {
+                        let e = got.expect_err(&what);
+                        assert_eq!(reason(&e), reason_code, "{what}");
+                    }
+                    _ => panic!("a vector holds an alg or a reason: {case}"),
+                }
+            }
+        }
+        assert!(want_rs + want_es > 0, "{state}: no vector ran");
+        assert_eq!(
+            w.key.rs_signed.lock().unwrap().len(),
+            want_rs,
+            "{state}: the RSA purpose signed what the vectors do not say"
+        );
+        assert_eq!(
+            w.key.signed.lock().unwrap().len() - es_before,
+            want_es,
+            "{state}: the token purpose signed what the vectors do not say, or an ES384 token stood in for a refused RS256 one"
+        );
+    }
+}
+
 /// A group of a token is a grant name written the way the audience's client says: with `:` when it declares no delimiter,
 /// and with its `groups_delimiter` in place of each `:` when it does. A name written the other way, a name that is no grant
 /// name once the delimiter is read back, and a delimiter inside a segment are each refused at `claims.groups`, in an ID token

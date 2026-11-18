@@ -1,0 +1,61 @@
+{
+  "about": "Which audiences are given RS256 and what discovery lists (ADR 0006, \"Named exceptions\"; REQ-KEYS-005, REQ-CLIENT-046, REQ-TOKEN-043, REQ-TOKEN-044, REQ-AUTHN-108). Each audience is a client. v1 pins signing_alg on a client row and keeps one default for every other; v2 keeps that and narrows it: the RSA key signs ID tokens only, for an audience that says RS256 in so many words, never by the caller's choice, and an audience whose key is not live is refused and never given ES384. Names are made up (example.org). actors/store is held to \"config\", actors/signer to \"tokens\" and actors/entry to \"discovery\".",
+  "config": {
+    "about": "What the loader takes as a client's signing_alg (REQ-CLIENT-046). value is the YAML scalar as written; absent means the key is left out. alg is what the loader records ('' is the default, ES384). A word outside the closed list is refused at the field with no value in the message: class 'value' is a string that is none of '', ES384 and RS256 (case and spaces count), 'type' is not a string, 'exchange' is any algorithm on a client that is given access tokens only.",
+    "accepted": [
+      { "name": "left out", "kinds": ["public", "confidential", "exchange"], "absent": true, "alg": "" },
+      { "name": "null", "kinds": ["public", "confidential", "exchange"], "value": null, "alg": "" },
+      { "name": "empty", "kinds": ["public", "confidential", "exchange"], "value": "", "alg": "" },
+      { "name": "the default, said in so many words", "kinds": ["public", "confidential"], "value": "ES384", "alg": "ES384" },
+      { "name": "an API server that takes RS256 alone", "kinds": ["public", "confidential"], "value": "RS256", "alg": "RS256" }
+    ],
+    "refused": [
+      { "kinds": ["public", "confidential"], "value": "PS256", "class": "value", "why": "the RSA key of an audience signs RS256 alone; PS256 is a named exception with a key of its own, not a value of this field" },
+      { "kinds": ["public", "confidential"], "value": "ES256", "class": "value", "why": "v1 allowed it; v2 has no ES256 key for an audience in the core" },
+      { "kinds": ["public", "confidential"], "value": "ES512", "class": "value", "why": "no P-521 key" },
+      { "kinds": ["public", "confidential"], "value": "RS384", "class": "value", "why": "RSA signs RS256 alone" },
+      { "kinds": ["public", "confidential"], "value": "RS512", "class": "value", "why": "RSA signs RS256 alone" },
+      { "kinds": ["public", "confidential"], "value": "EdDSA", "class": "value", "why": "not a signing algorithm of an audience" },
+      { "kinds": ["public", "confidential"], "value": "HS256", "class": "value", "why": "a shared secret signs no token of sluis" },
+      { "kinds": ["public", "confidential"], "value": "none", "class": "value", "why": "an unsigned token is no token" },
+      { "kinds": ["public", "confidential"], "value": "rs256", "class": "value", "why": "the closed list is spelled as JOSE spells it" },
+      { "kinds": ["public", "confidential"], "value": "es384", "class": "value", "why": "the closed list is spelled as JOSE spells it" },
+      { "kinds": ["public", "confidential"], "value": "RS256 ", "class": "value", "why": "a trailing space is another word" },
+      { "kinds": ["public", "confidential"], "value": " RS256", "class": "value", "why": "a leading space is another word" },
+      { "kinds": ["public", "confidential"], "value": 256, "class": "type", "why": "a number" },
+      { "kinds": ["public", "confidential"], "value": true, "class": "type", "why": "a boolean" },
+      { "kinds": ["public", "confidential"], "value": ["RS256"], "class": "type", "why": "a list: one audience has one algorithm" },
+      { "kinds": ["exchange"], "value": "RS256", "class": "exchange", "why": "an exchange client gets no ID token" },
+      { "kinds": ["exchange"], "value": "ES384", "class": "exchange", "why": "an exchange client gets no ID token, even for the default" }
+    ]
+  },
+  "tokens": {
+    "about": "What signer signs for an audience. signing_alg is the client's, as the loader stored it ('' is the default); typ is JWT for an ID token and at+jwt for an access token; rs256_key is the state of the RS256 purpose: 'unlisted' (the KeyPlan does not list it), 'listed, no key' (it lists it and key@ has none), 'pre-published' (the key waits for its lead time), 'active', 'revoked' (KeyRevocation lists its kid). The answer is alg, the algorithm in the header, or refused with the closed reason signer audits and no token of another algorithm. session and exchange get the same answer. A signing_alg that is not in the closed list cannot come from a loader; signer still signs no ID token for it (the second line).",
+    "keys": ["unlisted", "listed, no key", "pre-published", "active", "revoked"],
+    "vectors": [
+      { "name": "no algorithm, any state of the RSA key: the ID token is ES384", "signing_alg": "", "typ": "JWT", "keys": ["unlisted", "listed, no key", "pre-published", "active", "revoked"], "alg": "ES384" },
+      { "name": "ES384 said in so many words, any state of the RSA key: the ID token is ES384", "signing_alg": "ES384", "typ": "JWT", "keys": ["unlisted", "listed, no key", "pre-published", "active", "revoked"], "alg": "ES384" },
+      { "name": "an RS256 audience, its key active: the ID token is RS256", "signing_alg": "RS256", "typ": "JWT", "keys": ["active"], "alg": "RS256" },
+      { "name": "an RS256 audience, the purpose not in the KeyPlan: refused, not ES384", "signing_alg": "RS256", "typ": "JWT", "keys": ["unlisted"], "refused": "key_set" },
+      { "name": "an RS256 audience, the purpose listed and no key: refused, not ES384", "signing_alg": "RS256", "typ": "JWT", "keys": ["listed, no key"], "refused": "key_set" },
+      { "name": "an RS256 audience, its key pre-published: refused until it is active", "signing_alg": "RS256", "typ": "JWT", "keys": ["pre-published"], "refused": "key_set" },
+      { "name": "an RS256 audience, its key revoked: refused as revoked", "signing_alg": "RS256", "typ": "JWT", "keys": ["revoked"], "refused": "key_revoked" },
+      { "name": "an RS256 audience's access token is ES384 in every state: the RSA key signs ID tokens alone", "signing_alg": "RS256", "typ": "at+jwt", "keys": ["unlisted", "listed, no key", "pre-published", "active", "revoked"], "alg": "ES384" },
+      { "name": "no audience but the one that says so is given the RSA key, even while it is active", "signing_alg": "", "typ": "at+jwt", "keys": ["active"], "alg": "ES384" },
+      { "name": "an algorithm this version does not sign with: no ID token, in any state", "signing_alg": "PS256", "typ": "JWT", "keys": ["unlisted", "listed, no key", "pre-published", "active", "revoked"], "refused": "config" },
+      { "name": "an algorithm this version does not sign with: its access token is ES384", "signing_alg": "PS256", "typ": "at+jwt", "keys": ["active"], "alg": "ES384" }
+    ]
+  },
+  "discovery": {
+    "about": "What the discovery document lists in id_token_signing_alg_values_supported and whether the key set holds the RSA key (REQ-AUTHN-108, REQ-KEYS-271). rs256_key is the state of the ring's RSA key, null for a ring with none; revoked is whether KeyRevocation lists its kid; revocations says whether KeyRevocation can be read. The document lists ES384 always and RS256 only while the ring holds an active RS256 key that is not revoked: an installation with no RSA key serves no RS256. The key set holds the RSA key in every published state (pre-published, active, retiring) as an RSA entry with n and e and no x5c, and is withheld (503) when the revocations cannot be read.",
+    "vectors": [
+      { "name": "a ring with no RSA key", "rs256_key": null, "revoked": false, "revocations": "readable", "listed": ["ES384"], "key_set": "served", "rsa_in_key_set": false },
+      { "name": "an RSA key not yet published to the lead time", "rs256_key": "pre-published", "revoked": false, "revocations": "readable", "listed": ["ES384"], "key_set": "served", "rsa_in_key_set": true },
+      { "name": "an active RSA key", "rs256_key": "active", "revoked": false, "revocations": "readable", "listed": ["ES384", "RS256"], "key_set": "served", "rsa_in_key_set": true },
+      { "name": "an RSA key that has stopped signing and is still published", "rs256_key": "retiring", "revoked": false, "revocations": "readable", "listed": ["ES384"], "key_set": "served", "rsa_in_key_set": true },
+      { "name": "an RSA key that was dropped", "rs256_key": "dropped", "revoked": false, "revocations": "readable", "listed": ["ES384"], "key_set": "served", "rsa_in_key_set": false },
+      { "name": "an active RSA key that KeyRevocation lists", "rs256_key": "active", "revoked": true, "revocations": "readable", "listed": ["ES384"], "key_set": "served", "rsa_in_key_set": false },
+      { "name": "an active RSA key and revocations that cannot be read: nothing is known to be live", "rs256_key": "active", "revoked": false, "revocations": "unreadable", "listed": ["ES384"], "key_set": "withheld", "rsa_in_key_set": false }
+    ]
+  }
+}
