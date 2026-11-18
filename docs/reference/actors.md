@@ -304,7 +304,7 @@ Seals the records it takes from the transport into its audit log and usage log i
 - **Ports:** `data`, `keys`, `blob`, `transport`.
 - **Calls:** `policy`.
 - **Egress:** `audit-blob`, `audit-transport`.
-- **Key purposes:** `audit-log` (sign, public-key), `issuance-log` (sign, public-key), `evidence` (seal).
+- **Key purposes:** `audit-log` (sign, public-key), `audit-log-second` (sign, public-key), `issuance-log` (sign, public-key), `evidence` (seal).
 - **Decisions:** [ADR 0002](/decisions/0002-families-of-actors/), [ADR 0012](/decisions/0012-the-language-follows-the-executable/), [ADR 0028](/decisions/0028-audit-pieces/), [ADR 0029](/decisions/0029-the-audit-log/).
 - **Requirement areas:** [AUDIT](/requirements/audit/).
 - **Standards:** ST-71 C2SP signed-note; ST-72 C2SP tlog-checkpoint; ST-73 C2SP tlog-cosignature; ST-75 C2SP tlog-tiles; ST-114 OCSF 1.x.

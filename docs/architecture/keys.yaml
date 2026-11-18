@@ -15,7 +15,7 @@
 # Sections:
 #   algorithms    the algorithms in use; the FIPS-approved set is the default, a named exception says why
 #   purposes      the keys that live in a key store: `kind` signing | key-agreement | wrapping
-#   slot_plan     the default card slot map, version 1, for the boards
+#   slot_plan     the default card slot map, version 2, for the boards
 #   data_keys     the data keys, which key generates in software and wraps: six per tenant and four per boundary
 #   wrapping      how a data key is wrapped on AWS and on a board
 #
@@ -37,7 +37,7 @@
 #               The other side is `key_purposes` in actors.yaml, and the two must agree
 #   notes       what it is for
 schema: 1
-checked: "2026-11-03"
+checked: "2026-11-18"
 
 algorithms:
   ES384:
@@ -150,9 +150,19 @@ purposes:
     enabled: on-use
     ops: [sign, public-key]
     aws: { key_spec: ECC_NIST_P384, per: boundary, baseline: false }
-    board: { slot: spare }
+    board: { slot: '89' }
     users: [writer]
     notes: "Signs the checkpoints of the issuance log, a third log kind of the audit writer; ca emits the entries."
+
+  - name: audit-log-second
+    kind: signing
+    algorithm: ES256
+    enabled: on-use
+    ops: [sign, public-key]
+    aws: { key_spec: ECC_NIST_P256, per: writer instance, baseline: false }
+    board: { slot: '8f', runtimes: [bare-metal] }
+    users: [writer]
+    notes: "Boards only. The log key of a second audit writer instance on a node's card, which holds the first one's key in slot 84 as `audit-log`: P-256, signing the checkpoints of that instance's audit log and usage log like `audit-log`, and used only by that instance. On AWS a second writer instance has a key of its own under `audit-log` and needs no purpose of this name. A third instance has no pinned slot: it is named in the KeyPlan with a slot of the rotation spares."
 
   - name: release-signing
     kind: signing
@@ -170,7 +180,7 @@ purposes:
     enabled: on-use
     ops: [open, public-key]
     aws: { key_spec: ECC_NIST_P384, per: boundary, baseline: false }
-    board: { slot: spare }
+    board: { slot: '8a' }
     users: [exchange]
     notes: "The HPKE key that a host's enrolment request is sealed to."
 
@@ -180,9 +190,9 @@ purposes:
     enabled: on-use
     ops: [sign, public-key]
     aws: { key_spec: ECC_NIST_EDWARDS25519, per: boundary, baseline: false }
-    board: { slot: spare }
+    board: { slot: '8e' }
     users: [witness]
-    notes: "The key of the witness, in the format the cosignature specification requires (Ed25519, or ML-DSA-44 where the witness uses that). The witness signs its cosignatures through key, like every other signer; on a board the key sits in a spare slot."
+    notes: "The key of the witness, in the format the cosignature specification requires (Ed25519, or ML-DSA-44 where the witness uses that). The witness signs its cosignatures through key, like every other signer; on a board the Ed25519 key sits in slot 8e."
 
   - name: backup-archive
     kind: wrapping
@@ -221,7 +231,7 @@ purposes:
     enabled: named-exception
     ops: [sign, public-key]
     aws: { key_spec: RSA_2048, per: boundary, baseline: false }
-    board: { slot: spare }
+    board: { slot: '8b' }
     users: [signer]
     notes: "Tokens for a client that declares the FAPI 2.0 profile with PS256."
 
@@ -231,9 +241,9 @@ purposes:
     enabled: named-exception
     ops: [sign, public-key]
     aws: { key_spec: ECC_NIST_P256, per: boundary, baseline: false }
-    board: { slot: spare }
+    board: { slot: '8c' }
     users: [signer]
-    notes: "Tokens for FAPI 2.0 with ES256, and workload tokens for a GCP federation."
+    notes: "Tokens for FAPI 2.0 with ES256, and workload tokens for a GCP federation. On a board the key of slot 8c is the FAPI key; the key of a GCP federation is a key of the key service and never a card key."
 
   - name: token-signing-eddsa
     kind: signing
@@ -241,9 +251,9 @@ purposes:
     enabled: named-exception
     ops: [sign, public-key]
     aws: { key_spec: ECC_NIST_EDWARDS25519, per: boundary, baseline: false }
-    board: { slot: spare }
+    board: { slot: '8d' }
     users: [signer]
-    notes: "Tokens for FAPI 2.0 with EdDSA."
+    notes: "Tokens for FAPI 2.0 with EdDSA. On a board an Ed25519 key in slot 8d, which needs firmware 5.7."
 
   - name: token-signing-rs256
     kind: signing
@@ -253,7 +263,7 @@ purposes:
     aws: { key_spec: RSA_2048, per: boundary, baseline: false }
     board: { slot: '88' }
     users: [signer]
-    notes: "The ID tokens of an audience that declares `signing_alg: RS256` (its access tokens stay ES384), and workload tokens for an Azure Entra federation. The audience, not the caller, decides. The key set carries no `x5c` for it. On a board the key is an RSA-2048 key in slot 88 (a fixed row of the default map), PIN once and touch never, born on the card and attested like the others. One private-key operation of the card takes about 0.17 s and holds the card meanwhile (measured 2026-11-08 on a YubiKey 5 with firmware 5.8: median 173 ms, an ES384 signature 148 ms), so the card driver admits four at once (the burst), signs them one at a time and refuses the rest as busy (a call of another key waits for about one to two RSA signatures, up to 0.47 s in one sample; the bound is the four admitted, about 0.7 s), and key@ limits the purpose more tightly on a card than on a software store: one bucket for the purpose, a burst of 4 and 2 signatures a second (a third of the card), shared by every RS256 audience of the board, so a flood of sign-ins to one RS256 audience also refuses the ID tokens of the others (ES384 audiences are not affected). Both refusals reach signer as a failed call, and signer answers its caller with a refusal that it audits as `signer.refused`; key@ audits its own limit refusal (reason `rate`), and a `busy` of the driver is a counted refusal of key@ with the reason `busy` (and a line of the driver's journal once a minute with a count). A key in slot 88 that is not the plan's leaves the purpose absent and does not stop the driver. The software driver holds the key in a file and ignores the slot. Discovery and the key set are built from the ring, and signer reads the KeyPlan: for up to the cache of the key set (5 s), and for the hour of grace after a KeyPlan stops listing the purpose, discovery may list RS256 while signer already refuses it. That is the safe direction (a relying party is told of a key that is there and gets a refusal, never a token of another algorithm). The first RS256 key of an installation that has served for a while, and the first of each further board, is published for the lead time before it signs, like any new key. signer keeps the time a KeyPlan has omitted the purpose in memory: a restart of signer begins its hour of grace again, and the key stays in the ring and the key set meanwhile, with nothing signing with it."
+    notes: "The ID tokens of an audience that declares `signing_alg: RS256` (its access tokens stay ES384), and workload tokens for an Azure Entra federation. The audience, not the caller, decides. The key set carries no `x5c` for it. On a board the key is an RSA-2048 key in slot 88 (a fixed row of the default map; it serves the audiences, and the key of an Azure federation is a key of the key service, never a card key), PIN once and touch never, born on the card and attested like the others. One private-key operation of the card takes about 0.17 s and holds the card meanwhile (measured 2026-11-08 on a YubiKey 5 with firmware 5.8: median 173 ms, an ES384 signature 148 ms), so the card driver admits four at once (the burst), signs them one at a time and refuses the rest as busy (a call of another key waits for about one to two RSA signatures, up to 0.47 s in one sample; the bound is the four admitted, about 0.7 s), and key@ limits the purpose more tightly on a card than on a software store: one bucket for the purpose, a burst of 4 and 2 signatures a second (a third of the card), shared by every RS256 audience of the board, so a flood of sign-ins to one RS256 audience also refuses the ID tokens of the others (ES384 audiences are not affected). Both refusals reach signer as a failed call, and signer answers its caller with a refusal that it audits as `signer.refused`; key@ audits its own limit refusal (reason `rate`), and a `busy` of the driver is a counted refusal of key@ with the reason `busy` (and a line of the driver's journal once a minute with a count). A key in slot 88 that is not the plan's leaves the purpose absent and does not stop the driver. The software driver holds the key in a file and ignores the slot. Discovery and the key set are built from the ring, and signer reads the KeyPlan: for up to the cache of the key set (5 s), and for the hour of grace after a KeyPlan stops listing the purpose, discovery may list RS256 while signer already refuses it. That is the safe direction (a relying party is told of a key that is there and gets a refusal, never a token of another algorithm). The first RS256 key of an installation that has served for a while, and the first of each further board, is published for the lead time before it signs, like any new key. signer keeps the time a KeyPlan has omitted the purpose in memory: a restart of signer begins its hour of grace again, and the key stays in the ring and the key set meanwhile, with nothing signing with it."
 
   - name: nats
     kind: signing
@@ -261,15 +271,18 @@ purposes:
     enabled: named-exception
     ops: [sign, public-key]
     aws: { key_spec: ECC_NIST_EDWARDS25519, per: boundary, baseline: false }
-    board: { slot: spare }
+    board: { slot: none }
     users: [adapter-<vendor>]
-    notes: "The NATS operator, signing and account keys: one Ed25519 key per purpose, used only by the adapter that mints NATS credentials."
+    notes: "The NATS operator, signing and account keys: one Ed25519 key per purpose, used only by the adapter that mints NATS credentials. Never a card key: the keys of NATS live in the key service, outside the board installation."
 
 slot_plan:
-  version: 1
-  # The default map, version 1 (2026-11-03). It covers PIV slots 9a, 9c, 9d, 9e and the retired slots 82 to 95. A purpose that an
-  # installation does not enable gets no slot and no key. An installation may override the map in its signed configuration; the key plan
-  # check refuses a collision and an enabled purpose with no slot.
+  version: 2
+  # The default map, version 2 (2026-11-18, maintainer decision S1 A; version 1 of 2026-11-03 had 89 to 95 spare). It covers PIV slots 9a, 9c,
+  # 9d, 9e and the retired slots 82 to 95, and changes only slots that were spare: every slot of version 1 holds what it held. Every board of
+  # a version has the same layout, so enabling a purpose later never renumbers the keys of a live card. A purpose that an installation does not
+  # enable gets no slot and no key: a slot is generated only when its purpose is enabled. Every slot is generated with PIN once and touch
+  # never, except 87 (PIN never, touch never). Slot f9, the Yubico attestation slot, is never touched. An installation may override the map in
+  # its signed configuration; the key plan check refuses a collision and an enabled purpose with no slot.
   slots:
     '9a': token-signing
     '9c': x509-intermediate
@@ -281,11 +294,19 @@ slot_plan:
     '86': workload-issuer
     '87': pin-release
     '88': token-signing-rs256
+    '89': issuance-log
+    '8a': enrolment
+    '8b': token-signing-ps256
+    '8c': token-signing-es256
+    '8d': token-signing-eddsa
+    '8e': witness
+    '8f': audit-log-second
+  policy: "Every slot is generated with PIN once and touch never, except 87 (PIN never, touch never). A slot is generated only when its purpose is enabled, and purposes outside the baseline stay enabled on use. Slot f9, the Yubico attestation slot, is never touched."
   spare:
-    from: '89'
+    from: '90'
     to: '95'
-    count: 13
-    note: "Shared by every purpose: the new key of an event rotation while the old one finishes, older wrapping keys until their data keys are re-wrapped, and the purposes outside the default map (an enabled on-use purpose or a named exception takes one). The card driver serves the default map only (slot 88 is the RS256 purpose's by a fixed row): it has no key for a purpose outside it, so key@ refuses a KeyPlan that enables such a purpose on a card (the other spare slots are not served yet; the issuance log, REQ-KEYS-063, is the next purpose that needs one)."
+    count: 6
+    note: "Rotation spares: the new key of an event rotation while the old one finishes, and the older key-agreement key during a rewrap. A purpose that has a slot above takes that slot, never a spare one; a purpose the map does not hold (a further trust domain's intermediate, a third audit writer instance) is named in the KeyPlan with a slot of this range, and then the rotations have one slot fewer. The card driver serves the slots of the default map that it has a row for (version 1's ten: 9a, 9c, 9d and 82 to 88) and nothing else: it has no key for the purposes of 89 to 8f, so key@ refuses a KeyPlan that enables one of them on a card (serving them is separate Core: boards work)."
   unused:
     '9e': "The card-authentication slot signs without a PIN by default."
 

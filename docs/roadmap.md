@@ -51,6 +51,7 @@ These decisions are quoted with the codes the maintainer gave them. The phases b
 | H7 | Rate and abuse limits in `entry` on `/token`, `/authorize` and the recovery paths ([ADR 0036](/decisions/0036-volumetric-abuse/)). |
 | A3 B | The console is part of the core layer, not an add-on, and it is built in the Parity phase ([Parity](#parity)). |
 | A4 A | KV ([ADR 0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/)) is a building block, not an add-on. It is built in the core phase, after the core features and before the Lambda and Kubernetes shapes. It replaces the store-of-record export path for consumers: External Secrets reads KV through the Vault KV v2 subset, so a board installation needs no cloud for its consumers. Secret sources stay read-only and are written by infrastructure code for what sluis needs to start ([principle 17](/principles/#17-where-a-thing-is-written-decides-its-class)). |
+| S1 A | "Agree" to the default card slot map version 2: the slots that version 1 left spare get their purposes (`89` issuance log, `8a` enrolment, `8b` to `8d` the FAPI keys, `8e` witness, `8f` a second audit writer instance), `90` to `95` stay as six rotation spares, slot `f9` is never touched, and cloud federation keys and NATS keys stay off the cards. See the [amendment of ADR 0006](/decisions/0006-keys-and-sealing/#amendment-of-2026-11-18-default-slot-map-version-2) and [#1881](https://github.com/truvity/sluis/issues/1881). |
 
 ## What runs today
 

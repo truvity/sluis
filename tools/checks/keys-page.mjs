@@ -100,12 +100,14 @@ function render() {
 
   out.push(heading(2, 'Board slot plan'), '',
     `The default card slot map, version ${reg.slot_plan?.version} ([keys per board](${adrHref('0006', 'keys-per-board')}), [the slot plan](${adrHref('0006', 'the-slot-plan')})). A purpose that an installation does not enable gets no slot and no key.`, '');
-  const slots = Object.entries(reg.slot_plan?.slots ?? {});
+  // In slot order (hex), not in the order JavaScript gives digit-only keys before the others.
+  const slots = Object.entries(reg.slot_plan?.slots ?? {}).sort(([x], [y]) => Number.parseInt(x, 16) - Number.parseInt(y, 16));
   out.push(...table(['Slot', 'Purpose', 'Algorithm on the card', 'Runs on'], slots.map(([s, n]) => {
     const p = purposes.find((x) => x.name === n);
     if (!p) { error(`${KEYS}: slot ${s} names ${n}, which is not a purpose`); return [code(s), n, '—', '—']; }
     return [code(s), `[${code(n)}](#${n})`, algo(p.board?.algorithm ?? p.algorithm), p.board?.runtimes ? p.board.runtimes.join(', ') : 'every board'];
   })), '');
+  if (reg.slot_plan?.policy) out.push(`**Policies:** ${md(reg.slot_plan.policy)}`, '');
   const sp = reg.slot_plan?.spare;
   if (sp) out.push(`**Spare slots:** ${code(sp.from)} to ${code(sp.to)} (${sp.count}). ${md(sp.note)}`, '');
   for (const [s, t] of Object.entries(reg.slot_plan?.unused ?? {})) out.push(`**Unused:** slot ${code(s)}. ${md(t)}`, '');

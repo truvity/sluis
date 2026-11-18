@@ -408,8 +408,8 @@ func TestEveryCallerPurposeAndOperationNotInTheFilesIsRefused(t *testing.T) {
 	t.Logf("%d cells given by the files; key@ called %d refused cells, %d succeeded and %d reached the check after the rule", expectedAllowed, refusedCells, succeeded, reached)
 	// The counts are the registry's today. A change to the files changes them, in the same pull request: the numbers are
 	// the sweep's evidence that it called what it says, and not a smaller set.
-	if expectedAllowed != 85 || succeeded != 63 || reached != 15 || refusedCells != 3855 {
-		t.Fatalf("cells given by the files %d (want 85), succeeded %d (63), reached the check %d (15), refused %d (3855): "+
+	if expectedAllowed != 87 || succeeded != 63 || reached != 17 || refusedCells != 4005 {
+		t.Fatalf("cells given by the files %d (want 87), succeeded %d (63), reached the check %d (17), refused %d (4005): "+
 			"if the registry changed on purpose, change these numbers with it", expectedAllowed, succeeded, reached, refusedCells)
 	}
 }
