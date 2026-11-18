@@ -56,6 +56,7 @@ requirements:
     verification:
       - {kind: conformance-suite, ref: "OIDF v5.3.4: PKCE module passes; runner probes: no challenge, plain, wrong or no verifier refused. Conformance workflow, not a required check; public client, not certification"}
       - {kind: integration-test, ref: "a public client, and a confidential client not set to the nonce, with and without a nonce, are refused without PKCE"}
+      - {kind: test-vectors, ref: "client-vectors.json (kits/conformance/token), authorize and token: S256 for every client, the nonce for a confidential client that says so, a sent challenge always checked, the verifier held to it"}
   - id: REQ-AUTHN-026
     area: AUTHN
     split_from: REQ-AUTHN-002
@@ -87,6 +88,7 @@ requirements:
     issues: [775]
     verification:
       - {kind: integration-test, ref: "redirect matrix (exact, prefix, case, userinfo, fragment, port)"}
+      - {kind: test-vectors, ref: "client-vectors.json (kits/conformance/token), redirects: exact match, a free port for a loopback IP literal registered without one, no plain http outside development but a native app's"}
   - id: REQ-AUTHN-004
     area: AUTHN
     statement: "A policy that registers a non-loopback http redirect URI MUST be refused at load, for every client type and every installation profile."
@@ -1133,16 +1135,16 @@ requirements:
     rationale: "A client must not be configured for a flow that sluis does not serve (ADR 0017)."
     level: MUST
     source: design-decision
-    status: partial
-    gap: no-proving-test
+    status: done
     milestone: v1-parity
     runtimes: all
     standards:
       - {id: ST-32, section: "2", depth: Partial}
       - {id: ST-35, section: "4", depth: Partial}
-    issues: [789]
+    issues: [789, 1819]
+    tests: [actors/store/tests/config.rs]
     verification:
-      - {kind: integration-test, ref: "config check refusal test"}
+      - {kind: test-vectors, ref: "client-vectors.json (kits/conformance/token), config: a client that declares either address is refused at the key, whose value is never printed"}
   - id: REQ-AUTHN-063
     area: AUTHN
     statement: "sluis MAY serve client-initiated backchannel authentication in poll mode after the parity milestone, once a real consumer exists."
