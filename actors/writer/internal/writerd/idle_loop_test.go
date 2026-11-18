@@ -10,8 +10,8 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/truvity/atoom/common/refusal"
 	"github.com/truvity/sluis/v2/kits/go/audit"
-	"github.com/truvity/sluis/v2/kits/go/refusal"
 )
 
 // The writer's own sealing used to feed the next seal. Every seal needs a grant from policy (batch.go, grantFor), and

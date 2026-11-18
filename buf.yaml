@@ -9,6 +9,14 @@ modules:
         - MINIMAL
       ignore:
         - third_party/protovalidate
+  # atoom's contracts, vendored at the pinned commit (third_party/atoom/README.md). Generated Go comes from atoom's own module, so it
+  # is a dependency here, not an output: buf.gen.yaml leaves it out, and it is not linted as our own contract.
+  - path: third_party/atoom/proto
+    lint:
+      use:
+        - MINIMAL
+      ignore:
+        - third_party/atoom/proto
 lint:
   use:
     - STANDARD

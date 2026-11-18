@@ -102,7 +102,7 @@ pub fn decodes(segment: &str, tenant: &str, id: &str, bytes: &[u8]) -> Option<bo
 mod tests {
     use super::*;
     use buffa::Message as _;
-    use sluis_proto::sluis::r#type::v2alpha1::Refusal;
+    use sluis_proto::atoom::common::v1alpha1::Refusal;
 
     fn item(kind: &str, target: &str, reason: &str, time: bool) -> Vec<u8> {
         use buffa::Message as _;

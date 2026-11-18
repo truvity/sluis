@@ -10,9 +10,10 @@ import (
 
 	"connectrpc.com/connect"
 
+	commonv1alpha1 "github.com/truvity/atoom/common/gen/atoom/common/v1alpha1"
+	"github.com/truvity/atoom/common/refusal"
 	storev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1"
 	typev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/type/v2alpha1"
-	"github.com/truvity/sluis/v2/kits/go/refusal"
 )
 
 // said is the answer the vectors compare: ok, or code/reason.
@@ -72,7 +73,7 @@ func TestTheFakeStoreAnswersAsStoreDoes(t *testing.T) {
 					op := &storev2alpha1.Operation{Address: &typev2alpha1.Address{Kind: w.Kind, Tenant: w.Tenant, Id: w.ID}, Value: []byte("x"), IfVersion: w.IfVersion}
 					op.Verb = map[string]storev2alpha1.Verb{"create": storev2alpha1.Verb_CREATE, "update": storev2alpha1.Verb_UPDATE}[w.Verb]
 					for _, ix := range w.Indexes {
-						op.Indexes = append(op.Indexes, &typev2alpha1.IndexEntry{Name: ix, Value: []byte("v:" + ix)})
+						op.Indexes = append(op.Indexes, &commonv1alpha1.IndexEntry{Name: ix, Value: []byte("v:" + ix)})
 					}
 					req := &storev2alpha1.WriteRequest{Operations: []*storev2alpha1.Operation{op}}
 					if s.Grant {

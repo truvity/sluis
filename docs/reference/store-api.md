@@ -35,7 +35,7 @@ message Item {
   repeated IndexEntry indexes = 5;            // the declared indexes, computed by the writer
 }
 
-message IndexEntry { string name = 1; bytes value = 2; }
+message IndexEntry { string name = 1; bytes value = 2; }   // atoom.common.v1alpha1.IndexEntry, owned by atoom
 ```
 
 - **The caller is learned from the transport,** never from a field: a peer uid, a Lambda role, a service-account token or a SPIFFE identity ([0005](/decisions/0005-the-store/#rules)). The boundary is the store@ the client is connected to, so a request names none.

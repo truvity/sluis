@@ -8,7 +8,8 @@ connectrpc::include_generated!();
 mod tests {
     use buffa::Message;
 
-    use crate::sluis::r#type::v2alpha1::{Address, Refusal};
+    use crate::atoom::common::v1alpha1::Refusal;
+    use crate::sluis::r#type::v2alpha1::Address;
 
     #[test]
     fn the_modules_follow_the_proto_packages_and_messages_round_trip() {

@@ -1,0 +1,22 @@
+# The pinned runtimes of the whole repository (docs/plan.md, "Pinned runtimes"). Every library uses these values, and sluis and
+# session pin the same ones. The order of a bump is always atoom first (released), then the consumers.
+#
+# `just check-versions` holds the files that spell a pin (devbox.json, rust-toolchain.toml, go.work, every go.mod and Cargo.toml)
+# to this file. Keep the file flat: one `name: value` per line, so that the check and the consumers can read it without a parser.
+
+# Toolchains
+go: 1.27.0
+go_toolchain: go1.27.4
+rust: 1.99.1
+rust_edition: "2024"
+buf: 1.75.0
+
+# ConnectRPC and Protobuf, Go
+go_connect: v1.21.1
+go_protobuf: v1.36.12
+protoc_gen_go: 1.36.12
+
+# ConnectRPC and Protobuf, Rust (exact pins: two versions of connectrpc in one build fail to compile)
+rust_connectrpc: =0.9.1
+rust_buffa: =0.9.2
+rust_connectrpc_build: =0.9.0

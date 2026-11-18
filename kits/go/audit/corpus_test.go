@@ -12,7 +12,7 @@ import (
 
 	"github.com/gowebpki/jcs"
 
-	"github.com/truvity/sluis/v2/kits/go/refusal"
+	"github.com/truvity/atoom/common/refusal"
 )
 
 // The corpus of the RFC 8785 author (see kits/conformance/audit/jcs-corpus/README.md) and the differential golden

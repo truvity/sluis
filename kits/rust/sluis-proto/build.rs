@@ -27,13 +27,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if files.is_empty() {
         return Err(format!("no .proto file under {}", root.display()).into());
     }
+    // The messages import atoom's common types (atoom/common/v1alpha1), vendored at the pinned commit (third_party/atoom/README.md). They
+    // are generated here too, because connectrpc-build cannot point a message at another crate: this crate holds a second, wire-identical
+    // copy of the two messages, beside atoom-common's own, which the helpers of the refusal detail use.
+    let atoom = manifest.join("../../../third_party/atoom/proto");
+    println!("cargo:rerun-if-changed={}", atoom.display());
+    collect(&atoom, &mut files)?;
     // The messages import the protovalidate options (buf/validate/validate.proto), which are vendored so that no build
     // reaches an outside service (third_party/protovalidate/README.md). Only the files of proto/ are generated.
     let vendored = manifest.join("../../../third_party/protovalidate");
     println!("cargo:rerun-if-changed={}", vendored.display());
     connectrpc_build::Config::new()
         .files(&files)
-        .includes(&[&root, &vendored])
+        .includes(&[&root, &atoom, &vendored])
         .include_file("_connectrpc.rs")
         .compile()?;
     Ok(())

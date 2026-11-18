@@ -16,9 +16,9 @@ import (
 
 	"connectrpc.com/connect"
 
+	krefusal "github.com/truvity/atoom/common/refusal"
 	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1/keystorev2alpha1connect"
-	krefusal "github.com/truvity/sluis/v2/kits/go/refusal"
 )
 
 // fakeDriver is the admin side of a card driver: a locked one that accepts one PIN.

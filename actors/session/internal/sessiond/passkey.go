@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	commonv1alpha1 "github.com/truvity/atoom/common/gen/atoom/common/v1alpha1"
 	sessionv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/session/v2alpha1"
 	storev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1"
 	typev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/type/v2alpha1"
@@ -453,12 +454,12 @@ func (s *Service) storePasskey(ctx context.Context, tenant string, grant []byte,
 // passkeyIndexes are the two index entries of a StaffPasskey: the item id for a lookup by credential, and the keyed hash of the
 // subject for a listing of a person's passkeys. store@ replaces the index set on every put, so every write of the kind (the
 // create and the update after a sign-in) sends both.
-func (s *Service) passkeyIndexes(ctx context.Context, id, subject string) ([]*typev2alpha1.IndexEntry, error) {
+func (s *Service) passkeyIndexes(ctx context.Context, id, subject string) ([]*commonv1alpha1.IndexEntry, error) {
 	ix, err := s.keys.subjectIndex(ctx, subject)
 	if err != nil {
 		return nil, unavailable("key", err)
 	}
-	return []*typev2alpha1.IndexEntry{{Name: indexByCredential, Value: []byte(id)}, {Name: indexBySubject, Value: ix}}, nil
+	return []*commonv1alpha1.IndexEntry{{Name: indexByCredential, Value: []byte(id)}, {Name: indexBySubject, Value: ix}}, nil
 }
 
 // passkeyLogin is a verified assertion: the record the credential is, the version it was read at, and what the assertion

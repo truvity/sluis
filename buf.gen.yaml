@@ -5,6 +5,11 @@ managed:
   override:
     - file_option: go_package_prefix
       value: github.com/truvity/sluis/v2/gen/go
+    # atoom's messages are not generated here: the Go module github.com/truvity/atoom/common holds their stubs, and the vendored proto
+    # file only lets our own contracts import it (third_party/atoom/README.md). The package option names that module.
+    - file_option: go_package
+      path: atoom/common/v1alpha1/common.proto
+      value: github.com/truvity/atoom/common/gen/atoom/common/v1alpha1;commonv1alpha1
 plugins:
   # protoc-gen-go comes from devbox.
   - local: protoc-gen-go
@@ -14,3 +19,8 @@ plugins:
   - local: [go, tool, protoc-gen-connect-go]
     out: gen/go
     opt: paths=source_relative
+inputs:
+  - directory: .
+    exclude_paths:
+      - third_party/atoom/proto/atoom
+      - site

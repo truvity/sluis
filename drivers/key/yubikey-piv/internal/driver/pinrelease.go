@@ -12,10 +12,10 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/truvity/atoom/common/refusal"
 	"github.com/truvity/sluis/v2/drivers/key/yubikey-piv/internal/card"
 	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
 	"github.com/truvity/sluis/v2/kits/go/pinrelease"
-	"github.com/truvity/sluis/v2/kits/go/refusal"
 )
 
 // The PIN release between boards (ADR 0006, "Touch and PIN"; decided 2026-11-04). The PIN never leaves this process:

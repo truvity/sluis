@@ -18,6 +18,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
+	commonv1alpha1 "github.com/truvity/atoom/common/gen/atoom/common/v1alpha1"
 	"github.com/truvity/sluis/v2/actors/key/internal/envelope"
 	"github.com/truvity/sluis/v2/actors/key/internal/wrap"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
@@ -487,7 +488,7 @@ func TestOldLabelWrapsAreSaidNotSilent(t *testing.T) {
 	e.store.items["|data-key-wrap|cookie/1/"+old] = &storev2alpha1.Item{
 		Address: &typev2alpha1.Address{Kind: "data-key-wrap", Id: "cookie/1/" + old}, Version: 1,
 		Value:   mustMarshal(&keyv2alpha1.DataKeyWrap{Purpose: "cookie", Generation: 1, Recipient: old}),
-		Indexes: []*typev2alpha1.IndexEntry{{Name: indexByPurpose, Value: []byte("cookie")}, {Name: indexByRecipient, Value: []byte(old)}},
+		Indexes: []*commonv1alpha1.IndexEntry{{Name: indexByPurpose, Value: []byte("cookie")}, {Name: indexByRecipient, Value: []byte(old)}},
 	}
 	e.store.mu.Unlock()
 

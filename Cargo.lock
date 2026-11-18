@@ -144,6 +144,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
+name = "atoom-common"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=075ccc8fca5bfb929b1abdece95806d7aea98005#075ccc8fca5bfb929b1abdece95806d7aea98005"
+dependencies = [
+ "base64 0.22.1",
+ "buffa",
+ "connectrpc",
+ "connectrpc-build",
+ "serde",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2674,6 +2686,7 @@ name = "sluis-audit"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "atoom-common",
  "base64 0.23.1",
  "buffa",
  "connectrpc",
@@ -2695,7 +2708,7 @@ name = "sluis-conformance"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "base64 0.23.1",
+ "atoom-common",
  "buffa",
  "buffa-types",
  "connectrpc",
@@ -2815,7 +2828,7 @@ name = "sluis-kit"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "base64 0.23.1",
+ "atoom-common",
  "buffa",
  "clap",
  "connectrpc",
@@ -2966,6 +2979,7 @@ name = "store"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "atoom-common",
  "aws-lc-rs",
  "base64 0.23.1",
  "buffa",

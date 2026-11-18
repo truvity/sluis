@@ -18,6 +18,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/truvity/atoom/common/refusal"
 	"github.com/truvity/sluis/v2/actors/adapter-upstream-oidc/internal/upstreamd"
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	integrationv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/integration/v2alpha1"
@@ -30,7 +31,6 @@ import (
 	"github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1/storev2alpha1connect"
 	typev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/type/v2alpha1"
 	"github.com/truvity/sluis/v2/kits/go/audit"
-	"github.com/truvity/sluis/v2/kits/go/refusal"
 	"github.com/truvity/sluis/v2/kits/go/rpc"
 	"github.com/truvity/sluis/v2/kits/go/version"
 )

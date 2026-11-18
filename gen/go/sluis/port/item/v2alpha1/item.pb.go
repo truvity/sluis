@@ -9,7 +9,7 @@
 package itemv2alpha1
 
 import (
-	v2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/type/v2alpha1"
+	v1alpha1 "github.com/truvity/atoom/common/gen/atoom/common/v1alpha1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -32,7 +32,7 @@ type DriverItem struct {
 	Version       uint64                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`                     // set by the driver: 1 at creation, plus 1 at each change
 	Value         []byte                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`                          // the bytes store@ gave
 	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"` // set by store@, never by the engine
-	Indexes       []*v2alpha1.IndexEntry `protobuf:"bytes,5,rep,name=indexes,proto3" json:"indexes,omitempty"`                      // the declared indexes
+	Indexes       []*v1alpha1.IndexEntry `protobuf:"bytes,5,rep,name=indexes,proto3" json:"indexes,omitempty"`                      // the declared indexes
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -95,7 +95,7 @@ func (x *DriverItem) GetExpiresAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *DriverItem) GetIndexes() []*v2alpha1.IndexEntry {
+func (x *DriverItem) GetIndexes() []*v1alpha1.IndexEntry {
 	if x != nil {
 		return x.Indexes
 	}
@@ -516,7 +516,7 @@ type Put struct {
 	Key           []byte                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`                              // the key
 	Value         []byte                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`                          // the bytes to keep
 	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"` // set by store@, never by the engine
-	Indexes       []*v2alpha1.IndexEntry `protobuf:"bytes,4,rep,name=indexes,proto3" json:"indexes,omitempty"`                      // the declared indexes
+	Indexes       []*v1alpha1.IndexEntry `protobuf:"bytes,4,rep,name=indexes,proto3" json:"indexes,omitempty"`                      // the declared indexes
 	Log           bool                   `protobuf:"varint,5,opt,name=log,proto3" json:"log,omitempty"`                             // also write a change-log row in the same transaction
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -573,7 +573,7 @@ func (x *Put) GetExpiresAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *Put) GetIndexes() []*v2alpha1.IndexEntry {
+func (x *Put) GetIndexes() []*v1alpha1.IndexEntry {
 	if x != nil {
 		return x.Indexes
 	}
@@ -816,15 +816,15 @@ var File_sluis_port_item_v2alpha1_item_proto protoreflect.FileDescriptor
 
 const file_sluis_port_item_v2alpha1_item_proto_rawDesc = "" +
 	"\n" +
-	"#sluis/port/item/v2alpha1/item.proto\x12\x18sluis.port.item.v2alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1esluis/type/v2alpha1/type.proto\"\xc4\x01\n" +
+	"#sluis/port/item/v2alpha1/item.proto\x12\x18sluis.port.item.v2alpha1\x1a\"atoom/common/v1alpha1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc6\x01\n" +
 	"\n" +
 	"DriverItem\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\fR\x03key\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x04R\aversion\x12\x14\n" +
 	"\x05value\x18\x03 \x01(\fR\x05value\x129\n" +
 	"\n" +
-	"expires_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x129\n" +
-	"\aindexes\x18\x05 \x03(\v2\x1f.sluis.type.v2alpha1.IndexEntryR\aindexes\"F\n" +
+	"expires_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12;\n" +
+	"\aindexes\x18\x05 \x03(\v2!.atoom.common.v1alpha1.IndexEntryR\aindexes\"F\n" +
 	"\x0eItemGetRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\fR\x03key\x12\"\n" +
 	"\flinearizable\x18\x02 \x01(\bR\flinearizable\"K\n" +
@@ -854,13 +854,13 @@ const file_sluis_port_item_v2alpha1_item_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\fR\x03key\x12\x18\n" +
 	"\x06absent\x18\x02 \x01(\bH\x00R\x06absent\x12\x1a\n" +
 	"\aversion\x18\x03 \x01(\x04H\x00R\aversionB\b\n" +
-	"\x06expect\"\xb5\x01\n" +
+	"\x06expect\"\xb7\x01\n" +
 	"\x03Put\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\fR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\fR\x05value\x129\n" +
 	"\n" +
-	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x129\n" +
-	"\aindexes\x18\x04 \x03(\v2\x1f.sluis.type.v2alpha1.IndexEntryR\aindexes\x12\x10\n" +
+	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12;\n" +
+	"\aindexes\x18\x04 \x03(\v2!.atoom.common.v1alpha1.IndexEntryR\aindexes\x12\x10\n" +
 	"\x03log\x18\x05 \x01(\bR\x03log\",\n" +
 	"\x06Delete\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\fR\x03key\x12\x10\n" +
@@ -909,18 +909,18 @@ var file_sluis_port_item_v2alpha1_item_proto_goTypes = []any{
 	(*TailLogRequest)(nil),        // 10: sluis.port.item.v2alpha1.TailLogRequest
 	(*TailLogResponse)(nil),       // 11: sluis.port.item.v2alpha1.TailLogResponse
 	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
-	(*v2alpha1.IndexEntry)(nil),   // 13: sluis.type.v2alpha1.IndexEntry
+	(*v1alpha1.IndexEntry)(nil),   // 13: atoom.common.v1alpha1.IndexEntry
 }
 var file_sluis_port_item_v2alpha1_item_proto_depIdxs = []int32{
 	12, // 0: sluis.port.item.v2alpha1.DriverItem.expires_at:type_name -> google.protobuf.Timestamp
-	13, // 1: sluis.port.item.v2alpha1.DriverItem.indexes:type_name -> sluis.type.v2alpha1.IndexEntry
+	13, // 1: sluis.port.item.v2alpha1.DriverItem.indexes:type_name -> atoom.common.v1alpha1.IndexEntry
 	0,  // 2: sluis.port.item.v2alpha1.ItemGetResponse.item:type_name -> sluis.port.item.v2alpha1.DriverItem
 	0,  // 3: sluis.port.item.v2alpha1.QueryResponse.items:type_name -> sluis.port.item.v2alpha1.DriverItem
 	6,  // 4: sluis.port.item.v2alpha1.TransactRequest.conditions:type_name -> sluis.port.item.v2alpha1.Condition
 	7,  // 5: sluis.port.item.v2alpha1.TransactRequest.puts:type_name -> sluis.port.item.v2alpha1.Put
 	8,  // 6: sluis.port.item.v2alpha1.TransactRequest.deletes:type_name -> sluis.port.item.v2alpha1.Delete
 	12, // 7: sluis.port.item.v2alpha1.Put.expires_at:type_name -> google.protobuf.Timestamp
-	13, // 8: sluis.port.item.v2alpha1.Put.indexes:type_name -> sluis.type.v2alpha1.IndexEntry
+	13, // 8: sluis.port.item.v2alpha1.Put.indexes:type_name -> atoom.common.v1alpha1.IndexEntry
 	0,  // 9: sluis.port.item.v2alpha1.TransactResponse.items:type_name -> sluis.port.item.v2alpha1.DriverItem
 	1,  // 10: sluis.port.item.v2alpha1.ItemService.Get:input_type -> sluis.port.item.v2alpha1.ItemGetRequest
 	3,  // 11: sluis.port.item.v2alpha1.ItemService.Query:input_type -> sluis.port.item.v2alpha1.QueryRequest
