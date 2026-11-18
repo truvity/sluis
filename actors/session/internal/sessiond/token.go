@@ -201,7 +201,7 @@ func (s *Service) codeGrant(ctx context.Context, r *sessionv2alpha1.TokenRequest
 	}
 	v, err := s.decide(ctx, question{
 		tenant: tc.tenant, subject: ac.GetSubject(), accounts: facts.GetAccounts(), state: state,
-		client: tc.client, assure: assure, now: tc.now, verbs: []string{"update", "create"}, ops: []string{"seal", "mac"},
+		client: tc.client, assure: assure, now: tc.now, verbs: []string{"update", "create"}, ops: []string{"seal"},
 	})
 	if err != nil {
 		return nil, unavailable("policy", err)
@@ -256,7 +256,7 @@ func (s *Service) codeGrant(ctx context.Context, r *sessionv2alpha1.TokenRequest
 	}
 	out, err := s.mint(ctx, tc, mintInput{
 		person: ac.GetSubject(), sid: sid, scope: ac.GetScope(), nonce: ac.GetNonce(), assure: assure,
-		groups: groupsOf(v.grantNames, tc.client), chainEnd: ends, refresh: sid + "." + secret, grant: v.grant,
+		groups: groupsOf(v.grantNames, tc.client), chainEnd: ends, refresh: sid + "." + secret,
 	})
 	switch {
 	case errors.Is(err, errSessionOver):
@@ -401,17 +401,12 @@ type mintInput struct {
 	groups                    []string
 	chainEnd                  time.Time
 	refresh                   string
-	grant                     []byte // the grant of the decision the tokens follow, for the tenant's first pairwise key
 }
 
 // mint makes the ID token and the access token, signed by signer through key@, and the response around them. sub is
-// the subject of the tenant's sector (0034): pairwise per tenant unless the tenant declared the public sector. exp is
+// the person's own subject (0019 "Assigning a subject"), the same at every tenant (0020 "The sub of a token"). exp is
 // the earliest of the issuer's lifetime, the client's ttl_cap and the end of the chain (0020 "Lifetimes").
 func (s *Service) mint(ctx context.Context, tc *tokenCtx, in mintInput) (tokenResponse, error) {
-	sub, err := s.keys.pairwiseSubject(ctx, tc.tenant, s.sectorOf(tc.tenant), in.person, in.grant)
-	if err != nil {
-		return tokenResponse{}, unavailable("key", err)
-	}
 	ttlCap := tc.client.GetTtlCap().AsDuration()
 	idExp, idOK := expiry(tc.now, tc.life.IDToken, ttlCap, in.chainEnd)
 	atExp, atOK := expiry(tc.now, tc.life.AccessToken, ttlCap, in.chainEnd)
@@ -423,7 +418,7 @@ func (s *Service) mint(ctx context.Context, tc *tokenCtx, in mintInput) (tokenRe
 		return tokenResponse{}, internal("random", err)
 	}
 	c := claims{
-		issuer: tc.boundary.GetIssuer(), audience: tc.client.GetId(), subject: sub, sid: in.sid,
+		issuer: tc.boundary.GetIssuer(), audience: tc.client.GetId(), subject: in.person, sid: in.sid,
 		issuedAt: tc.now, assure: in.assure, groups: in.groups,
 	}
 	out := tokenResponse{TokenType: "Bearer", ExpiresIn: atExp.Unix() - tc.now.Unix(), RefreshToken: in.refresh, Scope: in.scope}

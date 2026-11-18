@@ -75,8 +75,8 @@ func TestAnUnknownAudienceALimitAndAMissingGrantAreOneAnswer(t *testing.T) {
 			if n := len(e.policy.requests()); n != c.asked {
 				t.Errorf("policy was asked %d times, want %d", n, c.asked)
 			}
-			if n := len(e.signer.requests()) + len(e.key.pairwise()); n != 0 {
-				t.Errorf("a refused exchange reached signer or key@ %d times", n)
+			if n := len(e.signer.requests()); n != 0 {
+				t.Errorf("a refused exchange reached the signer %d times", n)
 			}
 		})
 	}
@@ -190,8 +190,8 @@ func TestATokenOfAnotherInstallationIsRefusedWhateverThisSideDeclares(t *testing
 		if got := get(e.lastRecord(), "status_code"); got != "proof_kind" {
 			t.Errorf("reason = %v", got)
 		}
-		if n := len(e.policy.requests()) + len(e.signer.requests()) + len(e.key.pairwise()) + len(e.dir.seen); n != 0 {
-			t.Errorf("the proof reached policy, signer, key@ or the directory %d times", n)
+		if n := len(e.policy.requests()) + len(e.signer.requests()) + len(e.dir.seen); n != 0 {
+			t.Errorf("the proof reached policy, the signer or the directory %d times", n)
 		}
 	})
 	t.Run("a token of this installation is not made into the other's by a trust entry for its own issuer", func(t *testing.T) {

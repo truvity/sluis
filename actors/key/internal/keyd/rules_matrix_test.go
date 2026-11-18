@@ -329,9 +329,7 @@ func TestEveryCallerPurposeAndOperationNotInTheFilesIsRefused(t *testing.T) {
 						mustSucceed = enabled[p]
 					case "mac":
 						call = func() error {
-							// A tenant's first pairwise key is made under a grant that names the operation mac (REQ-KEYS-260).
-							g := grantFor(actor, tenant, "mac") // before the client: making a grant speaks as policy
-							_, err := n.client(actor).Mac(ctx, connect.NewRequest(&keyv2alpha1.MacRequest{Purpose: p, Tenant: tenant, Label: "l", Input: []byte("i"), Epoch: epochOf(p), Grant: g}))
+							_, err := n.client(actor).Mac(ctx, connect.NewRequest(&keyv2alpha1.MacRequest{Purpose: p, Tenant: tenant, Label: "l", Input: []byte("i"), Epoch: epochOf(p)}))
 							return err
 						}
 						mustSucceed = true
@@ -350,7 +348,7 @@ func TestEveryCallerPurposeAndOperationNotInTheFilesIsRefused(t *testing.T) {
 						continue // wrap and unwrap are no call of KeyService
 					}
 					// A purpose is called in the scope its calls have: cookie, grant and mac the boundary's, evidence, chain,
-					// pseudonym and pairwise a tenant's; data either. A cell in another scope is no call of that scope.
+					// pseudonym a tenant's; data either. A cell in another scope is no call of that scope.
 					if (op == "seal" || op == "open" || op == "mac") && !scopeFitsPurpose(p, scope) {
 						continue
 					}
@@ -408,19 +406,19 @@ func TestEveryCallerPurposeAndOperationNotInTheFilesIsRefused(t *testing.T) {
 	t.Logf("%d cells given by the files; key@ called %d refused cells, %d succeeded and %d reached the check after the rule", expectedAllowed, refusedCells, succeeded, reached)
 	// The counts are the registry's today. A change to the files changes them, in the same pull request: the numbers are
 	// the sweep's evidence that it called what it says, and not a smaller set.
-	if expectedAllowed != 87 || succeeded != 63 || reached != 17 || refusedCells != 4005 {
-		t.Fatalf("cells given by the files %d (want 87), succeeded %d (63), reached the check %d (17), refused %d (4005): "+
+	if expectedAllowed != 85 || succeeded != 61 || reached != 17 || refusedCells != 3912 {
+		t.Fatalf("cells given by the files %d (want 85), succeeded %d (61), reached the check %d (17), refused %d (3912): "+
 			"if the registry changed on purpose, change these numbers with it", expectedAllowed, succeeded, reached, refusedCells)
 	}
 }
 
 // scopeFitsPurpose says whether a Seal, Open or Mac of the purpose is a call in the scope: cookie, grant and mac are the
-// boundary's, evidence, chain, credential, pseudonym and pairwise a tenant's, data either, and a name that is none either.
+// boundary's, evidence, chain, credential and pseudonym a tenant's, data either, and a name that is none either.
 func scopeFitsPurpose(purpose, scope string) bool {
 	switch purpose {
 	case "cookie", "grant", "mac":
 		return scope == registry.ScopeBoundary
-	case "evidence", "chain", "credential", "pseudonym", "pairwise":
+	case "evidence", "chain", "credential", "pseudonym":
 		return scope == registry.ScopeTenant
 	}
 	return true

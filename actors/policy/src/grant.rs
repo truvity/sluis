@@ -27,10 +27,7 @@ pub const KEY_OPS: [&str; 4] = ["seal", "open", "mac", "sign"];
 fn purposes(op: &str) -> &'static [(KeyScope, &'static str)] {
     match op {
         "seal" | "open" => &[(KeyScope::Tenant, "data"), (KeyScope::Tenant, "evidence")],
-        "mac" => &[
-            (KeyScope::Tenant, "pseudonym"),
-            (KeyScope::Tenant, "pairwise"),
-        ],
+        "mac" => &[(KeyScope::Tenant, "pseudonym")],
         "sign" => &[(KeyScope::Boundary, "release-signing")],
         _ => &[],
     }

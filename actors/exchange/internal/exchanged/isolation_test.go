@@ -178,7 +178,7 @@ func TestAPublicNativeClientThatIsDeletedIsInvalidClientOnItsNextRequest(t *test
 			if r := e.exchange(req()); r.GetStatus() != 200 {
 				t.Fatalf("before the deletion: %d %s", r.GetStatus(), r.GetBody())
 			}
-			issued, asked, macs := len(e.signer.requests()), len(e.policy.requests()), len(e.key.pairwise())
+			issued, asked := len(e.signer.requests()), len(e.policy.requests())
 
 			e.store.drop("installation-client", id)
 			rep := e.exchange(req())
@@ -194,8 +194,8 @@ func TestAPublicNativeClientThatIsDeletedIsInvalidClientOnItsNextRequest(t *test
 				get(rec, "unmapped", "sluis", "client", "id") != id || get(rec, "unmapped", "sluis", "client", "authenticated") != false {
 				t.Errorf("record = %v", rec)
 			}
-			if len(e.signer.requests()) != issued || len(e.policy.requests()) != asked || len(e.key.pairwise()) != macs {
-				t.Error("a deleted client reached policy, key@ or the signer")
+			if len(e.signer.requests()) != issued || len(e.policy.requests()) != asked {
+				t.Error("a deleted client reached policy or the signer")
 			}
 
 			// The answer shows no more than invalid_client already does: a client that never existed gets the same

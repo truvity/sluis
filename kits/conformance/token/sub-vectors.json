@@ -1,5 +1,5 @@
 {
-  "about": "The three forms a `sub` can have in v2 and how each is spelled (ADR 0020, \"The claims of a token\"; ADR 0019, \"Assigning a subject\"; ADR 0022, \"SPIFFE identities\"; REQ-SUBJ-071, REQ-WORKLOAD-008). shape: Classify says person (the person's own subject, 128 random bits as 26 lower-case base32 characters, the sub of a tenant whose sector is public), pairwise (a Mac cut to 256 bits as 43 base64url characters, ADR 0034, which ADR 0045 cancels and the code still makes) or spiffe (the SPIFFE ID of a workload), and an empty kind for a string that is none of them: an e-mail address, a name of the upstream, a v1 spelling, a person's subject whose spare bits are set. ci_job and service_account: the SPIFFE ID made from what a verified proof says, or the part that was refused (trust_domain, segment); length (an ID of more than 2048 bytes) is tested in the unit test, as the vector would be as long as the limit. The ID names the repository or the ServiceAccount and never the run. v1_spellings: what v1 wrote as `sub` for each kind of subject, with the v2 form where v2 has one (v2 is null where v2 issues nothing like it); v2 never issues a v1 spelling, so each v1 string classifies as none, and a v2 given for a v1 CI or ServiceAccount spelling is the ID that the inputs make. decision says where the change is recorded: ADR 0015 (cutover), ADR 0022, or open (a question to the maintainer, on issue 1816). kits/go/subject is held to this file; session and exchange are held to shape for the sub of a person.",
+  "about": "The two forms a `sub` can have in v2 and how each is spelled (ADR 0020, \"The sub of a token\"; ADR 0019, \"Assigning a subject\"; ADR 0022, \"SPIFFE identities\"; REQ-SUBJ-071, REQ-WORKLOAD-008). shape: Classify says person (the person's own subject, 128 random bits as 26 lower-case base32 characters, the sub of a person at every tenant) or spiffe (the SPIFFE ID of a workload), and an empty kind for a string that is neither: an e-mail address, a name of the upstream, a v1 spelling, a pairwise subject (43 base64url characters, a form that v2 removed before any relying party moved, decision SB1 A of 2026-11-18, ADR 0020), a person's subject whose spare bits are set. ci_job and service_account: the SPIFFE ID made from what a verified proof says, or the part that was refused (trust_domain, segment); length (an ID of more than 2048 bytes) is tested in the unit test, as the vector would be as long as the limit. The ID names the repository or the ServiceAccount and never the run. v1_spellings: what v1 wrote as `sub` for each kind of subject, with the v2 form where v2 has one (v2 is null where v2 issues nothing like it); v2 never issues a v1 spelling, so each v1 string classifies as none, and a v2 given for a v1 CI or ServiceAccount spelling is the ID that the inputs make. decision says where the change is recorded: ADR 0015 (cutover) or ADR 0022. kits/go/subject is held to this file; session and exchange are held to shape for the sub of a person.",
   "limits": {
     "trust_domain_max": 255,
     "id_max_bytes": 2048,
@@ -28,24 +28,24 @@
       "kind": "person"
     },
     {
-      "name": "a pairwise subject",
+      "name": "a pairwise subject: v2 removed the form",
       "sub": "dpLDrTVAu4A8Ags67mbNiIcSMjTqDG5xQ8Ct1z_0Me0",
-      "kind": "pairwise"
+      "kind": ""
     },
     {
       "name": "another pairwise subject",
       "sub": "P8TM_nRYcOLA2Z9x8w_wZWyN7dQcwdfT03aw2-aF4vM",
-      "kind": "pairwise"
+      "kind": ""
     },
     {
-      "name": "256 bits of zero",
+      "name": "a pairwise-length string of zero bits",
       "sub": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-      "kind": "pairwise"
+      "kind": ""
     },
     {
-      "name": "256 bits of one",
+      "name": "a pairwise-length string of one bits",
       "sub": "__________________________________________8",
-      "kind": "pairwise"
+      "kind": ""
     },
     {
       "name": "the SPIFFE ID of a CI job",
@@ -394,7 +394,7 @@
       "v1_form": "the e-mail address",
       "v2_kind": "person",
       "v2": null,
-      "change": "replaced by an opaque subject",
+      "change": "replaced by the person's own opaque subject, the same at every tenant; a relying party that read the e-mail sub reads the `email` claim of the ID token for a readable name, and a store keyed on the old sub is re-keyed through directory sync (decisions SB1 A and SB2 A)",
       "decision": "ADR 0015"
     },
     {
@@ -445,8 +445,8 @@
       "v1_form": "aws:<account>:role/<path><name>",
       "v2_kind": null,
       "v2": null,
-      "change": "not issued: v2 has no proof of an AWS role and no spelling for it",
-      "decision": "open"
+      "change": "not issued in the core: an AWS-role caller gets a proof kind in the parity phase, spelled spiffe://<trust-domain>/aws/<account>/role/<path>/<name> (decision SB4 A); a trust policy that pins this string is regenerated from config at the switch or goes on the switch inventory (decision SB3 A)",
+      "decision": "ADR 0022"
     }
   ]
 }

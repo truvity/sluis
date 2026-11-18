@@ -20,7 +20,7 @@ import (
 
 // verifies: REQ-KEYS-260, REQ-KEYS-263
 // A name that is no tenant makes no key, however it is asked for (REQ-KEYS-260). The calls are the ones that used to make
-// a key on their own: Seal under chain, which is checked by rule, and Mac under pairwise; data and evidence refuse
+// a key on their own: Seal under chain and credential, which are checked by rule; data and evidence refuse
 // before the key lookup, and are in the sweep for the same reason. The tenant is a name that no config knows.
 func TestANameThatIsNoTenantGetsNoKey(t *testing.T) {
 	e := newTestEnv(t, "development")
@@ -39,20 +39,13 @@ func TestANameThatIsNoTenantGetsNoKey(t *testing.T) {
 			return err
 		}
 	}
-	mac := func(grant []byte) error {
-		_, err := n.client("session").Mac(context.Background(), connect.NewRequest(&keyv2alpha1.MacRequest{
-			Purpose: "pairwise", Tenant: ghost, Label: "l", Input: []byte("x"), Grant: grant,
-		}))
-		return err
-	}
 	calls := []call{
 		{"chain", seal("session", "chain", "session-chain"), "seal"},
 		{"credential", seal("session", "credential", "staff-passkey"), "seal"},
-		{"pairwise", mac, "mac"},
 		{"data", seal("session", "data", "person"), "seal"},
 		{"evidence", seal("writer", "evidence", "usage"), "seal"},
 	}
-	holder := map[string]string{"chain": "session", "credential": "session", "pairwise": "session", "data": "session", "evidence": "writer"}
+	holder := map[string]string{"chain": "session", "credential": "session", "data": "session", "evidence": "writer"}
 	for _, c := range calls {
 		t.Run(c.name, func(t *testing.T) {
 			// Grants are made first: the identity of a client is read when it connects.
@@ -90,13 +83,12 @@ func TestANameThatIsNoTenantGetsNoKey(t *testing.T) {
 
 // verifies: REQ-KEYS-260
 // Under a grant that names the tenant, for the caller and the operation, the first key is made. Once it exists, chain
-// and pairwise are used by rule alone, as before: a refresh holds no grant to seal with, and opening needs none.
+// and credential are used by rule alone, as before: a refresh holds no grant to seal with, and opening needs none.
 func TestAGrantThatNamesTheTenantMakesItsFirstKeyAndAnExistingKeyNeedsNone(t *testing.T) {
 	e := newTestEnv(t, "development")
 	n := e.startedNode(nodeOpts{})
 	const tenant = "acme"
 	sealGrant := n.grant("session", []string{tenant}, []string{"seal"}, time.Minute)
-	macGrant := n.grant("session", []string{tenant}, []string{"mac"}, time.Minute)
 	if got := wrapPurposes(t, e)[tenant]; len(got) != 0 {
 		t.Fatalf("keys before any call: %v", got)
 	}
@@ -104,24 +96,21 @@ func TestAGrantThatNamesTheTenantMakesItsFirstKeyAndAnExistingKeyNeedsNone(t *te
 	if err != nil {
 		t.Fatalf("the first chain key under a grant: %v", err)
 	}
-	c := n.client("session")
-	m1, err := c.Mac(context.Background(), connect.NewRequest(&keyv2alpha1.MacRequest{Purpose: "pairwise", Tenant: tenant, Label: "l", Input: []byte("x"), Grant: macGrant}))
-	if err != nil {
-		t.Fatalf("the first pairwise key under a grant: %v", err)
+	if _, err := seal1(n.client("session"), "credential", "staff-passkey", tenant, vecID, []byte("key"), sealGrant); err != nil {
+		t.Fatalf("the first credential key under a grant: %v", err)
 	}
 	if got := wrapPurposes(t, e)[tenant]; len(got) != 2 {
-		t.Fatalf("keys after two calls = %v, want chain and pairwise", got)
+		t.Fatalf("keys after two calls = %v, want chain and credential", got)
 	}
-	// With no grant at all: the key exists, so seal, open and mac go on by rule.
+	// With no grant at all: the key exists, so seal and open go on by rule.
 	if _, err := seal1(n.client("session"), "chain", "session-chain", tenant, vecID, []byte("more"), nil); err != nil {
 		t.Errorf("a seal under an existing chain key with no grant: %v", err)
 	}
 	if pt, err := open1(n.client("exchange"), "chain", "session-chain", tenant, vecID, env, nil); err != nil || string(pt) != "facts" {
 		t.Errorf("exchange opens the chain: %q, %v", pt, err)
 	}
-	m2, err := n.client("session").Mac(context.Background(), connect.NewRequest(&keyv2alpha1.MacRequest{Purpose: "pairwise", Tenant: tenant, Label: "l", Input: []byte("x")}))
-	if err != nil || string(m1.Msg.GetMac()) != string(m2.Msg.GetMac()) {
-		t.Errorf("pairwise with no grant under an existing key: %v", err)
+	if _, err := seal1(n.client("session"), "credential", "staff-passkey", tenant, vecID, []byte("key"), nil); err != nil {
+		t.Errorf("credential with no grant under an existing key: %v", err)
 	}
 	// A node that comes up with the wraps in the store, as after a restart or a restore of the store with its wraps,
 	// finds the keys and needs no grant either.
@@ -151,7 +140,7 @@ func TestARefusedFirstKeyDoesNotWaitForTheLoadOfAnotherKey(t *testing.T) {
 		done <- err
 	}()
 	go func() {
-		_, err := n.client("session").Mac(context.Background(), connect.NewRequest(&keyv2alpha1.MacRequest{Purpose: "pairwise", Tenant: "ghost-corp", Label: "l", Input: []byte("x")}))
+		_, err := seal1(n.client("session"), "credential", "staff-passkey", "ghost-corp", vecID, []byte("x"), nil)
 		done <- err
 	}()
 	for range 2 {

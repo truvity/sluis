@@ -451,7 +451,7 @@ func TestPolicyDecidesAtTheCallbackAndAgainAtTheFinish(t *testing.T) {
 		if first.GetContext().AuthAge == nil || last.GetContext().AuthAge == nil || last.GetContext().GetAuthAge() != first.GetContext().GetAuthAge()+3 {
 			t.Errorf("auth_age %v then %v: the auth_time was not carried", first.GetContext().AuthAge, last.GetContext().AuthAge)
 		}
-		if !slices.Equal(last.GetGrantStoreVerbs(), []string{"create", "update"}) || !slices.Equal(last.GetGrantKeyOps(), []string{"seal", "open", "mac"}) {
+		if !slices.Equal(last.GetGrantStoreVerbs(), []string{"create", "update"}) || !slices.Equal(last.GetGrantKeyOps(), []string{"seal", "open"}) {
 			t.Errorf("the grant asked for %v %v", last.GetGrantStoreVerbs(), last.GetGrantKeyOps())
 		}
 	})

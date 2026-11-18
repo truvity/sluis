@@ -79,13 +79,13 @@ key@ caches opened data keys in memory, each entry with its own time to live, se
 
 ### Erasing a tenant
 
-A tenant's exit deletes its `data`, `pseudonym`, `pairwise`, `chain` and `credential` wraps at once, every generation and every recipient. Every value sealed for the tenant stops opening: this is the **crypto-shred**. Its `evidence` wrap is deleted when the evidence retention ends, because evidence outlives personal data ([ADR 0006](/decisions/0006-keys-and-sealing/#erasing-a-tenant), [Audit](/concepts/audit/#tenants-encryption-and-erasure)).
+A tenant's exit deletes its `data`, `pseudonym`, `chain` and `credential` wraps at once, every generation and every recipient. Every value sealed for the tenant stops opening: this is the **crypto-shred**. Its `evidence` wrap is deleted when the evidence retention ends, because evidence outlives personal data ([ADR 0006](/decisions/0006-keys-and-sealing/#erasing-a-tenant), [Audit](/concepts/audit/#tenants-encryption-and-erasure)).
 
 ## Sealed grants
 
 Only `policy` may ask key@ to seal a **grant**, the decision that a request is allowed. The store, `ca`, `signer`, key@ and the minters open it. A grant names the tenant and what it allows, is reusable for about 60 seconds, and is never stored; a one-shot irreversible action leaves a hashed `SpentGrant` marker. On a board grants are sealed under the boundary's `grant` data key, not a card key, so a grant costs a memory operation and not an ECDH. A grant sealed in one boundary opens in no other ([ADR 0007](/decisions/0007-policy-and-sealed-grants/#sealed-grants)).
 
-This is one of **two independent checks**: the store's rule with a grant sealed for the tenant, and key@'s grant check on a tenant's `data` and `evidence` keys, where the rule alone checks `pairwise`, `pseudonym` and `chain` ([ADR 0007](/decisions/0007-policy-and-sealed-grants/#two-independent-checks)). The word *grant name* means something else: an entry of the grant vocabulary ([ADR 0020](/decisions/0020-grant-vocabulary-and-token-claims/#grant-names-and-the-vocabulary)).
+This is one of **two independent checks**: the store's rule with a grant sealed for the tenant, and key@'s grant check on a tenant's `data` and `evidence` keys, where the rule alone checks `pseudonym` and `chain` ([ADR 0007](/decisions/0007-policy-and-sealed-grants/#two-independent-checks)). The word *grant name* means something else: an entry of the grant vocabulary ([ADR 0020](/decisions/0020-grant-vocabulary-and-token-claims/#grant-names-and-the-vocabulary)).
 
 ## Algorithms
 

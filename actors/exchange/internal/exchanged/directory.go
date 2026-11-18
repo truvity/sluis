@@ -7,8 +7,8 @@ import (
 
 // Person is what exchange knows about the person behind a subject token, from the person's records.
 type Person struct {
-	// ID is the person's opaque, random id (ADR 0017, "Subjects"): the input of the pairwise subject. It is not
-	// the `sub` of any token.
+	// ID is the person's opaque, random id (ADR 0017, "Subjects"): the person's own subject (ADR 0019, "Assigning a
+	// subject"), which is the `sub` of every token the person gets.
 	ID string
 	// Accounts are the upstream accounts linked to the person, as "<upstream>/<subject claim value>" (policy.md,
 	// "Entity types"). Never an e-mail address.

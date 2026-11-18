@@ -3,7 +3,6 @@
 package keyd
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
@@ -39,11 +38,11 @@ func TestAWrapCopiedToAnotherAddressDoesNotOpen(t *testing.T) {
 	}
 	// Another purpose: the id and the purpose field are rewritten, as an actor that writes the store could.
 	moved := proto.Clone(w).(*keyv2alpha1.DataKeyWrap)
-	moved.Purpose = "pairwise"
-	e.store.put("data-key-wrap", "acme", wrapID("pairwise", 1, n.srv.recipient), moved)
-	_, err = n.client("session").Mac(context.Background(), connect.NewRequest(&keyv2alpha1.MacRequest{Purpose: "pairwise", Tenant: "acme", Label: "l", Input: []byte("x")}))
+	moved.Purpose = "credential"
+	e.store.put("data-key-wrap", "acme", wrapID("credential", 1, n.srv.recipient), moved)
+	_, err = seal1(n.client("session"), "credential", "staff-passkey", "acme", vecID, []byte("x"), nil)
 	if err == nil || connect.CodeOf(err) != connect.CodeInternal {
-		t.Fatalf("Mac under a wrap copied to another purpose: %v, want a refusal", err)
+		t.Fatalf("Seal under a wrap copied to another purpose: %v, want a refusal", err)
 	}
 	// To the boundary, as the cookie key.
 	asCookie := proto.Clone(w).(*keyv2alpha1.DataKeyWrap)

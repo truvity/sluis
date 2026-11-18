@@ -113,8 +113,9 @@ requirements:
     rationale: "A key that cannot be read cannot be brute-forced offline."
     level: MUST
     source: stakeholder-ciam
-    status: done
-    milestone: first-version
+    # Withdrawn 2026-11-18: decision SB1 A (maintainer, 2026-11-18), ADR 0020, ADR 0006: the pairwise subject is removed before any relying party moved.
+    status: withdrawn
+    superseded_by: [REQ-SUBJ-073]
     runtimes: all
     standards:
       - {id: NC-06, section: "2104", depth: Partial}
@@ -143,8 +144,9 @@ requirements:
     rationale: "A sector is one audience, so sites that must recognise the same user share one sector."
     level: MUST
     source: stakeholder-ciam
-    status: done
-    milestone: first-version
+    # Withdrawn 2026-11-18: decision SB1 A (maintainer, 2026-11-18), ADR 0020, ADR 0006: the pairwise subject is removed before any relying party moved.
+    status: withdrawn
+    superseded_by: [REQ-SUBJ-072]
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Full}
@@ -187,8 +189,9 @@ requirements:
     rationale: "The subject must not expose the upstream identifier."
     level: MUST
     source: stakeholder-ciam
-    status: done
-    milestone: first-version
+    # Withdrawn 2026-11-18: decision SB1 A (maintainer, 2026-11-18), ADR 0020, ADR 0006: the pairwise subject is removed before any relying party moved.
+    status: withdrawn
+    superseded_by: [REQ-SUBJ-074]
     runtimes: all
     standards:
       - {id: ST-28, section: "8.1", depth: Full}
@@ -930,9 +933,9 @@ requirements:
     rationale: "An exchanged token must not carry the subject of the token it was exchanged for (ADR 0034)."
     level: MUST
     source: design-decision
-    status: partial
-    gap: partly-built
-    milestone: first-version
+    # Withdrawn 2026-11-18: decision SB1 A (maintainer, 2026-11-18), ADR 0020, ADR 0006: the pairwise subject is removed before any relying party moved.
+    status: withdrawn
+    superseded_by: [REQ-SUBJ-072]
     runtimes: all
     standards: []
     issues: [1733]
@@ -944,8 +947,9 @@ requirements:
     rationale: "The upstream's claim can change, and the Person id is the stable identity (ADR 0034)."
     level: MUST
     source: design-decision
-    status: done
-    milestone: first-version
+    # Withdrawn 2026-11-18: decision SB1 A (maintainer, 2026-11-18), ADR 0020, ADR 0006: the pairwise subject is removed before any relying party moved.
+    status: withdrawn
+    superseded_by: [REQ-SUBJ-072]
     runtimes: all
     standards: []
     issues: [1024]
@@ -957,10 +961,10 @@ requirements:
     rationale: "With both parts prefixed, no two pairs of strings give one input, and session and exchange derive one subject (ADR 0034)."
     level: MUST
     source: design-decision
-    status: done
-    milestone: first-version
+    # Withdrawn 2026-11-18: decision SB1 A (maintainer, 2026-11-18), ADR 0020, ADR 0006: the pairwise subject is removed before any relying party moved.
+    status: withdrawn
+    superseded_by: [REQ-SUBJ-073]
     runtimes: all
-    actors: [session]
     standards: []
     issues: [1024]
     verification:
@@ -980,19 +984,60 @@ requirements:
       - {kind: manual, ref: "the operations guide names the new binding as the remedy for a recreated upstream account"}
   - id: REQ-SUBJ-071
     area: SUBJ
-    statement: "The sub of a token MUST have the form of a person's own subject (26 lower-case base32 characters), of a pairwise subject (43 base64url characters) or of a SPIFFE ID, and no other."
-    rationale: "A relying party that keys its records or its trust policy on sub reads one of three forms and never an address, a name of the upstream or a v1 spelling (ADR 0020, ADR 0019, ADR 0022; v1: the e-mail address, `github:<org>/<repo>`, `<cluster>:k8s:<namespace>:<name>`)."
+    statement: "The sub of a token MUST have the form of a person's own subject (26 lower-case base32 characters) or of a SPIFFE ID, and no other."
+    rationale: "A relying party that keys its records or its trust policy on sub reads one of two forms and never an address, a name of the upstream, a pairwise subject or a v1 spelling (ADR 0020, ADR 0019, ADR 0022; v1: the e-mail address, `github:<org>/<repo>`, `<cluster>:k8s:<namespace>:<name>`)."
     level: MUST
     source: v1-parity
     status: done
     milestone: first-version
     runtimes: all
     standards: []
-    issues: [1081, 1816]
+    issues: [1081, 1816, 1883]
     tests:
       - kits/go/subject/sub_test.go
       - actors/session/internal/sessiond/subject_test.go
       - actors/exchange/internal/exchanged/exchange_test.go
     verification:
-      - {kind: test-vectors, ref: "kits/conformance/token/sub-vectors.json, shape: the three forms classify; an address, a name of the upstream, a malformed ID and each v1 spelling have none"}
-      - {kind: integration-test, ref: "the sub of a sign-in's two tokens, named and public sector, and of an exchanged token has a form of the contract, though the upstream names an address"}
+      - {kind: test-vectors, ref: "kits/conformance/token/sub-vectors.json, shape: the two forms classify; an address, a name of the upstream, a pairwise subject, a malformed ID and each v1 spelling have none"}
+      - {kind: integration-test, ref: "the sub of a sign-in's two tokens and of an exchanged token has a form of the contract, though the upstream names an address"}
+  - id: REQ-SUBJ-072
+    area: SUBJ
+    statement: "The sub of every token that sluis gives a person, by sign-in, refresh or exchange, MUST be the person's own subject, the same for every client and at every tenant."
+    rationale: "Staff who work across vendors must be one person in every vendor's apps, audit and access review, and vendors are kept apart by grants and by separate installations, not by obfuscating the subject (ADR 0019, ADR 0020, decision SB1 A)."
+    level: MUST
+    source: design-decision
+    status: done
+    milestone: first-version
+    runtimes: all
+    standards: []
+    issues: [1883, 1816]
+    verification:
+      - {kind: integration-test, ref: "two clients, a refresh an hour later and the next sign-in give the Person item's id as the sub of the ID token and the access token; the exchanged token carries the same sub"}
+  - id: REQ-SUBJ-073
+    area: SUBJ
+    statement: "sluis MUST NOT issue a pairwise subject: no token carries a sub that is a keyed hash of a person, and key@ makes no key for one."
+    rationale: "A pairwise sub would split one person into one subject per tenant, and removing it after a relying party moved would change every stored sub (decision SB1 A)."
+    level: MUST
+    source: design-decision
+    status: done
+    milestone: first-version
+    runtimes: all
+    standards: []
+    issues: [1883, 1816]
+    verification:
+      - {kind: test-vectors, ref: "kits/conformance/token/sub-vectors.json, shape: a pairwise subject and each malformed spelling of one have no form"}
+      - {kind: integration-test, ref: "key@ refuses a Mac and a Seal for the purpose pairwise, and a new tenant gets no pairwise key"}
+  - id: REQ-SUBJ-074
+    area: SUBJ
+    statement: "The sub of a token for a person MUST NOT equal the value of the upstream's subject claim, whatever shape that value has."
+    rationale: "The upstream's identifier must not reach the relying party as the subject, and the upstream's claim can change while the person stays (ADR 0019)."
+    level: MUST
+    source: design-decision
+    status: done
+    milestone: first-version
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "8.1", depth: Full}
+    issues: [1883, 1816]
+    verification:
+      - {kind: integration-test, ref: "a name, a value that has the shape of an id and a value as long as a sub, asserted by the upstream, are the sub of no token and a claim of none"}
