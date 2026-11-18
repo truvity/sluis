@@ -32,6 +32,11 @@ message Boundary {
     max_items: 16, unique: true,
     items: {string: {pattern: "^[!#-\\[\\]-~]{1,256}$"}}
   }];
+  // Decision X1 A of 2026-11-18 (ADR 0006, "Amendment of 2026-11-18"): whether this installation publishes the token certificate.
+  // Off, which is the default and the state of the core, the key set carries no x5c member for any key, key@ gives no chain and
+  // keeps no token certificate, and the installation needs no intermediate and no certifier. On, each ES384 entry carries its
+  // chain; it needs the intermediate in the KeyPlan (the set is refused without it). key@ reads the value when it starts.
+  bool token_certificate = 10;
 }
 
 // KeyPlan is the kind KeyPlan: which keys exist and where they live; id "default".

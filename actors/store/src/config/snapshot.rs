@@ -705,6 +705,24 @@ fn validate_set(s: &Snapshot, boundary: &str) -> Result<(), LoadError> {
         if let Err(why) = super::slotplan::check(&format!("{id}.purposes"), &purposes) {
             return Err(failed(Some("KeyPlan"), why));
         }
+        // The token certificate, when the Boundary turns it on (decision X1 A, ADR 0006 "Amendment of 2026-11-18"), is made by
+        // the node's intermediate for the token-signing key: a plan without an ES384 key for each of the two is a set that
+        // publishes no chain and says it does. Off, the plan needs no intermediate.
+        if b.token_certificate {
+            let es384 = |name: &str| {
+                plan.purposes
+                    .iter()
+                    .any(|p| p.purpose == name && p.algorithm == "ES384")
+            };
+            if !es384("x509-intermediate") || !es384("token-signing") {
+                return Err(failed(
+                    Some("KeyPlan"),
+                    format!(
+                        "{id}.purposes: the Boundary turns the token certificate on, and the plan lists no ES384 key for both x509-intermediate and token-signing"
+                    ),
+                ));
+            }
+        }
     }
     debug_assert!(s.docs.values().all(|d| d.kind.class == Class::Config));
     Ok(())

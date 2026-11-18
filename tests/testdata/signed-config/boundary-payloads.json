@@ -555,6 +555,81 @@
    "name": "acr_values_supported is not a list",
    "payload": "default:\n  name: dev\n  kind: environment\n  level: L2\n  environment: production\n  issuer: https://sluis.example.test\n  uid_block: 0\n  acr_values_supported: urn:example:acr:mfa\n",
    "refused_path": "acr_values_supported"
+  },
+  {
+   "name": "token_certificate on",
+   "payload": "default:\n  name: dev\n  kind: environment\n  level: L2\n  environment: production\n  issuer: https://sluis.example.test\n  uid_block: 0\n  token_certificate: true\n",
+   "read": {
+    "name": "dev",
+    "kind": "environment",
+    "level": "L2",
+    "environment": "production",
+    "issuer": "https://sluis.example.test",
+    "uid_block": 0,
+    "default_tenant": "",
+    "declared_kinds": [],
+    "token_certificate": true
+   }
+  },
+  {
+   "name": "token_certificate off",
+   "payload": "default:\n  name: dev\n  kind: environment\n  level: L2\n  environment: production\n  issuer: https://sluis.example.test\n  uid_block: 0\n  token_certificate: false\n",
+   "read": {
+    "name": "dev",
+    "kind": "environment",
+    "level": "L2",
+    "environment": "production",
+    "issuer": "https://sluis.example.test",
+    "uid_block": 0,
+    "default_tenant": "",
+    "declared_kinds": [],
+    "token_certificate": false
+   }
+  },
+  {
+   "name": "token_certificate absent is off",
+   "payload": "default:\n  name: dev\n  kind: environment\n  level: L2\n  environment: production\n  issuer: https://sluis.example.test\n  uid_block: 0\n",
+   "read": {
+    "name": "dev",
+    "kind": "environment",
+    "level": "L2",
+    "environment": "production",
+    "issuer": "https://sluis.example.test",
+    "uid_block": 0,
+    "default_tenant": "",
+    "declared_kinds": [],
+    "token_certificate": false
+   }
+  },
+  {
+   "name": "token_certificate null is not a switch",
+   "payload": "default:\n  name: dev\n  kind: environment\n  level: L2\n  environment: production\n  issuer: https://sluis.example.test\n  uid_block: 0\n  token_certificate: null\n",
+   "refused_path": "default.token_certificate"
+  },
+  {
+   "name": "token_certificate yes is a string in the profile",
+   "payload": "default:\n  name: dev\n  kind: environment\n  level: L2\n  environment: production\n  issuer: https://sluis.example.test\n  uid_block: 0\n  token_certificate: yes\n",
+   "refused_path": "default.token_certificate"
+  },
+  {
+   "name": "token_certificate True is a string in the profile",
+   "payload": "default:\n  name: dev\n  kind: environment\n  level: L2\n  environment: production\n  issuer: https://sluis.example.test\n  uid_block: 0\n  token_certificate: True\n",
+   "refused_path": "default.token_certificate"
+  },
+  {
+   "name": "token_certificate 1 is a number",
+   "payload": "default:\n  name: dev\n  kind: environment\n  level: L2\n  environment: production\n  issuer: https://sluis.example.test\n  uid_block: 0\n  token_certificate: 1\n",
+   "refused_path": "default.token_certificate"
+  },
+  {
+   "name": "token_certificate quoted true is a string",
+   "payload": "default:\n  name: dev\n  kind: environment\n  level: L2\n  environment: production\n  issuer: https://sluis.example.test\n  uid_block: 0\n  token_certificate: \"true\"\n",
+   "refused_path": "default.token_certificate"
+  },
+  {
+   "name": "token_certificate a list is not a switch",
+   "payload": "default:\n  name: dev\n  kind: environment\n  level: L2\n  environment: production\n  issuer: https://sluis.example.test\n  uid_block: 0\n  token_certificate: [true]\n",
+   "refused_path": "default.token_certificate"
   }
  ]
 }

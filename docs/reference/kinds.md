@@ -70,7 +70,7 @@ Signed configuration, written by infrastructure as code or the publishing pipeli
 
 ### `Boundary`
 
-Kind (environment or customer), level L1-L4, parent boundary, issuer host, uid block.
+Kind (environment or customer), level L1-L4, parent boundary, issuer host, uid block, the acr values the boundary lists, and the switch of the token certificate (`token_certificate`, off when absent: decision X1 A, ADR 0006).
 
 - **Class:** config; scope boundary; plain; profile Fixed; module core; serves the work family.
 - **Writer:** `IaC`.
@@ -621,7 +621,7 @@ Sealed under the tenant's `credential` key (the only kind that is: session opens
 
 ### `SigningRing`
 
-The token keys the key set publishes, each ES384 key with its x5c chain and each RS256 key (the per-audience exception, an RSA-2048 key of the purpose token-signing-rs256) without one; each algorithm has its own life, so a rotation, revocation or retention of one never changes the other; exported as the static key set. key@ reads it to know the token keys of every node, so that a revocation declaration may name another node's key (ADR 0041). A key that has left the key set stays as a tombstone, state dropped, with its kid and times and no key, for the 1024 dropped last, so that a key which key@ presents again is not taken for a new one (REQ-KEYS-079); no key set lists it. A key dropped before the tombstones, or more than 1024 drops ago, is a new key again, and a key blocked this way stays blocked (a restored key included: make a new one at key@); an earlier signer counts a tombstone as a key that signs.
+The token keys the key set publishes, each ES384 key with its x5c chain when the installation turns the token certificate on (the Boundary's `token_certificate`, off in the core) and without one otherwise, and each RS256 key (the per-audience exception, an RSA-2048 key of the purpose token-signing-rs256) without one; each algorithm has its own life, so a rotation, revocation or retention of one never changes the other; exported as the static key set. key@ reads it to know the token keys of every node, so that a revocation declaration may name another node's key (ADR 0041). A key that has left the key set stays as a tombstone, state dropped, with its kid and times and no key, for the 1024 dropped last, so that a key which key@ presents again is not taken for a new one (REQ-KEYS-079); no key set lists it. A key dropped before the tombstones, or more than 1024 drops ago, is a new key again, and a key blocked this way stays blocked (a restored key included: make a new one at key@); an earlier signer counts a tombstone as a key that signs.
 
 - **Class:** durable; scope boundary; plain; profile none; module core; serves the work family.
 - **Writer:** [`signer`](/reference/actors/#signer).

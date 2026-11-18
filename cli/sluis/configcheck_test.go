@@ -434,6 +434,57 @@ func TestConfigCheckRefusesAUidBlockPastTheUidSpace(t *testing.T) {
 	}
 }
 
+// TestConfigCheckKnowsTheTokenCertificateSwitch runs the real store helper on the local set with the Boundary's switch of the
+// token certificate (decision X1 A of 2026-11-18): the set as committed leaves it off and has no intermediate, and passes;
+// switched on without the intermediate in the KeyPlan it is refused with the kind and the path; with the intermediate it
+// passes; the intermediate in the plan with the switch off passes too; and a switch that is not a boolean is refused by place.
+//
+// verifies: REQ-PKI-058
+func TestConfigCheckKnowsTheTokenCertificateSwitch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("SKIP: -short: the test builds the store executable")
+	}
+	helper := storeHelper(t)
+	const (
+		data         = "    - { purpose: data, algorithm: AES-256-GCM }\n"
+		intermediate = "    - { purpose: x509-intermediate, algorithm: ES384, slot: 9c }\n"
+		tenant       = "  default_tenant: acme\n"
+	)
+	run := func(t *testing.T, boundary, plan string) (int, string) {
+		t.Helper()
+		src := copyLocal(t)
+		replaceIn(t, filepath.Join(src, "boundary.yaml"), tenant, tenant+boundary)
+		if plan != "" {
+			replaceIn(t, filepath.Join(src, "key-plan.yaml"), data, plan+data)
+		}
+		docs, bootstrap := signLocal(t, src)
+		ta := newTestApp(t)
+		got := ta.do("config", "check", docs, "--bootstrap", bootstrap, "--helper", helper)
+		return got, ta.err.String()
+	}
+	for _, c := range []struct {
+		name, boundary, plan string
+		want                 int
+		in                   string
+	}{
+		{"off by an explicit false, no intermediate", "  token_certificate: false\n", "", cli.ExitOK, ""},
+		{"off, with the intermediate in the plan", "", intermediate, cli.ExitOK, ""},
+		{"on, with the intermediate in the plan", "  token_certificate: true\n", intermediate, cli.ExitOK, ""},
+		{"on, with no intermediate in the plan", "  token_certificate: true\n", "", cli.ExitRefused, "fail set: KeyPlan: default.purposes: the Boundary turns the token certificate on"},
+		{"not a boolean", "  token_certificate: yes\n", "", cli.ExitRefused, "default.token_certificate"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got, stderr := run(t, c.boundary, c.plan)
+			if got != c.want {
+				t.Fatalf("exit %d, want %d: %s", got, c.want, stderr)
+			}
+			if !strings.Contains(stderr, c.in) {
+				t.Errorf("stderr = %s, want %q", stderr, c.in)
+			}
+		})
+	}
+}
+
 // TestConfigCheckPassesTheRuntimeToTheHelperAndRefusesAnUnknownOne checks the CLI alone, with a helper that records
 // its arguments.
 func TestConfigCheckPassesTheRuntimeToTheHelperAndRefusesAnUnknownOne(t *testing.T) {

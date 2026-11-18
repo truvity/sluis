@@ -40,7 +40,7 @@ ECDSA over P-384 with SHA-384, the default of everything sluis signs for itself,
 
 | Purpose | Kind | Ops | AWS key | Board | Used by | Notes |
 |---|---|---|---|---|---|---|
-| <a id="token-signing"></a>`token-signing` | signing | `sign`, `public-key` | `ECC_NIST_P384`, one per boundary | slot `9a` | [`signer`](/reference/actors/#signer) | Signs tokens. Its certificate is a non-CA certificate that allows digital signatures only, issued by the node's intermediate; the published key set carries the x5c chain. Never the intermediate itself. |
+| <a id="token-signing"></a>`token-signing` | signing | `sign`, `public-key` | `ECC_NIST_P384`, one per boundary | slot `9a` | [`signer`](/reference/actors/#signer) | Signs tokens. Its certificate is a non-CA certificate that allows digital signatures only, issued by the node's intermediate when the installation turns the token certificate on (off in the core, decision X1 A); the published key set then carries the x5c chain. Never the intermediate itself. |
 | <a id="x509-intermediate"></a>`x509-intermediate` | signing | `sign`, `public-key`, `certify` | `ECC_NIST_P384`, one per trust domain | slot `9c` | [`ca`](/reference/actors/#ca) | The X.509 intermediate of a trust domain, certified by a root that root custody holds; sluis holds intermediates only. |
 | <a id="ssh-user"></a>`ssh-user` | signing | `sign`, `public-key` | `ECC_NIST_P384`, one per boundary | slot `82` | [`ssh-ca`](/reference/actors/#ssh-ca) | The SSH user certificate authority. |
 | <a id="ssh-host"></a>`ssh-host` | signing | `sign`, `public-key` | `ECC_NIST_P384`, one per boundary | slot `83` | [`ssh-ca`](/reference/actors/#ssh-ca) | The SSH host certificate authority. |

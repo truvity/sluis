@@ -73,7 +73,7 @@ Every leaf has a random 128-bit serial, `basicConstraints` critical with CA fals
 | Database client | `clientAuth` only | Subject `CN=<role>, OU=<requester>, O=sluis-database`; no SAN | Set by policy | 12 hours |
 | cert-manager | `serverAuth`, and `clientAuth` when requested | DNS and URI names taken from the requester's identity, never from the request alone | The requested duration | 90 days |
 
-- **The token certificate cannot serve TLS or issue.** It has no SAN and no CA flag, so a TLS client's name check fails and a path validator refuses it as an issuer. It is re-issued over the same key whenever its intermediate is renewed, so its `x5c` chain is never older than the intermediate.
+- **The token certificate cannot serve TLS or issue.** It has no SAN and no CA flag, so a TLS client's name check fails and a path validator refuses it as an issuer. It is re-issued over the same key whenever its intermediate is renewed, so its `x5c` chain is never older than the intermediate. An installation that leaves the token certificate off has none ([0006](/decisions/0006-keys-and-sealing/#amendment-of-2026-11-18-the-token-certificate-is-optional-and-off-in-the-core)).
 - **Policy may shorten any lifetime, never lengthen it past the maximum.** The maxima are floors in code ([0006](/decisions/0006-keys-and-sealing/#floors-in-code)); `sluis config check` refuses a declared lifetime above one.
 - **SSH certificate lifetimes** are in [SSH](/decisions/0023-certificate-authorities/#ssh).
 

@@ -49,8 +49,13 @@ type Boundary struct {
 	// is not here is ignored. Each is visible ASCII without a quote, a backslash or a space (a request separates values by
 	// spaces), 1 to 256 bytes, and may begin with - or _; at most 16, none twice. A value that YAML would read as a number is written in quotes: "1".
 	AcrValuesSupported []string `protobuf:"bytes,9,rep,name=acr_values_supported,json=acrValuesSupported,proto3" json:"acr_values_supported,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Decision X1 A of 2026-11-18 (ADR 0006, "Amendment of 2026-11-18"): whether this installation publishes the token certificate.
+	// Off, which is the default and the state of the core, the key set carries no x5c member for any key, key@ gives no chain and
+	// keeps no token certificate, and the installation needs no intermediate and no certifier. On, each ES384 entry carries its
+	// chain; it needs the intermediate in the KeyPlan (the set is refused without it). key@ reads the value when it starts.
+	TokenCertificate bool `protobuf:"varint,10,opt,name=token_certificate,json=tokenCertificate,proto3" json:"token_certificate,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Boundary) Reset() {
@@ -144,6 +149,13 @@ func (x *Boundary) GetAcrValuesSupported() []string {
 		return x.AcrValuesSupported
 	}
 	return nil
+}
+
+func (x *Boundary) GetTokenCertificate() bool {
+	if x != nil {
+		return x.TokenCertificate
+	}
+	return false
 }
 
 // KeyPlan is the kind KeyPlan: which keys exist and where they live; id "default".
@@ -1570,7 +1582,7 @@ var File_sluis_config_v2alpha1_config_proto protoreflect.FileDescriptor
 
 const file_sluis_config_v2alpha1_config_proto_rawDesc = "" +
 	"\n" +
-	"\"sluis/config/v2alpha1/config.proto\x12\x15sluis.config.v2alpha1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\"\xce\x03\n" +
+	"\"sluis/config/v2alpha1/config.proto\x12\x15sluis.config.v2alpha1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\"\xfb\x03\n" +
 	"\bBoundary\x12\x1a\n" +
 	"\x04name\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x04name\x12\x1a\n" +
 	"\x04kind\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x04kind\x12\x1c\n" +
@@ -1581,7 +1593,9 @@ const file_sluis_config_v2alpha1_config_proto_rawDesc = "" +
 	"\tuid_block\x18\x06 \x01(\rR\buidBlock\x123\n" +
 	"\x0edeclared_kinds\x18\a \x03(\tB\f\xbaH\t\x92\x01\x06\"\x04r\x02\x10\x01R\rdeclaredKinds\x12E\n" +
 	"\x0edefault_tenant\x18\b \x01(\tB\x1e\xbaH\x1br\x192\x17^$|^[a-z0-9._-]{1,128}$R\rdefaultTenant\x12V\n" +
-	"\x14acr_values_supported\x18\t \x03(\tB$\xbaH!\x92\x01\x1e\x10\x10\x18\x01\"\x18r\x162\x14^[!#-\\[\\]-~]{1,256}$R\x12acrValuesSupported\"\x8e\x02\n" +
+	"\x14acr_values_supported\x18\t \x03(\tB$\xbaH!\x92\x01\x1e\x10\x10\x18\x01\"\x18r\x162\x14^[!#-\\[\\]-~]{1,256}$R\x12acrValuesSupported\x12+\n" +
+	"\x11token_certificate\x18\n" +
+	" \x01(\bR\x10tokenCertificate\"\x8e\x02\n" +
 	"\aKeyPlan\x12A\n" +
 	"\bpurposes\x18\x01 \x03(\v2%.sluis.config.v2alpha1.KeyPurposePlanR\bpurposes\x12>\n" +
 	"\tcache_ttl\x18\x02 \x01(\v2\x19.google.protobuf.DurationB\x06\xbaH\x03\xc8\x01\x01R\bcacheTtl\x12A\n" +
