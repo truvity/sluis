@@ -81,7 +81,6 @@ func (f *flags) service(c cli.Flags) (*exchanged.Service, error) {
 		Directory: dir,
 		Policy:    policyv2alpha1connect.NewPolicyServiceClient(ph, purl, rpc.ClientOptions()...),
 		Signer:    signerv2alpha1connect.NewSignerServiceClient(gh, gurl, rpc.ClientOptions()...),
-		Keys:      keys,
 		Audit:     em,
 	})
 }

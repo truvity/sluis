@@ -566,7 +566,7 @@ requirements:
       - {kind: integration-test, ref: "the seal API takes no nonce; two seals of one value under one key differ"}
   - id: REQ-KEYS-035
     area: KEYS
-    statement: "Each tenant MUST have exactly six data keys, data, pseudonym, pairwise, evidence, chain and credential."
+    statement: "Each tenant MUST have exactly five data keys, data, pseudonym, evidence, chain and credential."
     rationale: "Purposes never share a key, so a tenant's exit can delete personal data and keep evidence (ADR 0006)."
     level: MUST
     source: design-decision
@@ -577,7 +577,7 @@ requirements:
     standards: []
     issues: [1208]
     verification:
-      - {kind: integration-test, ref: "a new tenant gets exactly six DataKeyWrap purposes; a new boundary gets the four of its own: grant, cookie, mac and data"}
+      - {kind: integration-test, ref: "a new tenant gets exactly five DataKeyWrap purposes; a new boundary gets the four of its own: grant, cookie, mac and data"}
   - id: REQ-KEYS-036
     area: KEYS
     statement: "A tenant's exit MUST delete its data, pseudonym, pairwise, chain and credential wraps at once, every generation and every recipient."
@@ -680,7 +680,7 @@ requirements:
   - id: REQ-KEYS-043
     area: KEYS
     statement: "key@ MUST NOT make a new generation of the mac data key in place."
-    rationale: "Link ids, upstream session ids and pairwise subjects are made under it, so a new key would change them all (ADR 0006)."
+    rationale: "Link ids, upstream session ids and the hashed index entries of sealed kinds are made under it, so a new key would change them all (ADR 0006)."
     level: MUST
     source: design-decision
     status: done
@@ -690,7 +690,7 @@ requirements:
     standards: []
     issues: [1210]
     verification:
-      - {kind: integration-test, ref: "key@ makes the mac key and a tenant's pairwise key at generation 1 only: an epoch on either is refused and every stored wrap is of generation 1; a rotation job, when built, must skip both"}
+      - {kind: integration-test, ref: "key@ makes the mac key at generation 1 only: an epoch on it is refused and every stored wrap is of generation 1; a rotation job, when built, must skip it"}
   - id: REQ-KEYS-044
     area: KEYS
     statement: "key@ MUST listen on Unix sockets only, one per caller, each in a directory that only its caller can open."
@@ -1051,7 +1051,7 @@ requirements:
     verification:
       - {kind: integration-test, ref: "a rotation writes a new SigningRing; the exported key set carries the new key and the old one for the overlap"}
 
-  # ---- where a tenant's keys live, and the pairwise key (decision 0006)
+  # ---- where a tenant's keys live (decision 0006; the pairwise key was removed 2026-11-18, decision SB1 A)
   - id: REQ-KEYS-074
     area: KEYS
     statement: "A tenant's key location MUST be operator-held unless its Tenant item declares customer account."
@@ -1095,7 +1095,7 @@ requirements:
       - {kind: integration-test, ref: "registry check: no secret source or kind holds a credential for a customer account; key@ reaches the account by its role"}
   - id: REQ-KEYS-070
     area: KEYS
-    statement: "Moving a tenant into a customer account MUST re-wrap its data, pseudonym, pairwise, evidence, chain and credential keys under the customer's KMS key during the move."
+    statement: "Moving a tenant into a customer account MUST re-wrap its data, pseudonym, evidence, chain and credential keys under the customer's KMS key during the move."
     rationale: "The move changes where the wraps are made and nothing an app sees (ADR 0006)."
     level: MUST
     source: design-decision
@@ -1127,10 +1127,10 @@ requirements:
     rationale: "A new key would change every pairwise subject of the tenant (ADR 0006)."
     level: MUST
     source: design-decision
-    status: done
-    milestone: first-version
+    # Withdrawn 2026-11-18: decision SB1 A (maintainer, 2026-11-18), ADR 0020, ADR 0006: the pairwise subject is removed before any relying party moved.
+    status: withdrawn
+    superseded_by: [REQ-SUBJ-073]
     runtimes: all
-    actors: [key]
     standards: []
     issues: [1024]
     verification:
@@ -1677,7 +1677,7 @@ requirements:
   - id: REQ-KEYS-101
     area: KEYS
     statement: "On a declared compromise of the grant, cookie, chain, data or evidence data key, key@ MUST make a new generation that every later Seal uses."
-    rationale: "New values must not be sealed under a key the thief holds; mac and pairwise are accepted risks, and pseudonym seals nothing (its new epoch is REQ-AUDIT-164) (ADR 0041)."
+    rationale: "New values must not be sealed under a key the thief holds; mac is an accepted risk, and pseudonym seals nothing (its new epoch is REQ-AUDIT-164) (ADR 0041)."
     level: MUST
     source: design-decision
     status: planned
@@ -1687,11 +1687,11 @@ requirements:
     standards: []
     features: ["design"]
     verification:
-      - {kind: integration-test, ref: "per purpose (grant, cookie, chain, data, evidence): declare, then the next Seal uses the new generation; for mac and pairwise the declaration is refused as not supported"}
+      - {kind: integration-test, ref: "per purpose (grant, cookie, chain, data, evidence): declare, then the next Seal uses the new generation; for mac the declaration is refused as not supported"}
   - id: REQ-KEYS-102
     area: KEYS
     statement: "key@ MUST refuse every Seal under a compromised generation of the grant, cookie, chain, data or evidence data key."
-    rationale: "A stale cache or a slow caller must not seal new values under it; mac and pairwise are accepted risks (ADR 0041)."
+    rationale: "A stale cache or a slow caller must not seal new values under it; mac is an accepted risk (ADR 0041)."
     level: MUST
     source: design-decision
     status: planned
@@ -1761,7 +1761,7 @@ requirements:
       - {kind: integration-test, ref: "the owner node of a revoked key tries to make it active and to sign: both refused"}
   - id: REQ-KEYS-260
     area: KEYS
-    statement: "key@ MUST make the data, evidence, chain, credential or pairwise key of a tenant that has none only under a grant that names that tenant, the caller and the operation."
+    statement: "key@ MUST make the data, evidence, chain or credential key of a tenant that has none only under a grant that names that tenant, the caller and the operation."
     rationale: "A name that nobody checked must not get a key, a wrap and audit facts by being named in a call; the key of a tenant that exists is used by rule where the purpose is checked by rule, so a refresh needs no new decision; the pseudonym key is not covered, because the audit emitter of every actor makes it and none holds a grant (ADR 0006, ADR 0007)."
     level: MUST
     source: design-decision
@@ -1774,7 +1774,7 @@ requirements:
     tests: [actors/key/internal/keyd/firstkey_test.go]
     verification:
       - {kind: integration-test, ref: "a name that is no tenant, with no grant or with a grant of another tenant, holder, operation or time: refused as grant, no key, no wrap, one audit fact; under a grant that names it the key is made"}
-      - {kind: integration-test, ref: "a key that exists is used under chain, credential and pairwise with no grant; an open for a tenant with no key does not wait for the makers"}
+      - {kind: integration-test, ref: "a key that exists is used under chain and credential with no grant; an open for a tenant with no key does not wait for the makers"}
   - id: REQ-KEYS-107
     area: KEYS
     statement: "entry and signer MUST omit every kid that KeyRevocation lists from every key set they serve."

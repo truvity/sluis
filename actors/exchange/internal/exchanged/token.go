@@ -11,20 +11,6 @@ import (
 	lifetimekit "github.com/truvity/sluis/v2/kits/go/lifetime"
 )
 
-// pairwiseLabel separates the use of the pairwise key from every other (key@ binds the label into the Mac).
-const pairwiseLabel = "pairwise"
-
-// subBytes is how much of the Mac a pairwise subject keeps: 256 bits (ADR 0034, "Subjects and sectors").
-const subBytes = 32
-
-// pairwiseSub turns the Mac into a subject: truncated to 256 bits, base64url without padding.
-func pairwiseSub(mac []byte) string {
-	if len(mac) > subBytes {
-		mac = mac[:subBytes]
-	}
-	return base64.RawURLEncoding.EncodeToString(mac)
-}
-
 // groupsOf is the groups claim of the token for the audience client (ADR 0020, "The claims of a token"): the held grant
 // names whose `<scope>:<thing>` pair appears among the pairs of the client's `requires`, in any role, and those of the
 // things its `groups` override names, written with its `groups_delimiter`. Admission was decided on the full set;

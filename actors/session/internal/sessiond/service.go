@@ -45,9 +45,6 @@ type Options struct {
 	Audit    *audit.Emitter
 	// UpstreamName names the Upstream to sign people in at. Empty means the only one the boundary declares.
 	UpstreamName string
-	// Sectors says which sector a tenant is in (0034). Nil means the first working version's rule: no Tenant item
-	// declares one, so the sector is the tenant's own name and never public.
-	Sectors func(tenant string) Sector
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
 	// HoldPages is how many pages of 200 holds a lookup of a person's hold reads before it fails closed; 0 means 1000

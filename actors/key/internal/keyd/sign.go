@@ -282,8 +282,9 @@ func hmacSHA384(key []byte, parts ...[]byte) []byte {
 
 // Mac makes a keyed hash with HMAC-SHA384 over a data key (ADR 0006, "Sign and Mac"): the label is bound into
 // the input as u16 length | label | input, so two uses never produce the same hash for the same input. The
-// purposes are mac (the boundary's), pseudonym (a tenant's, by epoch) and pairwise (a tenant's). MacRequest.grant
-// is checked only to make a tenant's first pairwise key (mayMake); a key that exists is used by rule alone.
+// purposes are mac (the boundary's) and pseudonym (a tenant's, by epoch). Neither needs a grant: the boundary's key is
+// made on its first need, and the pseudonym key is made by the audit emitters of every actor, none of which holds one
+// (reported, not decided here). There is no Mac of a person's subject: a subject is made of no key (ADR 0019).
 func (s *Server) Mac(ctx context.Context, req *connect.Request[keyv2alpha1.MacRequest]) (*connect.Response[keyv2alpha1.MacResponse], error) {
 	m := req.Msg
 	caller, err := s.callerOf(ctx, "mac")
@@ -292,7 +293,7 @@ func (s *Server) Mac(ctx context.Context, req *connect.Request[keyv2alpha1.MacRe
 	}
 	purpose, tenant := m.GetPurpose(), m.GetTenant()
 	switch purpose {
-	case "mac", "pseudonym", "pairwise":
+	case "mac", "pseudonym":
 	default:
 		return nil, s.refuse(ctx, caller, "mac", purpose, "", connect.CodeInvalidArgument, reasonPurpose, "purpose")
 	}
@@ -324,28 +325,12 @@ func (s *Server) Mac(ctx context.Context, req *connect.Request[keyv2alpha1.MacRe
 	if !labelAllowed(caller, m.GetLabel()) {
 		return nil, s.refuse(ctx, caller, "mac", purpose, tenant, connect.CodePermissionDenied, reasonRule, "label")
 	}
-	// The tenant's first pairwise key is made under a grant that names the tenant. The pseudonym key is not (the audit
-	// emitters of every actor make it, and none holds a grant): that is reported, not decided here.
-	create := true
-	if purpose != "pseudonym" {
-		if create, err = s.mayMake(ctx, newGrantState(m.GetGrant()), caller, "mac", tenant); err != nil {
-			return nil, s.keyFailure(ctx, caller, "mac", purpose, tenant, err, false)
-		}
-	}
 	var tag []byte
 	mac := func(key []byte) error {
 		tag = macTag(key, m.GetLabel(), m.GetInput())
 		return nil
 	}
-	if ref := (keyRef{tenant, purpose, generation}); create {
-		err = s.withKey(ctx, ref, true, mac)
-	} else {
-		err = s.withExistingKey(ctx, ref, mac)
-	}
-	if errors.Is(err, errNoKey) && !create {
-		return nil, s.refuse(ctx, caller, "mac", purpose, tenant, connect.CodePermissionDenied, reasonGrant, "grant")
-	}
-	if err != nil {
+	if err = s.withKey(ctx, keyRef{tenant, purpose, generation}, true, mac); err != nil {
 		return nil, s.keyFailure(ctx, caller, "mac", purpose, tenant, err, false)
 	}
 	return connect.NewResponse(&keyv2alpha1.MacResponse{Mac: tag}), nil

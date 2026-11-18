@@ -226,7 +226,6 @@ type fakeKey struct {
 	keyv2alpha1connect.UnimplementedKeyServiceHandler
 	mu   sync.Mutex
 	macs []*keyv2alpha1.MacRequest
-	fail bool
 }
 
 func macOf(purpose, tenant, label string, input []byte) []byte {
@@ -240,24 +239,9 @@ func macOf(purpose, tenant, label string, input []byte) []byte {
 func (f *fakeKey) Mac(_ context.Context, req *connect.Request[keyv2alpha1.MacRequest]) (*connect.Response[keyv2alpha1.MacResponse], error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.fail && req.Msg.GetPurpose() == "pairwise" {
-		return nil, refusal.New(connect.CodeUnavailable, "wrap", "")
-	}
 	f.macs = append(f.macs, proto.Clone(req.Msg).(*keyv2alpha1.MacRequest))
 	m := req.Msg
 	return connect.NewResponse(&keyv2alpha1.MacResponse{Mac: macOf(m.GetPurpose(), m.GetTenant(), m.GetLabel(), m.GetInput())}), nil
-}
-
-func (f *fakeKey) pairwise() []*keyv2alpha1.MacRequest {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	var out []*keyv2alpha1.MacRequest
-	for _, m := range f.macs {
-		if m.GetPurpose() == "pairwise" {
-			out = append(out, m)
-		}
-	}
-	return out
 }
 
 // ---- policy and signer -------------------------------------------------------------------------------------------
@@ -435,7 +419,7 @@ type env struct {
 // appSecret is the secret of example-app: reserved characters on purpose. No record, reply or log may repeat it.
 const appSecret = "s3cret: p@ss/w%rd +ok&=;" //nolint:gosec // G101: a test value, not a credential
 
-var testPerson = exchanged.Person{ID: "p-7f3a", Accounts: []string{"workforce/u-1001"}, State: "live", Org: testTenant}
+var testPerson = exchanged.Person{ID: "o2jmhljvic5yapacbm5o4zwnra", Accounts: []string{"workforce/u-1001"}, State: "live", Org: testTenant}
 
 func newEnv(t *testing.T, o envOptions) *env {
 	t.Helper()
@@ -512,7 +496,7 @@ func newEnv(t *testing.T, o envOptions) *env {
 		Boundary: testBoundary, Config: cfg, Directory: directory,
 		Policy: policyv2alpha1connect.NewPolicyServiceClient(ph, purl, rpc.ClientOptions()...),
 		Signer: signerv2alpha1connect.NewSignerServiceClient(gh, gurl, rpc.ClientOptions()...),
-		Keys:   keys, Audit: em, Now: func() time.Time { return t0 },
+		Audit:  em, Now: func() time.Time { return t0 },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -547,7 +531,7 @@ func mintWith(t *testing.T, key *ecdsa.PrivateKey, typ string, claims map[string
 // issued to. A test overrides what it needs.
 func subjectClaims(over map[string]any) map[string]any {
 	m := map[string]any{
-		"iss": testIssuer, "sub": "pairwise-of-the-sign-in", "aud": "sluis-cli", "client_id": "sluis-cli",
+		"iss": testIssuer, "sub": "subject-of-the-sign-in", "aud": "sluis-cli", "client_id": "sluis-cli",
 		"iat": t0.Add(-5 * time.Minute).Unix(), "exp": t0.Add(30 * time.Minute).Unix(), "jti": "j-subject",
 		"auth_time": t0.Add(-10 * time.Minute).Unix(), "acr": "urn:example:acr:mfa", "amr": []string{"pwd", "mfa"}, "sid": "sid-1",
 		"groups": []string{"dev:example-app:user"},

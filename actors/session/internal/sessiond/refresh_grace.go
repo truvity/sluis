@@ -43,7 +43,7 @@ const refreshTagLen = 24
 // copy of the store is no help, and a holder of a token cannot make another. The secret of a token never reaches key@.
 func (k keys) refreshSecret(ctx context.Context, tenant, sid string, generation uint64, salt []byte) (string, error) {
 	g := binary.BigEndian.AppendUint64(nil, generation)
-	m, err := k.mac(ctx, "mac", "", labelRefreshTag, lengthPrefixed(tenant, sid, string(g), string(salt)), nil)
+	m, err := k.mac(ctx, labelRefreshTag, lengthPrefixed(tenant, sid, string(g), string(salt)))
 	if err != nil {
 		return "", err
 	}

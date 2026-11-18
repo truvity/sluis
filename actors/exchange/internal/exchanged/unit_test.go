@@ -2,18 +2,9 @@ package exchanged
 
 import (
 	"net/netip"
-	"strings"
 	"testing"
 	"time"
 )
-
-// verifies: REQ-SUBJ-009
-func TestPairwiseSubIs256BitsOfBase64URLWithoutPadding(t *testing.T) {
-	sub := pairwiseSub(make([]byte, 48))
-	if len(sub) != 43 || strings.ContainsAny(sub, "=+/") {
-		t.Errorf("sub = %q", sub)
-	}
-}
 
 func TestLifetimeIsTheEarliestOfTheFour(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)

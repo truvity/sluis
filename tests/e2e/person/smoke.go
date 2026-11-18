@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
+
+	"github.com/truvity/sluis/v2/kits/go/subject"
 )
 
 // services the smoke needs healthy before it starts.
@@ -164,12 +166,11 @@ func smokeRun(cfg *config, fromOut *int64) error {
 	fmt.Println("exchanged token (the claims; the signature is not shown)")
 	printToken(xHdr, xClaims)
 	fmt.Printf("signature:     ES384, verified with kid %s from %s/jwks\n", kid, issuer)
-	// ADR 0034: both subjects are Mac(the tenant's pairwise key, kits/go/subject.PairwiseInput(sector, person id)), so one
-	// person in one tenant has one. A difference is a failure.
+	// ADR 0019, ADR 0020: both subjects are the person's own subject, so one person has one. A difference is a failure.
 	if idClaims["sub"] != xClaims["sub"] {
-		return errors.New("the ID token's sub and the exchanged token's sub differ: session and exchange must build the same pairwise subject")
+		return errors.New("the ID token's sub and the exchanged token's sub differ: session and exchange must give the person's own subject")
 	}
-	fmt.Println("subjects:      the sign-in's sub and the exchanged token's sub are the same pairwise subject")
+	fmt.Println("subjects:      the sign-in's sub and the exchanged token's sub are the same person's own subject")
 
 	// --- 2b. The same exchange as a confidential client: its secret authenticates the client that asks (ADR 0022), and
 	// the subject token is still the public native client's.
@@ -188,7 +189,7 @@ func smokeRun(cfg *config, fromOut *int64) error {
 	if cClaims["client_id"] != confidentialClient {
 		return fmt.Errorf("the confidential client's exchanged token has client_id %v, want %s", cClaims["client_id"], confidentialClient)
 	}
-	fmt.Println("client exchange: 200, a token for " + audience + ", the same pairwise subject; the subject token was sluis-cli's")
+	fmt.Println("client exchange: 200, a token for " + audience + ", the same subject; the subject token was sluis-cli's")
 
 	// --- 2c. What a client asks of the authentication: prompt and max_age, against the identity provider.
 	if err := s.prompts(ctx); err != nil {
@@ -293,18 +294,23 @@ func (s *session) cachedAccessToken() (string, error) {
 	return set.AccessToken, nil
 }
 
-var pairwiseRE = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
+// isPersonSubject says whether sub is a person's own subject (ADR 0019, "Assigning a subject"): 128 random bits in 26
+// characters of lower-case base32. Nothing else is a sub of a person, and no pairwise form exists (decision SB1 A).
+func isPersonSubject(sub string) bool {
+	kind, ok := subject.Classify(sub)
+	return ok && kind == subject.KindPerson
+}
 
-// checkIDToken asserts what the sign-in must show (ADR 0017, 0020, 0034): the issuer, the client as audience, a subject
-// that is the pairwise form and not the user name, and an amr that is only RFC 8176 tokens. An acr, if present, is the
+// checkIDToken asserts what the sign-in must show (ADR 0017, 0019, 0020): the issuer, the client as audience, a subject
+// that is the person's own and not the user name, and an amr that is only RFC 8176 tokens. An acr, if present, is the
 // upstream's own; nothing raises it.
 func checkIDToken(c map[string]any) error {
 	if c["iss"] != issuer || c["aud"] != cliID {
 		return fmt.Errorf("the ID token is for iss %v aud %v, want %s and %s", c["iss"], c["aud"], issuer, cliID)
 	}
 	sub, _ := c["sub"].(string)
-	if !pairwiseRE.MatchString(sub) {
-		return errors.New("the ID token's sub is not a pairwise subject (256 bits, base64url)")
+	if !isPersonSubject(sub) {
+		return errors.New("the ID token's sub is not a person's own subject (128 bits, 26 characters of base32)")
 	}
 	amr, ok := c["amr"].([]any)
 	if !ok || len(amr) == 0 || len(amr) > 16 {
@@ -327,8 +333,8 @@ func checkExchanged(h, c, signIn map[string]any) error {
 	if c["iss"] != issuer || c["aud"] != audience {
 		return fmt.Errorf("the exchanged token is for iss %v aud %v", c["iss"], c["aud"])
 	}
-	if !pairwiseRE.MatchString(fmt.Sprint(c["sub"])) {
-		return errors.New("the exchanged token's sub is not a pairwise subject")
+	if !isPersonSubject(fmt.Sprint(c["sub"])) {
+		return errors.New("the exchanged token's sub is not a person's own subject")
 	}
 	groups := strs(c["groups"])
 	wide := strs(signIn["groups"])

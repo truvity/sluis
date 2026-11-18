@@ -429,7 +429,7 @@ async fn an_asker_asks_only_its_own_actions() {
 
 #[tokio::test]
 async fn an_action_cannot_widen_its_own_grant() {
-    // token.exchange may allow get, list, create, update and seal, open, mac; whatever the asker asks.
+    // token.exchange may allow get, list, create, update and seal, open; whatever the asker asks.
     let rig = Rig::new("exchange").await;
     let mut req = token("token.exchange", &["workforce/u-1001"], "live", fresh_mfa());
     req.grant_store_verbs = ["get", "create", "delete", "apply"]
@@ -445,8 +445,8 @@ async fn an_action_cannot_widen_its_own_grant() {
             .sealed_grant,
     );
     assert_eq!(g.store_verbs, ["create", "get"]);
-    // sign is not an operation of the action, whatever exchange asks; mac is, for the pairwise key.
-    assert_eq!(g.key_ops, ["mac", "open", "seal"]);
+    // sign and mac are not operations of the action, whatever exchange asks.
+    assert_eq!(g.key_ops, ["open", "seal"]);
 
     // An audit grant allows no store verb at all.
     let rig = Rig::new("writer").await;
@@ -852,21 +852,21 @@ fn the_caps_of_every_action_are_the_shared_vectors() {
     }
 }
 
-/// The first sign-in at a tenant and every refresh need the pairwise key, which key@ makes only under a grant that names
-/// the tenant and the operation mac: session asks for seal and mac at the code exchange, and the real policy gives both.
-/// A grant narrowed to seal and open alone would leave the key unmade and the chain begun (a spent code and an orphan
-/// chain for every attempt).
+/// The first sign-in at a tenant needs the tenant's first chain key, which key@ makes only under a grant that names the
+/// tenant and the operation seal: session asks for seal at the code exchange, and the real policy gives it. A grant
+/// narrowed to open alone would leave the key unmade and the chain begun (a spent code and an orphan chain for every
+/// attempt). A person's subject needs no key, so no grant of token.issue allows mac.
 ///
 /// verifies: REQ-KEYS-260
 #[tokio::test]
-async fn session_gets_seal_and_mac_at_a_code_exchange_and_mac_at_a_refresh() {
+async fn session_gets_seal_at_a_code_exchange_and_never_mac() {
     let rig = Rig::new("session").await;
     for (asked, want) in [
-        (vec!["seal", "mac"], vec!["mac", "seal"]),
-        (vec!["mac"], vec!["mac"]),
-        (vec!["seal", "open", "mac"], vec!["mac", "open", "seal"]),
-        // Nothing beyond the action's caps is given, whatever is asked.
-        (vec!["seal", "mac", "sign"], vec!["mac", "seal"]),
+        (vec!["seal"], vec!["seal"]),
+        (vec!["seal", "open"], vec!["open", "seal"]),
+        // Nothing beyond the action's caps is given, whatever is asked: not mac, which only the pairwise key needed.
+        (vec!["seal", "mac", "sign"], vec!["seal"]),
+        (vec!["mac"], vec![]),
     ] {
         let mut req = token("token.issue", &["workforce/u-1001"], "live", fresh_mfa());
         req.grant_store_verbs = vec!["create".into(), "update".into()];

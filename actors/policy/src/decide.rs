@@ -44,9 +44,9 @@ const ACTIONS: [Spec; 5] = [
         every_tenant: false,
         token: true,
         verbs: &["get", "list", "create", "update", "delete", "apply"],
-        // mac: the pairwise key of a tenant, which key@ makes under a grant that names the tenant and this operation
-        // (REQ-KEYS-260); session makes the subject of a token with it.
-        ops: &["seal", "open", "mac"],
+        // No mac: a person's subject is made of no key (ADR 0019), and the boundary's mac key and the tenant's
+        // pseudonym key are used by rule alone.
+        ops: &["seal", "open"],
     },
     Spec {
         name: "token.exchange",
@@ -55,7 +55,7 @@ const ACTIONS: [Spec; 5] = [
         every_tenant: false,
         token: true,
         verbs: &["get", "list", "create", "update"],
-        ops: &["seal", "open", "mac"],
+        ops: &["seal", "open"],
     },
     Spec {
         name: "audit.seal",

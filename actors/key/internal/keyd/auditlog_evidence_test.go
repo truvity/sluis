@@ -17,7 +17,7 @@ import (
 )
 
 // eraseWrapsExcept deletes the wraps of the tenant whose purpose is not keep, as a tenant's exit does to the data,
-// pseudonym, pairwise and chain wraps (ADR 0006, "Erasing a tenant"); the evidence wrap stays until the evidence
+// pseudonym and chain wraps (ADR 0006, "Erasing a tenant"); the evidence wrap stays until the evidence
 // retention ends. It returns how many it deleted. The exit itself is not built (REQ-KEYS-036): this is its effect on
 // the store.
 func (f *fakeStore) eraseWrapsExcept(tenant, keep string) int {
@@ -171,7 +171,7 @@ func TestAnAuditEntryOpensUnderTheEvidenceKeyAndNeverTheDataKey(t *testing.T) {
 		t.Fatalf("the evidence key does not open the entry: %q, %v", pt, err)
 	}
 
-	// The tenant exits: its data, pseudonym, pairwise and chain wraps are deleted, and the node starts again with an
+	// The tenant exits: its data, pseudonym and chain wraps are deleted, and the node starts again with an
 	// empty cache. The person's value no longer opens; the entry still does.
 	if got := e.store.eraseWrapsExcept("acme", "evidence"); got == 0 {
 		t.Fatal("the tenant had no personal wraps to erase")

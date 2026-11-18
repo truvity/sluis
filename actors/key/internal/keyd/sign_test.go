@@ -12,6 +12,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -226,12 +227,8 @@ func TestMac(t *testing.T) {
 	e := newTestEnv(t, "development")
 	n := e.startedNode(nodeOpts{})
 	mac := func(actor, purpose, tenant, label, input, epoch string) ([]byte, error) {
-		var grant []byte
-		if purpose == "pairwise" && tenant != "" {
-			grant = n.grant(actor, []string{tenant}, []string{"mac"}, time.Minute)
-		}
 		res, err := n.client(actor).Mac(context.Background(), connect.NewRequest(&keyv2alpha1.MacRequest{
-			Purpose: purpose, Tenant: tenant, Label: label, Input: []byte(input), Epoch: epoch, Grant: grant,
+			Purpose: purpose, Tenant: tenant, Label: label, Input: []byte(input), Epoch: epoch,
 		}))
 		if err != nil {
 			return nil, err
@@ -260,7 +257,7 @@ func TestMac(t *testing.T) {
 	if string(x) == string(y) {
 		t.Error("the label and the input run together")
 	}
-	// Pseudonyms: per tenant and epoch; pairwise: per tenant.
+	// Pseudonyms: per tenant and epoch.
 	p1, err := mac("reader", "pseudonym", "acme", "audit-subject", "alice", "202611")
 	if err != nil {
 		t.Fatal(err)
@@ -270,48 +267,38 @@ func TestMac(t *testing.T) {
 	if string(p1) == string(p2) || string(p1) == string(p3) {
 		t.Error("a pseudonym did not change with the epoch or the tenant")
 	}
-	if _, err := mac("session", "pairwise", "acme", "sector", "alice", ""); err != nil {
-		t.Errorf("pairwise: %v", err)
-	}
 	// Refusals.
 	for name, c := range map[string]struct {
 		actor, purpose, tenant, label, epoch string
 		code                                 connect.Code
 		reason                               string
 	}{
-		"empty label":        {"session", "mac", "", "", "", connect.CodeInvalidArgument, "label"},
-		"mac with a tenant":  {"session", "mac", "acme", "l", "", connect.CodeInvalidArgument, "tenant"},
-		"pairwise no tenant": {"session", "pairwise", "", "l", "", connect.CodeInvalidArgument, "tenant"},
-		"no epoch":           {"reader", "pseudonym", "acme", "l", "", connect.CodeInvalidArgument, "epoch"},
-		"bad epoch":          {"reader", "pseudonym", "acme", "l", "202613", connect.CodeInvalidArgument, "epoch"},
-		"epoch on pairwise":  {"session", "pairwise", "acme", "l", "202611", connect.CodeInvalidArgument, "epoch"},
-		"data is not a mac":  {"session", "data", "acme", "l", "", connect.CodeInvalidArgument, "purpose"},
-		"no rule":            {"reader", "mac", "", "l", "", connect.CodePermissionDenied, "rule"},
+		"empty label":         {"session", "mac", "", "", "", connect.CodeInvalidArgument, "label"},
+		"mac with a tenant":   {"session", "mac", "acme", "l", "", connect.CodeInvalidArgument, "tenant"},
+		"pseudonym no tenant": {"reader", "pseudonym", "", "l", "202611", connect.CodeInvalidArgument, "tenant"},
+		"no epoch":            {"reader", "pseudonym", "acme", "l", "", connect.CodeInvalidArgument, "epoch"},
+		"bad epoch":           {"reader", "pseudonym", "acme", "l", "202613", connect.CodeInvalidArgument, "epoch"},
+		"epoch on mac":        {"session", "mac", "", "l", "202611", connect.CodeInvalidArgument, "epoch"},
+		"pairwise (retired)":  {"session", "pairwise", "acme", "l", "", connect.CodeInvalidArgument, "purpose"},
+		"data is not a mac":   {"session", "data", "acme", "l", "", connect.CodeInvalidArgument, "purpose"},
+		"no rule":             {"reader", "mac", "", "l", "", connect.CodePermissionDenied, "rule"},
 	} {
 		_, err := mac(c.actor, c.purpose, c.tenant, c.label, "x", c.epoch)
 		wantRefusalNamed(t, name, err, c.code, c.reason)
 	}
 }
 
-// The subject MAC keys never leave key@: the only operation on the boundary's mac key and on a tenant's pairwise key is
-// Mac, which returns a keyed hash. Seal, Open, Sign and PublicKey on either purpose are refused, even for session, the
-// actor that holds the Mac rule for both, and nothing was signed.
-//
-// verifies: REQ-SUBJ-008
-func TestMacKeysAreNeverExtracted(t *testing.T) {
+// The mac key never leaves key@: the only operation on the boundary's mac key is Mac, which returns a keyed hash. Seal,
+// Open, Sign and PublicKey on that purpose are refused, even for session, the actor that holds the Mac rule, and nothing
+// was signed.
+func TestMacKeyIsNeverExtracted(t *testing.T) {
 	e := newTestEnv(t, "development")
 	n := e.startedNode(nodeOpts{})
 	ctx := context.Background()
 	c := n.client("session")
-	// The control: Mac works for both, so the refusals below are about the other operations.
-	for _, p := range []struct{ purpose, tenant string }{{"mac", ""}, {"pairwise", "acme"}} {
-		var grant []byte
-		if p.purpose == "pairwise" {
-			grant = n.grant("session", []string{p.tenant}, []string{"mac"}, time.Minute)
-		}
-		if _, err := c.Mac(ctx, connect.NewRequest(&keyv2alpha1.MacRequest{Purpose: p.purpose, Tenant: p.tenant, Label: "l", Input: []byte("x"), Grant: grant})); err != nil {
-			t.Fatalf("Mac under %s: %v", p.purpose, err)
-		}
+	// The control: Mac works, so the refusals below are about the other operations.
+	if _, err := c.Mac(ctx, connect.NewRequest(&keyv2alpha1.MacRequest{Purpose: "mac", Label: "l", Input: []byte("x")})); err != nil {
+		t.Fatalf("Mac under mac: %v", err)
 	}
 	refused := func(op string, err error) {
 		t.Helper()
@@ -319,11 +306,8 @@ func TestMacKeysAreNeverExtracted(t *testing.T) {
 			t.Errorf("%s: err = %v, want a refusal", op, err)
 		}
 	}
-	for _, purpose := range []string{"mac", "pairwise"} {
+	for _, purpose := range []string{"mac"} {
 		tenant := ""
-		if purpose == "pairwise" {
-			tenant = "acme"
-		}
 		_, err := seal1(c, purpose, "person", tenant, vecID, []byte("x"), nil)
 		refused("Seal "+purpose, err)
 		_, err = open1(c, purpose, "person", tenant, vecID, []byte("not-an-envelope"), nil)
@@ -338,25 +322,21 @@ func TestMacKeysAreNeverExtracted(t *testing.T) {
 	}
 }
 
-// The mac key of the boundary and the pairwise key of a tenant exist at generation 1 only: no call makes another
-// generation of either (an epoch on them is refused; only the pseudonym key is rolled by epoch), so the keys the store
-// holds for them are one wrap of generation 1 per recipient. A rotation job, when it is built, must skip these two
-// purposes (ADR 0006); this test is the tripwire that fails when a second generation appears.
+// The mac key of the boundary exists at generation 1 only: no call makes another generation of it (an epoch on it is
+// refused; only the pseudonym key is rolled by epoch), so the keys the store holds for it are one wrap of generation 1
+// per recipient. A rotation job, when it is built, must skip this purpose (ADR 0006); this test is the tripwire that
+// fails when a second generation appears.
 //
-// verifies: REQ-KEYS-043, REQ-KEYS-072
-func TestMacAndPairwiseKeysAreNeverMadeInAnotherGeneration(t *testing.T) {
+// verifies: REQ-KEYS-043
+func TestMacKeyIsNeverMadeInAnotherGeneration(t *testing.T) {
 	e := newTestEnv(t, "development")
 	n := e.startedNode(nodeOpts{})
 	ctx := context.Background()
 	mac := func(purpose, tenant, epoch string) error {
-		var grant []byte
-		if purpose == "pairwise" {
-			grant = n.grant("session", []string{tenant}, []string{"mac"}, time.Minute)
-		}
-		_, err := n.client("session").Mac(ctx, connect.NewRequest(&keyv2alpha1.MacRequest{Purpose: purpose, Tenant: tenant, Label: "l", Input: []byte("x"), Epoch: epoch, Grant: grant}))
+		_, err := n.client("session").Mac(ctx, connect.NewRequest(&keyv2alpha1.MacRequest{Purpose: purpose, Tenant: tenant, Label: "l", Input: []byte("x"), Epoch: epoch}))
 		return err
 	}
-	for _, c := range []struct{ purpose, tenant string }{{"mac", ""}, {"pairwise", "acme"}} {
+	for _, c := range []struct{ purpose, tenant string }{{"mac", ""}} {
 		if err := mac(c.purpose, c.tenant, ""); err != nil {
 			t.Fatalf("Mac under %s: %v", c.purpose, err)
 		}
@@ -374,7 +354,7 @@ func TestMacAndPairwiseKeysAreNeverMadeInAnotherGeneration(t *testing.T) {
 		if err := proto.Unmarshal(it.GetValue(), w); err != nil {
 			t.Fatal(err)
 		}
-		if w.GetPurpose() != "mac" && w.GetPurpose() != "pairwise" {
+		if w.GetPurpose() != "mac" {
 			continue
 		}
 		seen[w.GetPurpose()]++
@@ -382,7 +362,37 @@ func TestMacAndPairwiseKeysAreNeverMadeInAnotherGeneration(t *testing.T) {
 			t.Errorf("a wrap of %s at generation %d (%s)", w.GetPurpose(), w.GetGeneration(), it.GetAddress().GetId())
 		}
 	}
-	if seen["mac"] == 0 || seen["pairwise"] == 0 {
-		t.Fatalf("the test saw wraps %v, want both purposes", seen)
+	if seen["mac"] == 0 {
+		t.Fatalf("the test saw wraps %v, want the mac purpose", seen)
+	}
+}
+
+// The pairwise purpose is retired (decision SB1 A, ADR 0006): no actor may Mac, Seal, Open or Sign under it, for a tenant
+// or for the boundary, with or without a grant, and no call makes a wrap for it. A person's sub is made of no key.
+//
+// verifies: REQ-SUBJ-073
+func TestThePairwisePurposeIsRetired(t *testing.T) {
+	e := newTestEnv(t, "development")
+	n := e.startedNode(nodeOpts{})
+	ctx := context.Background()
+	for _, actor := range []string{"session", "exchange", "reader"} {
+		grant := n.grant(actor, []string{"acme"}, []string{"seal", "open", "mac"}, time.Minute) // before the client: making a grant speaks as policy
+		c := n.client(actor)
+		for _, tenant := range []string{"acme", ""} {
+			_, err := c.Mac(ctx, connect.NewRequest(&keyv2alpha1.MacRequest{Purpose: "pairwise", Tenant: tenant, Label: "l", Input: []byte("x")}))
+			wantRefusal(t, err, connect.CodeInvalidArgument, "purpose")
+			if _, err := seal1(c, "pairwise", "person", tenant, vecID, []byte("x"), grant); err == nil {
+				t.Errorf("%s: Seal under pairwise for %q was answered", actor, tenant)
+			}
+			if _, err := open1(c, "pairwise", "person", tenant, vecID, []byte("not-an-envelope"), grant); err == nil {
+				t.Errorf("%s: Open under pairwise for %q was answered", actor, tenant)
+			}
+			if _, err := c.Sign(ctx, signReq("pairwise", []byte("x"))); err == nil {
+				t.Errorf("%s: Sign under pairwise was answered", actor)
+			}
+		}
+	}
+	if got := wrapPurposes(t, e); len(got["acme"]) != 0 || slices.Contains(got[""], "pairwise") {
+		t.Errorf("a wrap was made for the retired purpose: %v", got)
 	}
 }

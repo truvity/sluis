@@ -117,7 +117,6 @@ type options struct {
 	extra    []*configv2alpha1.InstallationClient
 	lifetime *configv2alpha1.TokenLifetime
 	upstream *configv2alpha1.Upstream
-	sectors  func(string) sessiond.Sector
 	caller   string // the registry name session sees as its caller; default "entry"
 }
 
@@ -200,7 +199,7 @@ func newEnv(t *testing.T, mutate func(*options)) *env {
 		Policy:   policyv2alpha1connect.NewPolicyServiceClient(ph, purl, rpc.ClientOptions()...),
 		Signer:   signerv2alpha1connect.NewSignerServiceClient(gh, gurl, rpc.ClientOptions()...),
 		Upstream: integrationv2alpha1connectpkg.NewUpstreamServiceClient(uh, uurl, rpc.ClientOptions()...),
-		Audit:    em, Now: clk.now, Sectors: o.sectors,
+		Audit:    em, Now: clk.now,
 	}
 	svc, err := sessiond.New(e.opts)
 	if err != nil {

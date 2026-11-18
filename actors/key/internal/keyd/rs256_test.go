@@ -671,7 +671,7 @@ func TestAPlanWithAnAlgorithmNoKeyIsHeldForIsRefused(t *testing.T) {
 		}
 	}
 	// ... and every data purpose is accepted with it.
-	for _, purpose := range []string{"data", "evidence", "chain", "grant", "cookie", "mac", "pseudonym", "pairwise"} {
+	for _, purpose := range []string{"data", "evidence", "chain", "grant", "cookie", "mac", "pseudonym"} {
 		e := newTestEnv(t, "development")
 		plan := proto.Clone(defaultPlan()).(*configv2alpha1.KeyPlan)
 		plan.Purposes = append(plan.Purposes, &configv2alpha1.KeyPurposePlan{Purpose: purpose, Algorithm: "AES-256-GCM"})

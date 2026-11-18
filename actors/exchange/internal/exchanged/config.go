@@ -137,21 +137,19 @@ func (c *Config) Secret(ctx context.Context, id string) (secret []byte, found bo
 	return it.Value.GetSecret(), true, nil
 }
 
-// Tenant is the tenant of a client and its sector (ADR 0034, "Subjects and sectors").
+// Tenant is the tenant of a client.
 type Tenant struct {
-	ID     string
-	Sector string
+	ID string
 }
 
 // TenantOf is the tenant of an audience client. Until Tenant items exist, every client of the boundary belongs to
-// Boundary.default_tenant (decision D-4), and the sector is that tenant's id, so the subject is always pairwise. The
-// tenant comes from the client, never from the request.
+// Boundary.default_tenant (decision D-4). The tenant comes from the client, never from the request.
 func TenantOf(b *configv2alpha1.Boundary) (Tenant, error) {
 	id := b.GetDefaultTenant()
 	if id == "" || store.ValidateID(id) != nil {
 		return Tenant{}, errors.New("no default tenant")
 	}
-	return Tenant{ID: id, Sector: id}, nil
+	return Tenant{ID: id}, nil
 }
 
 // development says whether the boundary is a development one.

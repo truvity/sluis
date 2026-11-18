@@ -49,7 +49,6 @@ const PAGE_TOKEN_VERSION: u8 = 1;
 const WRAP_PURPOSES_TENANT: &[&str] = &[
     "data",
     "pseudonym",
-    "pairwise",
     "evidence",
     "chain",
     "credential",

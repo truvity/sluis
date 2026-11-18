@@ -62,7 +62,7 @@ The maintainer's decisions:
 - The three claims need the upstream's claims to be trustworthy: the installation trusts one realm, so a wrong mapping is a configuration error of that installation and shows in its audit log, not a cross-boundary leak.
 - A regulated boundary's relying parties learn only that boundary's customer, organisation and product, because the installation issues nothing about another boundary.
 - A relying party that read the earlier rule "no organisation or tenant claim" now reads the three claims. The ID token and the access token both carry them.
-- The code derives a pairwise `sub` today; it stays until a change removes it, and no new work builds on it.
+- The pairwise `sub` that the code once derived is removed (maintainer decision SB1 A, 2026-11-18; [0020](/decisions/0020-grant-vocabulary-and-token-claims/#the-sub-of-a-token)): a person has one subject at every tenant.
 - The exchange of a person's token is not built yet: `exchange` refuses a subject token that is not its own. P2 of the [roadmap](/roadmap/#phases) builds it.
 - Requirements: [REQ-AUTHN-112](/requirements/authn/#REQ-AUTHN-112), [REQ-TOKEN-045](/requirements/token/#REQ-TOKEN-045) and [REQ-EXCH-027](/requirements/exch/#REQ-EXCH-027) are added; the rows of the cancelled work are withdrawn.
 
@@ -72,7 +72,7 @@ The maintainer's decisions:
 - **A realm per customer.** Realms follow boundaries: a product that is not regulated shares the generic realm, and only a regulated boundary needs a segregation of its own.
 - **One sluis installation that trusts every realm.** A token of one boundary's realm could then reach another boundary's relying parties.
 - **A `memberships` claim listing a person's organisations.** It carries data about many organisations in every token. The token carries the one organisation of the exchange.
-- **Pairwise subjects per sector.** They needed tenants with sectors and a lifecycle of subjects, and the single sign-on service already separates the boundaries by realm.
+- **Pairwise subjects per sector.** They needed tenants with sectors and a lifecycle of subjects, and the single sign-on service already separates the boundaries by realm. The code that made them was removed too (SB1 A): staff who work across vendors must be one person in every vendor's apps and audit.
 
 ## Follow-ups
 

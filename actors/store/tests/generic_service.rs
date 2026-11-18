@@ -130,7 +130,6 @@ async fn store_holds_what_the_writer_produced_and_no_key_that_opens_it() {
         for purpose in [
             "data",
             "pseudonym",
-            "pairwise",
             "evidence",
             "chain",
             "credential",

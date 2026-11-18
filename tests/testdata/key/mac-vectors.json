@@ -1,5 +1,5 @@
 {
-  "note": "Known answers for key@'s Mac (REQ-KEYS-042): HMAC-SHA384 under the data key over u16be(len(label)) | label | input. The epoch of a pseudonym is not in the input; it names the key's generation. key, input and mac are hex; the keys are test values: key = sha384('sluis mac vector key: ' + key_name)[:32], with the case's key_name field (boundary-mac, acme-pseudonym-202611, acme-pseudonym-202612 or acme-pairwise), not its name. Generated with Python 3's hmac and hashlib, not with the Go code: for each case, hmac.new(key, struct.pack('>H', len(label)) + label + input, hashlib.sha384).hexdigest().",
+  "note": "Known answers for key@'s Mac (REQ-KEYS-042): HMAC-SHA384 under the data key over u16be(len(label)) | label | input. The epoch of a pseudonym is not in the input; it names the key's generation. key, input and mac are hex; the keys are test values: key = sha384('sluis mac vector key: ' + key_name)[:32], with the case's key_name field (boundary-mac, acme-pseudonym-202611 or acme-pseudonym-202612), not its name. Generated with Python 3's hmac and hashlib, not with the Go code: for each case, hmac.new(key, struct.pack('>H', len(label)) + label + input, hashlib.sha384).hexdigest().",
   "cases": [
     {
       "name": "mac: link-id",
@@ -130,19 +130,6 @@
       "label": "audit-subject",
       "input": "616c696365",
       "mac": "21f409379df27eb1e6d0067424600c93ebee7cadee0103b893b49bea86471af104533459bc83038fe467475ad49032ae"
-    },
-    {
-      "name": "pairwise: generation 1",
-      "key_name": "acme-pairwise",
-      "caller": "session",
-      "purpose": "pairwise",
-      "tenant": "acme",
-      "epoch": "",
-      "generation": 1,
-      "key": "14e0581857473ab7c0666d7b0c393085954e9b7e3cd47f6914e2185efbe41bf5",
-      "label": "sector",
-      "input": "616c696365",
-      "mac": "c6507d98745dac7c4c992c5ccb6a2c81287b0eb9a6561653af8bff166c947464fcb7ade4d360d4bf2004aa5a293a9fd0"
     }
   ]
 }

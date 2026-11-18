@@ -1,29 +1,26 @@
+// Package subject holds what the units must agree on about a `sub`: its forms, and the SPIFFE ID of a workload.
 package subject
 
 import (
-	"encoding/base64"
 	"errors"
 	"strings"
 )
 
-// Kind says which of the forms of ADR 0020 ("The claims of a token") and ADR 0022 ("SPIFFE identities") a `sub` has.
-// A `sub` has one of three forms and no other: the person's own subject, a pairwise subject, or a SPIFFE ID.
+// Kind says which of the forms of ADR 0020 ("The sub of a token") and ADR 0022 ("SPIFFE identities") a `sub` has.
+// A `sub` has one of two forms and no other: the person's own subject, or a SPIFFE ID. A pairwise subject is a form
+// that v2 once had and removed before any relying party moved (decision SB1 A, 2026-11-18): it has no form now.
 type Kind string
 
 const (
 	// KindPerson is the person's own subject (ADR 0019, "Assigning a subject"): 128 random bits in lower-case base32
-	// without padding, 26 characters. It is the `sub` of a tenant whose sector is public.
+	// without padding, 26 characters. It is the `sub` of a person at every tenant.
 	KindPerson Kind = "person"
-	// KindPairwise is a pairwise subject (ADR 0034, "Subjects and sectors"): a Mac cut to 256 bits, in base64url
-	// without padding, 43 characters. ADR 0045 cancels sectors; the code that makes it stays until a change removes it.
-	KindPairwise Kind = "pairwise"
 	// KindSPIFFE is the SPIFFE ID of a workload (ADR 0022): the `sub` of a JWT-SVID.
 	KindSPIFFE Kind = "spiffe"
 )
 
 const (
-	personLen   = 26
-	pairwiseLen = 43
+	personLen = 26
 
 	// The limits of the SPIFFE ID specification (SPIFFE-ID.md): a trust domain of 255 characters, an ID of 2048 bytes.
 	maxTrustDomain = 255
@@ -32,7 +29,8 @@ const (
 )
 
 // Classify says which form a `sub` has, and false for a string that has none: an e-mail address, a name of the
-// upstream, a v1 spelling (`github:org/repo`, `cluster:k8s:ns:name`, `aws:...`) or anything else. It reads the form
+// upstream, a pairwise subject (removed, decision SB1 A), a v1 spelling (`github:org/repo`, `cluster:k8s:ns:name`,
+// `aws:...`) or anything else. It reads the form
 // only; it does not know whether a person or a workload has that subject. A subject of a person is checked as the bits
 // it was made from, so a 26-character string whose last character carries bits that 128 random bits never set is not
 // a subject.
@@ -45,10 +43,6 @@ func Classify(sub string) (Kind, bool) {
 	case len(sub) == personLen:
 		if validPersonID(sub) {
 			return KindPerson, true
-		}
-	case len(sub) == pairwiseLen:
-		if b, err := base64.RawURLEncoding.Strict().DecodeString(sub); err == nil && len(b) == 32 {
-			return KindPairwise, true
 		}
 	}
 	return "", false
