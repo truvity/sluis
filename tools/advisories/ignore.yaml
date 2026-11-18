@@ -8,4 +8,10 @@
 # Prefer the fix to an entry: bump the dependency. An entry that no finding uses is reported, and removed in the
 # next pull request that sees it.
 schema: 1
-ignores: []
+ignores:
+  - id: RUSTSEC-2026-0543
+    reason: chrono is reported unmaintained, not vulnerable; it comes only through cedar-policy-core and serde_with, no fixed release exists, and dropping it waits for those crates to move.
+    expires: "2026-12-18"
+  - id: GHSA-fc5q-39xc-vjpf
+    reason: picomatch is only in the site's build tooling (site/yarn.lock), matches globs written in this repository and never input from outside, and no fixed release exists yet.
+    expires: "2026-12-18"
