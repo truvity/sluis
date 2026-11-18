@@ -309,6 +309,43 @@ fn a_client_requiring_a_grant_the_vocabulary_does_not_declare_is_refused_with_it
     }
 }
 
+/// A thing that a client's `groups` override names is a thing the boundary's vocabulary declares, as a grant name of
+/// `requires` is: a typo, a scope or a role in its place is one failed `set` line that names the client and the position,
+/// not the value, and the set that names a declared thing loads.
+///
+/// verifies: REQ-CLIENT-049
+#[test]
+fn a_client_whose_groups_override_names_a_thing_the_vocabulary_does_not_declare_is_refused() {
+    let clients = source("installation-client");
+    let anchor = r#"requires: ["dev:example-app:user", "acme:example-app:user"]"#;
+    assert!(clients.contains(anchor));
+    let with = |list: &str| clients.replace(anchor, &format!("{anchor}\n  groups: {list}"));
+    // A declared thing loads.
+    let e = env();
+    e.sign("installation-client", &with("[example-app]"));
+    let (code, _, all) = run(&e.bootstrap(), e.docs.path());
+    assert_eq!(code, Some(0), "{all}");
+    for (name, list) in [
+        ("a thing nobody wrote", "[example-app, marker-thing]"),
+        ("a scope in its place", "[example-app, dev]"),
+        ("a role in its place", "[example-app, user]"),
+    ] {
+        let e = env();
+        e.sign("installation-client", &with(list));
+        let (code, checks, all) = run(&e.bootstrap(), e.docs.path());
+        assert_eq!(code, Some(3), "{name}: {all}");
+        assert_eq!(
+            failures(&checks),
+            ["set : InstallationClient: sluis-cli.groups[1]: not a thing the vocabulary declares"],
+            "{name}: {all}"
+        );
+        assert!(
+            !all.contains("marker"),
+            "{name}: the value was printed: {all}"
+        );
+    }
+}
+
 /// A client that wants its ID tokens signed with RS256 needs a key for it, and the key exists only where the KeyPlan lists the
 /// purpose with that algorithm (ADR 0006, "Key purposes": enabled on use). The set is refused with one failed `set` line that
 /// names the client and the field, and no value.

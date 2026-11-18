@@ -505,6 +505,106 @@ fn the_algorithm_of_a_clients_id_tokens_is_es384_or_rs256_and_an_exchange_client
     assert_eq!(alg("exchange", ""), "");
 }
 
+/// A client's `groups_delimiter` replaces each `:` of a grant name in the groups of its tokens, for a verifier that splits a
+/// group on `:`. The loader takes the delimiters of the shared vectors (`kits/conformance/token/groups-vectors.json`: one to
+/// eight printable ASCII characters outside a grant name's alphabet, the separator, a quote and a comma) and refuses the
+/// others at the field, with no value. Left out or empty is the colon, for every kind.
+///
+/// verifies: REQ-CLIENT-048
+#[test]
+fn the_delimiter_of_a_clients_groups_is_what_the_shared_vectors_accept() {
+    let vectors: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../kits/conformance/token/groups-vectors.json"
+    ))
+    .unwrap();
+    let list = |key: &str| vectors["delimiters"][key].as_array().unwrap().clone();
+    let (accepted, not_accepted) = (list("accepted"), list("refused"));
+    assert!(accepted.len() > 10 && not_accepted.len() > 10);
+    let client = |ty: &str, delimiter: &serde_json::Value| {
+        // A JSON string is a YAML double-quoted scalar, with the same escapes.
+        format!(
+            "app:\n  kind: {ty}\n  redirects: [\"https://app.example.com/cb\"]\n  requires: [\"dev:app:user\"]\n  groups_delimiter: {delimiter}\n"
+        )
+    };
+    let delimiter_of = |ty: &str, d: &serde_json::Value| {
+        let items = payload::decode(kind("InstallationClient"), client(ty, d).as_bytes())
+            .unwrap_or_else(|e| panic!("{ty} {d}: {e}"));
+        pb::InstallationClient::decode_from_slice(&items[0].1)
+            .unwrap()
+            .groups_delimiter
+    };
+    for ty in ["public", "confidential", "exchange"] {
+        for d in &accepted {
+            assert_eq!(delimiter_of(ty, d), d.as_str().unwrap(), "{ty} {d}");
+        }
+        assert_eq!(delimiter_of(ty, &"".into()), "", "{ty}");
+        assert_eq!(delimiter_of(ty, &serde_json::Value::Null), "", "{ty}");
+    }
+    for r in &not_accepted {
+        let d = &r["value"];
+        let e = refused("InstallationClient", &client("confidential", d));
+        // The words are fixed: the value is never in them.
+        assert_eq!(
+            e,
+            "app.groups_delimiter: is not one to eight printable ASCII characters outside letters, digits, -, _, :, a quote and a comma",
+            "{r}"
+        );
+    }
+    let e = refused(
+        "InstallationClient",
+        &client("confidential", &serde_json::json!(1)),
+    );
+    assert_eq!(e, "app.groups_delimiter: must be a string");
+}
+
+/// A client's `groups` override names the things whose grant names its tokens carry in every scope and role. An entry is a
+/// thing name: a grant name, a wildcard, an empty entry and a thing named twice are refused at the entry, with no value.
+///
+/// verifies: REQ-CLIENT-049
+#[test]
+fn the_groups_override_of_a_client_is_a_list_of_thing_names() {
+    let client = |line: &str| {
+        format!(
+            "app:\n  kind: confidential\n  redirects: [\"https://app.example.com/cb\"]\n  requires: [\"dev:app:user\"]\n{line}"
+        )
+    };
+    let things = |line: &str| {
+        let items = payload::decode(kind("InstallationClient"), client(line).as_bytes()).unwrap();
+        pb::InstallationClient::decode_from_slice(&items[0].1)
+            .unwrap()
+            .groups
+    };
+    assert!(things("").is_empty());
+    assert!(things("  groups: []\n").is_empty());
+    assert!(things("  groups: null\n").is_empty());
+    assert_eq!(
+        things("  groups: [example-wiki, Example_CI-2]\n"),
+        ["example-wiki", "Example_CI-2"]
+    );
+    for (bad, want) in [
+        ("dev:example-wiki:viewer", "is not a thing name"),
+        ("dev:example-wiki", "is not a thing name"),
+        ("\"*\"", "a wildcard is not allowed in groups"),
+        ("\"example-*\"", "a wildcard is not allowed in groups"),
+        ("\"\"", "must be a non-empty string"),
+        ("\"has space\"", "is not a thing name"),
+    ] {
+        let e = refused(
+            "InstallationClient",
+            &client(&format!("  groups: [{bad}]\n")),
+        );
+        assert_eq!(e, format!("app.groups[0]: {want}"), "{bad}");
+    }
+    let e = refused(
+        "InstallationClient",
+        &client("  groups: [example-wiki, example-ci, example-wiki]\n"),
+    );
+    assert_eq!(e, "app.groups[2]: names a thing twice");
+    // The v1 word `all` is a scalar, not a list: v2 has no override that carries everything.
+    let e = refused("InstallationClient", &client("  groups: all\n"));
+    assert_eq!(e, "app.groups: must be a list");
+}
+
 /// A code is bound to the client that asked by PKCE, or, for a confidential client that says so, by the nonce of its ID token
 /// (RFC 9700 section 2.1.1). The word `nonce` is refused for a public client, an exchange client and a confidential client
 /// that names no secret, at load, and every other word but `required` is refused.

@@ -3967,6 +3967,631 @@
      "want": null
     },
     {
+     "name": "a groups override of two things",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups",
+       "value": [
+        "example-wiki",
+        "example-ci"
+       ]
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups override that is empty",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups",
+       "value": []
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups override that is null",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups",
+       "value": null
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups override that names a grant name",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups",
+       "value": [
+        "dev:example-wiki:viewer"
+       ]
+      }
+     ],
+     "want": "example-app.groups[0]: not in the form the schema requires"
+    },
+    {
+     "name": "a groups override that names a wildcard",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups",
+       "value": [
+        "*"
+       ]
+      }
+     ],
+     "want": "example-app.groups[0]: not in the form the schema requires"
+    },
+    {
+     "name": "a groups override that names nothing",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups",
+       "value": [
+        ""
+       ]
+      }
+     ],
+     "want": "example-app.groups[0]: not in the form the schema requires"
+    },
+    {
+     "name": "a groups override that is the word all",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups",
+       "value": "all"
+      }
+     ],
+     "want": "example-app.groups: must be a list"
+    },
+    {
+     "name": "a groups delimiter of \".\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "."
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"/\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "/"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"|\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "|"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"~\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "~"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"#\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "#"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"@\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "@"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"!\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "!"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"..\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": ".."
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"~~\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "~~"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"+\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "+"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"=\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "="
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"%\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "%"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \";\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": ";"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"^\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "^"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"`\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "`"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"[\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "["
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"{\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "{"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"<\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "<"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"\\\\\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "\\"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"'\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "'"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"$\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "$"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"&\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "&"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"*\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "*"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"(\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "("
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \")\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": ")"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"?\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "?"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \".|.\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": ".|."
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \"........\"",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "........"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter that is empty",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": ""
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter that is null",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": null
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups delimiter of \":\", the separator it replaces",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": ":"
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
+     "name": "a groups delimiter of \"::\", holds the separator",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "::"
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
+     "name": "a groups delimiter of \".:.\", holds the separator",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": ".:."
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
+     "name": "a groups delimiter of \"a\", a letter of a name",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "a"
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
+     "name": "a groups delimiter of \"Z\", a letter of a name",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "Z"
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
+     "name": "a groups delimiter of \"0\", a digit of a name",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "0"
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
+     "name": "a groups delimiter of \"-\", a character of a name",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "-"
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
+     "name": "a groups delimiter of \"_\", a character of a name",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "_"
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
+     "name": "a groups delimiter of \".a\", holds a letter",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": ".a"
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
+     "name": "a groups delimiter of \"._.\", holds an underscore",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "._."
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
+     "name": "a groups delimiter of \" \", whitespace",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": " "
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
+     "name": "a groups delimiter of \". .\", holds whitespace",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": ". ."
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
+     "name": "a groups delimiter of \"\\t\", a control character",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "\t"
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
+     "name": "a groups delimiter of \"\\u007f\", a control character",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": ""
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
+     "name": "a groups delimiter of \",\", a comma",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": ","
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
+     "name": "a groups delimiter of \"\\\"\", a double quote",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "\""
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
+     "name": "a groups delimiter of \"\\u00e9\", not ASCII",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "é"
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
+     "name": "a groups delimiter of \".\\u00e9\", holds a character that is not ASCII",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": ".é"
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
+     "name": "a groups delimiter of \".........\", nine characters, one more than the limit",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups_delimiter",
+       "value": "........."
+      }
+     ],
+     "want": "example-app.groups_delimiter: not in the form the schema requires"
+    },
+    {
      "name": "signing_alg with a trailing newline: ES384",
      "ops": [
       {

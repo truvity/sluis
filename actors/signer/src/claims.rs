@@ -68,7 +68,8 @@ enum Shape {
     Flag,
     /// An array of authentication method references (RFC 8176): short non-empty strings.
     Methods,
-    /// An array of grant names, `<scope>:<thing>:<role>` (ADR 0020 "Grant names and the vocabulary").
+    /// An array of grant names, `<scope>:<thing>:<role>`, each written with the delimiter of the audience when it declares
+    /// one (ADR 0020 "Grant names and the vocabulary", "The claims of a token").
     Groups,
 }
 
@@ -251,6 +252,18 @@ impl Shaped {
 /// The path of the first claim that does not fit: a claim outside the set (`claims`), a missing or
 /// forbidden one, or one of the wrong shape.
 pub fn shape(typ: Typ, claims_json: &[u8]) -> Result<Shaped, Bad> {
+    shape_with(typ, claims_json, Some(""))
+}
+
+/// The same check, with the delimiter that the names of `groups` are written with: `Some` of it, empty for the colon, or
+/// `None` while the audience is not known yet. With `None` a group is held only to be a short printable string, and
+/// [`Shaped::check_groups`] holds it to the grant name once the audience's client has been read. The audience is named by
+/// the claims, so the client cannot be read before they are shaped.
+///
+/// # Errors
+///
+/// The path of the first claim that does not fit, as for [`shape`].
+pub fn shape_with(typ: Typ, claims_json: &[u8], delimiter: Option<&str>) -> Result<Shaped, Bad> {
     if claims_json.len() > CLAIMS_MAX {
         return Err(Bad("claims_json"));
     }
@@ -270,7 +283,7 @@ pub fn shape(typ: Typ, claims_json: &[u8]) -> Result<Shaped, Bad> {
         match (members.get(c.name), need) {
             (None, Required) => return Err(Bad(c.path)),
             (Some(_), Never) => return Err(Bad(c.path)),
-            (Some(v), _) if !fits(c.shape, v) => return Err(Bad(c.path)),
+            (Some(v), _) if !fits(c.shape, v, delimiter) => return Err(Bad(c.path)),
             _ => {}
         }
     }
@@ -293,7 +306,7 @@ pub fn shape(typ: Typ, claims_json: &[u8]) -> Result<Shaped, Bad> {
     })
 }
 
-fn fits(shape: Shape, v: &Value) -> bool {
+fn fits(shape: Shape, v: &Value, delimiter: Option<&str>) -> bool {
     match shape {
         Shape::Text(max) => v.as_str().is_some_and(|s| text_ok(s, max)),
         Shape::Time => v.as_i64().is_some_and(|n| (0..=SAFE_INT).contains(&n)),
@@ -304,20 +317,30 @@ fn fits(shape: Shape, v: &Value) -> bool {
         Shape::Groups => v.as_array().is_some_and(|a| {
             let mut seen = BTreeSet::new();
             a.len() <= 512
-                && a.iter()
-                    .all(|g| g.as_str().is_some_and(grant_name) && seen.insert(g.as_str()))
+                && a.iter().all(|g| {
+                    g.as_str().is_some_and(|g| match delimiter {
+                        Some(d) => grant_name(g, d),
+                        None => text_ok(g, GROUP_MAX),
+                    }) && seen.insert(g.as_str())
+                })
         }),
     }
 }
+
+/// The longest group a token may carry before the delimiter is known: three names of 64 bytes and two delimiters of 8.
+const GROUP_MAX: usize = 3 * 64 + 2 * 8;
 
 fn text_ok(s: &str, max: usize) -> bool {
     !s.is_empty() && s.len() <= max && !s.chars().any(char::is_control)
 }
 
 /// A grant name is `<scope>:<thing>:<role>`, each segment a non-empty string of ASCII letters,
-/// digits, `-` and `_` (ADR 0020 "Grant names and the vocabulary"). A wildcard is refused in a token.
-fn grant_name(s: &str) -> bool {
-    let mut parts = s.split(':');
+/// digits, `-` and `_` (ADR 0020 "Grant names and the vocabulary"). A wildcard is refused in a token. The parts are
+/// joined by `delimiter` when the audience declares one, and by `:` when it does not (`delimiter` empty). The delimiter
+/// the loader accepts holds no character of a segment, so the parts are found without doubt.
+fn grant_name(s: &str, delimiter: &str) -> bool {
+    let delimiter = if delimiter.is_empty() { ":" } else { delimiter };
+    let mut parts = s.split(delimiter);
     let segment = |p: Option<&str>| {
         p.is_some_and(|p| {
             !p.is_empty()
@@ -329,6 +352,23 @@ fn grant_name(s: &str) -> bool {
         && segment(parts.next())
         && segment(parts.next())
         && parts.next().is_none()
+}
+
+impl Shaped {
+    /// Holds the `groups` of the token to the grant names written with the audience's `groups_delimiter` (empty for the
+    /// colon), once the audience's client is known (ADR 0020, "The claims of a token"). A token that was shaped with the
+    /// delimiter already has nothing left to find.
+    ///
+    /// # Errors
+    ///
+    /// `claims.groups` when a group is not a grant name written with the delimiter.
+    pub fn check_groups(&self, delimiter: &str) -> Result<(), Bad> {
+        match self.members.get("groups") {
+            None => Ok(()),
+            Some(v) if fits(Shape::Groups, v, Some(delimiter)) => Ok(()),
+            Some(_) => Err(Bad("claims.groups")),
+        }
+    }
 }
 
 /// Checks that `iss` is the issuer URL of the boundary (ADR 0017 "Issuers": `iss` is the issuer URL).
@@ -421,6 +461,46 @@ mod tests {
         )
         .unwrap();
         assert_eq!(c.client_id.as_deref(), Some("sluis-cli"));
+    }
+
+    /// A group is a grant name written with the audience's delimiter, which is read once the audience is known: shaped
+    /// without it, a group need only be a short printable string, and `check_groups` holds it to the name.
+    ///
+    /// verifies: REQ-TOKEN-048
+    #[test]
+    fn groups_are_held_to_the_delimiter_of_the_audience() {
+        let with = |groups: Value| id(json!({ "groups": groups }));
+        for (delimiter, good, bad) in [
+            ("", "dev:app:admin", "dev.app.admin"),
+            (".", "dev.app.admin", "dev:app:admin"),
+            ("~~", "dev~~app~~admin", "dev~app~admin"),
+        ] {
+            let c = shape_with(Typ::Id, &with(json!([good])), None).unwrap();
+            assert_eq!(c.check_groups(delimiter), Ok(()), "{delimiter}");
+            let c = shape_with(Typ::Id, &with(json!([bad])), None).unwrap();
+            assert_eq!(
+                c.check_groups(delimiter),
+                Err(Bad("claims.groups")),
+                "{delimiter}"
+            );
+            assert!(shape_with(Typ::Id, &with(json!([good])), Some(delimiter)).is_ok());
+            assert_eq!(
+                shape_with(Typ::Id, &with(json!([bad])), Some(delimiter)).unwrap_err(),
+                Bad("claims.groups")
+            );
+        }
+        // Before the delimiter is known a group is still a string of reasonable size, and a repeat is still a repeat.
+        for groups in [json!([""]), json!(["a\nb"]), json!([1]), json!(["a", "a"])] {
+            assert_eq!(
+                shape_with(Typ::Id, &with(groups), None).unwrap_err(),
+                Bad("claims.groups")
+            );
+        }
+        let long = "a".repeat(GROUP_MAX + 1);
+        assert!(shape_with(Typ::Id, &with(json!([long])), None).is_err());
+        // No groups, nothing to check.
+        let c = shape_with(Typ::Id, &id(json!({})), None).unwrap();
+        assert_eq!(c.check_groups("."), Ok(()));
     }
 
     #[test]

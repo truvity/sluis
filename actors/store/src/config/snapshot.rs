@@ -597,6 +597,12 @@ fn validate_set(s: &Snapshot, boundary: &str) -> Result<(), LoadError> {
     // read as `policy` reads it, by the one reader of the kit, and read whether or not a client is declared: a
     // vocabulary that `policy` refuses must not load here.
     let vocabulary = vocabulary(s)?;
+    // The things it declares, for the `groups` override of a client.
+    let things: std::collections::BTreeSet<String> = vocabulary
+        .grants()
+        .into_iter()
+        .map(|(g, _)| g.thing)
+        .collect();
     // Whether the KeyPlan lists the RS256 purpose: a client that wants its ID tokens signed with RS256 needs a key for it, and
     // the key exists only where the plan enables the purpose (ADR 0006, "Key purposes": enabled on use).
     let mut rs256_key = false;
@@ -637,6 +643,14 @@ fn validate_set(s: &Snapshot, boundary: &str) -> Result<(), LoadError> {
             return Err(failed(
                 Some("InstallationClient"),
                 format!("{id}.requires[{i}]: not a grant name the vocabulary declares"),
+            ));
+        }
+        // A thing that the client's `groups` override names is a thing the vocabulary declares, for the same reason (ADR 0020,
+        // "The claims of a token"; REQ-CLIENT-049).
+        if let Some(i) = c.groups.iter().position(|t| !things.contains(t)) {
+            return Err(failed(
+                Some("InstallationClient"),
+                format!("{id}.groups[{i}]: not a thing the vocabulary declares"),
             ));
         }
     }

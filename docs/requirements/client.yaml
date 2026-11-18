@@ -704,3 +704,32 @@ requirements:
     verification:
       - {kind: integration-test, ref: "the local set with an RS256 client and a plan that lists the purpose, lists it under another algorithm, or lists none"}
 
+  - id: REQ-CLIENT-048
+    area: CLIENT
+    statement: "The loader MUST refuse a groups delimiter of a client that is not one to eight printable ASCII characters outside letters, digits, `-`, `_`, `:`, a double quote and a comma."
+    rationale: "A grant name holds only letters, digits, `-` and `_`, so a delimiter outside them keeps two different names from becoming one, and the loader needs no search of the declared names (ADR 0020)."
+    level: MUST
+    source: v1-parity
+    status: done
+    milestone: first-version
+    runtimes: all
+    standards: []
+    issues: [788, 1815]
+    tests: [actors/store/tests/config.rs]
+    verification:
+      - {kind: test-vectors, ref: "groups-vectors.json (kits/conformance/token): each accepted delimiter loads for every kind, each refused one is refused at the field, and the schema of the client refuses the same"}
+
+  - id: REQ-CLIENT-049
+    area: CLIENT
+    statement: "The loader MUST refuse an entry of the groups override of a client that is not a thing the vocabulary declares, and an entry that is a grant name, a wildcard or a repeat."
+    rationale: "A name that nobody declared would widen nothing or the wrong thing, and a typo should stop the load and not the first sign-in (ADR 0020)."
+    level: MUST
+    source: v1-parity
+    status: done
+    milestone: first-version
+    runtimes: all
+    standards: []
+    issues: [788, 1815]
+    tests: [actors/store/tests/config.rs, actors/store/tests/validate.rs]
+    verification:
+      - {kind: integration-test, ref: "a list of declared things loads; a grant name, a wildcard, an empty entry, a repeat, the v1 word all, a thing nobody wrote, a scope and a role in its place are each refused at the entry with no value"}

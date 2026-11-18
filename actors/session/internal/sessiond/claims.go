@@ -2,8 +2,10 @@ package sessiond
 
 import (
 	"encoding/json"
-	"strings"
 	"time"
+
+	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
+	"github.com/truvity/sluis/v2/kits/go/groupsclaim"
 )
 
 // claims is the input of a token's claim set (0020 "The claims of a token"). The set is fixed: signer refuses a claim
@@ -57,35 +59,12 @@ func (c claims) common() map[string]any {
 	return m
 }
 
-// narrowGroups is the groups claim (0020): the held grant names whose <scope>:<thing> pair appears among the pairs
-// of the client's requires, in any role, so a relying party never reads a grant name meant for another system.
-// Narrowing never changes what requires admits: admission was decided on the full set. The order is policy's
-// (sorted) and a name appears once.
-func narrowGroups(held, requires []string) []string {
-	pairs := map[string]bool{}
-	for _, r := range requires {
-		if p, ok := pairOf(r); ok {
-			pairs[p] = true
-		}
-	}
-	var out []string
-	seen := map[string]bool{}
-	for _, g := range held {
-		if p, ok := pairOf(g); ok && pairs[p] && !seen[g] {
-			seen[g] = true
-			out = append(out, g)
-		}
-	}
-	return out
-}
-
-// pairOf is the <scope>:<thing> of a grant name <scope>:<thing>:<role>.
-func pairOf(name string) (string, bool) {
-	parts := strings.Split(name, ":")
-	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
-		return "", false
-	}
-	return parts[0] + ":" + parts[1], true
+// groupsOf is the groups claim of a token for the client (0020): the held grant names whose <scope>:<thing> pair appears
+// among the pairs of the client's requires, and those of the things its groups override names, written with the client's
+// delimiter. Narrowing never changes what requires admits: admission was decided on the full set. The rule is the one
+// exchange applies (kits/go/groupsclaim). The result is sorted and has no repeats; it is empty, never nil.
+func groupsOf(held []string, c *configv2alpha1.InstallationClient) []string {
+	return groupsclaim.For(held, groupsclaim.Audience{Requires: c.GetRequires(), Things: c.GetGroups(), Delimiter: c.GetGroupsDelimiter()})
 }
 
 // expiry is the exp of a token: the earliest of the issuer's lifetime for the type, the client's ttl_cap and the end

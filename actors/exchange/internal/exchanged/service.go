@@ -255,7 +255,7 @@ func (s *Service) run(ctx context.Context, r *exchangev2alpha1.TokenExchangeRequ
 	if err != nil {
 		return nil, err
 	}
-	claims, err := claimsOf(b.GetIssuer(), sub, r.GetAudience(), requester.GetId(), iat, exp, jti, subject, narrow(verdict.GetGrantNames(), client.GetRequires()))
+	claims, err := claimsOf(b.GetIssuer(), sub, r.GetAudience(), requester.GetId(), iat, exp, jti, subject, groupsOf(verdict.GetGrantNames(), client))
 	if err != nil {
 		return nil, err
 	}

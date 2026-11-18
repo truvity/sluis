@@ -248,7 +248,7 @@ func (s *Service) codeGrant(ctx context.Context, r *sessionv2alpha1.TokenRequest
 	}
 	out, err := s.mint(ctx, tc, mintInput{
 		person: ac.GetSubject(), sid: sid, scope: ac.GetScope(), nonce: ac.GetNonce(), assure: assure,
-		groups: narrowGroups(v.grantNames, tc.client.GetRequires()), chainEnd: ends, refresh: sid + "." + secret, grant: v.grant,
+		groups: groupsOf(v.grantNames, tc.client), chainEnd: ends, refresh: sid + "." + secret, grant: v.grant,
 	})
 	switch {
 	case errors.Is(err, errSessionOver):

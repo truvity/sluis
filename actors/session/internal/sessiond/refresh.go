@@ -149,7 +149,7 @@ func (s *Service) refreshGrant(ctx context.Context, r *sessionv2alpha1.TokenRequ
 
 	out, err := s.mint(ctx, tc, mintInput{
 		person: chain.GetSubject(), sid: sid, scope: scope, assure: assure,
-		groups: narrowGroups(v.grantNames, tc.client.GetRequires()), chainEnd: ends, refresh: sid + "." + next, grant: v.grant,
+		groups: groupsOf(v.grantNames, tc.client), chainEnd: ends, refresh: sid + "." + next, grant: v.grant,
 	})
 	switch {
 	case errors.Is(err, errSessionOver):

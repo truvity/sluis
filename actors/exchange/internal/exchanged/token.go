@@ -4,9 +4,10 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
-	"sort"
-	"strings"
 	"time"
+
+	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
+	"github.com/truvity/sluis/v2/kits/go/groupsclaim"
 )
 
 // pairwiseLabel separates the use of the pairwise key from every other (key@ binds the label into the Mac).
@@ -23,42 +24,13 @@ func pairwiseSub(mac []byte) string {
 	return base64.RawURLEncoding.EncodeToString(mac)
 }
 
-// narrow returns the grant names of the held set that the audience asks for: each held name whose
-// `<scope>:<thing>` pair appears among the pairs of the audience's `requires`, in any role (ADR 0020, "The claims of
-// a token"). Admission was decided on the full set; narrowing only keeps a relying party from reading a name meant
-// for another system. The result is sorted and has no repeats; it is never nil.
-func narrow(held, requires []string) []string {
-	pairs := map[string]bool{}
-	for _, r := range requires {
-		if p, ok := pairOf(r); ok {
-			pairs[p] = true
-		}
-	}
-	out := []string{}
-	seen := map[string]bool{}
-	for _, h := range held {
-		if p, ok := pairOf(h); ok && pairs[p] && !seen[h] {
-			seen[h] = true
-			out = append(out, h)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-// pairOf returns "<scope>:<thing>" of a grant name "<scope>:<thing>:<role>". A name of another shape, and a wildcard
-// (never allowed in `requires`, ADR 0020), have none.
-func pairOf(name string) (string, bool) {
-	parts := strings.Split(name, ":")
-	if len(parts) != 3 || strings.Contains(name, "*") {
-		return "", false
-	}
-	for _, p := range parts {
-		if p == "" {
-			return "", false
-		}
-	}
-	return parts[0] + ":" + parts[1], true
+// groupsOf is the groups claim of the token for the audience client (ADR 0020, "The claims of a token"): the held grant
+// names whose `<scope>:<thing>` pair appears among the pairs of the client's `requires`, in any role, and those of the
+// things its `groups` override names, written with its `groups_delimiter`. Admission was decided on the full set;
+// narrowing only keeps a relying party from reading a name meant for another system. The rule is the one session applies
+// (kits/go/groupsclaim). The result is sorted, has no repeats and is never nil.
+func groupsOf(held []string, c *configv2alpha1.InstallationClient) []string {
+	return groupsclaim.For(held, groupsclaim.Audience{Requires: c.GetRequires(), Things: c.GetGroups(), Delimiter: c.GetGroupsDelimiter()})
 }
 
 // lifetime is the lifetime of the token: the earliest of the issuer's, the audience client's `ttl_cap`, the built-in
