@@ -1,11 +1,12 @@
 ---
-// The honest status of v2, on the home page. The words are fixed: v2 is designed, not
-// built. The figures are the build-time ones (decision records counted
+// The honest status of v2, on the home page. The words are fixed: v1 runs today, the v2
+// core is being built and the rest is designed. The figures are the build-time ones (decision records counted
 // from the repository), and a bundled script (home-status.ts) replaces them with the live
 // ones from the site's status API (/api/status, ADR 0014). When the API cannot answer, the
 // build-time figures stay and the note says they are from the build.
 import { listDecisions, decisionFacts, isAccepted } from '../../lib-decisions';
 import { BUILT_AT, designLine } from '../../lib/repo';
+import PhaseStrip from './PhaseStrip.astro';
 
 const accepted = (await listDecisions()).map(decisionFacts).filter((d) => isAccepted(d.status)).length;
 const builtOn = BUILT_AT.slice(0, 10);
@@ -14,15 +15,18 @@ const line = await designLine();
 
 <section class="pain status" aria-labelledby="where-it-stands" data-home-status>
   <h2 id="where-it-stands">Where it stands</h2>
-  <p class="verdict">What runs today is sluis v1. v2 is designed, not built.</p>
+  <p class="verdict">What runs in production today is sluis v1. The v2 core is being built.</p>
   <p class="lead">
-    sluis v1 is an OpenID Connect broker in production use that passed the OpenID conformance plans with no failures; its docs are at
-    <a href="/v1/">/v1/</a>. v2 is a rewrite, designed and not built. This site documents its target state: the design
-    is recorded, the first working version is the current milestone, and every page says how far its content has got.
+    sluis v1 is an OpenID Connect broker in production use that passed the OpenID conformance plans with no failures; its docs are at{' '}
+    <a href="/v1/">/v1/</a>. v2 is a rewrite. Its core is being built in the open: <code>v2.0.0-alpha.1</code> was published on
+    2026-11-08, and the demos of the local installation and of three boards run in CI. Lambda and Kubernetes installations, customer
+    identity, quota and the add-ons are designed and not built. This site documents the target state, and every page says how far its
+    content has got.
   </p>
+  <PhaseStrip />
   <p class="design-line">{line}</p>
   <dl class="figures">
-    <div><dt>Current milestone</dt><dd data-f="milestone">First working version</dd></div>
+    <div><dt>Current milestone</dt><dd data-f="milestone">Core (alpha.2)</dd></div>
     <div><dt>Issues closed</dt><dd data-f="closed">–</dd></div>
     <div><dt>Issues open</dt><dd data-f="open">–</dd></div>
     <div><dt>Decision records accepted</dt><dd data-f="accepted">{accepted}</dd></div>
