@@ -282,11 +282,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 	}
 	var settingsReader controller.SettingsReader
 	if len(cfg.orgSettings) > 0 {
-		readings := make(map[string]orgconfig.Read, len(cfg.orgSettings))
-		for org := range cfg.orgSettings {
-			readings[org] = cfg.orgSettings[org].Read
-		}
-		reader, err := orgsettings.NewAWSReader(ctx, readings)
+		reader, err := orgsettings.NewAWSReader(ctx, cfg.orgSettings)
 		if err != nil {
 			return nil, err
 		}

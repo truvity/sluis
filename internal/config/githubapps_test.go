@@ -208,3 +208,20 @@ func TestOrgSettingsAreReadAndHeldToWhatTheControllerCanActOn(t *testing.T) {
 		}
 	}
 }
+
+func TestTwoOrganisationsMayNotReadThroughOneRole(t *testing.T) {
+	two := orgSettingsSection
+	two += `      other-org:
+        read: {roleArn: "arn:aws:iam::111122223333:role/sluis-read", region: eu-west-1, parameter: /other/sluis/github-org}
+`
+
+	if _, err := policyWith(t, two); err == nil || !strings.Contains(err.Error(), "same role") {
+		t.Errorf("two organisations on one role: %v", err)
+	}
+
+	own := strings.Replace(two, `role/sluis-read", region: eu-west-1, parameter: /other`, `role/other-read", region: eu-west-1, parameter: /other`, 1)
+	// The fixture binds one organisation, so the second is refused for that and for nothing else.
+	if _, err := policyWith(t, own); err != nil && strings.Contains(err.Error(), "same role") {
+		t.Errorf("two organisations on two roles: %v", err)
+	}
+}

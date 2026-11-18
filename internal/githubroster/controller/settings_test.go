@@ -84,6 +84,8 @@ type settingsRig struct {
 	// noEntry leaves the organisation out of the controller's settings, and
 	// noSource gives the controller no way to read an account.
 	noEntry, noSource bool
+	// disabled leaves the organisation out of `enabledOrgs`.
+	disabled bool
 	// pass runs one pass with a controller kept across passes.
 	pass func()
 	// restart makes the next pass a new process: it knows only what the
@@ -124,7 +126,7 @@ func newSettingsRig(t *testing.T, cfg orgconfig.Config, doc string) *settingsRig
 		}
 
 		current = controller.New(controller.Config{
-			AppsDir: dir, Enabled: map[string]bool{"globex": false}, OrgSettings: entries,
+			AppsDir: dir, Enabled: map[string]bool{"globex": !r.disabled}, OrgSettings: entries,
 		}, controller.Deps{
 			Log:    slog.New(slog.NewTextHandler(r.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 			GitHub: github.Client(), Access: &console{policy: testPolicy, holders: map[string]map[string]bool{}},
@@ -433,15 +435,6 @@ func TestAnInvalidDocumentKeepsTheLastGoodOne(t *testing.T) {
 		bad()
 		r.pass()
 
-		// The empty document is a valid empty section: it removes what the controller
-		// wrote, which is its own case below.
-		if name == "an empty document" {
-			r.account.SetDocument(settingsDocument)
-			r.pass()
-
-			continue
-		}
-
 		got := r.settings(t)
 
 		switch name {
@@ -453,7 +446,7 @@ func TestAnInvalidDocumentKeepsTheLastGoodOne(t *testing.T) {
 			}) {
 				t.Errorf("%s: changes = %+v, want the secret held", name, got.Changes)
 			}
-		case "the read failing":
+		case "the read failing", "an empty document":
 			if got.Document.Outcome != status.DocumentUnreadable {
 				t.Errorf("%s: document = %+v", name, got.Document)
 			}
@@ -488,8 +481,7 @@ func TestAnInvalidDocumentKeepsTheLastGoodOne(t *testing.T) {
 func TestRemovalTouchesOnlyManagedNames(t *testing.T) {
 	r := newSettingsRig(t, settingsConfig(orgconfig.ModeEnforce), settingsDocument)
 
-	// Somebody else's settings, one of them with a name the document will
-	// name later, and one GitHub provides.
+	// Somebody else's settings, and one GitHub provides.
 	r.github.SetVariable("FOREIGN_VARIABLE", githubfake.Variable{Value: "theirs", Visibility: "all"})
 	r.github.SetSecret("FOREIGN_SECRET", "all")
 	r.github.AddConfiguration("foreign-config", map[string]string{"secret_scanning": "disabled"})
@@ -497,38 +489,36 @@ func TestRemovalTouchesOnlyManagedNames(t *testing.T) {
 
 	r.pass()
 
-	// Now the document drops everything it declared.
-	r.account.SetDocument("org: {}\n")
+	// The document drops a variable and the secret: two of the six names the
+	// controller wrote, which is under half.
+	r.account.SetDocument(strings.ReplaceAll(strings.ReplaceAll(settingsDocument,
+		"    GLOBEX_REGION: {value: eu-west-1, visibility: all}\n", ""),
+		"  secrets:\n    GLOBEX_DEPLOY_KEY: {parameter: /globex/sluis/credentials/deploy-key, visibility: private}\n", ""))
 	r.pass()
 
-	for _, gone := range []string{"GLOBEX_REGION", "GLOBEX_HOSTS"} {
-		if r.github.Variable(gone) != nil {
-			t.Errorf("%s was written by the controller and the document dropped it, but it is still there", gone)
-		}
+	if r.github.Variable("GLOBEX_REGION") != nil || r.github.Secret("GLOBEX_DEPLOY_KEY") != nil {
+		t.Error("the controller wrote a variable and a secret, the document dropped them, and they are still there")
 	}
 
-	// A platform variable is the installation's and stays, with the
-	// installation's visibility once the document no longer chooses.
-	if r.github.Variable("CI_RUNNER_LABEL_DEFAULT") == nil {
+	// Then the configuration and another variable: two of the four now.
+	r.account.SetDocument(`
+org:
+  variables:
+    ACCESS_ROSTER_ISSUER: {visibility: selected, repositories: [shop]}
+`)
+	r.pass()
+
+	if r.github.Variable("GLOBEX_HOSTS") != nil || r.github.Configuration("baseline") != nil {
+		t.Error("the variable and the configuration the controller wrote are still there")
+	}
+
+	// A platform variable is the installation's and stays.
+	if r.github.Variable("CI_RUNNER_LABEL_DEFAULT") == nil || r.github.Variable("ACCESS_ROSTER_ISSUER") == nil {
 		t.Error("a platform variable was removed with the document's")
 	}
 
-	if v := r.github.Variable("ACCESS_ROSTER_ISSUER"); v == nil || v.Value != "https://sluis.example.com" || v.Visibility != "all" {
-		t.Errorf("ACCESS_ROSTER_ISSUER = %+v, want the installation's value and visibility", v)
-	}
-
-	if r.github.Secret("GLOBEX_DEPLOY_KEY") != nil || r.github.Configuration("baseline") != nil {
-		t.Error("the secret or the configuration the controller wrote is still there")
-	}
-
-	for _, kept := range []string{"FOREIGN_VARIABLE"} {
-		if r.github.Variable(kept) == nil {
-			t.Errorf("%s was not the controller's and was removed", kept)
-		}
-	}
-
-	if r.github.Secret("FOREIGN_SECRET") == nil || r.github.Configuration("foreign-config") == nil {
-		t.Error("a secret or a configuration the controller did not write was removed")
+	if r.github.Variable("FOREIGN_VARIABLE") == nil || r.github.Secret("FOREIGN_SECRET") == nil || r.github.Configuration("foreign-config") == nil {
+		t.Error("something the controller did not write was removed")
 	}
 
 	for _, did := range r.github.Did() {
@@ -543,6 +533,84 @@ func TestRemovalTouchesOnlyManagedNames(t *testing.T) {
 	}
 }
 
+// A pass that would remove most of what the controller wrote removes none of
+// it, says so, and records it.
+func TestMostOfTheManagedNamesAreNotRemovedAtOnce(t *testing.T) {
+	r := newSettingsRig(t, settingsConfig(orgconfig.ModeEnforce), settingsDocument)
+	r.pass()
+
+	before := len(r.github.Did())
+	managed := r.settings(t).Managed
+
+	// Four of the six names go.
+	r.account.SetDocument(`
+org:
+  variables:
+    ACCESS_ROSTER_ISSUER: {visibility: selected, repositories: [shop]}
+`)
+	r.pass()
+
+	if after := r.github.Did()[before:]; len(after) != 0 {
+		t.Fatalf("a mass removal was carried out: %v", after)
+	}
+
+	held := 0
+
+	for _, c := range r.settings(t).Changes {
+		if c.Action == status.SettingDelete && c.State == status.SettingHeld && strings.HasPrefix(c.Reason, "removal held") {
+			held++
+		}
+	}
+
+	if held != 4 {
+		t.Errorf("changes = %+v, want four removals held", r.settings(t).Changes)
+	}
+
+	if got := r.settings(t).Managed; !slices.Equal(got.Variables, managed.Variables) || len(got.Secrets) != 1 || len(got.SecurityConfigurations) != 1 {
+		t.Errorf("the record lost names that were not removed: %+v", got)
+	}
+
+	var audited bool
+
+	for _, rec := range r.settingRecords() {
+		audited = audited || strings.Contains(rec, "delete") && strings.Contains(rec, "failure")
+	}
+
+	if !audited {
+		t.Errorf("audit = %v, want the held removals", r.settingRecords())
+	}
+
+	// Restoring the document releases nothing and removes nothing.
+	r.account.SetDocument(settingsDocument)
+	r.pass()
+
+	if after := r.github.Did()[before:]; len(after) != 0 {
+		t.Errorf("restoring the document did %v", after)
+	}
+}
+
+// An empty document, a comment-only one and `org: {}` are read as a document
+// that could not be read: the last good settings stay.
+func TestAnEmptyDocumentIsNotARequestToRemoveEverything(t *testing.T) {
+	r := newSettingsRig(t, settingsConfig(orgconfig.ModeEnforce), settingsDocument)
+	r.pass()
+
+	applied := len(r.github.Did())
+
+	for name, doc := range map[string]string{"empty": "", "comments": "# nothing yet\n", "an empty org": "org: {}\n"} {
+		r.account.SetDocument(doc)
+		r.pass()
+
+		if got := r.settings(t); got.Document.Outcome != status.DocumentUnreadable || len(got.Managed.Variables) != 4 || len(got.Managed.Secrets) != 1 {
+			t.Errorf("%s: settings = %+v", name, got)
+		}
+
+		if after := r.github.Did()[applied:]; len(after) != 0 {
+			t.Errorf("%s: GitHub was changed: %v", name, after)
+		}
+	}
+}
+
 // The record of what the controller wrote survives a restart: it is in the
 // report store, and a new process removes what the old one wrote and nothing
 // else.
@@ -551,7 +619,7 @@ func TestTheManagedRecordSurvivesARestart(t *testing.T) {
 	r.github.SetVariable("FOREIGN_VARIABLE", githubfake.Variable{Value: "theirs", Visibility: "all"})
 	r.pass()
 	r.restart()
-	r.account.SetDocument("org: {}\n")
+	r.account.SetDocument(strings.ReplaceAll(settingsDocument, "    GLOBEX_REGION: {value: eu-west-1, visibility: all}\n", ""))
 	r.pass()
 
 	if r.github.Variable("GLOBEX_REGION") != nil {
@@ -566,7 +634,12 @@ func TestTheManagedRecordSurvivesARestart(t *testing.T) {
 // A setting the document names and GitHub already holds the same way is not
 // written, and so is not the controller's to remove.
 func TestAnIdenticalExistingSettingIsNotAdopted(t *testing.T) {
-	r := newSettingsRig(t, settingsConfig(orgconfig.ModeEnforce), "org:\n  variables:\n    GLOBEX_REGION: {value: eu-west-1, visibility: all}\n")
+	r := newSettingsRig(t, settingsConfig(orgconfig.ModeEnforce), `
+org:
+  variables:
+    GLOBEX_REGION: {value: eu-west-1, visibility: all}
+    GLOBEX_OTHER: {value: x, visibility: all}
+`)
 	r.github.SetVariable("GLOBEX_REGION", githubfake.Variable{Value: "eu-west-1", Visibility: "all"})
 	r.pass()
 
@@ -576,11 +649,235 @@ func TestAnIdenticalExistingSettingIsNotAdopted(t *testing.T) {
 		}
 	}
 
-	r.account.SetDocument("org: {}\n")
+	if slices.Contains(r.settings(t).Managed.Variables, "GLOBEX_REGION") {
+		t.Error("an identical setting was recorded as the controller's")
+	}
+
+	r.account.SetDocument("org:\n  variables:\n    GLOBEX_OTHER: {value: x, visibility: all}\n")
 	r.pass()
 
 	if r.github.Variable("GLOBEX_REGION") == nil {
 		t.Error("a setting the controller never wrote was removed")
+	}
+}
+
+// A name GitHub holds that the controller did not write is never overwritten
+// or adopted: it is a conflict row, audited once, until somebody removes it on
+// GitHub. The installation's own variables are the one exception.
+func TestASettingTheControllerDidNotCreateIsAConflictAndNeverWritten(t *testing.T) {
+	r := newSettingsRig(t, settingsConfig(orgconfig.ModeEnforce), settingsDocument)
+	r.github.SetVariable("GLOBEX_REGION", githubfake.Variable{Value: "theirs", Visibility: "private"})
+	r.github.SetSecret("GLOBEX_DEPLOY_KEY", "all")
+	r.github.AddConfiguration("baseline", map[string]string{"secret_scanning": "disabled"})
+	// The installation's variable is held by somebody else, and is overwritten.
+	r.github.SetVariable("CI_RUNNER_LABEL_DEFAULT", githubfake.Variable{Value: "theirs", Visibility: "private"})
+
+	r.pass()
+
+	if v := r.github.Variable("GLOBEX_REGION"); v == nil || v.Value != "theirs" || v.Visibility != "private" {
+		t.Errorf("GLOBEX_REGION = %+v, want it untouched", v)
+	}
+
+	if sec := r.github.Secret("GLOBEX_DEPLOY_KEY"); sec == nil || sec.Writes != 0 {
+		t.Errorf("GLOBEX_DEPLOY_KEY = %+v, want it untouched", sec)
+	}
+
+	if cfg := r.github.Configuration("baseline"); cfg == nil || cfg.Settings["secret_scanning"] != "disabled" || len(cfg.Attached) != 0 {
+		t.Errorf("baseline = %+v, want it untouched", cfg)
+	}
+
+	if v := r.github.Variable("CI_RUNNER_LABEL_DEFAULT"); v == nil || v.Value != "self-hosted" || v.Visibility != "all" {
+		t.Errorf("the installation's variable = %+v, want it written", v)
+	}
+
+	got := r.settings(t)
+	conflicts := map[string]bool{}
+
+	for _, c := range got.Changes {
+		if c.State == status.SettingConflict {
+			conflicts[c.Kind+"/"+c.Name] = true
+		}
+	}
+
+	for _, want := range []string{"variable/GLOBEX_REGION", "secret/GLOBEX_DEPLOY_KEY", "security_configuration/baseline"} {
+		if !conflicts[want] {
+			t.Errorf("changes = %+v, want a conflict for %s", got.Changes, want)
+		}
+	}
+
+	if slices.Contains(got.Managed.Variables, "GLOBEX_REGION") || len(got.Managed.Secrets) != 0 || len(got.Managed.SecurityConfigurations) != 0 {
+		t.Errorf("a conflict was recorded as written: %+v", got.Managed)
+	}
+
+	// Each conflict is audited once, as something the controller did not do,
+	// and not on the next pass.
+	if !slices.Contains(r.settingRecords(), "roster.github_org_setting.changed variable/GLOBEX_REGION update failure enforce") {
+		t.Errorf("audit = %v, want the conflict", r.settingRecords())
+	}
+
+	first := len(r.settingRecords())
+	r.pass()
+
+	if again := len(r.settingRecords()); again != first {
+		t.Errorf("a standing conflict was audited again: %d records, then %d", first, again)
+	}
+
+	// An operator removes it on GitHub, and the controller creates its own.
+	r.github.RemoveVariable("GLOBEX_REGION")
+	r.pass()
+
+	if v := r.github.Variable("GLOBEX_REGION"); v == nil || v.Value != "eu-west-1" {
+		t.Errorf("GLOBEX_REGION = %+v after the operator removed it, want the controller's", v)
+	}
+}
+
+// GitHub reads names without regard to case: a document that spells a
+// platform name in lower case is refused, and a document in lower case is
+// held to GitHub's upper-case names.
+func TestNamesAreReadWithoutRegardToCase(t *testing.T) {
+	r := newSettingsRig(t, settingsConfig(orgconfig.ModeEnforce), "org:\n  variables:\n    ci_runner_label_default: {value: mine, visibility: all}\n")
+	r.pass()
+
+	got := r.settings(t)
+	if got.Document.Outcome != status.DocumentRefused || !strings.Contains(got.Document.Error, "owner-org-platform") || len(r.settingActions()) != 0 {
+		t.Fatalf("a lower-case platform name: %+v, actions %v", got, r.settingActions())
+	}
+
+	r.account.SetDocument("org:\n  variables:\n    Foo: {value: 1, visibility: all}\n    FOO: {value: 2, visibility: all}\n")
+	r.pass()
+
+	if got := r.settings(t); got.Document.Outcome != status.DocumentRefused || len(r.settingActions()) != 0 {
+		t.Fatalf("two names GitHub reads as one: %+v", got)
+	}
+
+	// A lower-case platform-valued name keeps the installation's value.
+	r.account.SetDocument("org:\n  variables:\n    access_roster_issuer: {visibility: selected, repositories: [shop]}\n" +
+		"    acme_lower: {value: v, visibility: all}\n")
+	r.pass()
+
+	if v := r.github.Variable("ACCESS_ROSTER_ISSUER"); v == nil || v.Value != "https://sluis.example.com" || v.Visibility != "selected" {
+		t.Errorf("ACCESS_ROSTER_ISSUER = %+v", v)
+	}
+
+	if v := r.github.Variable("ACME_LOWER"); v == nil || v.Value != "v" {
+		t.Errorf("ACME_LOWER = %+v, want the lower-case name kept as GitHub keeps it", v)
+	}
+
+	// The next pass finds both in place: GitHub's names and the document's agree.
+	before := len(r.github.Did())
+	r.pass()
+
+	if after := r.github.Did()[before:]; len(after) != 0 {
+		t.Errorf("a settled organisation was written to again: %v", after)
+	}
+}
+
+// `enabledOrgs` is the kill switch: an organisation that is not in it is read
+// as report whatever its mode says.
+func TestAnOrganisationThatIsNotEnabledIsReadAsReport(t *testing.T) {
+	r := newSettingsRig(t, settingsConfig(orgconfig.ModeEnforce), settingsDocument)
+	r.disabled = true
+	r.restart()
+	r.pass()
+
+	if did := r.settingActions(); len(did) != 0 {
+		t.Fatalf("a disabled organisation was written to: %v", did)
+	}
+
+	got := r.settings(t)
+	if got.Mode != "report" || !got.NotEnabled || len(got.Changes) == 0 {
+		t.Errorf("settings = %+v, want report with the differences", got)
+	}
+}
+
+// What a refusal says is the path and the rule, and never a word of the
+// document: not in the report, the logs or the audit trail.
+func TestARefusalRepeatsNothingTheDocumentSaid(t *testing.T) {
+	const secret = "s3cr3t-scalar"
+
+	for name, doc := range map[string]string{
+		"a scalar where a mapping goes":  "org:\n  variables: " + secret + "\n",
+		"an unknown key":                 "org:\n  variables:\n    ACME_V: {value: x, visibility: all, " + secret + ": 1}\n",
+		"a parameter outside the prefix": "org:\n  secrets:\n    ACME_K: {parameter: /other/" + secret + ", visibility: all}\n",
+		"a bad visibility":               "org:\n  variables:\n    ACME_V: {value: " + secret + ", visibility: " + secret + "}\n",
+		"a bad setting value": "org:\n  security_configurations:\n    base:\n      description: d\n" +
+			"      settings: {secret_scanning: " + secret + "}\n      attach: {scope: all}\n",
+		"a repository": "org:\n  variables:\n    ACME_V: {value: x, visibility: selected, repositories: [\"bad/" + secret + "\"]}\n",
+	} {
+		r := newSettingsRig(t, settingsConfig(orgconfig.ModeEnforce), doc)
+		r.pass()
+
+		got := r.settings(t)
+		if got.Document.Outcome != status.DocumentRefused {
+			t.Errorf("%s: document = %+v, want refused", name, got.Document)
+		}
+
+		everything := r.logs.String() + fmt.Sprint(r.audit.Records()) + fmt.Sprint(r.report.documents)
+		if strings.Contains(everything, secret) {
+			t.Errorf("%s: the refusal repeats the document", name)
+		}
+	}
+}
+
+// A name in the record that is no name GitHub accepts, or one the platform owns
+// and the installation does not set, is not trusted: nothing is removed for it.
+func TestTheRecordIsNotTrustedToNameWhatToRemove(t *testing.T) {
+	r := newSettingsRig(t, settingsConfig(orgconfig.ModeEnforce), "org:\n  variables:\n    ACME_KEEP: {value: v, visibility: all}\n")
+	r.github.SetVariable("CI_RUNNER_LABEL_OLD", githubfake.Variable{Value: "platform's", Visibility: "all"})
+	r.github.SetVariable("BAD", githubfake.Variable{Value: "x", Visibility: "all"})
+
+	record, err := status.Encode(status.Org{Org: "globex", Settings: &status.Settings{
+		Mode: "enforce", Document: status.Document{Outcome: status.DocumentApplied},
+		Managed: status.Managed{Variables: []string{"CI_RUNNER_LABEL_OLD", "not a name", "ACME_KEEP"}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err = r.report.Put(context.Background(), status.Key("globex"), record); err != nil {
+		t.Fatal(err)
+	}
+
+	r.restart()
+	r.pass()
+
+	if r.github.Variable("CI_RUNNER_LABEL_OLD") == nil {
+		t.Error("a platform-owned name the installation does not set was removed on the record's word")
+	}
+
+	for _, did := range r.settingActions() {
+		if strings.Contains(did, "delete") {
+			t.Errorf("a removal on a recorded name nobody should trust: %q", did)
+		}
+	}
+
+	got := r.settings(t)
+	if slices.Contains(got.Managed.Variables, "CI_RUNNER_LABEL_OLD") || slices.Contains(got.Managed.Variables, "not a name") {
+		t.Errorf("managed = %+v, want the untrusted names dropped from the record", got.Managed)
+	}
+}
+
+// GitHub takes no configuration for an archived repository, so a detach that
+// cannot happen is not asked for every pass.
+func TestADetachOnAnArchivedRepositoryIsNotRetriedEveryPass(t *testing.T) {
+	r := newSettingsRig(t, settingsConfig(orgconfig.ModeEnforce), `
+org:
+  security_configurations:
+    baseline:
+      description: Scanning on the shop.
+      settings: {secret_scanning: enabled}
+      attach: {scope: selected, repositories: [shop]}
+`)
+	r.pass()
+	r.github.Attach("baseline", r.github.RepositoryID("docs"))
+	r.github.Archive("docs")
+
+	before := len(r.github.Did())
+	r.pass()
+	r.pass()
+
+	if after := r.github.Did()[before:]; len(after) != 0 {
+		t.Errorf("a detach on an archived repository was tried: %v", after)
 	}
 }
 
@@ -599,7 +896,7 @@ org:
 	}
 
 	held := slices.IndexFunc(r.settings(t).Changes, func(c status.SettingChange) bool {
-		return c.Name == "GLOBEX_A" && c.State == status.SettingHeld && strings.Contains(c.Reason, "nowhere")
+		return c.Name == "GLOBEX_A" && c.State == status.SettingHeld && strings.Contains(c.Reason, "does not exist")
 	})
 	if held < 0 {
 		t.Errorf("changes = %+v, want GLOBEX_A held for the missing repository", r.settings(t).Changes)

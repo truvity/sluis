@@ -43,7 +43,7 @@ func (c *Controller) settings(ctx context.Context, org string, client githubapp.
 	previous := c.journal.Previous(ctx, org).Settings
 	out := orgsettings.Pass(ctx, orgsettings.PassInput{
 		Org: org, Settings: cfg, Source: source, Target: orgsettings.Target{Org: client, Token: token},
-		Previous: previous, Now: c.deps.Now(),
+		Previous: previous, Now: c.deps.Now(), Enabled: c.cfg.Enabled[org],
 	})
 	report.Settings = &out
 
@@ -87,7 +87,7 @@ func settingsEvents(org string, out status.Settings, previous *status.Settings) 
 		}
 
 		outcome := audit.Succeeded()
-		if change.State == status.SettingFailed || change.State == status.SettingHeld {
+		if change.State == status.SettingFailed || change.State == status.SettingHeld || change.State == status.SettingConflict {
 			outcome = audit.Failed(reasonOf(change.Reason))
 		}
 

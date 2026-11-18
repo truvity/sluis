@@ -391,5 +391,18 @@ func (d *PolicyDocument) validateOrgSettings() []error {
 		}
 	}
 
+	// A role is one organisation's: two organisations on one role could read
+	// each other's document and secrets.
+	roles := map[string]string{}
+
+	for _, org := range slices.Sorted(maps.Keys(d.Controllers.GitHub.OrgSettings)) {
+		role := d.Controllers.GitHub.OrgSettings[org].Read.RoleARN
+		if other, taken := roles[role]; taken && role != "" {
+			errs = append(errs, fmt.Errorf("controllers.github.orgSettings: %s and %s read through the same role: give each organisation its own", other, org))
+		}
+
+		roles[role] = org
+	}
+
 	return errs
 }

@@ -837,8 +837,13 @@
                     "additionalProperties": false,
                     "description": "Where the organisation's document is and as whom the controller reads it.",
                     "properties": {
+                      "externalId": {
+                        "description": "Optional. Passed to STS as the ExternalId of the assumption, so that the organisation's trust policy can require `sts:ExternalId`. The role is also assumed with a session policy that limits it to the document and the secrets' parameters.",
+                        "pattern": "^[A-Za-z0-9+=,.@:/-]{2,1000}$",
+                        "type": "string"
+                      },
                       "parameter": {
-                        "description": "The name of the parameter that holds the document: the `org` section of a company fragment (docs/reference/sluis/policy-fragment.md).",
+                        "description": "The name of the parameter that holds the document: the `org` section of a company fragment (docs/reference/sluis/policy-fragment.md). It must not be under `secretPrefix`.",
                         "pattern": "^/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$",
                         "type": "string"
                       },

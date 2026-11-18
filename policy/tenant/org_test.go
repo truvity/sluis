@@ -261,3 +261,90 @@ org:
 		t.Fatal("a secret with a value key was accepted")
 	}
 }
+
+// GitHub reads the names of variables and secrets without regard to case, so
+// the platform's names are the platform's whatever case the document writes.
+func TestCheckOrg_NamesAreComparedWithoutRegardToCase(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		section tenant.OrgSection
+		code    string
+		path    string
+	}{
+		"a lower-case platform variable": {
+			tenant.OrgSection{Variables: map[string]tenant.OrgVariable{"ci_runner_label_x": {Value: "x", Visibility: "all"}}},
+			tenant.OwnerOrgPlatform, "org.variables[ci_runner_label_x]",
+		},
+		"a mixed-case platform variable": {
+			tenant.OrgSection{Variables: map[string]tenant.OrgVariable{"Ci_Remote_Builders": {Value: "x", Visibility: "all"}}},
+			tenant.OwnerOrgPlatform, "org.variables[Ci_Remote_Builders]",
+		},
+		"a value for a lower-case platform-valued name": {
+			tenant.OrgSection{Variables: map[string]tenant.OrgVariable{"access_roster_issuer": {Value: "x", Visibility: "all"}}},
+			tenant.OwnerOrgPlatform, "org.variables[access_roster_issuer]",
+		},
+		"two variables GitHub reads as one": {
+			tenant.OrgSection{Variables: map[string]tenant.OrgVariable{
+				"Foo": {Value: "1", Visibility: "all"}, "FOO": {Value: "2", Visibility: "all"},
+			}},
+			tenant.OwnerOrg, "org.variables[Foo]",
+		},
+		"two secrets GitHub reads as one": {
+			tenant.OrgSection{Secrets: map[string]tenant.OrgSecret{
+				"Key": {Parameter: "/acme/sluis/credentials/a", Visibility: "all"}, "KEY": {Parameter: "/acme/sluis/credentials/b", Visibility: "all"},
+			}},
+			tenant.OwnerOrg, "org.secrets[Key]",
+		},
+		"two repositories GitHub reads as one": {
+			tenant.OrgSection{Variables: map[string]tenant.OrgVariable{
+				"ACME_V": {Value: "1", Visibility: "selected", Repositories: []string{"Shop", "shop"}},
+			}},
+			tenant.OwnerOrg, "org.variables[ACME_V].repositories[1]",
+		},
+	} {
+		vs := tenant.CheckOrg(orgOwner(), tc.section)
+		if len(vs) != 1 || vs[0].Code != tc.code || vs[0].Path != tc.path {
+			t.Errorf("%s: want one %s at %s, got %v", name, tc.code, tc.path, vs)
+		}
+	}
+
+	// A platform-valued name in another case may still leave its value to the
+	// installation and choose its selection.
+	ok := tenant.OrgSection{Variables: map[string]tenant.OrgVariable{"Access_Roster_Issuer": {Visibility: "selected", Repositories: []string{"shop"}}}}
+	if vs := tenant.CheckOrg(orgOwner(), ok); len(vs) != 0 {
+		t.Errorf("a platform-valued name with no value was refused: %v", vs)
+	}
+
+	c := orgOwner().Ceiling.Org
+	if !c.PlatformOwns("ci_runner_label_a") || !c.ValueOnly("ACCESS_roster_ISSUER") || c.ValueOnly("CI_RUNNER_LABEL_A") {
+		t.Error("PlatformOwns and ValueOnly must fold case")
+	}
+}
+
+// A refusal says where and which rule, and never repeats what the document
+// wrote: a value, a parameter, a repository.
+func TestCheckOrg_ADetailRepeatsNoScalarOfTheDocument(t *testing.T) {
+	t.Parallel()
+
+	s := tenant.OrgSection{
+		Variables: map[string]tenant.OrgVariable{"ACME_V": {Value: "s3cr3t-value", Visibility: "selected", Repositories: []string{"bad/repo-s3cr3t"}}},
+		Secrets: map[string]tenant.OrgSecret{
+			"ACME_K": {Parameter: "/elsewhere/s3cr3t-parameter", Visibility: "weird-s3cr3t"},
+		},
+		SecurityConfigurations: map[string]tenant.SecurityConfiguration{
+			"base": {Description: "d", Settings: map[string]string{"secret_scanning": "maybe-s3cr3t"}, Attach: tenant.Attachment{Scope: "scope-s3cr3t"}},
+		},
+	}
+
+	vs := tenant.CheckOrg(orgOwner(), s)
+	if len(vs) == 0 {
+		t.Fatal("accepted")
+	}
+
+	for _, v := range vs {
+		if strings.Contains(v.Detail, "s3cr3t") || strings.Contains(v.String(), "s3cr3t-") {
+			t.Errorf("a detail repeats the document: %s", v)
+		}
+	}
+}

@@ -8,16 +8,21 @@ Let the GitHub controller keep an organisation's Actions variables, Actions secr
 
 - Allow the controller's role `sts:AssumeRole` on the read role of step 1.
 
-- Start in `report` mode: a pass then reports and changes nothing.
+- Start in `report` mode, and remove any hand-made setting the document names: the controller never overwrites what it did not create.
 
 ## 1. Create the read role in the organisation's account
 
-The role trusts only the controller's role and reads the document and the secrets' parameters.
+The role trusts only the controller's role, optionally with an external id, and reads the document and the secrets' parameters. Each organisation has its own role.
 
 ```json
 {"Effect": "Allow", "Action": "ssm:GetParameter", "Resource": [
   "arn:aws:ssm:eu-west-1:111122223333:parameter/example/sluis/github-org",
   "arn:aws:ssm:eu-west-1:111122223333:parameter/example/sluis/credentials/*"]}
+```
+
+```json
+{"Effect": "Allow", "Principal": {"AWS": "<the controller's role>"}, "Action": "sts:AssumeRole",
+ "Condition": {"StringEquals": {"sts:ExternalId": "example-id"}}}
 ```
 
 ## 2. Write the document
@@ -46,7 +51,7 @@ controllers:
   github:
     orgSettings:
       example-org:
-        read: {roleArn: "arn:aws:iam::111122223333:role/sluis-read", region: eu-west-1, parameter: /example/sluis/github-org}
+        read: {roleArn: "arn:aws:iam::111122223333:role/sluis-read", region: eu-west-1, parameter: /example/sluis/github-org, externalId: example-id}
         platformVariables: ["CI_RUNNER_LABEL_*"]
         platformValued: [ACCESS_ROSTER_ISSUER]
         secretPrefix: /example/sluis/credentials/
@@ -57,11 +62,13 @@ controllers:
 
 ## 4. Read the report
 
-Read `settings` in the organisation's report ([GitHub organisation reference](../../reference/sluis/github-organisation.md)). `document.outcome` is `applied`, `refused` or `unreadable`. Each change is a `drift` row, and each is one `roster.github_org_setting.changed` record ([audit actions](../../reference/sluis/audit-actions.md)).
+Read `settings` in the organisation's report ([GitHub organisation reference](../../reference/sluis/github-organisation.md)). `document.outcome` is `applied`, `refused` or `unreadable`. An empty document is `unreadable`. A row is `drift`, `conflict` (GitHub holds a name the controller did not create) or `held`, and each is one `roster.github_org_setting.changed` record ([audit actions](../../reference/sluis/audit-actions.md)).
 
 ## 5. Enforce
 
-Add `mode: enforce` under the organisation and roll out. The controller applies the rows and records what it wrote.
+Add `mode: enforce` under the organisation, and the organisation to `enabledOrgs`, and roll out. The controller applies the rows and records what it wrote. Removing the organisation from `enabledOrgs` returns it to `report`.
+
+A pass that would remove most of the names the controller wrote removes none, and reports `removal held`.
 
 ## Roll back
 

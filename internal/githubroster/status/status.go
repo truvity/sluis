@@ -318,6 +318,9 @@ type Settings struct {
 	// Mode is `report` (drift is computed and reported) or `enforce` (drift
 	// is applied).
 	Mode string `json:"mode"`
+	// NotEnabled is set when the installation's mode is `enforce` and the
+	// organisation is not in `enabledOrgs`: the pass ran as `report`.
+	NotEnabled bool `json:"not_enabled,omitempty"`
 	// At is when the pass ran.
 	At time.Time `json:"at"`
 	// Document is how reading and checking the organisation's document went.
@@ -362,7 +365,8 @@ type SettingChange struct {
 	// State is `drift` (report mode: it would be done), `applied`, `failed`
 	// (GitHub refused it) or `held` (it cannot be done until something else
 	// is true: a repository that does not exist, a parameter that cannot be
-	// read).
+	// read, a removal of most of what the controller wrote) or `conflict`
+	// (GitHub holds the name and the controller did not write it).
 	State string `json:"state"`
 	// Reason is why it is failed or held, in words.
 	Reason string `json:"reason,omitempty"`
@@ -384,6 +388,10 @@ const (
 	SettingApplied = "applied"
 	SettingFailed  = "failed"
 	SettingHeld    = "held"
+	// SettingConflict is a setting GitHub holds that the controller did not
+	// write and the document would have differ: the controller leaves it and
+	// says so.
+	SettingConflict = "conflict"
 )
 
 // Managed is what the controller wrote in one organisation: the names it

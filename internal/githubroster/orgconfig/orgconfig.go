@@ -9,10 +9,12 @@
 package orgconfig
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/truvity/sluis/policy/tenant"
 )
@@ -63,6 +65,10 @@ type Read struct {
 	Region string `yaml:"region" json:"region"`
 	// Parameter is the name of the parameter that holds the document.
 	Parameter string `yaml:"parameter" json:"parameter"`
+	// ExternalID is passed to STS as the ExternalId of the assumption. The
+	// organisation's trust policy may require it (`sts:ExternalId`), which
+	// keeps the role from being assumed by anyone who learns its ARN. Optional.
+	ExternalID string `yaml:"externalId,omitempty" json:"externalId,omitempty"`
 }
 
 // Variable is a variable the installation sets.
@@ -80,7 +86,46 @@ var (
 	roleARN       = regexp.MustCompile(`^arn:[a-z-]+:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,512}$`)
 	regionName    = regexp.MustCompile(`^[a-z]{2}(-[a-z]+)+-[0-9]$`)
 	parameterName = regexp.MustCompile(`^/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$`)
+	externalID    = regexp.MustCompile(`^[A-Za-z0-9+=,.@:/-]{2,1000}$`)
 )
+
+// SessionPolicy is the inline session policy the controller assumes the read
+// role with: ssm:GetParameter on the document parameter and on the secrets'
+// prefix, and kms:Decrypt for the SecureString parameters, whatever else the
+// role would allow. A session policy only narrows the role. The account and
+// partition are the role's own.
+func (c Config) SessionPolicy() (string, error) {
+	parts := strings.Split(c.Read.RoleARN, ":")
+	if len(parts) < 6 || !roleARN.MatchString(c.Read.RoleARN) {
+		return "", errors.New("read.roleArn is not an IAM role ARN")
+	}
+
+	partition, account := parts[1], parts[4]
+	parameter := func(name string) string {
+		return "arn:" + partition + ":ssm:" + c.Read.Region + ":" + account + ":parameter" + name
+	}
+
+	resources := []string{parameter(c.Read.Parameter)}
+	if c.SecretPrefix != "" {
+		resources = append(resources, parameter(c.SecretPrefix+"*"))
+	}
+
+	doc := map[string]any{
+		"Version": "2012-10-17",
+		"Statement": []map[string]any{
+			{"Effect": "Allow", "Action": "ssm:GetParameter", "Resource": resources},
+			// The role's own policy says which key.
+			{"Effect": "Allow", "Action": "kms:Decrypt", "Resource": "*"},
+		},
+	}
+
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		return "", err //nolint:wrapcheck // cannot fail on this value
+	}
+
+	return string(raw), nil
+}
 
 // Ceiling is how far the organisation's document may reach.
 func (c Config) Ceiling() tenant.OrgCeiling {
@@ -114,11 +159,31 @@ func (c Config) Validate() error {
 		errs = append(errs, fmt.Errorf("read.parameter %q is not a parameter name", c.Read.Parameter))
 	}
 
+	if c.Read.ExternalID != "" && !externalID.MatchString(c.Read.ExternalID) {
+		errs = append(errs, errors.New("read.externalId is not an STS external id (2 to 1000 letters, digits and +=,.@:/-)"))
+	}
+
+	// The document is read with the same role as the secrets' parameters; a
+	// document under the prefix would be a secret an organisation could name.
+	if c.SecretPrefix != "" && strings.HasPrefix(c.Read.Parameter, c.SecretPrefix) {
+		errs = append(errs, errors.New("read.parameter is under secretPrefix: the document would be readable as a secret"))
+	}
+
 	if err := c.Ceiling().Validate(); err != nil {
 		errs = append(errs, err)
 	}
 
 	ceiling := c.Ceiling()
+
+	folded := map[string]string{}
+
+	for _, name := range sortedNames(c.Variables) {
+		if other, taken := folded[tenant.FoldName(name)]; taken {
+			errs = append(errs, fmt.Errorf("variables: %s and %s are one name to GitHub, which reads names without regard to case", other, name))
+		}
+
+		folded[tenant.FoldName(name)] = name
+	}
 
 	for _, name := range sortedNames(c.Variables) {
 		v := c.Variables[name]

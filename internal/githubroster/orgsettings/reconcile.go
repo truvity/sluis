@@ -15,6 +15,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -50,11 +51,15 @@ type Target struct {
 }
 
 // Desired is what the organisation should hold: the platform's variables and
-// the document's, merged and checked.
+// the document's, merged and checked. Variable and secret names are keyed as
+// GitHub keeps them, folded to upper case ([tenant.FoldName]).
 type Desired struct {
 	Variables map[string]tenant.OrgVariable
 	Secrets   map[string]tenant.OrgSecret
 	Configs   map[string]tenant.SecurityConfiguration
+	// Platform are the variables the installation sets, which the controller
+	// writes whatever GitHub already holds under the name.
+	Platform map[string]bool
 }
 
 // Input is one pass over one organisation.
@@ -62,6 +67,9 @@ type Input struct {
 	Mode    Mode
 	Target  Target
 	Desired Desired
+	// Ceiling says which names the platform owns: the controller never
+	// removes one the installation does not set.
+	Ceiling tenant.OrgCeiling
 	// Previous is the record of what the controller wrote last time.
 	Previous status.Managed
 	Secrets  Secrets
@@ -77,16 +85,27 @@ type Result struct {
 // mode, applies the difference. An error means GitHub could not be read, so
 // nothing was changed; a change that GitHub refuses is a row of the result
 // and the pass goes on.
+//
+// A name GitHub holds that the controller did not write is the organisation's
+// and not the controller's: it is reported as a conflict and never written,
+// adopted or removed, except for the installation's own variables. A pass
+// that would remove most of what the controller wrote removes none of it.
 func Reconcile(ctx context.Context, in Input) (Result, error) {
+	in.Desired = folded(in.Desired)
+	in.Previous = foldedRecord(in.Previous)
+
 	r := &run{in: in, enforce: in.Mode == ModeEnforce}
 	r.managed = status.Managed{
 		Variables:              slices.Clone(in.Previous.Variables),
 		Secrets:                maps.Clone(in.Previous.Secrets),
 		SecurityConfigurations: slices.Clone(in.Previous.SecurityConfigurations),
 	}
+
 	if r.managed.Secrets == nil {
 		r.managed.Secrets = map[string]int64{}
 	}
+
+	r.wrote = struct{ vars, cfgs map[string]bool }{vars: setOf(in.Previous.Variables), cfgs: setOf(in.Previous.SecurityConfigurations)}
 
 	if err := r.read(ctx); err != nil {
 		return Result{}, err
@@ -113,18 +132,69 @@ func Reconcile(ctx context.Context, in Input) (Result, error) {
 	return Result{Changes: r.changes, Managed: r.managed}, nil
 }
 
+func setOf(names []string) map[string]bool {
+	out := make(map[string]bool, len(names))
+	for _, n := range names {
+		out[n] = true
+	}
+
+	return out
+}
+
+// folded keys the variables and secrets by the name GitHub keeps.
+func folded(d Desired) Desired {
+	out := Desired{
+		Variables: map[string]tenant.OrgVariable{}, Secrets: map[string]tenant.OrgSecret{}, Configs: d.Configs,
+		Platform: map[string]bool{},
+	}
+
+	for name, v := range d.Variables {
+		out.Variables[tenant.FoldName(name)] = v
+	}
+
+	for name, s := range d.Secrets {
+		out.Secrets[tenant.FoldName(name)] = s
+	}
+
+	for name := range d.Platform {
+		out.Platform[tenant.FoldName(name)] = true
+	}
+
+	return out
+}
+
+func foldedRecord(m status.Managed) status.Managed {
+	out := status.Managed{SecurityConfigurations: m.SecurityConfigurations}
+
+	for _, n := range m.Variables {
+		out.Variables = append(out.Variables, tenant.FoldName(n))
+	}
+
+	if m.Secrets != nil {
+		out.Secrets = make(map[string]int64, len(m.Secrets))
+		for n, v := range m.Secrets {
+			out.Secrets[tenant.FoldName(n)] = v
+		}
+	}
+
+	return out
+}
+
 // run is one pass.
 type run struct {
 	in      Input
 	enforce bool
 	managed status.Managed
 	changes []status.SettingChange
+	// wrote are the variables and configurations of the record.
+	wrote struct{ vars, cfgs map[string]bool }
 
-	repos  []githubapp.Repo
-	byName map[string]int64
-	vars   map[string]githubapp.Variable
-	secs   map[string]githubapp.Secret
-	cfgs   map[string]githubapp.SecurityConfiguration
+	repos    []githubapp.Repo
+	byName   map[string]int64
+	archived map[int64]bool
+	vars     map[string]githubapp.Variable
+	secs     map[string]githubapp.Secret
+	cfgs     map[string]githubapp.SecurityConfiguration
 	// written is the version of the parameter the last secret written was
 	// read from.
 	written int64
@@ -132,6 +202,10 @@ type run struct {
 
 func (r *run) org() githubapp.Org { return r.in.Target.Org }
 func (r *run) tok() string        { return r.in.Target.Token }
+
+// conflict is the reason of a setting GitHub holds that the controller did
+// not write.
+const conflict = "GitHub holds it and the controller did not write it: remove it on GitHub to let the controller manage it"
 
 // read takes everything the pass compares against, or fails whole: a
 // partial read acted on is how a setting is wrongly created or removed.
@@ -145,7 +219,7 @@ func (r *run) read(ctx context.Context) error {
 
 	r.vars = map[string]githubapp.Variable{}
 	for _, v := range vars {
-		r.vars[v.Name] = v
+		r.vars[tenant.FoldName(v.Name)] = v
 	}
 
 	secs, err := r.org().Secrets(ctx, r.tok())
@@ -155,7 +229,7 @@ func (r *run) read(ctx context.Context) error {
 
 	r.secs = map[string]githubapp.Secret{}
 	for _, s := range secs {
-		r.secs[s.Name] = s
+		r.secs[tenant.FoldName(s.Name)] = s
 	}
 
 	cfgs, err := r.org().SecurityConfigurations(ctx, r.tok())
@@ -174,8 +248,11 @@ func (r *run) read(ctx context.Context) error {
 		}
 
 		r.byName = make(map[string]int64, len(r.repos))
+		r.archived = map[int64]bool{}
+
 		for _, repo := range r.repos {
-			r.byName[repo.Name] = repo.ID
+			r.byName[strings.ToLower(repo.Name)] = repo.ID
+			r.archived[repo.ID] = repo.Archived
 		}
 	}
 
@@ -225,18 +302,17 @@ func (r *run) act(kind, name, action string, apply func() error) bool {
 }
 
 // resolve turns repository names into ids. A name the organisation has no
-// repository for is returned as missing, and the setting is held.
-func (r *run) resolve(names []string) (ids []int64, missing []string) {
+// repository for is counted as missing, and the setting is held.
+func (r *run) resolve(names []string) (ids []int64, missing int) {
 	for _, name := range names {
-		if id, ok := r.byName[name]; ok {
+		if id, ok := r.byName[strings.ToLower(name)]; ok {
 			ids = append(ids, id)
 		} else {
-			missing = append(missing, name)
+			missing++
 		}
 	}
 
 	slices.Sort(ids)
-	slices.Sort(missing)
 
 	return ids, missing
 }
@@ -252,9 +328,7 @@ func idsOf(repos []githubapp.Repo) []int64 {
 	return out
 }
 
-func heldNames(missing []string) string {
-	return "the organisation has no repository " + strings.Join(missing, ", ")
-}
+const heldMissing = "a repository the document names does not exist in the organisation"
 
 // variables creates or updates each desired variable.
 func (r *run) variables(ctx context.Context) {
@@ -265,7 +339,7 @@ func (r *run) variables(ctx context.Context) {
 
 		var (
 			ids     []int64
-			missing []string
+			missing int
 		)
 
 		if want.Visibility == tenant.VisibilitySelected {
@@ -280,8 +354,16 @@ func (r *run) variables(ctx context.Context) {
 		}
 
 		switch {
-		case len(missing) > 0:
-			r.record(status.KindVariable, name, action, status.SettingHeld, heldNames(missing))
+		case missing > 0:
+			r.record(status.KindVariable, name, action, status.SettingHeld, heldMissing)
+
+			continue
+		case exists && !d.Platform[name] && !r.wrote.vars[name]:
+			// Somebody else's variable: the controller leaves it be, and
+			// says so when the document would have it differ.
+			if r.variableDiffers(ctx, got, want, ids) {
+				r.record(status.KindVariable, name, action, status.SettingConflict, conflict)
+			}
 
 			continue
 		case exists && !r.variableDiffers(ctx, got, want, ids):
@@ -318,30 +400,39 @@ func (r *run) variableDiffers(ctx context.Context, got githubapp.Variable, want 
 }
 
 // secrets writes each desired secret that is missing, differently shared, or
-// whose parameter has a new version since the controller last wrote it.
+// whose parameter has a new version since the controller last wrote it. A
+// secret GitHub holds and the controller did not write is a conflict: its
+// value cannot be compared, so it is never overwritten.
 func (r *run) secrets(ctx context.Context) {
 	d := r.in.Desired
 
 	for _, name := range slices.Sorted(maps.Keys(d.Secrets)) {
 		want := d.Secrets[name]
 		got, exists := r.secs[name]
+		_, wrote := r.in.Previous.Secrets[name]
 		action := status.SettingCreate
 
 		if exists {
 			action = status.SettingUpdate
 		}
 
+		if exists && !wrote {
+			r.record(status.KindSecret, name, action, status.SettingConflict, conflict)
+
+			continue
+		}
+
 		var (
 			ids     []int64
-			missing []string
+			missing int
 		)
 
 		if want.Visibility == tenant.VisibilitySelected {
 			ids, missing = r.resolve(want.Repositories)
 		}
 
-		if len(missing) > 0 {
-			r.record(status.KindSecret, name, action, status.SettingHeld, heldNames(missing))
+		if missing > 0 {
+			r.record(status.KindSecret, name, action, status.SettingHeld, heldMissing)
 
 			continue
 		}
@@ -373,7 +464,7 @@ func (r *run) secretDiffers(ctx context.Context, name string, got githubapp.Secr
 		return false
 	}
 
-	have, err := r.org().SecretRepositories(ctx, r.tok(), name)
+	have, err := r.org().SecretRepositories(ctx, r.tok(), got.Name)
 
 	return err != nil || !slices.Equal(idsOf(have), ids)
 }
@@ -406,7 +497,8 @@ func (r *run) writeSecret(ctx context.Context, name string, want tenant.OrgSecre
 }
 
 // configurations creates or updates each desired configuration and brings
-// its attachment to the document's.
+// its attachment to the document's. One GitHub holds that the controller did
+// not write is left as it is and reported when it differs from the document.
 func (r *run) configurations(ctx context.Context) {
 	d := r.in.Desired
 
@@ -416,20 +508,29 @@ func (r *run) configurations(ctx context.Context) {
 
 		var (
 			ids     []int64
-			missing []string
+			missing int
 		)
 
 		if want.Attach.Scope == tenant.ScopeSelected {
 			ids, missing = r.resolve(want.Attach.Repositories)
 		}
 
-		if len(missing) > 0 {
+		if missing > 0 {
 			action := status.SettingCreate
 			if exists {
 				action = status.SettingUpdate
 			}
 
-			r.record(status.KindSecurityConfiguration, name, action, status.SettingHeld, heldNames(missing))
+			r.record(status.KindSecurityConfiguration, name, action, status.SettingHeld, heldMissing)
+
+			continue
+		}
+
+		if exists && !r.wrote.cfgs[name] {
+			missingIDs, extra, err := r.attachmentDiff(ctx, got.ID, true, want, ids)
+			if err != nil || configurationDiffers(got, want) || len(missingIDs) > 0 || len(extra) > 0 {
+				r.record(status.KindSecurityConfiguration, name, status.SettingUpdate, status.SettingConflict, conflict)
+			}
 
 			continue
 		}
@@ -490,14 +591,13 @@ func attached(status string) bool {
 	return false
 }
 
-// attachment brings the repositories a configuration is attached to to the
-// document's: it attaches what is missing and, for a selected attachment,
-// detaches what the document no longer names.
-func (r *run) attachment(ctx context.Context, name string, id int64, exists bool, want tenant.SecurityConfiguration, ids []int64) {
+// attachmentDiff is the repositories a configuration is missing from and the
+// ones it holds that the document does not name. An archived repository is
+// neither: GitHub takes no configuration for it and gives none back, so
+// asking for it every pass would never end.
+func (r *run) attachmentDiff(ctx context.Context, id int64, exists bool, want tenant.SecurityConfiguration, ids []int64) (missing, extra []int64, err error) {
 	wanted := ids
 	if want.Attach.Scope == tenant.ScopeAll {
-		// An archived repository takes no configuration, and would be reported
-		// as missing for ever.
 		live := make([]githubapp.Repo, 0, len(r.repos))
 		for _, repo := range r.repos {
 			if !repo.Archived {
@@ -513,9 +613,7 @@ func (r *run) attachment(ctx context.Context, name string, id int64, exists bool
 	if exists {
 		rows, err := r.org().ConfigurationRepositories(ctx, r.tok(), id)
 		if err != nil {
-			r.record(status.KindSecurityConfiguration, name, status.SettingAttach, status.SettingHeld, err.Error())
-
-			return
+			return nil, nil, err //nolint:wrapcheck // the client names the call
 		}
 
 		for _, row := range rows {
@@ -527,8 +625,24 @@ func (r *run) attachment(ctx context.Context, name string, id int64, exists bool
 		slices.Sort(have)
 	}
 
-	missing := difference(wanted, have)
-	extra := difference(have, wanted)
+	wanted = slices.DeleteFunc(slices.Clone(wanted), func(id int64) bool { return r.archived[id] })
+
+	missing = difference(wanted, have)
+	extra = slices.DeleteFunc(difference(have, wanted), func(id int64) bool { return r.archived[id] })
+
+	return missing, extra, nil
+}
+
+// attachment brings the repositories a configuration is attached to to the
+// document's: it attaches what is missing and, for a selected attachment,
+// detaches what the document no longer names.
+func (r *run) attachment(ctx context.Context, name string, id int64, exists bool, want tenant.SecurityConfiguration, ids []int64) {
+	missing, extra, err := r.attachmentDiff(ctx, id, exists, want, ids)
+	if err != nil {
+		r.record(status.KindSecurityConfiguration, name, status.SettingAttach, status.SettingHeld, err.Error())
+
+		return
+	}
 
 	if len(missing) > 0 {
 		r.act(status.KindSecurityConfiguration, name, status.SettingAttach, func() error {
@@ -556,26 +670,51 @@ func difference(a, b []int64) []int64 {
 	return out
 }
 
+// removal is one name the controller wrote and the document no longer names.
+type removal struct {
+	kind, name string
+	remove     func() error
+	forget     func()
+}
+
 // removals deletes what the controller wrote and the document no longer
-// names. Nothing else is ever deleted.
+// names. Nothing else is ever deleted. A recorded name that is not a name
+// GitHub accepts, or is one the platform owns and the installation does not
+// set, is not trusted: the record is storage, and storage can be wrong.
+// A pass that would remove more than half of what the controller wrote, and
+// at least two names, removes none and says so: a document that lost its
+// lines is more likely than an organisation that meant to drop most of them.
 func (r *run) removals(ctx context.Context) {
 	d := r.in.Desired
+
+	var due []removal
+
+	total := len(r.in.Previous.Variables) + len(r.in.Previous.Secrets) + len(r.in.Previous.SecurityConfigurations)
 
 	for _, name := range r.in.Previous.Variables {
 		if _, wanted := d.Variables[name]; wanted {
 			continue
 		}
 
-		if _, exists := r.vars[name]; !exists {
-			r.forget(&r.managed.Variables, name)
+		name := name
 
-			continue
-		}
-
-		if r.act(status.KindVariable, name, status.SettingDelete, func() error {
-			return r.org().DeleteVariable(ctx, r.tok(), name) //nolint:wrapcheck // the client names the call
-		}) {
+		switch {
+		case !tenant.ValidActionsName(name):
+			r.record(status.KindVariable, name, status.SettingDelete, status.SettingHeld, "the record names something that is not a variable name: not removed")
 			r.forget(&r.managed.Variables, name)
+		case r.in.Ceiling.PlatformOwns(name) && !d.Platform[name]:
+			r.record(status.KindVariable, name, status.SettingDelete, status.SettingHeld, "a name the platform owns and the installation does not set: not removed")
+			r.forget(&r.managed.Variables, name)
+		default:
+			if _, exists := r.vars[name]; !exists {
+				r.forget(&r.managed.Variables, name)
+
+				continue
+			}
+
+			due = append(due, removal{status.KindVariable, name,
+				func() error { return r.org().DeleteVariable(ctx, r.tok(), r.vars[name].Name) }, //nolint:wrapcheck // the client names the call
+				func() { r.forget(&r.managed.Variables, name) }})
 		}
 	}
 
@@ -584,16 +723,22 @@ func (r *run) removals(ctx context.Context) {
 			continue
 		}
 
-		if _, exists := r.secs[name]; !exists {
-			delete(r.managed.Secrets, name)
+		name := name
 
-			continue
-		}
-
-		if r.act(status.KindSecret, name, status.SettingDelete, func() error {
-			return r.org().DeleteSecret(ctx, r.tok(), name) //nolint:wrapcheck // the client names the call
-		}) {
+		switch {
+		case !tenant.ValidActionsName(name):
+			r.record(status.KindSecret, name, status.SettingDelete, status.SettingHeld, "the record names something that is not a secret name: not removed")
 			delete(r.managed.Secrets, name)
+		default:
+			if _, exists := r.secs[name]; !exists {
+				delete(r.managed.Secrets, name)
+
+				continue
+			}
+
+			due = append(due, removal{status.KindSecret, name,
+				func() error { return r.org().DeleteSecret(ctx, r.tok(), r.secs[name].Name) }, //nolint:wrapcheck // the client names the call
+				func() { delete(r.managed.Secrets, name) }})
 		}
 	}
 
@@ -602,17 +747,37 @@ func (r *run) removals(ctx context.Context) {
 			continue
 		}
 
-		cfg, exists := r.cfgs[name]
-		if !exists {
-			r.forget(&r.managed.SecurityConfigurations, name)
+		name := name
 
-			continue
+		cfg, exists := r.cfgs[name]
+
+		switch {
+		case !exists:
+			r.forget(&r.managed.SecurityConfigurations, name)
+		case strings.TrimSpace(name) != name || name == "":
+			r.record(status.KindSecurityConfiguration, name, status.SettingDelete, status.SettingHeld,
+				"the record names something that is not a configuration name: not removed")
+			r.forget(&r.managed.SecurityConfigurations, name)
+		default:
+			due = append(due, removal{status.KindSecurityConfiguration, name,
+				func() error { return r.org().DeleteSecurityConfiguration(ctx, r.tok(), cfg.ID) }, //nolint:wrapcheck // the client names the call
+				func() { r.forget(&r.managed.SecurityConfigurations, name) }})
+		}
+	}
+
+	if len(due) >= 2 && len(due)*2 > total {
+		for _, d := range due {
+			r.record(d.kind, d.name, status.SettingDelete, status.SettingHeld,
+				fmt.Sprintf("removal held: %d of the %d names the controller wrote would be removed at once; "+
+					"restore the document, or remove them on GitHub", len(due), total))
 		}
 
-		if r.act(status.KindSecurityConfiguration, name, status.SettingDelete, func() error {
-			return r.org().DeleteSecurityConfiguration(ctx, r.tok(), cfg.ID) //nolint:wrapcheck // the client names the call
-		}) {
-			r.forget(&r.managed.SecurityConfigurations, name)
+		return
+	}
+
+	for _, d := range due {
+		if r.act(d.kind, d.name, status.SettingDelete, d.remove) {
+			d.forget()
 		}
 	}
 }
