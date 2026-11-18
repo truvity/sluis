@@ -3564,45 +3564,49 @@ async fn an_error_from_the_reader_shows_nothing_of_its_reason() {
 
 /// Discovery lists RS256 in `id_token_signing_alg_values_supported` only while the ring holds an active RS256 key that
 /// `KeyRevocation` does not list, and the key set lists the RSA key in every published state, as an RSA entry with `n` and
-/// `e` and no `x5c`. With no RSA key, a pre-published, a retiring or a revoked one, the document says ES384 alone.
+/// `e` and no `x5c`. With no RSA key, a pre-published, a retiring or a revoked one, the document says ES384 alone. The cases
+/// are those of the shared vectors (`kits/conformance/token/signing-alg-vectors.json`, "discovery"), among them revocations
+/// that cannot be read: the key set is withheld, and the document does not promise RS256.
 ///
 /// verifies: REQ-AUTHN-108
 #[tokio::test]
 async fn discovery_lists_rs256_only_while_an_rs256_key_is_active() {
-    let alg_values = |doc: &Value| -> Vec<String> {
-        doc["id_token_signing_alg_values_supported"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|v| v.as_str().unwrap().to_owned())
-            .collect()
-    };
-    // (state of the RSA key, revoked, listed in discovery, in the key set)
-    for (state, revoked, listed, in_set) in [
-        (None, false, false, false),
-        (Some("pre-published"), false, false, true),
-        (Some("active"), false, true, true),
-        (Some("retiring"), false, false, true),
-        (Some("dropped"), false, false, false),
-        (Some("active"), true, false, false),
-    ] {
+    let vectors: Value = serde_json::from_str(include_str!(
+        "../../../kits/conformance/token/signing-alg-vectors.json"
+    ))
+    .unwrap();
+    let cases = vectors["discovery"]["vectors"].as_array().unwrap();
+    assert!(cases.len() >= 7);
+    for case in cases {
         let up = up().await;
-        if let Some(state) = state {
+        if let Some(state) = case["rs256_key"].as_str() {
             *up.fake.rsa.lock().unwrap() = Some(("-rsa-kid".into(), state.into()));
         }
-        if revoked {
+        if case["revoked"].as_bool().unwrap() {
             up.fake.revoked.lock().unwrap().push("-rsa-kid".into());
         }
-        let d = http(&up, "GET", "/.well-known/openid-configuration", &[], b"").await;
-        assert_eq!(d.status, 200);
-        let doc: Value = serde_json::from_slice(&d.body).unwrap();
-        let want: Vec<String> = if listed {
-            vec!["ES384".into(), "RS256".into()]
-        } else {
-            vec!["ES384".into()]
+        let readable = match case["revocations"].as_str().unwrap() {
+            "readable" => true,
+            "unreadable" => false,
+            other => panic!("revocations {other}: {case}"),
         };
-        assert_eq!(alg_values(&doc), want, "state {state:?}, revoked {revoked}");
+        *up.fake.revocations_fail.lock().unwrap() = !readable;
+        let d = http(&up, "GET", "/.well-known/openid-configuration", &[], b"").await;
+        assert_eq!(d.status, 200, "{case}");
+        let doc: Value = serde_json::from_slice(&d.body).unwrap();
+        assert_eq!(
+            doc["id_token_signing_alg_values_supported"], case["listed"],
+            "{case}"
+        );
         let k = http(&up, "GET", "/jwks", &[], b"").await;
+        match case["key_set"].as_str().unwrap() {
+            "withheld" => {
+                assert_eq!(k.status, 503, "{case}");
+                continue;
+            }
+            "served" => assert_eq!(k.status, 200, "{case}"),
+            other => panic!("key_set {other}: {case}"),
+        }
         let set: Value = serde_json::from_slice(&k.body).unwrap();
         let rsa: Vec<&Value> = set["keys"]
             .as_array()
@@ -3612,8 +3616,8 @@ async fn discovery_lists_rs256_only_while_an_rs256_key_is_active() {
             .collect();
         assert_eq!(
             !rsa.is_empty(),
-            in_set,
-            "state {state:?}, revoked {revoked}"
+            case["rsa_in_key_set"].as_bool().unwrap(),
+            "{case}"
         );
         for k in rsa {
             assert_eq!(
@@ -3624,14 +3628,6 @@ async fn discovery_lists_rs256_only_while_an_rs256_key_is_active() {
             assert_eq!(k["n"].as_str().map(str::len), Some(342));
         }
         // The EC key is in every one of them, whatever the RSA key does.
-        assert_eq!(set["keys"][0]["kid"], "kid-1");
+        assert_eq!(set["keys"][0]["kid"], "kid-1", "{case}");
     }
-    // Revocations that cannot be read: the key set is withheld, and the document does not promise RS256.
-    let up = up().await;
-    *up.fake.rsa.lock().unwrap() = Some(("-rsa-kid".into(), "active".into()));
-    *up.fake.revocations_fail.lock().unwrap() = true;
-    let d = http(&up, "GET", "/.well-known/openid-configuration", &[], b"").await;
-    let doc: Value = serde_json::from_slice(&d.body).unwrap();
-    assert_eq!(alg_values(&doc), ["ES384"]);
-    assert_eq!(http(&up, "GET", "/jwks", &[], b"").await.status, 503);
 }
