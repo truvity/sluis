@@ -52,7 +52,7 @@ A session is state that may be lost: a lost chain costs a sign-in and never data
 ### Agent sessions
 
 - **An agent session starts only from a consent the person gave interactively.** The consent names the client, the resources and their scopes, and is recorded on the chain; an agent authorization never completes silently.
-- **No interactive idle timer.** An agent session has an inactivity expiry on its refresh token (default 14 days) and an absolute lifetime from the consent (default 30 days, maximum 90 days). Its access tokens last at most 30 minutes (maximum 1 hour).
+- **No interactive idle timer.** An agent session has an inactivity expiry on its refresh token (default 14 days) and an absolute lifetime from the consent (default 30 days, maximum 90 days). Its access tokens last at most 30 minutes (maximum 1 hour). These lifetimes (access 30 minutes, idle 14 days, absolute 30 days) are built with the agent session class and consent ([#794](https://github.com/truvity/sluis/issues/794)) in the parity phase, not in the core (maintainer decision L2 A, 2026-11-18; [#1817](https://github.com/truvity/sluis/issues/1817)).
 - **It never outlives the person or the consent.** Revoking the consent, the directory disabling the person, an operator's revoke, and refresh-token reuse each end it at once. Every refresh re-checks the consent and the person's state.
 - **Refresh tokens rotate** at every use, as for every class (REQ-SESS-001).
 - **Tokens are narrow:** one resource per token (RFC 8707), with the scopes the consent names for that resource. They are sender-constrained by DPoP where the client supports it, when DPoP arrives ([0020](/decisions/0020-grant-vocabulary-and-token-claims/#binding)).
