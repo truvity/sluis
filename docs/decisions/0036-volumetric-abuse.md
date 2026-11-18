@@ -61,3 +61,4 @@ The [threat model](/security/threat-model/#availability-and-abuse) lists the thr
 
 - The limiter, the bounds and the breakers in the generic OIDC upstream, built in the core phase: [#916](https://github.com/truvity/sluis/issues/916).
 - Rate limits on the credential endpoints: [#796](https://github.com/truvity/sluis/issues/796).
+- The limits of `entry` on `/token`, `/authorize` and the recovery routes, per client and per source address, built in the core ([Limits at the edge](/reference/contracts/#limits-at-the-edge)): [#1857](https://github.com/truvity/sluis/issues/1857).
