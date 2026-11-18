@@ -93,7 +93,7 @@ The call graph of the actor registry is enforced in the pod's code and again by 
 A gateway cannot route to a Unix socket in another pod, and the kubelet's HTTP and TCP probes connect to the pod address, so a container in the pod bridges to `entry`, in one of two modes:
 
 - **Edge relay, the default.** A key-less container listens on the pod address and forwards to `entry`'s Unix socket in a shared volume. A Service targets its port, so the cluster's gateway or Ingress controller routes to it with an HTTPRoute or an Ingress. It is written in Rust, like `entry` ([0012](/decisions/0012-the-language-follows-the-executable/)).
-- **`cloudflared` in `entry`'s pod, an optional value.** A sidecar connects out to the Cloudflare edge and forwards to `entry`'s socket, and the pod accepts no inbound connection at all. It is for a cluster that has no Cloudflare tunnel of its own. This option is **proposed, awaiting the maintainer**, and not decided.
+- **`cloudflared` in `entry`'s pod, an optional value.** A sidecar connects out to the Cloudflare edge and forwards to `entry`'s socket, and the pod accepts no inbound connection at all. It is for a cluster that has no Cloudflare tunnel of its own. The maintainer agreed to this option on 2026-11-18 (decision E3b).
 
 ### Behind the Cloudflare edge
 
