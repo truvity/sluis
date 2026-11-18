@@ -24,6 +24,10 @@ use crate::yaml::{self, Value};
 pub const SINGLETON_ID: &str = "default";
 /// The built-in cap of an access token (kinds.yaml, group TokenLifetime): config sits inside it.
 pub const ACCESS_TOKEN_CAP: std::time::Duration = std::time::Duration::from_secs(3600);
+/// The built-in cap of a person's session and of the idle limit of its refresh token (ADR 0018, "Human sessions": 24
+/// hours, v1's absolute limit); config sits inside it. session holds the same maximum (`maxSession` in
+/// actors/session) and cuts a value above it, so a file the check passes is read as written.
+pub const SESSION_CAP: std::time::Duration = std::time::Duration::from_secs(24 * 3600);
 /// The built-in maximum of key@'s cache of opened data keys (ADR 0006, "The cache" and "Floors in code"): a KeyPlan
 /// may shorten it and never lengthen it. key@'s reader of the payload holds the same maximum (`maxCacheTTL` in
 /// actors/key), and the shared KeyPlan vectors (`cache_ttl_max_seconds`) tie the two, so a longer value is refused
@@ -654,11 +658,29 @@ fn slot_map(o: &mut Obj) -> R<Vec<pb::NodeSlotMap>> {
 fn token_lifetime(mut o: Obj) -> R<pb::TokenLifetime> {
     let id_token = o.required_duration("id_token")?;
     let access_token = o.required_duration("access_token")?;
-    if access_token > ACCESS_TOKEN_CAP {
-        return err(&o.at("access_token"), "above the built-in cap of one hour");
-    }
     let human_session_absolute = o.required_duration("human_session_absolute")?;
     let refresh_idle = o.required_duration("refresh_idle")?;
+    // ADR 0020 "Lifetimes" and ADR 0018 "Configuration": a value (a duration is above zero already) is at or below its
+    // built-in maximum, the idle limit is at or below the absolute limit, and a token never outlives the longest session
+    // (v1: "absolute is positive and at least token"), so the file that says otherwise is refused here and not cut at
+    // run time (REQ-TOKEN-038, REQ-TOKEN-050).
+    for (key, d) in [("id_token", id_token), ("access_token", access_token)] {
+        if d > ACCESS_TOKEN_CAP {
+            return err(&o.at(key), "above the built-in cap of one hour");
+        }
+        if d > human_session_absolute {
+            return err(&o.at(key), "above human_session_absolute");
+        }
+    }
+    if human_session_absolute > SESSION_CAP {
+        return err(
+            &o.at("human_session_absolute"),
+            "above the built-in cap of 24 hours",
+        );
+    }
+    if refresh_idle > human_session_absolute {
+        return err(&o.at("refresh_idle"), "above human_session_absolute");
+    }
     o.done()?;
     Ok(pb::TokenLifetime {
         id_token: pb_duration(id_token),

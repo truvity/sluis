@@ -8,6 +8,7 @@ import (
 
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	"github.com/truvity/sluis/v2/kits/go/groupsclaim"
+	lifetimekit "github.com/truvity/sluis/v2/kits/go/lifetime"
 )
 
 // pairwiseLabel separates the use of the pairwise key from every other (key@ binds the label into the Mac).
@@ -36,15 +37,9 @@ func groupsOf(held []string, c *configv2alpha1.InstallationClient) []string {
 // lifetime is the lifetime of the token: the earliest of the issuer's, the audience client's `ttl_cap`, the built-in
 // maximum and the end of the subject token (ADR 0020, "Lifetimes"; REQ-EXCH-004: an exchange never yields a token
 // that outlives the token it was made from). It returns the `iat` and `exp` in whole seconds, and false when the
-// subject token has less than a second left.
+// subject token has less than a second left. The rule is the one session applies (kits/go/lifetime).
 func lifetime(now time.Time, issuer, clientCap time.Duration, subjectExp time.Time) (iat, exp int64, ok bool) {
-	d := min(issuer, hardCap)
-	if clientCap > 0 {
-		d = min(d, clientCap)
-	}
-	iat = now.Unix()
-	exp = min(iat+int64(d/time.Second), subjectExp.Unix())
-	return iat, exp, exp > iat
+	return lifetimekit.Expiry(now, lifetimekit.Limits{Issuer: issuer, Caps: []time.Duration{clientCap}, Ends: []time.Time{subjectExp}})
 }
 
 // accessClaims are the claims of the access token that exchange has signed (ADR 0020, "The claims of a token"). A

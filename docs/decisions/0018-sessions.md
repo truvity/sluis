@@ -78,7 +78,7 @@ A customer is a human session like any other: sluis adds no class and no limit l
 ### Configuration
 
 - **The limits are fields of the layered kind `TokenLifetime`,** per class, with the combine rule shortest wins ([0004](/decisions/0004-the-data-model/#layered-and-linked-kinds)). The layers are the built-in hard caps ([0006](/decisions/0006-keys-and-sealing/#floors-in-code)), the config kind `TokenLifetime`, and the durable kind `TokenLifetimeTenant`, which a tenant admin writes and `exchange` owns. A tenant's value longer than config is refused at the store; a tenant that shortens its people's sessions is tightening, and that takes effect at once.
-- **The configuration check refuses** a value above a maximum, an idle limit above its absolute limit, and an agent class on a client that exchanges a person's token for other credentials.
+- **The configuration check refuses** a value above a maximum, an idle limit above its absolute limit, a token lifetime above the absolute limit (v1's rule: a session has to end some time after sign-in, and a token cannot outlive the session that grants it), and an agent class on a client that exchanges a person's token for other credentials. The first three are built ([REQ-TOKEN-050](/requirements/token/#REQ-TOKEN-050)); the agent class waits for [#794](https://github.com/truvity/sluis/issues/794).
 
 ## Consequences
 
