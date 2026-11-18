@@ -20,7 +20,7 @@ The audit pieces have the data and keys ports every actor has, and three ports o
 
 Select a box to see what it holds, what it never holds and who it calls. Choose a flow to step through it: each step lights the lines it uses, in order. On a board every actor listens on Unix sockets only; [the identity explorer](/architecture/identity-explorer/) shows the sockets and units of each installation.
 
-Where Search (the indexer, the search index and the reader) runs is derived from the actor registry ([0003](/decisions/0003-units-transports-and-fusion/#units)). `quota` is not an audit piece: it counts an allowance down and records each admit, refusal and push as an audit fact ([0039](/decisions/0039-quota-allowance/#countdown-and-refusal)). The witness is optional everywhere ([0029](/decisions/0029-the-audit-log/#witnesses)).
+Where Search (the indexer, the search index and the reader) runs is derived from the actor registry ([0003](/decisions/0003-units-transports-and-fusion/#units)). `quota` is not an audit piece: it is the reserved allowance engine of [0039](/decisions/0039-quota-allowance/), which [0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/) superseded. The usage stream and the limit check of 0046 are built right after the core, and the usage log is a log of the audit installation, written by the same writer. The witness is optional everywhere ([0029](/decisions/0029-the-audit-log/#witnesses)).
 
 <AuditExplorer part="map" />
 
@@ -48,7 +48,7 @@ How an auditor can tell that nothing was removed, changed or added. The writer h
 
 <AuditExplorer part="lag" />
 
-The default index of each tested installation is in [0028](/decisions/0028-audit-pieces/#search-and-the-index): `sqlite` on local, a replicated `rqlite` index on boards, `postgres` on Aurora on lambda, reached through RDS Proxy, and `postgres` on `cnpg` on Kubernetes. The indexer follows each log's signed checkpoints, so the index lags the log by the seal interval, a few seconds, plus its own pass. With a `sqlite` index on a cluster the reader runs on the indexer's node. The search index is a rebuildable cache; the log in the blob is the record.
+The default index of each tested installation is in [0028](/decisions/0028-audit-pieces/#search-and-the-index): `sqlite` on local, a replicated `rqlite` index on boards, `postgres` on Aurora Serverless v2 on lambda, reached directly with IAM authentication and no RDS Proxy at first, and `postgres` on `cnpg` on Kubernetes. The indexer follows each log's signed checkpoints, so the index lags the log by the seal interval, a few seconds, plus its own pass. With a `sqlite` index on a cluster the reader runs on the indexer's node. The search index is a rebuildable cache; the log in the blob is the record.
 
 ## When the writer is down for an hour
 

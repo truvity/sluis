@@ -133,7 +133,7 @@ A documented, versioned map says which slot serves which purpose: one slot per p
 
 | Slot | Purpose |
 |---|---|
-| `9c` | X.509 intermediate |
+| `9c` | X.509 intermediate (generated only when the PKI add-on turns the token certificate on; the core needs no slot `9c`) |
 | `9a` | Token signing |
 | `9d` | Key agreement (ECDH): unwraps data keys, the boundary's `grant` data key among them |
 | `82` | `ssh-user` CA |

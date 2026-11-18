@@ -23,6 +23,7 @@ Every runtime runs the same actors: the foundation (store@, key@ and exporter@) 
 | The caller is known by | The peer uid | The caller's role and alias | A service-account token with one audience per callee |
 | The call graph is enforced again by | The socket's group and the caller's sandbox | The callee's resource policy | A NetworkPolicy per callee |
 | `entry` listens on | A Unix socket, behind `cloudflared` | `127.0.0.1` inside the sandbox, behind the Lambda Web Adapter | A Unix socket, behind a key-less edge relay container |
+| The Cloudflare edge | A tunnel to `cloudflared` | Cloudflare proxied to an API Gateway custom domain with mutual TLS | The cluster's own Cloudflare tunnel and gateway |
 | A holder's drivers are | systemd units beside the holder | Extensions of the holder's function | Native sidecar containers in the holder's pod |
 | Packaging | `.deb` and `.rpm` packages, and a tarball | A zip per executable | One OCI image per process, and one Helm chart |
 
@@ -65,13 +66,14 @@ This table is derived from what each driver requires and from [what each runtime
 | | `yubikey-piv` | ✓ | ✓ | ✗ | ✗ |
 | | `aws-kms` | ✓, with AWS credentials | ✓, with AWS credentials | ✓ | ✓ |
 | store@: durable and temp | `rqlite` | ✓, one node | ✓ | ✗ | ✗ |
-| | `dynamodb` | ✓, with AWS credentials | ✓, with AWS credentials | ✓ | ✓ |
+| | `dynamodb` | ✓, with AWS credentials | ✓, with AWS credentials | ✓ | ✓, with AWS credentials; not the default (see `postgres`) |
+| | `postgres` (CloudNativePG, built in the core phase) | ✗ | ✗ | ✗ | ✓, the default |
 | | in-memory | tests only | tests only | tests only | tests only |
 | store@: config source | `file` | ✓ | ✓ | ✓, a layer or a package file | ✓, a mounted ConfigMap |
 | | `appconfig` | with AWS credentials | with AWS credentials | ✓ | ✓ |
 | store@: secret source | systemd credential | ✓ | ✓ | ✗ | ✗ |
 | | AWS SSM | with AWS credentials | with AWS credentials | ✓ | ✓ |
-| Audit blob | `fs` | ✓, no lock | ✗ | ✗ | ✗ |
+| Audit blob | `fs` | ✓, no lock | a stage on the boards: one log per board on its own disk | ✗ | ✗ |
 | | `s3-compatible` | ✓ | ✓ | ✓ | ✓ |
 | Audit transport | `direct` | ✓ | ✓ | ✗, its fallback spool needs a disk | needs a per-pod volume for its fallback spool |
 | | `spool` | ✓ | ✓ | ✗ | ✗ |
@@ -79,7 +81,7 @@ This table is derived from what each driver requires and from [what each runtime
 | | `nats-jetstream` | ✓ | ✓ | send only; the writer runs elsewhere | ✓ |
 | Audit index | `sqlite` | ✓ | on one node | ✗ | needs a per-pod volume |
 | | `rqlite` | ✓ | ✓ | ✗ | ✗ |
-| | `postgres` | ✓ | ✓ | ✓, in the VPC | ✓ |
+| | `postgres` | ✓ | ✓ | ✓, in the VPC | ✓, the `cnpg` mode |
 | Audit witness | none, `external` | ✓ | ✓ | ✓ | ✓ |
 | | `peer` | ✗ | ✓ | ✗ | not independent in one cluster |
 
@@ -98,11 +100,11 @@ The tested installations choose the default drivers of their runtime. Pick by th
 | Installation | Runtime and nodes | key@ driver | store@: engine, config source, secret source | Audit blob | Audit transport |
 |---|---|---|---|---|---|
 | [local](#local) | bare-metal, 1 node | `software` (a development card is opt-in) | `rqlite` with one node; `file`; credential files | `fs` | `spool` or `direct` |
-| [boards](#boards) | bare-metal, 3 nodes | `yubikey-piv`, one card per board | `rqlite`, one cluster over the three boards; `file`; systemd credentials | R2 through `s3-compatible` | `spool` |
+| [boards](#boards) | bare-metal, 3 nodes | `yubikey-piv`, one card per board | `rqlite`, one cluster over the three boards; `file`; systemd credentials | `fs` on each board (R2 comes with the Cloudflare add-on) | `spool` |
 | [lambda](#lambda) | serverless, elastic | `aws-kms` | `dynamodb`; `appconfig` or `file` from a layer; SSM | S3 through `s3-compatible` | `sqs` |
-| [kubernetes](#kubernetes) | kubernetes, N nodes | `aws-kms` | `dynamodb`; a mounted ConfigMap or `appconfig`; SSM | S3 through `s3-compatible` | `nats-jetstream` (`sqs` possible) |
+| [kubernetes](#kubernetes) | kubernetes, N nodes | `aws-kms` | `postgres` on CloudNativePG; a mounted ConfigMap or `appconfig`; SSM | S3 through `s3-compatible` | `nats-jetstream` (`sqs` possible) |
 
-The key mode follows from the installation, not from a switch: KMS on lambda and kubernetes, a YubiKey on boards, software keys on local. The code carries the floor: the `software` driver of key@ refuses to start in production and warns in staging, and configuration picks only among the modes the floor allows ([0006](/decisions/0006-keys-and-sealing/#floors-in-code)).
+Every production installation sits behind the Cloudflare edge, and each has its own engine and key driver ([the edge and the engines](#the-edge-and-the-engines-of-each-installation)). The key mode follows from the installation, not from a switch: KMS on lambda and kubernetes, a YubiKey on boards, software keys on local. The code carries the floor: the `software` driver of key@ refuses to start in production and warns in staging, and configuration picks only among the modes the floor allows ([0006](/decisions/0006-keys-and-sealing/#floors-in-code)).
 
 An installation serves one [boundary](/concepts/boundaries/) at L4, or the front of a federation with the boundaries below L4 inside it. A test installation serves no real user, trusts nothing, and lives outside the sluis host names. An installation runs in one region of one cloud provider, or on one set of boards; a second region is a second installation ([0011](/decisions/0011-runtimes-and-installations/#installations)).
 
@@ -119,7 +121,45 @@ flowchart TD
 
 Anything else is a possible installation: start from the nearest tested one and change drivers within the rules.
 
-**The reference installations** that the design is checked against are three: a three-board installation, which is the self-hosted one ([boards](#boards)); an internal installation for a company's own staff, on serverless ([lambda](#lambda)); and a customer installation on Kubernetes on AWS (EKS) ([kubernetes](#kubernetes)). The [local](#local) installation is for development and serves no real user ([0011](/decisions/0011-runtimes-and-installations/#installations)).
+**The reference installations** that the design is checked against are three: a three-board installation, which is the self-hosted one ([boards](#boards)); an internal installation for a company's own staff, on serverless ([lambda](#lambda)); and a Kubernetes installation on AWS (EKS) ([kubernetes](#kubernetes)). The [local](#local) installation is for development and serves no real user ([0011](/decisions/0011-runtimes-and-installations/#installations)).
+
+## The edge and the engines of each installation
+
+Every production installation sits behind the Cloudflare edge, and each has its own way in. sluis's own deploy code sets its side of it, and each installation's infrastructure code applies the Cloudflare records, rules and rate limits; sluis holds no Cloudflare credential in the core (decisions E1 and E2 A of 2026-11-18, [0011](/decisions/0011-runtimes-and-installations/#amendment-of-2026-11-18-the-core-comes-first)). The key set and the discovery document are cacheable for less than the key pre-publish time.
+
+```mermaid
+flowchart LR
+  cf["Cloudflare edge"]
+  cf -->|"tunnel"| cfd["cloudflared"] --> eb["entry<br/>boards"]
+  cf -->|"proxied,<br/>mutual TLS"| gw["API Gateway<br/>custom domain"] --> lwa["Web Adapter"] --> el["entry<br/>Lambda"]
+  cf -->|"cluster's tunnel<br/>and gateway"| rel["edge relay"] --> ek["entry<br/>Kubernetes"]
+```
+
+The local installation has no Cloudflare: its forwarder ends TLS for a developer or a test harness. On Lambda the API's default `execute-api` endpoint is disabled, so the custom domain is the only way in. On Kubernetes a `cloudflared` sidecar in `entry`'s pod is an option for a cluster without its own tunnel.
+
+The store engine and the key driver follow the installation as well:
+
+```mermaid
+flowchart LR
+  subgraph loc["local"]
+    ls["store@: rqlite, one node"]
+    lk["key@: software"]
+  end
+  subgraph brd["boards"]
+    bs["store@: rqlite, Raft"]
+    bk["key@: yubikey-piv"]
+  end
+  subgraph lam["Lambda"]
+    as["store@: dynamodb"]
+    ak["key@: aws-kms"]
+  end
+  subgraph k8s["Kubernetes"]
+    ks["store@: postgres<br/>on CloudNativePG"]
+    kk["key@: aws-kms"]
+  end
+```
+
+On Kubernetes the store and the audit index are separate databases with separate roles of one CloudNativePG cluster, so the credential of one does not open the other ([0005](/decisions/0005-the-store/#amendment-of-2026-11-18-kubernetes-stores-in-postgresql-through-cloudnativepg)). On Lambda the audit index is `postgres` on Aurora Serverless v2.
 
 ## local
 
@@ -147,25 +187,25 @@ flowchart LR
   rq <-- "Raft, mutual TLS" --> peers["rqlite nodes of<br/>the other boards"]
 ```
 
-- **Drivers:** `yubikey-piv` behind key@; `rqlite` behind store@, one cluster over the three boards with the data on eMMC and the temp data replicated too, so any board serves any request ([0005](/decisions/0005-the-store/#engines)); `file` for config and systemd credentials for secrets; the audit `spool` on each board; `s3-compatible` on R2, with credentials from the `cloud-cloudflare` driver. The audit index is an rqlite cluster of its own; its full-text search was tested on a three-node cluster on 2026-10-30 ([0028](/decisions/0028-audit-pieces/#search-and-the-index)).
+- **Drivers:** `yubikey-piv` behind key@; `rqlite` behind store@, one cluster over the three boards with the data on eMMC and the temp data replicated too, so any board serves any request ([0005](/decisions/0005-the-store/#engines)); `file` for config and systemd credentials for secrets; the audit `spool` on each board; the `fs` blob on each board's disk (R2 through `s3-compatible`, with credentials from the `cloud-cloudflare` driver, belongs to the Cloudflare add-on and holds no place in the core). The audit index is an rqlite cluster of its own; its full-text search was tested on a three-node cluster on 2026-10-30 ([0028](/decisions/0028-audit-pieces/#search-and-the-index)).
 - **Keys:** a board's keys are its own, born on its card. No key is shared between boards, so losing a board loses its keys, not the installation's. Data keys are wrapped for each board's card, so any board opens them ([0006](/decisions/0006-keys-and-sealing/#keys-per-board)). The slots are on [Bare-metal](/runtimes/bare-metal/#the-card-and-its-slots).
-- **Audit:** one log per board, with its own writer, spool and log key; the other two boards are its peer witnesses, through the audit blob, so a checkpoint carries two boards' signatures ([0029](/decisions/0029-the-audit-log/#witnesses)). Readers merge the logs by time. The log is on R2, so it is off site from the start.
+- **Audit:** one log per board, with its own writer, spool and log key; the other two boards are its peer witnesses, through the audit blob, so a checkpoint carries two boards' signatures ([0029](/decisions/0029-the-audit-log/#witnesses)). Readers merge the logs by time. The log lives on each board's own disk for now, so a reinstalled board starts a fresh log ([Rebuild one board](/runtimes/rebuild-a-board/#what-a-reinstall-loses)); the Cloudflare add-on brings the R2 bucket that keeps it off site.
 - **Identity and edge:** each board runs its own `cloudflared`, which forwards to `entry`'s Unix socket. The boundary's issuer issues workload tokens, with one key per board card in its key set ([0022](/decisions/0022-workload-identity-and-host-enrolment/)). The audit pieces have a front of their own, a second `entry` with its own tunnel route on `sluis-audit.example.com` ([0028](/decisions/0028-audit-pieces/#the-audit-front)).
-- **Limits:** Raft tolerates the loss of one board of three. Physical access to a board with its card and PIN allows signing as that board; peer witnessing limits that for the audit logs but not for tokens. A Cloudflare account administrator can remove R2's lock (lock mode `removable`), so the logs get their tamper evidence from the witnesses. Every batch crosses the internet to R2, so an outage of the link or of R2 delays the logs.
+- **Limits:** Raft tolerates the loss of one board of three. Physical access to a board with its card and PIN allows signing as that board; peer witnessing limits that for the audit logs but not for tokens. The `fs` blob has no lock (lock mode `none`), so the logs get their tamper evidence from the witnesses; with the Cloudflare add-on's R2 bucket the lock is `removable` by an account administrator and the witnesses still carry it.
 
 ## lambda
 
-One Lambda function per actor and per holder behind API Gateway, with KMS keys, DynamoDB, an SQS queue to the audit writer and an S3 bucket with a compliance lock. A work function holds no credential; only the holders' roles reach storage, keys and the audit blob, and every hop between functions is an invoke. An invoke is fast enough for this layout, so no function links store@ into a work actor ([0003](/decisions/0003-units-transports-and-fusion/#fusion)); the figures of the warm sign-in are in [0037](/decisions/0037-capacity-is-measured-before-it-is-promised/#the-warm-sign-in-on-lambda). The writer runs with a reserved concurrency of 1, and correctness comes from the write-once fence on the bucket, not from the limit ([0029](/decisions/0029-the-audit-log/#the-write-once-fence)). The request path, the audit path and the limits are on [Serverless](/runtimes/serverless/). Runtime: serverless, elastic.
+One Lambda function per actor and per holder behind API Gateway, with KMS keys, DynamoDB, an SQS queue to the audit writer, an S3 bucket with a compliance lock, and an audit index on Aurora Serverless v2 with auto-pause that the indexer and the reader reach directly with IAM authentication, without RDS Proxy at first. Cloudflare proxies to an API Gateway custom domain with mutual TLS, and the API's default endpoint is disabled. A work function holds no credential; only the holders' roles reach storage, keys and the audit blob, and every hop between functions is an invoke. An invoke is fast enough for this layout, so no function links store@ into a work actor ([0003](/decisions/0003-units-transports-and-fusion/#fusion)); the figures of the warm sign-in are in [0037](/decisions/0037-capacity-is-measured-before-it-is-promised/#the-warm-sign-in-on-lambda). The writer runs with a reserved concurrency of 1, and correctness comes from the write-once fence on the bucket, not from the limit ([0029](/decisions/0029-the-audit-log/#the-write-once-fence)). The request path, the audit path and the limits are on [Serverless](/runtimes/serverless/). Runtime: serverless, elastic.
 
 ## kubernetes
 
-A pod per actor and per holder on Amazon EKS, each with its own service account, installed from one Helm chart. A driver is a native sidecar container in its holder's pod, a key-less edge relay container in `entry`'s pod forwards to its socket, and the audit side may be a separate audit installation, from the chart's `audit-install` preset. Kubernetes in 2.0 means Kubernetes on AWS (EKS), with DynamoDB, AWS KMS and S3; a cluster without AWS is not in 2.0, and the direction for later is PostgreSQL via CNPG as the store engine. A holder's cloud role comes from web identity through the cluster's IAM OIDC provider, not from EKS Pod Identity. It is the customer installation: it runs the full conformance set (OpenID Connect, FAPI 2.0 and the customer-identity plans) as well as a smoke test on kind with the `kubernetes-dev` preset and integration tests on a development EKS cluster. The details are on [Kubernetes](/runtimes/kubernetes/). Runtime: kubernetes, N nodes.
+A pod per actor and per holder on Amazon EKS, each with its own service account, installed from one Helm chart. A driver is a native sidecar container in its holder's pod, a key-less edge relay container in `entry`'s pod forwards to its socket, and the audit side may be a separate audit installation, from the chart's `audit-install` preset. Its store is PostgreSQL through CloudNativePG, with the new `postgres` driver of store@, and the audit index is a separate database and role of the same cluster; the keys are AWS KMS and the blob is S3, so a cluster without AWS is not in 2.0. The edge is the cluster's own Cloudflare tunnel and gateway, with an optional `cloudflared` sidecar. A holder's cloud role comes from web identity through the cluster's IAM OIDC provider, not from EKS Pod Identity. It runs the same smoke tests as the other installations, plus a smoke test on kind with the `kubernetes-dev` preset and integration tests on a development EKS cluster. The details are on [Kubernetes](/runtimes/kubernetes/). Runtime: kubernetes, N nodes.
 
 ## Other installations
 
 These are possible installations: allowed by the rules, not tested.
 
-- **One board.** The boards installation reduced to one node, with `rqlite` on one node and the blob on R2.
+- **One board.** The boards installation reduced to one node, with `rqlite` on one node and the `fs` blob.
 - **EC2.** One instance or an Auto Scaling group is a bare-metal installation on virtual machines ([Bare-metal](/runtimes/bare-metal/#virtual-machines-ec2)). EC2 is not a delivery target.
 
 For each, `sluis config check` applies the same rules as for a tested installation. What the tests do not give is evidence that the combination keeps working from release to release.

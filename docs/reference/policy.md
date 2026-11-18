@@ -138,7 +138,7 @@ action "policy.link" appliesTo {
 
 ## Entity types
 
-The types follow the [actor registry](/reference/actors/) and the [kinds](/reference/kinds/): a type exists when an actor of the first working version asks about it ([principle 8](/principles/#8-nothing-without-a-consumer)). The asking actor sends the facts as a slice of entities with the request; `policy` reads no item for them.
+The types follow the [actor registry](/reference/actors/) and the [kinds](/reference/kinds/): a type exists when an actor of the core asks about it ([principle 8](/principles/#8-nothing-without-a-consumer)). The asking actor sends the facts as a slice of entities with the request; `policy` reads no item for them.
 
 | Type | What it is | Facts sent by | Id |
 |---|---|---|---|
@@ -147,12 +147,12 @@ The types follow the [actor registry](/reference/actors/) and the [kinds](/refer
 | `Grant` | A grant name of the vocabulary, with its scope, thing, role and whether the scope is sensitive | `policy`, from the vocabulary | `<scope>:<thing>:<role>`, such as `dev:example-app:user` ([0020](/decisions/0020-grant-vocabulary-and-token-claims/#grant-names-and-the-vocabulary)) |
 | `Client` | A client of an issuer, and the resource of a token request | The asker, from the `InstallationClient` or `TenantClient` it read ([0021](/decisions/0021-clients/#the-client-declaration)) | `<boundary>/<client id>`, such as `dev/example-app` |
 | `Boundary` | A boundary, and the place a link is made in | The asker, from the `Boundary` config kind | The boundary's name |
-| `Workload` | A workload that proved its identity: in the first version a GitHub Actions job, checked by the `github-oidc` verifier | `exchange`, from the verified proof | `<verifier>/<proof subject>` |
+| `Workload` | A workload that proved its identity: in the core a Kubernetes ServiceAccount token (the slice that KV needs), and with the GitHub add-on a GitHub Actions job, checked by the `github-oidc` verifier | `exchange`, from the verified proof | `<verifier>/<proof subject>` |
 | `SigningKey` | A signing key of a boundary | `exchange` | The key's purpose, `release-signing` ([0024](/decisions/0024-root-custody-and-the-signing-api/#the-signing-api)) |
 | `AuditLog` | One log of a project of the boundary, `in` the `Boundary`, with its `project` and its `kind` (`audit` or `usage`) | `reader`, from the `AuditLog` config kind | `<project>/<kind>`, such as `sluis/audit` ([0028](/decisions/0028-audit-pieces/#access)) |
 
 - **A person is named by an account, because an operator cannot know a subject.** The subject is 128 random bits assigned at the first sign-in, so a binding or a link written before it names the account that will be linked. A binding never names an e-mail address, which does not identify ([0019](/decisions/0019-person-and-upstream-link/#what-policy-sees)).
-- **`org` is the tenant the person belongs to,** the tenant of the client the person signs in to ([0033](/decisions/0033-customer-connections/#which-tenant-a-person-belongs-to), [0019](/decisions/0019-person-and-upstream-link/#the-records)). The broker's organisation id is not copied into `org`: the asker reads `org` from the person's item, and no policy document sets it. `Account.org` is, in the same way, the tenant of the sign-in that linked the account; a config `Upstream` names no tenant.
+- **`org` is the tenant the person belongs to,** the tenant of the client the person signs in to ([0019](/decisions/0019-person-and-upstream-link/#the-records)). The upstream's organisation id is not copied into `org`: the asker reads `org` from the person's item, and no policy document sets it. `Account.org` is, in the same way, the tenant of the sign-in that linked the account; a config `Upstream` names no tenant.
 - **`state` is `live` or `held` in the first version.** An operator's `PersonHold` is a tightening that takes effect at once; `session` computes the state and sends it, and the first `forbid` of the example refuses a person who is not live. Lifting a hold gives back only what the policy grants. The states `suspended` and `left` join with the directory at parity ([0019](/decisions/0019-person-and-upstream-link/#states)).
 - **A client's id carries its boundary.** Client ids are unique per issuer, not across issuers ([0017](/decisions/0017-identity-and-sign-in/#audiences)), and a Cedar entity id must be unique, so `dev/example-app` and `prod/example-app` are two entities. A `Client` is `in` its `Boundary`, so a policy can say "any client of `dev`". `Client.requires` is the client's declared `requires`, a set of `Grant`.
 - **`Workload` attributes are the verified claims of the proof.** For a GitHub Actions job they are the repository, the ref (`ref`), the kind of ref (`ref_type`, `branch` or `tag`), the workflow, the environment and the event that started the job (`event`, GitHub's `event_name`), such as `push`, `pull_request` or `pull_request_target` ([0024](/decisions/0024-root-custody-and-the-signing-api/#the-signing-api)); a name the proof does not carry is absent, never an empty string, and a policy tests `has` before it reads. GitHub puts `event_name` in every token, so `exchange` refuses a `github-oidc` proof without one.
@@ -165,7 +165,7 @@ Each of these is added by the record or pull request that first asks about it, a
 
 | Added | By | Because |
 |---|---|---|
-| `Group`, and a binding that names a directory group | Directory sync ([#805](https://github.com/truvity/sluis/issues/805)) | The first working version reads no directory; internal groups are accounts ([0019](/decisions/0019-person-and-upstream-link/#what-policy-sees)) |
+| `Group`, and a binding that names a directory group | Directory sync ([#805](https://github.com/truvity/sluis/issues/805)) | The core reads no directory; internal groups are accounts ([0019](/decisions/0019-person-and-upstream-link/#what-policy-sees)) |
 | `Target`, and the batch membership method | Reconcilers ([#1220](https://github.com/truvity/sluis/issues/1220)) | A directory adapter asks which people a connection's groups put in a target ([0026](/decisions/0026-reconcilers/#the-desired-state)) |
 | `Host` and the action `cert.issue` | Host enrolment ([0022](/decisions/0022-workload-identity-and-host-enrolment/)) | Their first asker is `exchange` with a host proof |
 | `Resource` | Declared resources ([#979](https://github.com/truvity/sluis/issues/979)) | A resource is a declared URL with its own `requires` ([0021](/decisions/0021-clients/#resources)) |
@@ -306,9 +306,9 @@ A company is a tenant: its accounts and its grant names carry its `org`, and its
 
 ## The grant vocabulary
 
-A grant name is `<scope>:<thing>:<role>`, and every grant name a policy, a client or a token can name is declared in one document, the **vocabulary** ([0020](/decisions/0020-grant-vocabulary-and-token-claims/#grant-names-and-the-vocabulary)). It is the config kind `GrantVocabulary`: Fixed, written by the publishing pipeline, and read by `policy`, `exchange`, `session`, `signer` and the console. This section fixes its shape for the first working version, schema v1. How grant names are found, bound and checked at run time is above.
+A grant name is `<scope>:<thing>:<role>`, and every grant name a policy, a client or a token can name is declared in one document, the **vocabulary** ([0020](/decisions/0020-grant-vocabulary-and-token-claims/#grant-names-and-the-vocabulary)). It is the config kind `GrantVocabulary`: Fixed, written by the publishing pipeline, and read by `policy`, `exchange`, `session`, `signer` and the console. This section fixes its shape for the core, schema v1. How grant names are found, bound and checked at run time is above.
 
-Schema v1 has only the keys that code of the first working version reads ([principle 8](/principles/#8-nothing-without-a-consumer)). Adding a key or a value is compatible; removing or changing one is a new schema version beside v1.
+Schema v1 has only the keys that code of the core reads ([principle 8](/principles/#8-nothing-without-a-consumer)). Adding a key or a value is compatible; removing or changing one is a new schema version beside v1.
 
 ### Format
 
@@ -326,7 +326,7 @@ Schema v1 has only the keys that code of the first working version reads ([princ
 
 #### `scopes`
 
-A scope is an environment, a company or `all` ([0020](/decisions/0020-grant-vocabulary-and-token-claims/#grant-names-and-the-vocabulary)). The document does not say which; a scope named like a boundary or a tenant means that boundary or tenant by convention, which is how the delegation policy of [The grants of one tenant](#the-grants-of-one-tenant) reads a company's scope. This is the convention of the first working version; at the parity milestone the delegation policy reads a tenant-to-scope list that config declares, and a scope that only shares a tenant's name is not claimed by it ([ADR 0007](/decisions/0007-policy-and-sealed-grants/#template-links), [REQ-POLICY-022](/requirements/policy/#REQ-POLICY-022)). `all` is an ordinary name with no meaning of its own: `all:x:admin` is a grant name like any other, and never implies `dev:x:admin`.
+A scope is an environment, a company or `all` ([0020](/decisions/0020-grant-vocabulary-and-token-claims/#grant-names-and-the-vocabulary)). The document does not say which; a scope named like a boundary or a tenant means that boundary or tenant by convention, which is how the delegation policy of [The grants of one tenant](#the-grants-of-one-tenant) reads a company's scope. This is the convention of the core; at the parity milestone the delegation policy reads a tenant-to-scope list that config declares, and a scope that only shares a tenant's name is not claimed by it ([ADR 0007](/decisions/0007-policy-and-sealed-grants/#template-links), [REQ-POLICY-022](/requirements/policy/#REQ-POLICY-022)). `all` is an ordinary name with no meaning of its own: `all:x:admin` is a grant name like any other, and never implies `dev:x:admin`.
 
 | Field | Required | Meaning |
 |---|---|---|

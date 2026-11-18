@@ -10,11 +10,25 @@ sluis writes a tamper-evident audit trail. This page explains the ideas; the rec
 
 ## What is audited
 
-**Every flow is audited, refusals included.** When an actor does something for a caller, such as signing a person in, issuing a token, minting a credential or changing a kind, it appends an audit record, so every actor is an emitter. **What was used goes to a usage log beside it:** an action that uses something, such as a metered call, sends one message with an audit part and a usage part, and the writer puts each part into its own log ([The usage stream](#the-usage-stream)). The facts of the allowance, every admit, refusal and push, are audit facts too ([ADR 0039](/decisions/0039-quota-allowance/#countdown-and-refusal)).
+**Every flow is audited, refusals included.** When an actor does something for a caller, such as signing a person in, issuing a token, minting a credential or changing a kind, it appends an audit record, so every actor is an emitter. **What was used goes to a usage log beside it:** an action that uses something, such as a metered call, sends one message with an audit part and a usage part, and the writer puts each part into its own log ([The usage stream](#the-usage-stream)). A usage record is never dropped, and a limit check on the request path refuses at a limit that the product writes ([ADR 0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/)); both are built right after the core.
 
 ## The four pieces
 
-Audit is the fourth [family](/concepts/families/) of actors and the audit module. It is four pieces fed by an emitter library over a transport ([ADR 0028](/decisions/0028-audit-pieces/#four-pieces)):
+Audit is the fourth [family](/concepts/families/) of actors and the audit module. It is four pieces fed by an emitter library over a transport ([ADR 0028](/decisions/0028-audit-pieces/#four-pieces)). A record takes this way from an actor to a reader:
+
+```mermaid
+flowchart LR
+  act["actors<br/>(emitter library)"] -.->|"record"| tr["transport"]
+  tr --> wr["writer"]
+  wr -->|"tiles,<br/>checkpoint"| blob[("blob<br/>one per project")]
+  wr -->|"sign"| key["key@"]
+  wr <-->|"cosign"| wit["witness<br/>(optional)"]
+  blob --> idx["indexer"]
+  idx --> ix[("index")]
+  ix --> rd["reader"]
+```
+
+The dashed line is asynchronous: the request returns once its record is durable in the transport, and never waits for the writer.
 
 | Piece | What it is | What it holds |
 |---|---|---|
@@ -44,7 +58,7 @@ The tenants' keys are the boundary's, whatever the project: a tenant's records i
 Access to audit is checked **twice, by two independent checks** ([ADR 0028](/decisions/0028-audit-pieces/#access)):
 
 1. **The reader and `policy`.** Cedar decides every call on project, log kind and tenant. The grant that results is a mandatory filter of every query, and a record read from the blob opens at key@ only under a grant that covers its tenant.
-2. **The blob store's own access control on the bucket and the prefix:** IAM on AWS, temporary credentials scoped to a bucket and a prefix on Cloudflare R2, file permissions per uid on a local file system.
+2. **The blob store's own access control on the bucket and the prefix:** IAM on AWS, temporary credentials scoped to a bucket and a prefix on Cloudflare R2 (the Cloudflare add-on), file permissions per uid on a local file system.
 
 The bindings are Cedar policies in config:
 
@@ -132,7 +146,25 @@ The sluis action is `metadata.event_code`, the tenant `metadata.tenant_uid`, the
 
 - **One call, one message, two logs.** The emitter builds the audit record and the usage events from one call and sends one message; the writer splits it and seals both in the same conditional write. There is no dual write and no usage event without its audit record.
 - **Each kind is a log of its own:** its own prefix, checkpoints, retention, lock mode, readers and witnesses. Usage entries carry no personal data and are sealed under the tenant's `evidence` key.
-- **Only `quota` sends the facts of an allowance.** The usage log has no search index. A product builds its billing from it outside sluis, in the `billing/` prefix of its project; sluis holds no prices ([ADR 0039](/decisions/0039-quota-allowance/#the-billing-log-is-outside-sluis)).
+- **A usage record is never dropped, and sluis holds no balance, plan or price.** The usage log has no search index. A product builds its billing from it outside sluis, in the `billing/` prefix of its project ([ADR 0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/), [ADR 0030](/decisions/0030-audit-records-and-the-usage-stream/#the-usage-stream)).
+
+### Usage records and the limit check
+
+The usage stream and the limit check are built right after the core, in the Quota phase ([roadmap](/roadmap/#customer-identity-and-quota)). A usage record is a class of its own, with an idempotency key: the operation that produces it uses a blocking emit and fails when the transport does not accept the record durably. Security audit keeps its counted loss. The limit check compares a counter of usage per customer, organisation and product with a limit that the product writes, and refuses at the limit, beside the policy decision.
+
+```mermaid
+flowchart LR
+  req["request"] --> lim{"limit check"}
+  prod["product"] -->|"writes the limit"| lim
+  lim -->|"over the limit"| ref["refused"]
+  lim -->|"within"| op["operation"]
+  op -->|"blocking emit"| tr["transport"]
+  tr --> wr["writer"]
+  wr --> ul[("usage log")]
+  op -.->|"transport refuses"| err["operation fails"]
+```
+
+The shape of the counters, their period and where the check runs are decided with its first caller ([#841](https://github.com/truvity/sluis/issues/841)).
 - **A meter has a name, a unit and a kind, and never changes;** only declared outcomes bill ([ADR 0040](/decisions/0040-meters-and-usage-evidence/)).
 
 ## The witness is optional
@@ -149,7 +181,7 @@ With no witness, a compromised writer can get a rewritten checkpoint signed: it 
 
 The lock mode comes from the blob backend: `compliance` on AWS S3, `removable` on Cloudflare R2, `none` on a local file system. `sluis config check` reports it and applies one rule ([ADR 0029](/decisions/0029-the-audit-log/#lock-modes)):
 
-- **A production log needs a `compliance` lock, or a weaker lock plus a `peer` or `external` witness.** The check refuses anything else in a production boundary and warns in development and staging. The boards, on R2 with peer witnesses, pass; a single-node production installation on a local file system needs an `external` witness.
+- **A production log needs a `compliance` lock, or a weaker lock plus a `peer` or `external` witness.** The check refuses anything else in a production boundary and warns in development and staging. The boards, on the `fs` blob with peer witnesses, pass; a single-node production installation on a local file system needs an `external` witness.
 - **Each log declares its retention in `AuditLog`, and a production log must** ([ADR 0029](/decisions/0029-the-audit-log/#retention)). There is no built-in default, and the audit log and the usage log declare theirs separately. Try a period in governance mode first: a wrong period locked in compliance mode cannot be shortened.
 - **Legal holds stay outside sluis.** A hold is placed and lifted with the store's own means, under cloud IAM or a break-glass role, and recorded as an audit record under the name of the person who did it. Before key@ deletes a tenant's `evidence` wrap, it checks for a standing hold.
 - **Lifecycle tiers and compliance profiles** are declared in `AuditLog`. Only cold, immutable objects move to colder storage, and never the lock. Compliance profiles are floors that `sluis config check` enforces ([lifecycle tiers](/decisions/0029-the-audit-log/#lifecycle-tiers), [compliance profiles](/decisions/0029-the-audit-log/#compliance-profiles)).
@@ -170,7 +202,7 @@ Each tenant is a reader of the boundary's audit, and its records are sealed unde
 
 - **One index per boundary, partitioned by project and log kind.** Every row carries its project, log kind and tenant, and every query names the partitions it reads. The usage log and the `billing/` prefix are not indexed.
 - **The index follows the checkpoints.** The indexer indexes only entries that a signed checkpoint covers, so it lags the log by a few seconds, and it can always be rebuilt from the log. It opens each record at key@ under the record's tenant's `evidence` key, and a tenant's exit purges its rows.
-- **The default index** is `sqlite` on local, `rqlite` on the boards, and `postgres` on lambda (Aurora) and Kubernetes (CloudNativePG) ([ADR 0028](/decisions/0028-audit-pieces/#search-and-the-index), [PostgreSQL row-level security](/decisions/0028-audit-pieces/#postgresql-row-level-security)). The index is audit's own and not the store's business.
+- **The default index** is `sqlite` on local, `rqlite` on the boards, and `postgres` on lambda (Aurora Serverless v2 with auto-pause, reached directly with IAM authentication and without RDS Proxy at first) and on Kubernetes (CloudNativePG, in a database of its own beside the store) ([ADR 0028](/decisions/0028-audit-pieces/#search-and-the-index), [PostgreSQL row-level security](/decisions/0028-audit-pieces/#postgresql-row-level-security)). The index is audit's own and not the store's business.
 - **The reader is the audit API:** search, facets, a get that returns a record with its inclusion proof against a cosigned checkpoint, NDJSON exports and a tail. Every call is authorised by a grant from `policy`, which becomes a mandatory filter of the query.
 
 **Verification never trusts the index or the store.** A verifier reads the entries, the checkpoints and the cosignatures from the log store and recomputes the tree itself.
@@ -188,7 +220,7 @@ Every audit has a front of its own, also when the audit module runs beside the i
 An installation may run the foundation with the audit module only, to keep the audit of a product that does not use sluis for sign-in ([Families](/concepts/families/#the-foundation-and-the-modules)). key@ signs every checkpoint and seals every record, store@ serves the key wraps, the tenants and audit's documents, and exporter@ backs up the wraps.
 
 - **`policy` authorises every search in this shape too.** The product's issuer is a trusted token source declared in config. The reader verifies the product's token against it, and `policy` decides from the token's claims and seals the grant that key@ checks.
-- **The product pushes each tenant before the tenant's first record,** idempotently by request id, like an allowance push. A record for a tenant the boundary does not know is held in the transport and raises an alarm, so a mistyped tenant id never creates a tenant.
+- **The product pushes each tenant before the tenant's first record,** idempotently by request id. A record for a tenant the boundary does not know is held in the transport and raises an alarm, so a mistyped tenant id never creates a tenant.
 - **A product that later adopts sluis for sign-in adds the identity module.** Its project, buckets, logs and keys stay as they are, and nothing is migrated.
 
 ## Recovery and backup

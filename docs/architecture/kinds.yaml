@@ -274,7 +274,7 @@ kinds:
     exportable: no
     backed_up: no
     layer_module: quota module
-    notes: "The quotas that exist, their unit and the bounds an allowance push must respect."
+    notes: "Reserved with the allowance engine of ADR 0039, which ADR 0046 superseded; not built. The quotas that exist, their unit and the bounds an allowance push must respect."
 
   - name: Upstream
     serves: work
@@ -711,7 +711,7 @@ kinds:
     exportable: no
     backed_up: yes
     layer_module: quota module
-    notes: "Id is the quota name. Mode (prepaid, limited, unlimited) and units left, counted down by quota. A product changes it by a push: a request id, an operation (add | set | write-off) and, optionally, the expected version. A push is idempotent by request id (its SpentPush marker), is applied with a conditional update on the units (a delta), and is an audit fact. Admits use the same conditional update, so they race with pushes safely. Hot counter: the driver contract allows a single conditional update."
+    notes: "Reserved with the allowance engine of ADR 0039, which ADR 0046 superseded; not built. Id is the quota name. Mode (prepaid, limited, unlimited) and units left, counted down by quota. A product changes it by a push: a request id, an operation (add | set | write-off) and, optionally, the expected version. A push is idempotent by request id (its SpentPush marker), is applied with a conditional update on the units (a delta), and is an audit fact. Admits use the same conditional update, so they race with pushes safely. Hot counter: the driver contract allows a single conditional update."
 
   - name: AdmitRecord
     serves: work
@@ -725,7 +725,7 @@ kinds:
     backed_up: no
     ttl: {field: expires_at, default: 24h}
     layer_module: quota module
-    notes: "Idempotency of an admit by operation id; rebuilt from usage facts after a restore. The admit's decrement of the Allowance is the same conditional update that a push uses."
+    notes: "Reserved with the allowance engine of ADR 0039, which ADR 0046 superseded; not built. Idempotency of an admit by operation id; rebuilt from usage facts after a restore. The admit's decrement of the Allowance is the same conditional update that a push uses."
 
   - name: Person
     serves: work
@@ -1393,7 +1393,7 @@ kinds:
     backed_up: no
     ttl: {default: 7d, max: 30d}
     layer_module: quota module
-    notes: "The hash of the request id of an allowance push that was applied, so a retried push changes nothing. A hashed spent marker, like SpentGrant, but with one writer."
+    notes: "Reserved with the allowance engine of ADR 0039, which ADR 0046 superseded; not built. The hash of the request id of an allowance push that was applied, so a retried push changes nothing. A hashed spent marker, like SpentGrant, but with one writer."
 
   - name: LogLevelOverride
     serves: work

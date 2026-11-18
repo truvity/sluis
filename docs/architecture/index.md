@@ -109,7 +109,7 @@ flowchart LR
 | **People** | From a browser or a CLI, sign in through an upstream identity provider, refresh, list and revoke their sessions, and sign out. Device login for headless machines is postponed ([#855](https://github.com/truvity/sluis/issues/855)) |
 | **Robots** | CI jobs, workloads and services present a platform token (a GitHub Actions token, a Kubernetes ServiceAccount token, an AWS web-identity token) and exchange it for an access token, a downstream credential, or a certificate |
 | **Relying parties** | Apps and cloud APIs read discovery and the key set, then verify tokens offline with any standard JOSE library. sluis needs no client library |
-| **Operators** | Through the console and the CLI, connect integrations, manage clients and secrets, and request and install the certificates of the intermediates (`sluis key request`, `install`, `status`). Backup is a job of exporter@; a restore is the operator's command `sluis restore` ([0010](/decisions/0010-backup-and-recovery/#restore)) |
+| **Operators** | Through the console and the CLI, connect integrations, manage clients and secrets, and, once the optional token certificate is on (off in the core), request and install the certificates of the intermediates (`sluis key request`, `install`, `status`). Backup is a job of exporter@; a restore is the operator's command `sluis restore` ([0010](/decisions/0010-backup-and-recovery/#restore)) |
 | **Auditors** | Auditors and independent verifiers query the audit trail and verify it without trusting sluis's index or data |
 | **Upstream identity providers** | Workspace directories and generic OpenID Connect authenticate people. sluis federates sign-in and never stores a password for a person |
 | **Directory and team systems** | The source of facts: who is in which group or team. sluis reads and reconciles them, and policy maps the facts to grants |
@@ -119,7 +119,7 @@ flowchart LR
 
 ### The external API surface
 
-Five kinds of caller identity reach the box, and these are all it has to verify: a person's session cookie, a person's bearer (the access token of a live sign-in), a workload's platform token, a confidential client's secret, and a product service's X.509-SVID over mutual TLS for the allowance push ([0039](/decisions/0039-quota-allowance/#the-push)). Only discovery and the key set are public.
+Four kinds of caller identity reach the box, and these are all it has to verify: a person's session cookie, a person's bearer (the access token of a live sign-in), a workload's platform token or the token of the installation's trusted realm, and a confidential client's secret. A product service that writes limits for the limit check needs a fifth, which is decided with the first caller of the check ([0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/#limits-and-balances), [#841](https://github.com/truvity/sluis/issues/841)). Only discovery and the key set are public.
 
 #### OIDC and OAuth endpoints
 
@@ -141,13 +141,13 @@ Served at the root of the public host, for example `https://sluis.example.com`.
 
 #### Token exchange and mint
 
-Both are `POST /token` with `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` (RFC 8693). The `subject_token` is a GitHub Actions token, a Kubernetes ServiceAccount token from any known cluster, an AWS web-identity token, a token from a peer sluis, or the access token of a live sign-in presented by a client that is allowed to re-audience it. The `actor_token` is refused.
+Both are `POST /token` with `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` (RFC 8693). The `subject_token` is a Kubernetes ServiceAccount token from any known cluster, a GitHub Actions token (the GitHub add-on), an AWS web-identity token, a token from a peer sluis, a token of the installation's trusted realm (Keycloak in the tested installations; customer identity, built right after the core, [0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)), or the access token of a live sign-in presented by a client that is allowed to re-audience it. The `actor_token` is refused.
 
 | Result | Selected by | Notes |
 | ------ | ----------- | ----- |
 | An access token for another audience | `audience` | Never an ID token. A refusal looks like an unknown audience; the reason is only in the audit record |
-| A GitHub installation token | `requested_token_type=urn:sluis:params:oauth:token-type:github-installation-token`, `audience=github-app:<id>`, `repositories`, `scope` | The first grant that covers the whole request wins. Grants are never added together |
-| A cloud API token or object-store credential | `requested_token_type=urn:sluis:params:oauth:token-type:cloudflare-token`, `audience=cloudflare:<preset>`, `lifetime` | Caps and rate limits are checked in core before the adapter is asked |
+| A GitHub installation token (GitHub add-on) | `requested_token_type=urn:sluis:params:oauth:token-type:github-installation-token`, `audience=github-app:<id>`, `repositories`, `scope` | The first grant that covers the whole request wins. Grants are never added together |
+| A cloud API token or object-store credential (Cloudflare add-on) | `requested_token_type=urn:sluis:params:oauth:token-type:cloudflare-token`, `audience=cloudflare:<preset>`, `lifetime` | Caps and rate limits are checked in core before the adapter is asked |
 | Cloud credentials for a person or robot | `audience` naming a cloud role | The cloud accepts a short-lived token that sluis signed, and returns its own credentials |
 
 `GET /.access/grants` answers "what do I hold" for a bearer of a live sign-in; `Explain` answers "why".
@@ -175,16 +175,17 @@ The audit trail is served by the audit installation's own front: its own `entry`
 
 #### Second factor
 
-sluis runs a **generic WebAuthn relying party**: a passkey is the fast sign-in path and counts as phishing-resistant multi-factor authentication. A full sign-in at the upstream provider, with its own multi-factor authentication, is still required at an interval that policy sets and for high-privilege grants, requested by RFC 9470 step-up ([0017](/decisions/0017-identity-and-sign-in/#step-up)). Until passkeys ship ([#885](https://github.com/truvity/sluis/issues/885)), sluis takes the upstream provider's multi-factor result as a fact.
+sluis runs a **generic WebAuthn relying party**: a passkey is the fast sign-in path and counts as phishing-resistant multi-factor authentication. A full sign-in at the upstream provider, with its own multi-factor authentication, is still required at an interval that policy sets and for high-privilege grants, requested by RFC 9470 step-up ([0017](/decisions/0017-identity-and-sign-in/#step-up)). Passkey registration runs on the local installation; the sign-in tiers and step-up are part of the core hardening (H5, [#795](https://github.com/truvity/sluis/issues/795), [#885](https://github.com/truvity/sluis/issues/885)). Until they land, sluis takes the upstream provider's multi-factor result as a fact.
 
 #### Added in v2
 
 These operations are new in v2; their paths and RPC names are fixed when each is built:
 
 - device login (RFC 8628), postponed ([#855](https://github.com/truvity/sluis/issues/855)): `POST /device_authorization`, `GET /device` and the `device_code` grant, with a verification page that needs a session with upstream MFA;
-- certificates for workloads, people and hosts: a Connect call for cert-manager's external-issuer library, and `sluis pki` and `sluis ssh` ([0023](/decisions/0023-certificate-authorities/));
-- static publication: public `GET` of CA certificates, CRLs, trust bundles, SSH CA keys and the key revocation list, exported by exporter@ ([0009](/decisions/0009-export/#what-is-exportable));
-- quota: the product's push of an allowance and the admit call for metered operations ([0039](/decisions/0039-quota-allowance/#the-push));
+- certificates for workloads, people and hosts, in the PKI, SSH and database add-on after parity: a Connect call for cert-manager's external-issuer library, and `sluis pki` and `sluis ssh` ([0023](/decisions/0023-certificate-authorities/));
+- static publication: public `GET` of CA certificates, CRLs, trust bundles, SSH CA keys and the key revocation list, exported by exporter@ with the directory driver in the core, and with the bucket driver and the edge purge in the Cloudflare add-on ([0009](/decisions/0009-export/#what-is-exportable));
+- quota: the usage stream and the limit check on the request path, with limits that the product writes ([0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/)); there is no allowance or balance in sluis;
+- KV: the Vault KV v2 subset that External Secrets reads, and `sluis kv` for staff ([0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/#amendment-of-2026-11-18-kv-is-a-building-block-built-in-the-core-phase));
 - the signing API: `SigningService.SignDetached`, a Connect call served by `exchange` through `entry`, for a caller with a CI identity token ([0024](/decisions/0024-root-custody-and-the-signing-api/#the-signing-api)).
 
 ### Resources each use case touches
@@ -220,7 +221,7 @@ Every use case also emits an audit fact through the audit emit port, which the m
 | Console reads and actions | open r | get r | get, list r | get r | |
 | Rotate signing keys, request intermediates | sign b | get b | create b | | |
 | Discovery and offline verification | | | | | static documents |
-| Admit a metered operation | mac r | | update r | | |
+| Check a limit and write a usage record (Quota phase) | mac r | | update r | | |
 
 The audit pieces use their own ports besides these: the blob, the transport and the index ([0028](/decisions/0028-audit-pieces/#four-pieces)).
 

@@ -240,7 +240,7 @@ actors:
   - name: ca
     family: work
     holder: false
-    purpose: "The X.509 certificate authority: host and workload SVIDs, sluis's own mutual-TLS certificates and database client certificates, each logged in its issuance log. The first working version makes the token certificate only, which is not logged (ADR 0023)."
+    purpose: "The X.509 certificate authority: host and workload SVIDs, sluis's own mutual-TLS certificates and database client certificates, each logged in its issuance log. Until the PKI add-on it makes the token certificate only, which is not logged, and that is optional and off in the core (ADR 0023, ADR 0006)."
     language: Go
     language_rule: R4
     placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "Never fused with entry (the fusion rule)." }
@@ -248,7 +248,7 @@ actors:
     calls: []
     egress: []
     key_purposes:
-      # The first working version uses only the intermediate: it signs the token certificate and certifies the token key
+      # Until the PKI add-on, ca uses only the intermediate, and only when the token certificate is on: it signs the token certificate and certifies the token key
       # (certify). The public key of the intermediate is not asked for. The rest below is what the registries tie to ca
       # (keys.yaml names ca explicitly among the users of grant, data and mac, and by the macro 'every work actor' for pseudonym,
       # and kinds.yaml makes IssuedCertificate sealed with ca as writer), so check-registries refuses a ca without it; v0 uses
@@ -289,11 +289,11 @@ actors:
   - name: quota
     family: work
     holder: false
-    purpose: "Keeps the allowance of each tenant, counts it down with a conditional update, refuses at zero, and records every admit, refusal and top-up as an audit fact."
+    purpose: "Reserved for the allowance engine of ADR 0039, which ADR 0046 superseded; not built, and sluis keeps no balance. Which actor serves the limit check of ADR 0046 is decided with its first caller."
     language: Rust
     language_rule: R11
     language_note: "Rust unless its design names a serious trade-off."
-    placement: { scope: beside-sluis, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "Runs beside sluis, sharing its store, or in an installation of its own." }
+    placement: { scope: beside-sluis, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "Reserved with the allowance engine; not built." }
     ports: [data, keys, audit-emit]
     calls: [policy]
     egress: []

@@ -453,7 +453,7 @@ A documented, versioned map says which PIV slot serves which purpose, one slot p
 
 | Slot | Purpose |
 |---|---|
-| `9c` | The board's X.509 intermediate, certified by ritueel's root |
+| `9c` | The board's X.509 intermediate, certified by ritueel's root (generated only when the PKI add-on turns the token certificate on; the core needs no slot `9c`) |
 | `9a` | Token signing |
 | `9d` | Key agreement (ECDH): unwraps data keys, the boundary's `grant` data key among them |
 
@@ -515,7 +515,7 @@ A directory re-sync of 1,000, 10,000 and 100,000 users takes 2.5 s, 26 s and 260
 |---|---|---|---|
 | `exchange` | 1 replay marker per token exchange | 0.76 | 20.0 |
 | `session` | 6 per sign-in (5% of tokens) | 0.24 | 6.3 |
-| `quota`, where a rule enforces | 2 per admit: the `AdmitRecord` and the conditional update of the allowance ([0039](/decisions/0039-quota-allowance/#countdown-and-refusal)) | 1.6 | 42.0 |
+| `quota` (reserved), where a rule enforces | 2 per admit: the `AdmitRecord` and the conditional update of the allowance ([0039](/decisions/0039-quota-allowance/#countdown-and-refusal)) | 1.6 | 42.0 |
 | Audit `writer`, 3 logs | 1 per sealed batch, at most 0.2 a second per log ([0029](/decisions/0029-the-audit-log/#sealing)) | 0.6 | 0.6 |
 | `witness`, 3 | 2 co-signatures per batch | 1.2 | 1.2 |
 | `indexer` | 1 per sealed batch, with the cursor | 0.6 | 0.6 |
@@ -524,7 +524,7 @@ A directory re-sync of 1,000, 10,000 and 100,000 users takes 2.5 s, 26 s and 260
 | **Total with `quota` enforcing** | | **7.0** | **72.7** |
 | **Total without enforcement** | | **5.4** | **30.7** |
 
-The three audit rows were counted as commits of the engine when the estimate was made. The writer and the witnesses keep their state in the audit blob and the index is an rqlite cluster of its own, so those rows overstate the load on store@'s engine and count towards the load of the board as a whole.
+The `quota` rows are the estimate of the allowance engine of 0039, which [0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/) superseded and which is not built; the limit check of 0046 has no figure yet, and the totals with `quota` enforcing are an upper bound until it has. The three audit rows were counted as commits of the engine when the estimate was made. The writer and the witnesses keep their state in the audit blob and the index is an rqlite cluster of its own, so those rows overstate the load on store@'s engine and count towards the load of the board as a whole.
 
 The design needs about 7 commits a second at the measured peak, 39 times below the budget of about 275 ([measured](/decisions/0037-capacity-is-measured-before-it-is-promised/#board-capacity); 29 times below the derated 200), and about 73 at the signing ceiling, 27% of the budget. The cards limit the installation before the store does, unless a hot quota allowance runs at the target of 100 admits a second, which alone takes about 200 commits a second ([0039](/decisions/0039-quota-allowance/#consistency-under-load)). Enforced `quota` is the largest writer, 23% of the total at the peak and 58% at the ceiling, so its load test matters most. The estimate reserves what is not yet known: the certificate rate, the size of directory passes, the lease time, the cost of a full-text commit and a slower follower. Re-measure when the actors exist.
 
@@ -550,7 +550,7 @@ Docker on a workstation is the development and CI form of bare-metal, one node: 
 ## Limits and residual risk
 
 - The YubiKey is physical. Whoever holds the board and the card, and knows the PIN, can sign. Keep the board in a controlled place. The card's PIN policy limits the exposure of a lost board until it is replaced.
-- eMMC wears under heavy writes. The spool and the data are small, and a blob store off the board keeps the audit chain. With the `fs` blob driver on the board, which is how the boards run today and is a stage until the R2 driver of ADR 0029 is built, the audit chain is only as durable as the board's disk: a reinstall loses the log of that board.
+- eMMC wears under heavy writes. The spool and the data are small, and a blob store off the board keeps the audit chain. With the `fs` blob driver on the board, which is how the boards run today and is a stage until the R2 driver of ADR 0029 is built (R2 belongs to the Cloudflare add-on), the audit chain is only as durable as the board's disk: a reinstall loses the log of that board.
 - A root-level compromise of a node defeats host-asserted identities (uid, cgroup). On a cloud VM, KMS key policies and CloudTrail limit and record what the stolen identity can do.
 - KMS is a regional service. A regional outage stops signing; there is no software fallback key, because the code refuses one in production.
 - A burst beyond the signing rate of the cards queues ([Board capacity](#board-capacity)).

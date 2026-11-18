@@ -6,7 +6,7 @@ sidebar:
   order: 0
 ---
 
-A sluis release publishes every artifact from `https://distribution.sluis.id/`, a Cloudflare R2 bucket, with no redirects. GitHub Releases holds the same files as the immutable record. Every artifact of a release carries the same version and ships together. The design is [0013](/decisions/0013-release-train-packaging-and-distribution/); how to check what you downloaded is [Release signing](/distribution/release-signing/).
+The design is that a sluis release publishes every artifact from `https://distribution.sluis.id/`, a Cloudflare R2 bucket, with no redirects. That site is not built yet: `v2.0.0-alpha.1` (2026-11-08) published its archives, checksums and SBOMs on GitHub Releases and its images on GHCR, and no package. GitHub Releases holds the same files as the immutable record. Every artifact of a release carries the same version and ships together. The design is [0013](/decisions/0013-release-train-packaging-and-distribution/); how to check what you downloaded is [Release signing](/distribution/release-signing/).
 
 ## At a glance
 
@@ -70,7 +70,7 @@ Every driver executable is a package of its own, so a host installs only what it
 | `sluis-console` | The console's static bundle |
 | `sluis-audit-writer` | The audit module: the writer and the witness |
 | `sluis-audit-search` | The audit module: the indexer and the reader |
-| `sluis-quota` | The quota module |
+| `sluis-quota` | Reserved with the `quota` actor, the allowance engine that [0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/) superseded; not built |
 | `sluis-host` | The root host service, mainly for [SSH](/integrations/infrastructure-access/#ssh); it never listens on the network |
 | `sluis-install-boards` | The meta-package of the boards installation |
 
@@ -93,7 +93,7 @@ Every dependency of every form, with the package names per family, is in the [ru
 
 ## The R2 layout
 
-The distribution site (#873), with its apt and dnf repositories, is v1 parity (decided 2026-11-07). The first working version publishes images, tarballs, checksums and SBOMs from GitHub Releases, and the layout below is the design for the site.
+The distribution site (#873), with its apt and dnf repositories, is v1 parity (decided 2026-11-07). The core publishes images, tarballs, checksums and SBOMs from GitHub Releases and GHCR, and the layout below is the design for the site.
 
 ```text
 apt/       dists/stable/{InRelease,Release,Release.gpg}
@@ -208,7 +208,7 @@ What a layer or an extension bundles is in the [runtime dependency matrix](/dist
 
 ## OCI images
 
-One image per process, so a container can run its one executable only. Multi-arch images are on GHCR as `ghcr.io/truvity/sluis/<kind>-<name>`, for example `ghcr.io/truvity/sluis/actor-entry`, from the first working version. No image is named `sluis`: that name belongs to v1. The tag is the release version, with no `latest`; pull by digest, and find every digest of a release in its `release-images.txt`.
+One image per process, so a container can run its one executable only. Multi-arch images are on GHCR as `ghcr.io/truvity/sluis/<kind>-<name>`, for example `ghcr.io/truvity/sluis/actor-entry`, since `v2.0.0-alpha.1`. No image is named `sluis`: that name belongs to v1. The tag is the release version, with no `latest`; pull by digest, and find every digest of a release in its `release-images.txt`.
 
 - The base is distroless `static`, or distroless with glibc and a pinned `pcsc-lite` for a cgo executable. What an image installs, and what stays on the host (pcscd, the CCID driver, polkit), is in the [runtime dependency matrix](/distribution/dependencies/).
 - The executable sits at the package's path, `/usr/libexec/sluis/actors/<name>` or `/usr/libexec/sluis/drivers/<owner>/<name>`, byte for byte, and a label names its source package. A release test compares the images' binaries with the packages' files by hash.
@@ -257,7 +257,7 @@ Each archive has an SPDX 2.3 JSON SBOM beside it, `<archive>.sbom.spdx.json`, an
 
 From the parity milestone the chart is an OCI artifact at `ghcr.io/truvity/sluis/charts/sluis`, packaged by truvity/ocictl from the same build, and a chart's version is the release version. A chart pins every image by digest, so it installs exactly the images released with it.
 
-- **One `sluis` chart** with a piece selector and the presets `install`, `audit-install`, `quota-install` and `kubernetes-dev`, and no subcharts, so a writer and a reader always come from one release. A holder's pod runs the holder's image with its drivers as native sidecar containers. The console runs as its own Deployment behind the same route as `entry`.
+- **One `sluis` chart** with a piece selector and the presets `install`, `audit-install` and `kubernetes-dev`, and no subcharts, so a writer and a reader always come from one release. A holder's pod runs the holder's image with its drivers as native sidecar containers. The console runs as its own Deployment behind the same route as `entry`.
 - **The cert-manager issuer** has a chart of its own, with its CRDs and RBAC. The certificate sidecar is an image plus a documented container snippet.
 
 ```sh
@@ -275,7 +275,16 @@ Before the first tag, once:
 - **Immutable releases.** Turn on "Immutable releases" in the repository settings (Settings, General, Releases) so that a published release cannot change. `main` already protects its commits. The release job fails closed (owner decision, 2026-11-12): it stops, before it changes anything, when it cannot establish that the release will be immutable. It reads the setting first; if the setting is off, it stops. The token of a workflow has no "Administration: read" permission and is usually refused that read (HTTP 403 or 404); then the job looks at the most recent published release, whose `immutable` flag any token with `contents: read` can see, and stops unless it is `true` (the setting was on when that release was published). Any other failure of the read (the network, a server error, an answer that is not a boolean) stops the job too. After the job has made the release public it reads the release's `immutable` flag again (a few times, as GitHub sets it while publishing); if the flag is not `true`, or cannot be read, the job fails with a message that the release was published without immutability. That release is already public, so the owner checks it by hand and decides whether the version can be kept.
 - **The tag rulesets on `v2.*`, applied by the owner.** `v2-tags-create` lets only the owner create a tag that matches `v2.*`, and `v2-tags-immutable` lets nobody update or delete one. Both exist. Without the first, anyone with write access to the repository could tag a branch whose copy of `release.yaml` has no gate: GitHub runs the workflow file of the tagged commit, so the gate lives in the file it protects and cannot stop that. What stops it is that only the owner can create the tag. There is no `environment: release` and no approval step, by the owner's decision.
 
-For each release:
+For each release the steps run in this order:
+
+```mermaid
+flowchart LR
+  cl["CHANGELOG heading<br/>renamed on main"] --> cand["Candidate:<br/>build once, install"]
+  cand --> tag["maintainer signs<br/>and pushes the tag"]
+  tag --> gate["gate"]
+  gate --> rel["release:<br/>the candidate's bytes"]
+  rel --> pub["GitHub release<br/>and GHCR images"]
+```
 
 1. Rename `## Unreleased` in `CHANGELOG.md` to the version (`## 2.0.0-alpha.2`), in a pull request that merges to `main`. The push of that commit starts the release candidate ([The release candidate](#the-release-candidate)): wait for the run of `Checks` and the run of `Candidate` on `main` for that commit to finish green. A failure of either costs no version number: fix it on `main` and build it again as "The release candidate" says (a changed first `## ` heading line, or a re-run of the failed job). Also add the SHA-256 of the previous release's published `SHA256SUMS` to `deploy/verify/previous.sums` when a release becomes the previous one (`deploy/verify/previous.sh` says how). The text of the changelog section is the release's notes; a release with no such section fails.
 2. Tag that commit and push the tag, one tag per push (GitHub starts no workflow for a push of more than three tags):

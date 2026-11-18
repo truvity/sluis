@@ -6,7 +6,7 @@ sidebar:
   order: 1
 ---
 
-**No release artifact is signed in the first working version or in v1 parity** (the maintainer decided on 2026-11-07, [0013](/decisions/0013-release-train-packaging-and-distribution/#signing-and-checksums)). A release carries checksums and SBOMs, and the maintainer signs each tag by hand. The signing of release artifacts, keyless or OpenPGP, is in Backlog with the staff key and GPG work ([Roadmap](/roadmap/#later)). The rest of this page is the design for when it returns, and a row marked Backlog is made by no release yet.
+**No release artifact is signed in the core or in v1 parity** (the maintainer decided on 2026-11-07, [0013](/decisions/0013-release-train-packaging-and-distribution/#signing-and-checksums)). A release carries checksums and SBOMs, and the maintainer signs each tag by hand. The signing of release artifacts, keyless or OpenPGP, is in Backlog with the staff key and GPG work ([Roadmap](/roadmap/#later)). The rest of this page is the design for when it returns, and a row marked Backlog is made by no release yet.
 
 The design: releases carry GitHub build-provenance attestations and keyless cosign signatures on images, made by the CI build with no stored key. Nothing is signed with a sluis key or with OpenPGP until [ritueel](https://ritueel.id) has held its first ceremony and its drill, because a signature that a later root does not vouch for teaches users to trust a key that is then thrown away. From then on, releases are signed through sluis's own signing API with a release subkey held in a cloud key service: detached signatures first, then signed apt and dnf metadata ([0024](/decisions/0024-root-custody-and-the-signing-api/#signed-releases)).
 
@@ -128,6 +128,8 @@ CI has no static upload key and no release signing key.
 4. CI uploads the files with that token, and the token expires.
 
 Only the workflow identity that the policy names can obtain the token, so a fork or a pull request can't publish.
+
+This path needs the GitHub add-on (the `github-oidc` verifier) and the Cloudflare add-on (the R2 minter on the shared Cloudflare client), and neither exists yet. Until they do, CI publishes to GitHub Releases and GHCR with the workflow's own token.
 
 ## What a check does not prove
 
