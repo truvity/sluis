@@ -133,6 +133,30 @@ This is the Lambda trigger that the part "Publishing public material" above left
 
 2026-11-18 (maintainer decision A4 A; [0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/#amendment-of-2026-11-18-kv-is-a-building-block-built-in-the-core-phase)). KV is a building block of the core phase, built before the Lambda and Kubernetes shapes. A consumer, External Secrets among them, reads KV through the Vault KV v2 subset, so the **store of record** destination of "Destinations" above is not the path for consumers and is not built for them. A board installation needs no cloud for its consumers. The store-of-record text of the Context and the amendment of 2026-11-12 above are read that way. Secret sources stay read-only, written by infrastructure code for what sluis needs to start (principle 17 stands), and exporter@ still publishes public material only.
 
+### Amendment of 2026-11-18: the edge and the exporter in the core
+
+2026-11-18 (maintainer decisions E1, E2 A and L2; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv)). Read "The edge", "The order and the time", the Consequences and the Follow-ups with these changes.
+
+- **The core holds the directory driver and the static key set only.** The bucket driver, the purge and the credential for it belong to the Cloudflare add-on, and sluis holds no Cloudflare credential in the core (E2 A). The sentence that exporter@ is in the first version "and then the bucket and the purge for the boards" describes the add-on, and [#1454](https://github.com/truvity/sluis/issues/1454) is the add-on's work.
+- **In the core the edge is set by documented rules, not by sluis.** Every production shape sits behind the Cloudflare edge (E1), and the shared rules make the key set and the discovery document cacheable with a cache time below the pre-publish time of a key, so a new key is in every cache before it signs. A revoked key leaves the key set of `entry` and of the directory at once; a copy held at the edge expires with its cache time.
+- **The purge, the 60-second target and the 65-minute stale window belong to an installation that has the add-on.** Where there is no purge, step 2 of the four steps does not exist and `published` needs the write and the read back ([REQ-EXPORT-021](/requirements/export/#REQ-EXPORT-021) already allows "no edge to purge"). The time a revoked key stays verifiable in the core is measured by the drill of [0041](/decisions/0041-a-compromised-key-is-revoked-then-replaced/), and no figure is claimed here.
+
+The trigger on Lambda is in a picture; the amendment above of the same date has the rules.
+
+```mermaid
+sequenceDiagram
+    participant T as store table
+    participant S as DynamoDB Streams
+    participant E as exporter@
+    participant R as store@
+    participant D as destination
+    T->>S: exportable item changed
+    S->>E: wake
+    E->>R: read the kinds
+    E->>D: write the documents
+    Note over E: a daily run rebuilds and removes
+```
+
 ## Consequences
 
 - What leaves sluis is a short, reviewed list, and a reader of the registry can see every export and its consumer.

@@ -1,6 +1,7 @@
 # 0047 — KV is a building block of stores that no tenant owns: policy decides by path, each store has its own data key, and External Secrets reads it through a Vault KV v2 subset
 
 **Status:** Accepted
+**Layer:** building block
 **Date:** 2026-11-12
 
 Proposal: [issue #798](https://github.com/truvity/sluis/issues/798), maintainer decisions K1 A, K2 A, K3, K4, K5 A and K6 A, 2026-11-12.

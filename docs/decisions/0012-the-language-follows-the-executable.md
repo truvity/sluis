@@ -100,6 +100,24 @@ A fallback is not chosen in advance. When a spike fails, the maintainer picks th
 | `sluis-node`, `sluis-host` | Go |
 | Connect for Rust (S1) | The gRPC protocol through tonic, or a hand-written unary codec |
 
+### Amendment of 2026-11-18: the per-actor table reads with the core
+
+2026-11-18 (maintainer decisions K2 B, A3 B, A4 A, X1 A and the order of [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv)). The last column of the table is "First working version"; it reads "the core", and the core now holds Lambda and Kubernetes. The rows change as follows; a rule is not changed, and the languages follow R5 and R11 as written.
+
+| Component | Language | Rule | In the core |
+|---|---|---|---|
+| `exporter@` | Rust | R11 | yes: the directory driver and the static key set; the bucket driver and the purge are the Cloudflare add-on |
+| AWS drivers: `dynamodb`, `appconfig`, SSM, `aws-kms`, `sqs`, the `s3-compatible` blob | Rust | R5 | yes: Lambda and Kubernetes need them |
+| The `postgres` driver of store@ (`Get`, `Query`, `Transact`, `TailLog`, K2 B) | Rust | R5, R11: an engine driver with no vendor SDK, like `rqlite` | yes |
+| The `postgres` index, `nats-jetstream` | Go | R5, R6 | yes: the Kubernetes installation needs them |
+| Witness drivers, the OpenBao and Kubernetes destinations of exporter@ | Go | R5, R6 | no |
+| `kv` ([0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/)) | Rust: it runs on a tier-0 board and holds no credential at rest | R11 | yes: built after the core features |
+| `console` | as above | R11 | no: the actor is part of the core layer and is built in Parity (A3 B) |
+| `ca` | Go | R4 | built, and off in the core (X1 A) |
+| `quota` | | | no actor: [0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/) superseded the allowance engine |
+
+A later design that names a serious trade-off changes a row, as R11 says.
+
 ## Consequences
 
 - More of sluis moves to Rust on the boards. Reviewers read more Rust, and the Rust gates cover more components; each move waits for the Rust kit to pass the suite.

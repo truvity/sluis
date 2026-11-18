@@ -1,6 +1,7 @@
 # 0042 — sluis syncs company-issued OpenPGP keys to staff GitHub accounts
 
 **Status:** Accepted
+**Layer:** add-on
 **Date:** 2026-11-06
 
 Proposal: [issue #1488](https://github.com/truvity/sluis/issues/1488).

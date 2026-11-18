@@ -1,6 +1,7 @@
 # 0045 — Customers sign in through the upstream identity provider, realms follow boundaries, and the sluis token carries customer, organisation and product
 
 **Status:** Accepted
+**Layer:** customer identity
 **Date:** 2026-11-12
 
 Proposal: [issue #782](https://github.com/truvity/sluis/issues/782), maintainer decisions D1 B, D3 and D7 A, 2026-11-12.

@@ -1,6 +1,7 @@
 # 0023 — The ca and ssh-ca actors are the certificate authorities; every leaf has a fixed profile and a short lifetime
 
 **Status:** Accepted; amended by 0044
+**Layer:** add-on
 **Date:** 2026-11-12
 
 Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).

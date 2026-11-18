@@ -1,7 +1,7 @@
 # 0032 — A customer-identity installation is a front and a few customer boundaries whose tenants each have their own data keys, a tenant's client IDs carry its name, and a move keeps every subject
 
 **Status:** Accepted; amended by 0045
-**Layer:** CIAM module
+**Layer:** customer identity
 **Date:** 2026-11-12
 
 Proposal: [issue #1023](https://github.com/truvity/sluis/issues/1023).
@@ -65,6 +65,10 @@ Maintainer decisions D1 B, D3 and D7 A, 2026-11-12 ([0045](/decisions/0045-custo
 - **Single sign-on at the broker as the shape of the installation,** the pairwise `sub` per tenant sector, the issuer host per tenant and the client IDs of the form `<tenant>:<name>` ([REQ-ISO-116](/requirements/iso/#REQ-ISO-116), [REQ-ISO-077](/requirements/iso/#REQ-ISO-077) and the sector rows are withdrawn).
 - **"sluis stores no organisation membership and no tenant claim"** (the bullet under Tenants) is replaced. sluis still stores no membership list. The sluis token carries `customer`, `org` and `product`, which `exchange` sets from the upstream token ([0020](/decisions/0020-grant-vocabulary-and-token-claims/#amendment-of-2026-11-12-customer-organisation-and-product)).
 - **Realms follow boundaries.** One installation serves one boundary and trusts the one realm of that boundary.
+
+### Amendment of 2026-11-18: the customer identity phase is 0045's scope
+
+2026-11-18 (maintainer decisions Order, Placement and Customer identity; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv)). The phase [Customer identity and quota](/roadmap/#customer-identity-and-quota) is the scope of [0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/): the exchange of a token of the trusted realm for a sluis token with customer, org and product. It builds no customer front, no issuer host per tenant and no sector. Read this record with its amendment of 2026-11-12 and with 0045; what it says about the front, the tenants' client IDs and the pairwise subject stays superseded. The Kubernetes installation of the core is not "the customer-identity installation" ([0011](/decisions/0011-runtimes-and-installations/#amendment-of-2026-11-18-the-order-after-the-core-and-what-the-table-and-the-chapters-read-as)).
 
 ## Consequences
 

@@ -1,6 +1,7 @@
 # 0030 — Audit records are OCSF events with one `unmapped.sluis` object, and usage is a separate stream from the same call
 
 **Status:** Accepted; amended by 0046
+**Layer:** building block
 **Date:** 2026-11-12
 
 Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
@@ -165,6 +166,10 @@ Decided 2026-11-07, before the first release, because a log of test data is chea
 ### Amendment of 2026-11-12: the usage guarantee
 
 Maintainer decision D4 A, 2026-11-12 ([0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/)). A usage fact is never dropped: its idempotency key is `source` plus `id`, the write fails if the record cannot be stored, and an emitter does not take the best-effort path for it. Usage is aggregated per customer, organisation and product, the claims of the sluis token ([0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)). Only `quota` sending the facts of an allowance (the bullet under The usage stream) no longer applies: the allowance of [0039](/decisions/0039-quota-allowance/) is superseded.
+
+### Amendment of 2026-11-18: no allowance facts
+
+2026-11-18 ([0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/), maintainer decisions Quota and Order; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv)). The usage stream stands and is built right after the core, with the limit check. The allowance of [0039](/decisions/0039-quota-allowance/) is not built, so the `quota` action rows (an admit, a refusal or a push of an allowance), the sentence "Only `quota` sends the facts of an allowance" and the link to the billing log of 0039 describe a superseded design. An application's usage part carries meters ([0040](/decisions/0040-meters-and-usage-evidence/)), and a product builds its billing log from the usage stream outside sluis.
 
 ## Consequences
 

@@ -134,6 +134,10 @@ The first working version has the `console` actor and no pages. So that the cons
 
 Rules 1, 4, 6, 7, 8, 9, 10 and 11 are requirements (Consequences); rules 2, 3 and 5 are guidance for review.
 
+### Amendment of 2026-11-18: the console is core and is built in Parity (A3 B)
+
+2026-11-18 (maintainer decision A3 B; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv); [Parity](/roadmap/#parity)). The console is part of the core layer, not an add-on, and it is built in the Parity phase. "The first working version has the `console` actor and no pages" reads: the console, the actor and its pages, is built in Parity. The rules of this record stand as written.
+
 ## Consequences
 
 - The console has no role store of its own and no grant it can give; a stolen operator session can tighten and configure what the profiles allow and cannot widen authority.

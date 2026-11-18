@@ -7,7 +7,7 @@
 <!--
 Copy this file to NNNN-short-title.md and fill it in. Delete these comments.
 Status: Proposed, Accepted, Rejected, Superseded by NNNN, or Accepted; amended by NNNN.
-Layer: core, CIAM module or quota module. Optional: leave the line out for a core record.
+Layer: core, building block, shared building block, add-on, customer identity or quota. Optional: leave the line out for a core record.
 Keep the text public and generic: no private deployment, account, hostname, ticket
 or person other than the maintainer. Use example.com, acme and globex.
 Each road not taken is one bullet: the option in bold, then why it lost.

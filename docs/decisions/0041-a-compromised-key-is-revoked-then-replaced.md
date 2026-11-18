@@ -161,6 +161,13 @@ These decisions are accepted as risks and not as solutions. Each is written in t
 
 2026-11-18 (maintainer decision H6; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv)). A compromised key is revoked, then replaced, in the core phase, as core security hardening and part of the core's definition of done ([The core is done when](/roadmap/#the-core-is-done-when)). The flow of this record is built for every key that the core and its shapes hold, the four first-version items of the Follow-ups first. The intermediate and SSH CA procedures belong to the PKI add-on and follow its phase.
 
+### Amendment of 2026-11-18: the times without a purge, and the follow-ups of the core
+
+2026-11-18 (maintainer decisions E1 and E2 A; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv); [0009](/decisions/0009-export/#amendment-of-2026-11-18-the-edge-and-the-exporter-in-the-core)). Read the times and the follow-ups with these changes.
+
+- **The purge is the Cloudflare add-on's,** and sluis holds no Cloudflare credential in the core. "The 60 seconds of the purge target", "about 6 minutes" and "about 11 if the purge fails" are the figures of an installation that has the add-on. In the core a revoked key leaves the key set of `entry` and the directory at once, and an edge copy expires with its cache time, which the edge rules set below the pre-publish time of a key. The first drill of the core measures the time; no figure is claimed here.
+- **The "v1 parity" bullet of the Follow-ups** is read with the amendment above: the items for a key that the core and its shapes hold are built in the core phase, and the intermediate and SSH CA procedures follow the PKI add-on.
+
 ## Consequences
 
 - **A compromised token-signing key stops verifying in about 6 minutes while `exporter@` can read the store (about 11 if the purge fails, longer for the static copy if it cannot), and not after about 1 h 45** (the lead time of 30 minutes, the 65 minutes of retention and 10 minutes of cache, which a healthy rotation would apply). The cost is one refresh per live client in the first minutes, and an unfamiliar-key window on a single-key installation for verifiers that refetch with a throttle.

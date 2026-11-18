@@ -65,8 +65,8 @@ function expect(name, check, files, want, { env = {}, has = [], lacks = [], comm
 // ---- C1 decisions: the real template and README, with an index of one record
 const template = readFileSync(join(repo, 'docs/decisions/0000-template.md'), 'utf8');
 const readme = readFileSync(join(repo, 'docs/decisions/README.md'), 'utf8')
-  .replace(/(## Index\n)[\s\S]*$/, '$1\n| ADR | Decision | Status |\n|-----|----------|--------|\n');
-const row = (n, slug, status) => `| [${n}](${n}-${slug}.md) | A decision | ${status} |\n`;
+  .replace(/(## Index\n)[\s\S]*$/, '$1\n| ADR | Decision | Layer | Status |\n|-----|----------|-------|--------|\n');
+const row = (n, slug, status, layer = 'core') => `| [${n}](${n}-${slug}.md) | A decision | ${layer} | ${status} |\n`;
 const GOOD = ['- **Another way.** It lost, for a reason.'];
 const PROPOSAL = 'Proposal: [issue #1](https://github.com/truvity/sluis/issues/1).';
 const record = ({ num = '0001', status = 'Accepted', layer = '', date = '2026-10-31', drop = '', roads = GOOD, extra = [], proposal = PROPOSAL, body = 'Text.' } = {}) =>
@@ -98,7 +98,8 @@ expect('a line of the template comment left in', 'decisions', adr(one({ extra: [
 expect('no records', 'decisions', { ...adr({}, ''), 'docs/decisions/0001-we-use-the-example.md': undefined }, 'fail', { has: ['empty sweep'] });
 expect('a missing section', 'decisions', adr(one({ drop: 'Consequences' })), 'fail', { has: ['## Consequences'] });
 expect('no follow-ups', 'decisions', adr(one({ drop: 'Follow-ups' })), 'fail', { has: ['## Follow-ups'] });
-expect('a layer of a later module', 'decisions', adr(one({ layer: 'CIAM module' })), 'pass');
+expect('a layer of a later phase', 'decisions', adr(one({ layer: 'customer identity' }), row('0001', 'we-use-the-example', 'Accepted', 'customer identity')), 'pass');
+expect('an index layer that differs', 'decisions', adr(one({ layer: 'quota' })), 'fail', { has: ['says layer "core"'] });
 expect('an unknown layer', 'decisions', adr(one({ layer: 'billing' })), 'fail', { has: ['layer "billing" is not one of'] });
 expect('the layer line after the date', 'decisions', adr({ 'docs/decisions/0001-we-use-the-example.md': record().replace('**Date:** 2026-10-31', '**Date:** 2026-10-31\n**Layer:** core') }), 'fail', { has: ['out of the template'] });
 expect('an unknown status', 'decisions', adr(one({ status: 'Maybe' })), 'fail', { has: ['not one of'] });

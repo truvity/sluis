@@ -152,6 +152,15 @@ The design is described at three levels, and the output of each is the input of 
 - **The engines are reached only through store@'s drivers.** DynamoDB and rqlite are chosen per installation ([0005](/decisions/0005-the-store/#engines)).
 - **`sluis-node` holds no key credential.** It issues each unit a short-lived workload token and asks key@ to sign it, with a key purpose of its own on boards ([0022](/decisions/0022-workload-identity-and-host-enrolment/), [0006](/decisions/0006-keys-and-sealing/#key-purposes)).
 
+### Amendment of 2026-11-18: the layers, no quota actor, and the `kv` actor
+
+2026-11-18 (maintainer decisions Order, Quota, A1 A and A4 A; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv); the [roadmap](/roadmap/#a-core-building-blocks-and-add-ons)). Read the text above with these changes.
+
+- **The layers are the core, the core building blocks, the shared building blocks and the add-ons.** "Identity, audit and quota are modules" names the layers of the earlier plan. The foundation stays store@, exporter@ and key@. The core building blocks are store, key, policy, audit with usage and limits, and KV. Each record's `Layer` line in the [index](https://github.com/truvity/sluis/blob/main/docs/decisions/README.md) says which layer it belongs to.
+- **There is no `quota` actor and no quota module.** The `quota` row of the table and the sentence "the quota module is `quota`" describe the allowance engine of [0039](/decisions/0039-quota-allowance/), which [0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/) superseded and which is not built. The usage stream and the limit check of 0046 belong to audit with usage and limits, and are built in the phase [Customer identity and quota](/roadmap/#customer-identity-and-quota). "The work actors other than `quota`" reads "the work actors".
+- **The engine is chosen per installation among `rqlite`, `dynamodb` and, on Kubernetes, `postgres` through CloudNativePG** (K2 B, [0005](/decisions/0005-the-store/#amendment-of-2026-11-18-kubernetes-stores-in-postgresql-through-cloudnativepg)). "DynamoDB and rqlite are chosen per installation" reads that way, here and in [0008](/decisions/0008-boundaries-and-tenants/).
+- **`kv` is a work actor** ([0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/), decision A4 A): versioned static secrets in stores that no tenant owns, with no credential at rest. It is not a row of the table above. The `console` actor belongs to the core layer and is built in the Parity phase (decision A3 B).
+
 ## Consequences
 
 - A flaw in request parsing in `entry` reaches no key, no storage credential and no audit credential, and `entry` cannot send anything out. To obtain a credential an attacker needs a grant that `policy` sealed and a holder that accepts it.

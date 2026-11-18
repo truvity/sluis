@@ -21,7 +21,7 @@ A record is `NNNN-short-title-in-kebab-case.md`. A new record takes the number a
 Every record has these parts, in this order:
 
 - **Status.** One of `Proposed`, `Accepted`, `Rejected`, `Superseded by NNNN`, or `Accepted; amended by NNNN`.
-- **Layer.** Optional. One of `core`, `CIAM module` or `quota module`: the part of the product the decision belongs to ([roadmap](../roadmap.md)). A record with no Layer line is core.
+- **Layer.** Optional. One of `core`, `building block`, `shared building block`, `add-on`, `customer identity` or `quota`: the layer of the product the decision belongs to ([roadmap](../roadmap.md#a-core-building-blocks-and-add-ons)). A record with no Layer line is core, and so is a record that spans the layers, such as the installations or the release train.
 - **Date.** The day the status last changed.
 - **Context.** The forces at play. What problem, what constraints, what the reader needs to know.
 - **Decision.** What we do, in the active voice.
@@ -53,70 +53,57 @@ On 2026-11-03 the records were renumbered a second time, without any change of c
 
 ## Index
 
-Records are grouped by the layer of the product they belong to: the core, then the CIAM and quota layers, which the re-plan of 2026-11-12 cancelled ([roadmap](../roadmap.md)). Each record's `Layer` line says which. Two records of the CIAM layer, [0036](0036-volumetric-abuse.md) and [0038](0038-fapi-2-profile.md), are core again since 2026-11-18 and sit in the core table.
+Records are in number order, and the Layer column says which layer of the product each belongs to; it is the record's own `Layer` line ([roadmap](../roadmap.md#a-core-building-blocks-and-add-ons)). The layers are the core (and what spans it: installations, release, the site), the core building blocks, the shared building blocks, the add-ons, and two phases that follow the core with a narrow scope since 2026-11-18: customer identity and quota. The CIAM broker records (0031, 0033, 0034 and 0035) and the allowance engine of 0039 stay superseded. A record that was amended on 2026-11-18 keeps its body, and its dated amendments say how to read it.
 
-### Core
-
-| ADR | Decision | Status |
-|-----|----------|--------|
-| [0001](0001-v1-and-v2-lines.md) | v1 and v2 are two lines that coexist until v2 replaces v1 | Accepted |
-| [0002](0002-families-of-actors.md) | Actors form four families: work actors hold no credential at rest, and only the data, keys and audit families hold credentials | Accepted |
-| [0003](0003-units-transports-and-fusion.md) | One model, many transports: a unit per actor, the same calls over sockets, invokes and pods, and fusion only by explicit choice | Accepted |
-| [0004](0004-the-data-model.md) | Data is resource kinds in a compiled registry, each with an address, one storage class, a treatment, a profile and one writer | Accepted; amended by 0047 |
-| [0005](0005-the-store.md) | store@ holds every storage credential: one generic store service, typed clients, drivers private to their owner, and signed configuration loaded as a whole | Accepted |
-| [0006](0006-keys-and-sealing.md) | key@ holds a boundary's keys: it seals, opens and signs in place, with five data keys per tenant and one key per purpose and algorithm | Accepted; amended by 0047 |
-| [0007](0007-policy-and-sealed-grants.md) | Policy is Cedar in a Rust actor over four layers, and every tenant-scoped write carries a grant that policy sealed | Accepted; amended by 0047 |
-| [0008](0008-boundaries-and-tenants.md) | A boundary is the unit of keys and policy on a cumulative ladder from L0 to L4, and a tenant is a scope with data keys of its own | Accepted |
-| [0009](0009-export.md) | exporter@ publishes the kinds marked exportable to destinations outside sluis, never to a secret source | Accepted; amended by 0044 |
-| [0010](0010-backup-and-recovery.md) | A backup is a logical archive of the authoritative kinds through the store; a regional outage is accepted and a drill measures recovery | Accepted |
-| [0011](0011-runtimes-and-installations.md) | Runtimes are three kinds, four installations are tested, and delivery goes local first, with the boards' cards in the first version, then the rest of the boards, Lambda and Kubernetes in parallel | Accepted; amended by 0044 |
-| [0012](0012-the-language-follows-the-executable.md) | The language follows the executable: Go by default, Rust at the edge, in the trusted base, in cloud drivers and on the smallest boards | Accepted |
-| [0013](0013-release-train-packaging-and-distribution.md) | One repository, one version, one release train, and packaging follows the runtime | Accepted |
-| [0014](0014-the-site-is-static-on-cloudflare-workers.md) | The site is static on Cloudflare Workers, deployed by GitHub Actions, with a live status API | Accepted |
-| [0015](0015-evolution-and-compatibility.md) | Evolution and compatibility: N and N-1 inside a major version, a parallel cutover from v1, and v1's history stays where it is | Accepted |
-| [0016](0016-telemetry.md) | Telemetry is OpenTelemetry with fixed conventions, and a log level is raised at run time only with an expiry | Accepted |
-| [0017](0017-identity-and-sign-in.md) | Each boundary has its own issuer, a token has one audience, people sign in with passkeys and step-up, and break-glass recovery uses passkeys held in config | Accepted; amended by 0045 |
-| [0018](0018-sessions.md) | Sessions have three classes with limits per class, and session chains are temp kinds | Accepted |
-| [0019](0019-person-and-upstream-link.md) | A person is tied to an upstream account by issuer and subject claim | Accepted |
-| [0020](0020-grant-vocabulary-and-token-claims.md) | Grant names come from a declared vocabulary, and a token carries fixed claims for one audience | Accepted; amended by 0045 |
-| [0021](0021-clients.md) | Clients: installation clients are config, tenant clients are durable, and a self-described client is admitted only from allow-listed hosts | Accepted; amended by 0047 |
-| [0022](0022-workload-identity-and-host-enrolment.md) | Workload identity follows SPIFFE, and hosts enrol the same way | Accepted; amended by 0047 |
-| [0023](0023-certificate-authorities.md) | The ca and ssh-ca actors are the certificate authorities; every leaf has a fixed profile and a short lifetime | Accepted; amended by 0044 |
-| [0024](0024-root-custody-and-the-signing-api.md) | sluis holds no root: it asks root custody to certify its intermediates, and signs artifacts through a signing API | Accepted; amended by 0044 |
-| [0025](0025-integrations.md) | Integrations are adapters, work actors that return facts or carry out authorised effects, hold nothing at rest, and mint only for declared targets | Accepted |
-| [0026](0026-reconcilers.md) | A reconciler manages membership only, one per target under a lease | Accepted |
-| [0027](0027-the-console.md) | The console checks delegation and routes writes, and its pages follow the storage class and profile of what they show | Accepted |
-| [0028](0028-audit-pieces.md) | Audit is four pieces joined by a transport, search is an index fed from the log, and an audit installation has its own front | Accepted |
-| [0029](0029-the-audit-log.md) | The audit log is a tiled log in a blob, sealed by its one writer, with pseudonyms, lifecycle tiers and per-tenant keys | Accepted; amended by 0046 |
-| [0030](0030-audit-records-and-the-usage-stream.md) | Audit records are OCSF events with one `unmapped.sluis` object, and usage is a separate stream from the same call | Accepted; amended by 0046 |
-| [0036](0036-volumetric-abuse.md) | Volumetric abuse is stopped at the edge, and sluis bounds what one connection, client or source can cost with a token bucket kept as a temp kind | Accepted; amended by 0044 |
-| [0038](0038-fapi-2-profile.md) | FAPI 2.0 is a profile a client declares, with PAR, DPoP, private-key client authentication and its own signing algorithm, and sender constraint is declared per audience | Accepted; amended by 0044 |
-| [0041](0041-a-compromised-key-is-revoked-then-replaced.md) | A compromised key is revoked, then replaced: it leaves at once, its replacement signs at once, and only a person declares | Accepted |
-| [0042](0042-sluis-syncs-company-issued-openpgp-keys-to-staff-github-accounts.md) | sluis syncs company-issued OpenPGP keys to staff GitHub accounts | Accepted |
-| [0043](0043-a-person-binds-their-own-keys-to-their-identity-in-sluis.md) | A person binds their own keys to their identity in sluis: sluis checks the proof and the card attestation on the server, records a binding, and certifies, lists and syncs only card-born keys | Accepted; amended by 0044 |
-| [0044](0044-sluis-v2-is-a-core-building-blocks-and-add-ons.md) | sluis v2 is a core, building blocks and add-ons, and the first working version is the core | Accepted |
-| [0045](0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product.md) | Customers sign in through the upstream identity provider, realms follow boundaries, and the sluis token carries customer, organisation and product | Accepted |
-| [0046](0046-usage-records-are-never-dropped-and-balances-live-in-the-product.md) | Usage records are a class that is never dropped, and plans and balances live in the product | Accepted |
-| [0047](0047-kv-is-an-add-on-of-stores-that-no-tenant-owns.md) | KV is a building block of stores that no tenant owns: policy decides by path, each store has its own data key, and External Secrets reads it through a Vault KV v2 subset | Accepted |
-
-### CIAM module (cancelled on 2026-11-12, see [0045](0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product.md))
-
-| ADR | Decision | Status |
-|-----|----------|--------|
-| [0031](0031-ciam-is-a-broker.md) | CIAM is a broker: a customer-identity product owns the accounts, sluis owns the session and the tokens, and the contract between them is written down | Superseded by 0045 |
-| [0032](0032-customer-identity-installations.md) | A customer-identity installation is a front and a few customer boundaries whose tenants each have their own data keys, a tenant's client IDs carry its name, and a move keeps every subject | Accepted; amended by 0045 |
-| [0033](0033-customer-connections.md) | An installation federates to a fixed set of upstreams that its operator declares, and a customer installation sees exactly one | Superseded by 0045 |
-| [0034](0034-end-users-and-upstream-signals.md) | An end user is a person with five states, erased by deleting its records, and upstream signals end sessions or suspend and erase | Superseded by 0045 |
-| [0035](0035-customer-pages.md) | Customer pages are few, branded per client and login domain, and localised per request | Superseded by 0045 |
-| [0037](0037-capacity-is-measured-before-it-is-promised.md) | Capacity is measured before it is promised: a dated spike of the signing path, the hops to store@ and key@, the engines and the audit writer, and tokens stay signed in place meanwhile | Accepted |
-
-### Quota module (balance cancelled on 2026-11-12, see [0046](0046-usage-records-are-never-dropped-and-balances-live-in-the-product.md))
-
-| ADR | Decision | Status |
-|-----|----------|--------|
-| [0039](0039-quota-allowance.md) | Quota holds an allowance per tenant that the product pushes, counts it down, refuses at zero and records every fact | Superseded by 0046 |
-| [0040](0040-meters-and-usage-evidence.md) | A meter has a name, a unit and a kind, and only declared outcomes become usage evidence | Accepted |
-
+| ADR | Decision | Layer | Status |
+|-----|----------|-------|--------|
+| [0001](0001-v1-and-v2-lines.md) | v1 and v2 are two lines that coexist until v2 replaces v1 | core | Accepted |
+| [0002](0002-families-of-actors.md) | Actors form four families: work actors hold no credential at rest, and only the data, keys and audit families hold credentials | core | Accepted |
+| [0003](0003-units-transports-and-fusion.md) | One model, many transports: a unit per actor, the same calls over sockets, invokes and pods, and fusion only by explicit choice | core | Accepted |
+| [0004](0004-the-data-model.md) | Data is resource kinds in a compiled registry, each with an address, one storage class, a treatment, a profile and one writer | core | Accepted; amended by 0047 |
+| [0005](0005-the-store.md) | store@ holds every storage credential: one generic store service, typed clients, drivers private to their owner, and signed configuration loaded as a whole | building block | Accepted |
+| [0006](0006-keys-and-sealing.md) | key@ holds a boundary's keys: it seals, opens and signs in place, with five data keys per tenant and one key per purpose and algorithm | building block | Accepted; amended by 0047 |
+| [0007](0007-policy-and-sealed-grants.md) | Policy is Cedar in a Rust actor over four layers, and every tenant-scoped write carries a grant that policy sealed | building block | Accepted; amended by 0047 |
+| [0008](0008-boundaries-and-tenants.md) | A boundary is the unit of keys and policy on a cumulative ladder from L0 to L4, and a tenant is a scope with data keys of its own | core | Accepted |
+| [0009](0009-export.md) | exporter@ publishes the kinds marked exportable to destinations outside sluis, never to a secret source | core | Accepted; amended by 0044 |
+| [0010](0010-backup-and-recovery.md) | A backup is a logical archive of the authoritative kinds through the store; a regional outage is accepted and a drill measures recovery | core | Accepted |
+| [0011](0011-runtimes-and-installations.md) | Runtimes are three kinds, four installations are tested, and the delivery order is the roadmap's | core | Accepted; amended by 0044 |
+| [0012](0012-the-language-follows-the-executable.md) | The language follows the executable: Go by default, Rust at the edge, in the trusted base, in cloud drivers and on the smallest boards | core | Accepted |
+| [0013](0013-release-train-packaging-and-distribution.md) | One repository, one version, one release train, and packaging follows the runtime | core | Accepted |
+| [0014](0014-the-site-is-static-on-cloudflare-workers.md) | The site is static on Cloudflare Workers, deployed by GitHub Actions, with a live status API | core | Accepted |
+| [0015](0015-evolution-and-compatibility.md) | Evolution and compatibility: N and N-1 inside a major version, a parallel cutover from v1, and v1's history stays where it is | core | Accepted |
+| [0016](0016-telemetry.md) | Telemetry is OpenTelemetry with fixed conventions, and a log level is raised at run time only with an expiry | core | Accepted |
+| [0017](0017-identity-and-sign-in.md) | Each boundary has its own issuer, a token has one audience, people sign in with passkeys and step-up, and break-glass recovery uses passkeys held in config | core | Accepted; amended by 0045 |
+| [0018](0018-sessions.md) | Sessions have three classes with limits per class, and session chains are temp kinds | core | Accepted |
+| [0019](0019-person-and-upstream-link.md) | A person is tied to an upstream account by issuer and subject claim | core | Accepted |
+| [0020](0020-grant-vocabulary-and-token-claims.md) | Grant names come from a declared vocabulary, and a token carries fixed claims for one audience | core | Accepted; amended by 0045 |
+| [0021](0021-clients.md) | Clients: installation clients are config, tenant clients are durable, and a self-described client is admitted only from allow-listed hosts | core | Accepted; amended by 0047 |
+| [0022](0022-workload-identity-and-host-enrolment.md) | Workload identity follows SPIFFE, and hosts enrol the same way | core | Accepted; amended by 0047 |
+| [0023](0023-certificate-authorities.md) | The ca and ssh-ca actors are the certificate authorities; every leaf has a fixed profile and a short lifetime | add-on | Accepted; amended by 0044 |
+| [0024](0024-root-custody-and-the-signing-api.md) | sluis holds no root: it asks root custody to certify its intermediates, and signs artifacts through a signing API | add-on | Accepted; amended by 0044 |
+| [0025](0025-integrations.md) | Integrations are adapters, work actors that return facts or carry out authorised effects, hold nothing at rest, and mint only for declared targets | core | Accepted |
+| [0026](0026-reconcilers.md) | A reconciler manages membership only, one per target under a lease | core | Accepted |
+| [0027](0027-the-console.md) | The console checks delegation and routes writes, and its pages follow the storage class and profile of what they show | core | Accepted |
+| [0028](0028-audit-pieces.md) | Audit is four pieces joined by a transport, search is an index fed from the log, and an audit installation has its own front | building block | Accepted |
+| [0029](0029-the-audit-log.md) | The audit log is a tiled log in a blob, sealed by its one writer, with pseudonyms, lifecycle tiers and per-tenant keys | building block | Accepted; amended by 0046 |
+| [0030](0030-audit-records-and-the-usage-stream.md) | Audit records are OCSF events with one `unmapped.sluis` object, and usage is a separate stream from the same call | building block | Accepted; amended by 0046 |
+| [0031](0031-ciam-is-a-broker.md) | CIAM is a broker: a customer-identity product owns the accounts, sluis owns the session and the tokens, and the contract between them is written down | customer identity | Superseded by 0045 |
+| [0032](0032-customer-identity-installations.md) | A customer-identity installation is a front and a few customer boundaries whose tenants each have their own data keys, a tenant's client IDs carry its name, and a move keeps every subject | customer identity | Accepted; amended by 0045 |
+| [0033](0033-customer-connections.md) | An installation federates to a fixed set of upstreams that its operator declares, and a customer installation sees exactly one | customer identity | Superseded by 0045 |
+| [0034](0034-end-users-and-upstream-signals.md) | An end user is a person with five states, erased by deleting its records, and upstream signals end sessions or suspend and erase | customer identity | Superseded by 0045 |
+| [0035](0035-customer-pages.md) | Customer pages are few, branded per client and login domain, and localised per request | customer identity | Superseded by 0045 |
+| [0036](0036-volumetric-abuse.md) | Volumetric abuse is stopped at the edge, and sluis bounds what one connection, client or source can cost with a token bucket kept as a temp kind | core | Accepted; amended by 0044 |
+| [0037](0037-capacity-is-measured-before-it-is-promised.md) | Capacity is measured before it is promised: a dated spike of the signing path, the hops to store@ and key@, the engines and the audit writer, and tokens stay signed in place meanwhile | core | Accepted |
+| [0038](0038-fapi-2-profile.md) | FAPI 2.0 is a profile a client declares, with PAR, DPoP, private-key client authentication and its own signing algorithm, and sender constraint is declared per audience | core | Accepted; amended by 0044 |
+| [0039](0039-quota-allowance.md) | Quota holds an allowance per tenant that the product pushes, counts it down, refuses at zero and records every fact | quota | Superseded by 0046 |
+| [0040](0040-meters-and-usage-evidence.md) | A meter has a name, a unit and a kind, and only declared outcomes become usage evidence | quota | Accepted |
+| [0041](0041-a-compromised-key-is-revoked-then-replaced.md) | A compromised key is revoked, then replaced: it leaves at once, its replacement signs at once, and only a person declares | core | Accepted |
+| [0042](0042-sluis-syncs-company-issued-openpgp-keys-to-staff-github-accounts.md) | sluis syncs company-issued OpenPGP keys to staff GitHub accounts | add-on | Accepted |
+| [0043](0043-a-person-binds-their-own-keys-to-their-identity-in-sluis.md) | A person binds their own keys to their identity in sluis: sluis checks the proof and the card attestation on the server, records a binding, and certifies, lists and syncs only card-born keys | add-on | Accepted; amended by 0044 |
+| [0044](0044-sluis-v2-is-a-core-building-blocks-and-add-ons.md) | sluis v2 is a core, building blocks and add-ons, and the first working version is the core | core | Accepted |
+| [0045](0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product.md) | Customers sign in through the upstream identity provider, realms follow boundaries, and the sluis token carries customer, organisation and product | customer identity | Accepted |
+| [0046](0046-usage-records-are-never-dropped-and-balances-live-in-the-product.md) | Usage records are a class that is never dropped, and plans and balances live in the product | quota | Accepted |
+| [0047](0047-kv-is-an-add-on-of-stores-that-no-tenant-owns.md) | KV is a building block of stores that no tenant owns: policy decides by path, each store has its own data key, and External Secrets reads it through a Vault KV v2 subset | building block | Accepted |
 
 ## Where the old records went
 

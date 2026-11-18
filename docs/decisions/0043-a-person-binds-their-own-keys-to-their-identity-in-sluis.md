@@ -1,6 +1,7 @@
 # 0043 — A person binds their own keys to their identity in sluis
 
 **Status:** Accepted; amended by 0044
+**Layer:** add-on
 **Date:** 2026-11-12
 
 Proposal: [issue #1496](https://github.com/truvity/sluis/issues/1496), owner decisions SK1 E, BK1 A, BK2 A, BK3 A, BD1 B, BD2 B, CU1 A to CU4 A, EX1 A, OC1 A, AL1 A, 2026-11-06.
