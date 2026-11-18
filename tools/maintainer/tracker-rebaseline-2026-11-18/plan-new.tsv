@@ -48,3 +48,12 @@
 47	Core: kubernetes	type:feature,area:deploy,runtime:kubernetes,install:kubernetes	Optional `cloudflared` sidecar value in `entry`'s pod	bodies/new-47.md
 48	Core: boards	type:feature,area:deploy,runtime:bare-metal,install:boards	`cloudflared` deployed by the board scripts	bodies/new-48.md
 49	Core: release	type:docs,area:docs	Document the Cloudflare records, rules, rate limits and cache times each installation's IaC applies	bodies/new-49.md
+50	Customer identity	type:feature,area:core,actor:exchange	ExchangeTrust config kind: the one upstream realm an installation trusts	bodies/new-50.md
+51	Customer identity	type:feature,area:core,actor:exchange	exchange: take a person's upstream token as the subject token (RFC 8693)	bodies/new-51.md
+52	Customer identity	type:feature,area:core,actor:exchange	The customer, org and product claims of the sluis token	bodies/new-52.md
+53	Customer identity	type:feature,area:core,actor:policy	Policy: customer, org and product as facts of a decision	bodies/new-53.md
+54	Customer identity	type:chore,area:conformance,actor:exchange	Upstream test realm: a Keycloak token is exchanged for a sluis token with the three claims	bodies/new-54.md
+55	Quota	type:feature,area:core,actor:writer	Usage records are never dropped: store once by idempotency key, fail the operation when not stored	bodies/new-55.md
+56	Quota	type:feature,area:core,actor:quota	The limit check on the request path: a counter per customer, organisation and product	bodies/new-56.md
+57	Quota	type:feature,area:core,actor:quota	Limits: the configuration kind, the period and the counter shape, measured before enforcement	bodies/new-57.md
+58	Quota	type:chore,area:conformance,actor:quota	Usage and limits smoke on the local installation	bodies/new-58.md

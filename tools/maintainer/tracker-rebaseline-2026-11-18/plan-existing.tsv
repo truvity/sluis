@@ -132,7 +132,7 @@
 837	Parity	keep	Parity: Audit: ingest and archive	-
 839	Parity	keep	Parity: Audit: search and query	-
 840	Parity	keep	Parity: Audit: profiles and identity treatment	-
-841	Parity	keep	Parity: Audit: emitter SDK and usage stream	-
+841	Quota	keep	Parity: Audit: emitter SDK and usage stream	-
 845	Parity	keep	Parity: Pulumi library	-
 847	Parity	keep	Parity: High availability	-
 850	Parity	keep	Parity: OpenID conformance and standards coverage	-
