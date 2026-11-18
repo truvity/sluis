@@ -1,4 +1,4 @@
-# KV: the key-value secret add-on (ADR 0047). Rows are planned: nothing is built yet.
+# KV: the key-value secret building block of the core (ADR 0047, amendment of 2026-11-18). Rows are planned: nothing is built yet.
 schema: 1
 area: KV
 requirements:
@@ -9,7 +9,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -22,7 +22,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -35,7 +35,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -48,7 +48,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -61,7 +61,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -74,7 +74,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -87,7 +87,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -100,7 +100,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -113,7 +113,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -126,7 +126,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -139,7 +139,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -152,7 +152,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -165,7 +165,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -178,7 +178,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -191,7 +191,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -204,7 +204,7 @@ requirements:
     level: SHOULD
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -217,7 +217,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -230,7 +230,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -243,7 +243,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -256,7 +256,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -269,7 +269,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -282,7 +282,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -295,7 +295,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -308,7 +308,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -317,11 +317,11 @@ requirements:
   - id: REQ-KV-025
     area: KV
     statement: "sluis MUST NOT offer dynamic secrets, leases, transit or response wrapping through KV."
-    rationale: "The add-on is static secrets and nothing more, and a general engine would widen the trusted base (ADR 0047, ADR 0009)."
+    rationale: "The block is static secrets and nothing more, and a general engine would widen the trusted base (ADR 0047, ADR 0009)."
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -334,7 +334,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -347,7 +347,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -360,7 +360,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -373,7 +373,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -386,7 +386,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -399,7 +399,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -412,7 +412,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -425,7 +425,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -438,7 +438,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -451,7 +451,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -464,7 +464,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -472,12 +472,12 @@ requirements:
       - {kind: integration-test, ref: "a person with an old sign-in is refused on the subtree and accepted on a fresh one, and a store has no setting that asks for it"}
   - id: REQ-KV-037
     area: KV
-    statement: "The tests of the KV add-on MUST include a differential run against a pinned OpenBao dev server."
+    statement: "The tests of the KV building block MUST include a differential run against a pinned OpenBao dev server."
     rationale: "The wire is Vault's, and a run against a real server finds what a reading misses (ADR 0047)."
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]
@@ -485,12 +485,12 @@ requirements:
       - {kind: integration-test, ref: "the CI job runs the same requests against both servers and compares the answers"}
   - id: REQ-KV-038
     area: KV
-    statement: "The tests of the KV add-on SHOULD include a run of External Secrets with a pinned chart in a kind cluster."
+    statement: "The tests of the KV building block SHOULD include a run of External Secrets with a pinned chart in a kind cluster."
     rationale: "A later release of ESO can add calls, and the run is the guard (ADR 0047)."
     level: SHOULD
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [798]

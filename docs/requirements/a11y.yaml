@@ -9,7 +9,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: NC-04, section: "WCAG 2.1 AA", depth: Full}
@@ -24,7 +24,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: planned
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-59, section: "1", depth: Partial}
@@ -40,7 +40,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: NC-04, section: "WCAG 2.1 AA", depth: Full}

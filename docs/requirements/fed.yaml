@@ -9,7 +9,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.3.7", depth: Full}
@@ -26,7 +26,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.3.7", depth: Full}
@@ -43,7 +43,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.3.7", depth: Full}
@@ -60,7 +60,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.3.7", depth: Full}
@@ -77,7 +77,7 @@ requirements:
     source: stakeholder-ciam
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "5.7", depth: Full}
@@ -92,7 +92,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "5.7", depth: Full}
@@ -106,7 +106,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-10, section: "2.4", depth: Full}
@@ -121,7 +121,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-10, section: "2.4", depth: Full}
@@ -135,7 +135,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: planned
-    milestone: ciam-upstream
+    milestone: backlog
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2.1", depth: Partial}
@@ -150,7 +150,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2", depth: Partial}
@@ -165,7 +165,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2", depth: Partial}
@@ -181,7 +181,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2", depth: Partial}
@@ -210,7 +210,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: ciam-upstream
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-28, section: "3", depth: Full}
@@ -226,7 +226,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
@@ -284,7 +284,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: planned
-    milestone: ciam-upstream
+    milestone: backlog
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Partial}
@@ -299,7 +299,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: planned
-    milestone: ciam-upstream
+    milestone: backlog
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Partial}
@@ -313,7 +313,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-28, section: "3.1.2.1", depth: Partial}
@@ -327,7 +327,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: planned
-    milestone: ciam-upstream
+    milestone: backlog
     runtimes: all
     standards:
       - {id: ST-28, section: "3", depth: Partial}
@@ -341,7 +341,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: ciam-upstream
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [916]
@@ -380,7 +380,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: ciam-upstream
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [916]
@@ -393,7 +393,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: ciam-upstream
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [916]
@@ -406,7 +406,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: planned
-    milestone: ciam-upstream
+    milestone: backlog
     runtimes: all
     standards:
       - {id: NC-01, section: "8176", depth: Partial}
@@ -420,7 +420,7 @@ requirements:
     level: MUST
     source: standard
     status: planned
-    milestone: v1-parity
+    milestone: backlog
     runtimes: all
     standards:
       - {id: ST-31, section: "2.4", depth: Full}
@@ -434,7 +434,7 @@ requirements:
     level: MUST
     source: standard
     status: planned
-    milestone: v1-parity
+    milestone: backlog
     runtimes: all
     standards:
       - {id: ST-31, section: "2.6", depth: Full}
@@ -448,7 +448,7 @@ requirements:
     level: MUST
     source: standard
     status: planned
-    milestone: v1-parity
+    milestone: backlog
     runtimes: all
     standards:
       - {id: ST-31, section: "2.4", depth: Full}
@@ -462,7 +462,7 @@ requirements:
     level: MUST
     source: standard
     status: planned
-    milestone: v1-parity
+    milestone: backlog
     runtimes: all
     standards:
       - {id: ST-31, section: "2.6", depth: Full}
@@ -476,7 +476,7 @@ requirements:
     level: MUST
     source: standard
     status: planned
-    milestone: v1-parity
+    milestone: backlog
     runtimes: all
     standards:
       - {id: ST-31, section: "2.6", depth: Full}
@@ -503,7 +503,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: ciam-upstream
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [916]
@@ -516,7 +516,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: ciam-upstream
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [916]
@@ -529,7 +529,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: ciam-upstream
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [916]

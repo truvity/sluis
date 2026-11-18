@@ -9,7 +9,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-13, section: "2.1", depth: Full}
@@ -28,7 +28,7 @@ requirements:
     # Reworded 2026-11-07 to the proof we have: signer's cross-check with go-jose (a token signed through key@, verified against the
     # published key set, which finds the key by the kid of the header). No outside JOSE vector set is in the repository.
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-13, section: "2.1", depth: Full}
@@ -46,7 +46,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-13, section: "2.1", depth: Full}
@@ -66,7 +66,7 @@ requirements:
     # the OIDF Config OP plan has not run.
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-51, section: "3", depth: Partial}
@@ -88,7 +88,7 @@ requirements:
     # Reworded 2026-11-07 to the proof we have: the header key@ signs is alg ES384 (the signing input it saw), and go-jose verifies the token
     # against the published key set. No Wycheproof vectors are in the repository.
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-51, section: "3", depth: Partial}
@@ -111,7 +111,7 @@ requirements:
     # partial: the OIDF Config OP plan has not run.
     status: partial
     gap: external-suite-not-run
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-51, section: "3", depth: Partial}
@@ -129,7 +129,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-52, section: "4.1.3", depth: Full}
@@ -144,7 +144,7 @@ requirements:
     level: MUST
     source: security-review
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Full}
@@ -159,7 +159,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-08, section: "2", depth: Full}
@@ -174,7 +174,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-08, section: "2", depth: Full}
@@ -192,7 +192,7 @@ requirements:
     # Owner decision 2026-11-07: to v1 parity, with this gate kept. The first working version releases `sub` only.
     status: partial
     gap: partly-built
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "5.4", depth: Full}
@@ -208,7 +208,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "5.4", depth: Full}
@@ -239,7 +239,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-13, section: "2.2", depth: Partial}
@@ -257,7 +257,7 @@ requirements:
     # never more than a scope grants. The verification is that answer; the claims the scopes profile and email grant, and the OIDF
     # userinfo modules that need them, come with REQ-TOKEN-006.
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "5.3", depth: Full}
@@ -275,7 +275,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "5.3", depth: Full}
@@ -291,7 +291,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-11, section: "2", depth: Full}
@@ -307,7 +307,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-11, section: "2", depth: Full}
@@ -323,7 +323,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-11, section: "2", depth: Full}
@@ -339,7 +339,7 @@ requirements:
     source: v1-parity
     status: partial
     gap: external-suite-not-run
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "5.1", depth: Full}
@@ -355,7 +355,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "5.1", depth: Full}
@@ -371,7 +371,7 @@ requirements:
     source: v1-parity
     status: partial
     gap: external-suite-not-run
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "5.1", depth: Full}
@@ -387,8 +387,9 @@ requirements:
     level: SHOULD
     source: stakeholder-ciam
     # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Restored 2026-11-18 as REQ-TOKEN-052: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
-    superseded_by: [REQ-AUTHN-112]
+    superseded_by: [REQ-TOKEN-052]
     runtimes: all
     standards:
       - {id: ST-18, section: "7", depth: Full}
@@ -405,8 +406,9 @@ requirements:
     level: SHOULD
     source: stakeholder-ciam
     # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Restored 2026-11-18 as REQ-TOKEN-054: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
-    superseded_by: [REQ-AUTHN-112]
+    superseded_by: [REQ-TOKEN-054]
     runtimes: all
     standards:
       - {id: ST-18, section: "7", depth: Full}
@@ -421,8 +423,9 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Restored 2026-11-18 as REQ-TOKEN-055: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
-    superseded_by: [REQ-AUTHN-112]
+    superseded_by: [REQ-TOKEN-055]
     runtimes: all
     standards:
       - {id: ST-18, section: "5", depth: Partial}
@@ -437,7 +440,7 @@ requirements:
     source: v1-parity
     status: partial
     gap: external-suite-not-run
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Full}
@@ -455,7 +458,7 @@ requirements:
     source: v1-parity
     status: partial
     gap: external-suite-not-run
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Full}
@@ -473,7 +476,7 @@ requirements:
     source: v1-parity
     status: partial
     gap: external-suite-not-run
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Full}
@@ -521,7 +524,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Full}
@@ -536,7 +539,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Full}
@@ -550,7 +553,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [776, 788, 1815]
@@ -564,7 +567,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [776]
@@ -577,7 +580,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [776, 1106]
@@ -590,7 +593,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [776]
@@ -603,7 +606,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [776]
@@ -616,7 +619,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [776]
@@ -629,7 +632,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [776]
@@ -642,8 +645,9 @@ requirements:
     level: MUST
     source: standard
     # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Restored 2026-11-18 as REQ-TOKEN-052: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
-    superseded_by: [REQ-AUTHN-112]
+    superseded_by: [REQ-TOKEN-052]
     runtimes: all
     standards:
       - {id: ST-37, depth: Partial}
@@ -658,8 +662,9 @@ requirements:
     level: MUST
     source: standard
     # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Restored 2026-11-18 as REQ-TOKEN-056: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
-    superseded_by: [REQ-AUTHN-112]
+    superseded_by: [REQ-TOKEN-056]
     runtimes: all
     standards:
       - {id: ST-37, depth: Partial}
@@ -673,7 +678,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     features: ["design"]
@@ -687,7 +692,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [signer]
     standards: []
@@ -703,7 +708,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [signer]
     standards: []
@@ -719,10 +724,10 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: customer-identity
     runtimes: all
     standards: []
-    issues: [782, 785]
+    issues: [782, 785, 1842]
     verification:
       - {kind: integration-test, ref: "a token of the trusted realm yields a sluis token with the three claims; a request that names them changes nothing"}
 
@@ -733,7 +738,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [788, 1815]
@@ -748,7 +753,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [788, 1815]
@@ -763,7 +768,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     actors: [signer]
@@ -778,7 +783,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [776, 786, 1817]
@@ -793,7 +798,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [786, 1817]
@@ -807,10 +812,109 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-08, section: "2", depth: Full}
     issues: [791]
     verification:
       - {kind: test-vectors, ref: "kits/conformance/token/lifetime-vectors.json, expiry: the resource_ttl_cap vectors, once a client declares a resource"}
+  - id: REQ-TOKEN-052
+    area: TOKEN
+    statement: "An access token for an audience of profile fapi2 MUST be sender-constrained by DPoP."
+    rationale: "A token bound to a client-held key cannot be replayed by a thief; the core offers DPoP binding only (ADR 0038, the amendment of 2026-11-18)."
+    level: MUST
+    source: standard
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-37, depth: Partial}
+      - {id: ST-18, section: "7", depth: Full}
+    issues: [912]
+    verification:
+      - {kind: conformance-suite, ref: "FAPI2-SP (DPoP variant)"}
+      - {kind: integration-test, ref: "a token for an audience of profile fapi2 is never issued without a DPoP proof"}
+  - id: REQ-TOKEN-053
+    area: TOKEN
+    statement: "sluis MUST give a DPoP nonce of its own choosing and refuse a DPoP proof that lacks the current nonce with use_dpop_nonce."
+    rationale: "A server nonce limits the time in which a proof can be precomputed (RFC 9449 section 8)."
+    level: MUST
+    source: standard
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-18, section: "8", depth: Full}
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "a proof without the nonce is answered with use_dpop_nonce and a fresh nonce, and the retry with that nonce is accepted"}
+  - id: REQ-TOKEN-054
+    area: TOKEN
+    statement: "A DPoP-bound access token MUST carry a cnf claim with the thumbprint of the key of the proof."
+    rationale: "The cnf claim lets a resource server check the binding (RFC 9449 section 6)."
+    level: MUST
+    source: standard
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-18, section: "6", depth: Full}
+      - {id: ST-58, section: "3", depth: Full}
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "the cnf claim of a DPoP-bound token holds the jkt of the proof key"}
+  - id: REQ-TOKEN-055
+    area: TOKEN
+    statement: "A DPoP proof sent by a client that does not use DPoP MUST be refused with invalid_request."
+    rationale: "Silently issuing a bearer token to a client that asked for binding is a downgrade (ADR 0038)."
+    level: MUST
+    source: standard
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-18, section: "5", depth: Partial}
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "a proof from a client of no DPoP profile is refused"}
+  - id: REQ-TOKEN-056
+    area: TOKEN
+    statement: "sluis MUST NOT sign a token for an audience of profile fapi2 with an algorithm outside PS256, ES256 and EdDSA."
+    rationale: "The profile does not allow ES384 (ADR 0038)."
+    level: MUST
+    source: standard
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-37, depth: Partial}
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "an audience of profile fapi2 gets a token signed with an algorithm of the profile, and the default audiences keep ES384"}
+  - id: REQ-TOKEN-057
+    area: TOKEN
+    statement: "`sluis config check` MUST refuse a client or an audience that declares mutual-TLS binding."
+    rationale: "The core offers DPoP binding only, and mutual TLS needs an edge that forwards the client certificate (ADR 0038, the amendment of 2026-11-18)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: all
+    standards: []
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "a configuration that declares certificate-bound tokens for a client or an audience is refused, and one that declares DPoP is accepted"}
+  - id: REQ-TOKEN-058
+    area: TOKEN
+    statement: "A sluis token that did not come from an exchange of an upstream token MUST carry none of the claims customer, org and product."
+    rationale: "An absent claim stays absent, so a staff sign-in never claims a customer (ADR 0045)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: customer-identity
+    runtimes: all
+    standards: []
+    issues: [1842]
+    verification:
+      - {kind: integration-test, ref: "the token of a staff sign-in carries none of the three claims"}

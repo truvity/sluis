@@ -9,7 +9,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-104, section: "1", depth: Full}
@@ -27,7 +27,7 @@ requirements:
     level: SHOULD
     source: stakeholder-ciam
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-104, section: "1", depth: Full}
@@ -42,8 +42,9 @@ requirements:
     level: MAY
     source: stakeholder-ciam
     # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Restored 2026-11-18 as REQ-TEST-019: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
-    superseded_by: [REQ-AUTHN-112]
+    superseded_by: [REQ-TEST-019]
     runtimes: all
     standards:
       - {id: ST-37, section: "1", depth: Full}
@@ -59,7 +60,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: partial
-    milestone: first-version
+    milestone: core
     gap: partly-built
     runtimes: all
     standards:
@@ -74,7 +75,7 @@ requirements:
     level: MUST
     source: security-review
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
@@ -89,7 +90,7 @@ requirements:
     level: MUST
     source: security-review
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
@@ -104,7 +105,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: first-version
+    milestone: core
     gap: partly-built
     runtimes: all
     standards:
@@ -121,7 +122,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: partial
-    milestone: first-version
+    milestone: core
     gap: partly-built
     runtimes: all
     standards:
@@ -136,7 +137,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-103, section: "blob port", depth: Full}
@@ -150,7 +151,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: first-version
+    milestone: core
     runtimes: [bare-metal]
     standards: []
     issues: [877]
@@ -158,20 +159,20 @@ requirements:
       - {kind: integration-test, ref: "an ID token minted more than a second after the one-time-password step carries amr with pwd, otp and mfa"}
   - id: REQ-TEST-011
     area: TEST
-    statement: "The customer installation on Kubernetes (EKS) MUST run the full conformance set, the OpenID Connect plans, the FAPI 2.0 plans and the customer-identity plans, in addition to the local installation on pull requests and the lambda installation nightly."
-    rationale: "The customer installation is the one that serves end users and claims the high-assurance profile, so the claim is proved on the installation that carries it (ADR 0011, Kubernetes; ADR 0038)."
+    statement: "The Kubernetes installation MUST run the full conformance set, the OpenID Connect plans and the FAPI 2.0 plans, in addition to the local installation on pull requests and the Lambda installation nightly."
+    rationale: "The Kubernetes installation is the one that can claim the high-assurance profile, so the claim is proved on the installation that carries it (ADR 0011, Kubernetes; ADR 0038, the amendment of 2026-11-18, decision H1)."
     level: MUST
     source: design-decision
     status: planned
-    milestone: ciam-upstream
+    milestone: core
     runtimes: ["kubernetes"]
     standards:
       - {id: ST-37, section: "1", depth: Full}
       - {id: ST-104, section: "1", depth: Full}
-    issues: [850, 929, 931]
+    issues: [850, 929, 931, 1237]
     verification:
-      - {kind: conformance-suite, ref: "OIDF Config OP, Basic OP and the logout plans against the EKS customer installation"}
-      - {kind: conformance-suite, ref: "FAPI2-SP against the EKS customer installation"}
+      - {kind: conformance-suite, ref: "OIDF Config OP, Basic OP and the logout plans against the Kubernetes installation"}
+      - {kind: conformance-suite, ref: "FAPI2-SP against the Kubernetes installation"}
   - id: REQ-TEST-012
     area: TEST
     statement: "The fake vendor server of a provisioner conformance suite SHOULD name the vendor release and the date whose behaviour it models."
@@ -179,7 +180,7 @@ requirements:
     level: SHOULD
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     features: ["parity"]
@@ -192,7 +193,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [831, 1100]
@@ -205,7 +206,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [831, 849]
@@ -218,7 +219,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [796, 831]
@@ -231,7 +232,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [831, 960]
@@ -244,7 +245,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     tests: [tools/verify/evidence/evidence_test.go]
@@ -258,9 +259,50 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     tests: [tests/e2e/cli/commands_test.go, tests/e2e/cli/checks_test.go, tests/e2e/spine/verifyrefusal_test.go]
     verification:
       - {kind: integration-test, ref: "tests/e2e/cli: commands.go lists the test of each of the 15 rows; TestEveryRowOfTheFirstVersionCommandTableHasATestInCI fails for a row without one; the job smokes runs the steps"}
+  - id: REQ-TEST-019
+    area: TEST
+    statement: "CI MUST run the OpenID Foundation FAPI 2.0 Security Profile plan against the local installation."
+    rationale: "The conformance run is the proof of the profile, and it sits beside the Basic suite (ADR 0038, the amendment of 2026-11-18, decision H1)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-37, section: "1", depth: Full}
+      - {id: ST-104, section: "1", depth: Full}
+    issues: [929]
+    verification:
+      - {kind: conformance-suite, ref: "FAPI2-SP against the local installation, in the pull-request workflow"}
+  - id: REQ-TEST-020
+    area: TEST
+    statement: "CI MUST run a test realm whose token is exchanged for a sluis token that carries customer, org and product."
+    rationale: "The exchange is proved against a realm of the kind that an installation trusts (ADR 0045)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: customer-identity
+    runtimes: all
+    standards: []
+    issues: [1844]
+    verification:
+      - {kind: integration-test, ref: "a Keycloak token is exchanged in CI and the sluis token carries the three claims, and a token of a second realm is refused"}
+  - id: REQ-TEST-021
+    area: TEST
+    statement: "CI MUST run a smoke of the usage stream and the limit check against the local installation."
+    rationale: "Records that are never dropped and a check on the request path need a proof that runs on every change (ADR 0046)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: quota
+    runtimes: all
+    standards: []
+    issues: [1848]
+    verification:
+      - {kind: integration-test, ref: "a call over its limit is refused, a usage record is stored once under its idempotency key, and a full spool fails the operation"}

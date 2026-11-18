@@ -10,7 +10,7 @@ requirements:
     source: v1-parity
     status: partial
     gap: external-suite-not-run
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [policy]
     standards:
@@ -26,7 +26,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [policy]
     standards:
@@ -41,7 +41,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [policy]
     standards:
@@ -58,7 +58,7 @@ requirements:
     source: v1-parity
     status: partial
     gap: external-suite-not-run
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
@@ -74,7 +74,7 @@ requirements:
     source: design-decision
     status: partial
     gap: external-suite-not-run
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [policy]
     standards:
@@ -90,7 +90,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [policy]
     standards:
@@ -120,7 +120,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [policy]
     standards:
@@ -136,7 +136,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [policy]
     standards:
@@ -151,7 +151,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [892]
@@ -167,7 +167,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [892]
@@ -180,7 +180,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [892]
@@ -194,7 +194,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [892]
@@ -209,7 +209,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [1212]
@@ -222,7 +222,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [1212]
@@ -235,7 +235,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: ciam-upstream
+    milestone: parity
     runtimes: all
     actors: [policy]
     standards: []
@@ -249,7 +249,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [1207]
@@ -262,7 +262,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [policy]
     standards: []
@@ -276,7 +276,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [policy]
     standards: []
@@ -290,7 +290,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [policy]
     standards: []
@@ -304,7 +304,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [policy]
     standards: []
@@ -318,9 +318,22 @@ requirements:
     level: SHOULD
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     features: ["parity"]
     verification:
       - {kind: integration-test, ref: "a config with a declared group that nothing names gives one warning that names the group; a config where every group is named gives none"}
+  - id: REQ-POLICY-024
+    area: POLICY
+    statement: "policy MUST accept the customer, the organisation and the product of a token as facts of a decision."
+    rationale: "A service that decides on them reads facts that sluis set, not parameters of the call (ADR 0045; ADR 0007)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: customer-identity
+    runtimes: all
+    standards: []
+    issues: [1843]
+    verification:
+      - {kind: integration-test, ref: "a rule that names an organisation allows a token that carries it and refuses a token that carries another"}

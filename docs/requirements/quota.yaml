@@ -8,8 +8,9 @@ requirements:
     rationale: "Admission must precede the cost it limits."
     level: MUST
     source: design-decision
-    status: planned
-    milestone: quota
+    # Withdrawn 2026-11-18: ADR 0046 supersedes ADR 0039 (maintainer decisions D4 A and D7 A): sluis keeps usage records and a limit check, and no allowance, plan or balance.
+    status: withdrawn
+    superseded_by: [REQ-QUOTA-097]
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
@@ -364,8 +365,9 @@ requirements:
     rationale: "Every risk choice is explicit and reviewed."
     level: MUST
     source: design-decision
-    status: planned
-    milestone: quota
+    # Withdrawn 2026-11-18: ADR 0046 supersedes ADR 0039 (maintainer decisions D4 A and D7 A): sluis keeps usage records and a limit check, and no allowance, plan or balance.
+    status: withdrawn
+    superseded_by: [REQ-QUOTA-097]
     runtimes: all
     standards: []
     issues: [915]
@@ -1141,10 +1143,10 @@ requirements:
     rationale: "When quota cannot do its job it says so and does not guess, and the calling rule decides whether that fails open or closed (ADR 0039)."
     level: MUST
     source: design-decision
-    status: planned
-    milestone: quota
+    # Withdrawn 2026-11-18: ADR 0046 supersedes ADR 0039 (maintainer decisions D4 A and D7 A): sluis keeps usage records and a limit check, and no allowance, plan or balance.
+    status: withdrawn
+    superseded_by: [REQ-QUOTA-097]
     runtimes: all
-    actors: [quota]
     standards: []
     issues: [915, 1144]
     verification:
@@ -1155,8 +1157,9 @@ requirements:
     rationale: "Entry routes and verifies a certificate, and policy decides (ADR 0039)."
     level: MUST
     source: design-decision
-    status: planned
-    milestone: quota
+    # Withdrawn 2026-11-18: ADR 0046 supersedes ADR 0039 (maintainer decisions D4 A and D7 A): sluis keeps usage records and a limit check, and no allowance, plan or balance.
+    status: withdrawn
+    superseded_by: [REQ-QUOTA-097]
     runtimes: all
     standards: []
     issues: [915]
@@ -1266,10 +1269,10 @@ requirements:
     rationale: "The facts are the evidence and the source of the roll-forward after a restore (ADR 0039)."
     level: MUST
     source: design-decision
-    status: planned
-    milestone: quota
+    # Withdrawn 2026-11-18: ADR 0046 supersedes ADR 0039 (maintainer decisions D4 A and D7 A): sluis keeps usage records and a limit check, and no allowance, plan or balance.
+    status: withdrawn
+    superseded_by: [REQ-AUDIT-189, REQ-AUDIT-190]
     runtimes: all
-    actors: [quota]
     standards: []
     issues: [915, 841]
     verification:
@@ -1352,9 +1355,22 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: quota
     features: ["design"]
     runtimes: all
     standards: []
     verification:
       - {kind: integration-test, ref: "a request over the limit is refused and one under it is allowed, with the limit written by the product"}
+  - id: REQ-QUOTA-098
+    area: QUOTA
+    statement: "sluis MUST answer a limit check with allow or refuse, beside the policy decision of the request."
+    rationale: "The product writes the limit and sluis holds the counter, so the check is one more answer of the request path (ADR 0046)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: quota
+    runtimes: all
+    standards: []
+    issues: [1846]
+    verification:
+      - {kind: integration-test, ref: "a request under a limit that is reached is refused beside an allowed policy decision, and a request under a limit that is not reached is allowed"}

@@ -832,7 +832,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "5.4", depth: Full}
