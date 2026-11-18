@@ -320,11 +320,12 @@ requirements:
     rationale: "One client's loop must not use another's capacity."
     level: MUST
     source: design-decision
-    status: planned
+    status: done
     milestone: ciam-upstream
     runtimes: all
+    actors: [entry]
     standards: []
-    issues: [916]
+    issues: [916, 1857]
     verification:
       - {kind: integration-test, ref: "burst test on two clients"}
   - id: REQ-SEC-022
@@ -364,7 +365,7 @@ requirements:
     gap: partly-built
     runtimes: all
     standards: []
-    issues: [916]
+    issues: [916, 1857]
     verification:
       - {kind: integration-test, ref: "limit refusal response test"}
   - id: REQ-SEC-025
@@ -401,12 +402,12 @@ requirements:
     rationale: "A window keyed on a plain address would be personal data in a temp kind (ADR 0036)."
     level: MUST
     source: design-decision
-    status: planned
+    status: done
     milestone: v1-parity
     runtimes: all
     actors: [entry]
     standards: []
-    issues: [1215]
+    issues: [1215, 1857]
     verification:
       - {kind: integration-test, ref: "a RateWindow id is a Mac output; the source address is not in the item"}
       - {kind: integration-test, ref: "a forwarded client address is honoured only from a peer on the trusted list and ignored from any other peer"}
@@ -604,3 +605,114 @@ requirements:
     issues: [796, 960, 1624]
     verification:
       - {kind: integration-test, ref: "the sign-in response sets a cookie whose name starts with __Host- and which has no Domain attribute"}
+  - id: REQ-SEC-042
+    area: SEC
+    statement: "The entry actor MUST bound the authorization requests of each client with a token bucket."
+    rationale: "One client's loop of sign-in starts must not use another's capacity (ADR 0036, decision H7)."
+    level: MUST
+    source: design-decision
+    status: done
+    milestone: first-version
+    runtimes: all
+    actors: [entry]
+    standards: []
+    issues: [1857]
+    verification:
+      - {kind: integration-test, ref: "burst test on two clients at the authorization endpoint"}
+  - id: REQ-SEC-043
+    area: SEC
+    statement: "The entry actor MUST bound the token requests and the authorization requests of each source address with a token bucket."
+    rationale: "One source must not use the capacity of the token and authorization endpoints (ADR 0036, decision H7)."
+    level: MUST
+    source: design-decision
+    status: done
+    milestone: first-version
+    runtimes: all
+    actors: [entry]
+    standards: []
+    issues: [1857]
+    verification:
+      - {kind: integration-test, ref: "a flood from one address on each endpoint is refused after its limit and another address is not refused"}
+  - id: REQ-SEC-044
+    area: SEC
+    statement: "The entry actor MUST bound the requests of the recovery routes of each source address with a token bucket."
+    rationale: "The routes that add a factor after a fresh sign-in are the ones a guesser tries (ADR 0036, decision H7)."
+    level: MUST
+    source: design-decision
+    status: done
+    milestone: first-version
+    runtimes: all
+    actors: [entry]
+    standards: []
+    issues: [1857]
+    verification:
+      - {kind: integration-test, ref: "a flood from one address on the two recovery routes is refused after its limit"}
+  - id: REQ-SEC-045
+    area: SEC
+    statement: "A refusal by a limit of the entry actor MUST NOT disclose which limit refused, the client or the address."
+    rationale: "A refusal that names its cause tells a guesser which bucket to avoid, and tells a client about another's (ADR 0036, REQ-SEC-024)."
+    level: MUST
+    source: design-decision
+    status: done
+    milestone: first-version
+    runtimes: all
+    actors: [entry]
+    standards: []
+    issues: [1857]
+    verification:
+      - {kind: integration-test, ref: "the body and the headers of a refusal are the same for every limit and hold no client and no address"}
+  - id: REQ-SEC-046
+    area: SEC
+    statement: "The store actor MUST refuse a RateBound document that names a limit outside the bounds built into the release."
+    rationale: "A signed document tightens or loosens a limit within what the release allows and never past it (ADR 0036)."
+    level: MUST
+    source: design-decision
+    status: done
+    milestone: first-version
+    runtimes: all
+    standards: []
+    issues: [1857]
+    verification:
+      - {kind: integration-test, ref: "a limit above 100000 or at 0, and a window above an hour or at 0, is refused by its place"}
+  - id: REQ-SEC-047
+    area: SEC
+    statement: "The entry actor MUST take its limits from the RateBound kind, and keep the built-in default of each limit that the kind does not name."
+    rationale: "An installation sets its limits in signed config, and an installation that sets none is still bounded (ADR 0036)."
+    level: MUST
+    source: design-decision
+    status: done
+    milestone: first-version
+    runtimes: all
+    actors: [entry]
+    standards: []
+    issues: [1857]
+    verification:
+      - {kind: integration-test, ref: "no document gives the defaults, a document replaces the limits it names and no others"}
+  - id: REQ-SEC-048
+    area: SEC
+    statement: "The entry actor MUST audit a refusal by a limit as a failed request that names the limit and holds neither the address nor the client."
+    rationale: "A denial is counted from the audit log, and the record must hold no personal data (ADR 0036)."
+    level: MUST
+    source: design-decision
+    status: done
+    milestone: first-version
+    runtimes: all
+    actors: [entry]
+    standards: []
+    issues: [1857]
+    verification:
+      - {kind: integration-test, ref: "one failed audit record per refusal with the word of the limit and neither the address nor the client"}
+  - id: REQ-SEC-049
+    area: SEC
+    statement: "The entry actor MUST refuse a request with 503 when it cannot read or write the bucket of its limit."
+    rationale: "A limiter that fails open lets a flood through exactly when the store is struggling (ADR 0036, REQ-SEC-024)."
+    level: MUST
+    source: design-decision
+    status: done
+    milestone: first-version
+    runtimes: all
+    actors: [entry]
+    standards: []
+    issues: [1857]
+    verification:
+      - {kind: integration-test, ref: "a store that fails and a key service that fails each refuse the request with 503 and no call to session"}

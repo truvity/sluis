@@ -112,6 +112,27 @@ A refusal tells a caller what to do, never why someone else may do more:
 - **A refused and an unknown object look the same:** an audience the caller may not use and one that does not exist give the same answer ([Architecture](/architecture/#token-exchange-and-mint)).
 - **Errors never show a value** of configuration or of a request, only the path of the field ([0004](/decisions/0004-the-data-model/#schemas-are-protobuf)).
 
+### Limits at the edge
+
+`entry` bounds what one client and one source address can cost on the endpoints that start work ([0036](/decisions/0036-volumetric-abuse/#inside-sluis), decision H7 of 2026-11-18). The edge in front of the installation is the first line; these limits stay when it is not there.
+
+| Limit | Endpoint | Counted by | Default |
+|---|---|---|---|
+| `token_client` | `/token` | the client | 1200 requests a minute |
+| `token_address` | `/token` | the source address | 300 requests a minute |
+| `authorize_client` | `/authorize` | the client | 1200 requests a minute |
+| `authorize_address` | `/authorize` | the source address | 300 requests a minute |
+| `recovery_address` | `/passkeys/add` and `/passkeys/register`, which are one limit | the source address | 30 requests a minute |
+
+- **A limit is a token bucket:** it admits `limit` requests in a burst and fills again in one `window`. A bucket is an item of the temp kind `RateWindow` (`<limit>/<subject>` in the id, the tenant `-`), lives as long as it takes to fill, and is not backed up, so an absent bucket is a full one.
+- **The limits are the config kind `RateBound`** ([Kinds](/reference/kinds/#ratebound)), one optional document: a limit it names replaces the default, a limit it leaves out keeps it. Each is between 1 and 100000 requests, in a window between 1 second and 1 hour; the loader refuses anything else, and `entry` holds the same bounds when it reads. A tightened limit takes effect within five seconds.
+- **A client is its id,** from `client_id` or from the user of a Basic `Authorization` header. A client id that the installation does not declare (`InstallationClient`) shares one bucket with every other, so a request cannot make a bucket by naming a client. The recovery routes name no client, and have no limit by client.
+- **A source address is never stored.** The id of its bucket is the first 128 bits of `Mac` at key@ over the `mac` key of the boundary, label `sluis-rate-address-v1`, of the address ([REQ-SEC-027](/requirements/sec/#REQ-SEC-027)). An IPv6 address counts as its /64.
+- **The address is the last of `X-Forwarded-For`,** the one the forwarder wrote; `entry` serves no other peer, and what a client wrote in front of it is not read. A request that carries no usable address is not counted against an address, because one bucket for all of them would let anyone lock everyone out ([REQ-SEC-017](/requirements/sec/#REQ-SEC-017)); the forwarder of an installation must send the header.
+- **The address is counted first, before the body is read; the client is counted when the request is well formed.** A source past its bound is refused before it can spend the bucket of a client.
+- **A refusal is 429** with the fixed body and `Retry-After: 5`, the same for every limit and every subject. The word of the limit is in the audit record only, as the reason of a failed `entry.token`, `entry.authorize`, `entry.passkeys_add` or `entry.passkeys_register`: `rate_token_client`, `rate_token_address`, `rate_authorize_client`, `rate_authorize_address` or `rate_recovery_address`. The records are the count of refusals.
+- **A limiter that cannot read or write its bucket, or ask key@, fails closed:** 503 with the fixed body, and the reason `rate_store` or `rate_key` in the audit record.
+
 ### OAuth and OpenID Connect endpoints
 
 These endpoints answer in the error format of their standard, as clients implement it ([principle 5](/principles/#5-open-standards-as-their-consumers-implement-them)):
