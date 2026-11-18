@@ -15,17 +15,6 @@ func TestPairwiseSubIs256BitsOfBase64URLWithoutPadding(t *testing.T) {
 	}
 }
 
-func TestNarrowKeepsTheHeldNamesOfThePairsTheAudienceRequires(t *testing.T) {
-	held := []string{"dev:app:user", "dev:app:admin", "dev:other:admin", "acme:app:user", "dev:app:user", "bad", "dev:app:"}
-	got := narrow(held, []string{"dev:app:operator", "*:x:y", "worse"})
-	if strings.Join(got, ",") != "dev:app:admin,dev:app:user" {
-		t.Errorf("narrow = %v", got)
-	}
-	if got := narrow(held, nil); got == nil || len(got) != 0 {
-		t.Errorf("narrow with no requires = %#v, want an empty slice", got)
-	}
-}
-
 func TestLifetimeIsTheEarliestOfTheFour(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	for _, c := range []struct {

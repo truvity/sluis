@@ -695,6 +695,59 @@ func TestTokenGroupsAreNarrowedToTheAudience(t *testing.T) {
 	}
 }
 
+// The client's groups override adds the things it names, in every scope and role, to the pairs of its requires, and its
+// delimiter writes each name of the claim without the colon, in the ID token and the access token, at sign-in and at
+// a refresh. The rule is the one exchange applies (kits/go/groupsclaim), held to the shared vectors.
+// verifies: REQ-TOKEN-046, REQ-TOKEN-047
+func TestTokenGroupsFollowTheOverrideAndTheDelimiterOfTheClient(t *testing.T) {
+	held := []string{"dev:example-app:admin", "dev:example-app:user", "dev:example-wiki:viewer", "prod:example-wiki:admin", "dev:example-ci:user"}
+	groupsOf := func(token string) string {
+		_, c := tokenClaims(t, token)
+		g, _ := c["groups"].([]any)
+		var out []string
+		for _, x := range g {
+			out = append(out, x.(string))
+		}
+		return strings.Join(out, ",")
+	}
+	for _, c := range []struct {
+		name      string
+		things    []string
+		delimiter string
+		want      string
+	}{
+		{"neither", nil, "", "dev:example-app:admin,dev:example-app:user"},
+		{"the override", []string{"example-wiki"}, "", "dev:example-app:admin,dev:example-app:user,dev:example-wiki:viewer,prod:example-wiki:admin"},
+		{"the delimiter", nil, ".", "dev.example-app.admin,dev.example-app.user"},
+		{"both", []string{"example-wiki"}, "/", "dev/example-app/admin,dev/example-app/user,dev/example-wiki/viewer,prod/example-wiki/admin"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newEnv(t, func(o *options) {
+				o.client.Requires = []string{"dev:example-app:user"}
+				o.client.Groups, o.client.GroupsDelimiter = c.things, c.delimiter
+			})
+			e.policy.grantNames = held
+			b, _ := e.redeemed()
+			for _, tok := range []string{"id_token", "access_token"} {
+				if got := groupsOf(b[tok].(string)); got != c.want {
+					t.Errorf("%s groups = %s, want %s", tok, got, c.want)
+				}
+			}
+			e.clk.advance(time.Minute)
+			r := e.token(refreshRequest(b["refresh_token"].(string)))
+			if r.GetStatus() != http.StatusOK {
+				t.Fatalf("refresh: %d %s", r.GetStatus(), r.GetBody())
+			}
+			rb := body(t, r)
+			for _, tok := range []string{"id_token", "access_token"} {
+				if got := groupsOf(rb[tok].(string)); got != c.want {
+					t.Errorf("refreshed %s groups = %s, want %s", tok, got, c.want)
+				}
+			}
+		})
+	}
+}
+
 func TestTokenLosingRedemptionEndsTheWinnersChain(t *testing.T) {
 	// Another instance redeems the code between this one's read and its write: this one's conditional update aborts,
 	// it finds the code spent, and it ends the chain the winner made. The winner's chain exists by then because the

@@ -86,6 +86,25 @@
           ],
           "pattern": "^(required|nonce)?$",
           "description": "how a code is bound to the client that asked for it: empty or \"required\" for PKCE with S256, \"nonce\" for a confidential client that checks the nonce of its ID token instead (RFC 9700 section 2.1.1; ADR 0021); only a confidential client"
+        },
+        "groups": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+          },
+          "description": "things whose held grant names this audience's tokens carry in groups in every scope and role, beyond the pairs of requires (ADR 0020, \"The claims of a token\"); each is a thing the vocabulary declares, which the load checks"
+        },
+        "groups_delimiter": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[!#-+./;-@\\[-^`{-~]{0,8}$",
+          "description": "what replaces each \":\" of a grant name in the groups of this audience's tokens, for a verifier that splits a group on \":\"; one to eight printable ASCII characters outside letters, digits, \"-\", \"_\", \":\", a quote and a comma; empty keeps \":\""
         }
       },
       "required": [

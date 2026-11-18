@@ -690,6 +690,42 @@ func TestTheNarrowingKeepsPairsAndNeverWidens(t *testing.T) {
 	}
 }
 
+// The audience's groups override adds the things it names, in every scope and role, to the pairs of its requires, and its
+// delimiter writes each name of the claim without the colon. Both are the audience's, not the caller's: the rule is the
+// one session applies, and the shared vectors hold the two to it.
+// verifies: REQ-TOKEN-046, REQ-TOKEN-047
+func TestTheGroupsOverrideAndTheDelimiterOfTheAudienceShapeTheClaim(t *testing.T) {
+	held := []string{"dev:example-app:user", "dev:example-wiki:viewer", "prod:example-wiki:admin", "dev:example-ci:user"}
+	groups := func(e *env) []string {
+		t.Helper()
+		r := e.exchange(request(e.mint(subjectClaims(nil))))
+		if r.GetStatus() != 200 {
+			t.Fatalf("status = %d: %s", r.GetStatus(), r.GetBody())
+		}
+		claims, _ := claimsOf(t, body(t, r)["access_token"].(string))
+		return toStrings(claims["groups"])
+	}
+	for _, c := range []struct {
+		name      string
+		groups    []string
+		delimiter string
+		want      string
+	}{
+		{"neither", nil, "", "dev:example-app:user"},
+		{"the override", []string{"example-wiki"}, "", "dev:example-app:user,dev:example-wiki:viewer,prod:example-wiki:admin"},
+		{"the delimiter", nil, ".", "dev.example-app.user"},
+		{"both", []string{"example-wiki"}, "/", "dev/example-app/user,dev/example-wiki/viewer,prod/example-wiki/admin"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newEnv(t, envOptions{requires: []string{"dev:example-app:user"}, groups: c.groups, delimiter: c.delimiter})
+			e.policy.decide = allow(held...)
+			if got := strings.Join(groups(e), ","); got != c.want {
+				t.Errorf("groups = %s, want %s", got, c.want)
+			}
+		})
+	}
+}
+
 func TestCheck(t *testing.T) {
 	e := newEnv(t, envOptions{})
 	if bad := e.svc.Check(context.Background()); len(bad) != 0 {

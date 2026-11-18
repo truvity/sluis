@@ -1,0 +1,161 @@
+{
+  "about": "Which grant names reach which audience in the groups claim of a token, and how the claim is spelled (ADR 0020, \"The claims of a token\"; REQ-TOKEN-033, REQ-TOKEN-046, REQ-TOKEN-047). Each audience is a client: requires are its grant names, things its groups override, delimiter its groups_delimiter. held is what the person holds after policy has expanded the ladders. groups is the claim, sorted by the names as written, with no repeats. The rule is the one v1 keeps: a name is kept when its scope:thing pair is a pair of requires, in any role, or when its thing is in the override, in any scope; the delimiter is applied after narrowing and changes how a kept name is written, never which names are kept. v2 has no report mode and no 'all' override. kits/go/groupsclaim, session and exchange are held to narrowing; actors/store is held to delimiters.",
+  "narrowing": [
+    {
+      "name": "the pair of requires keeps every role of it",
+      "held": ["dev:example-app:admin", "dev:example-app:user", "dev:example-wiki:admin"],
+      "requires": ["dev:example-app:user"],
+      "groups": ["dev:example-app:admin", "dev:example-app:user"]
+    },
+    {
+      "name": "the same thing in another scope is another pair",
+      "held": ["dev:example-app:user", "prod:example-app:user", "all:example-app:user"],
+      "requires": ["dev:example-app:user"],
+      "groups": ["dev:example-app:user"]
+    },
+    {
+      "name": "another thing in the same scope is another pair",
+      "held": ["dev:example-app:user", "dev:example-wiki:user", "dev:example-ci:user"],
+      "requires": ["dev:example-wiki:user"],
+      "groups": ["dev:example-wiki:user"]
+    },
+    {
+      "name": "two pairs of requires keep both",
+      "held": ["dev:example-app:user", "dev:example-wiki:editor", "dev:example-ci:user", "prod:example-wiki:editor"],
+      "requires": ["dev:example-app:user", "dev:example-wiki:viewer"],
+      "groups": ["dev:example-app:user", "dev:example-wiki:editor"]
+    },
+    {
+      "name": "two requires of one pair count once",
+      "held": ["dev:example-app:admin", "dev:example-app:user"],
+      "requires": ["dev:example-app:user", "dev:example-app:admin"],
+      "groups": ["dev:example-app:admin", "dev:example-app:user"]
+    },
+    {
+      "name": "an audience that requires nothing reads nothing",
+      "held": ["dev:example-app:user", "dev:example-wiki:user"],
+      "requires": [],
+      "groups": []
+    },
+    {
+      "name": "nothing held, nothing carried",
+      "held": [],
+      "requires": ["dev:example-app:user"],
+      "groups": []
+    },
+    {
+      "name": "held names that are not of the pairs are dropped, though the person holds them",
+      "held": ["dev:example-ci:admin", "prod:example-app:admin"],
+      "requires": ["dev:example-app:user"],
+      "groups": []
+    },
+    {
+      "name": "the claim is sorted and has no repeats",
+      "held": ["dev:example-app:user", "dev:example-app:admin", "dev:example-app:user", "dev:example-app:auditor"],
+      "requires": ["dev:example-app:user"],
+      "groups": ["dev:example-app:admin", "dev:example-app:auditor", "dev:example-app:user"]
+    },
+    {
+      "name": "an override thing keeps every scope and role of that thing",
+      "held": ["dev:example-wiki:viewer", "prod:example-wiki:admin", "all:example-wiki:editor", "dev:example-ci:user"],
+      "requires": ["dev:example-app:user"],
+      "things": ["example-wiki"],
+      "groups": ["all:example-wiki:editor", "dev:example-wiki:viewer", "prod:example-wiki:admin"]
+    },
+    {
+      "name": "an override adds to the pairs of requires and takes none away",
+      "held": ["dev:example-app:user", "dev:example-wiki:viewer", "dev:example-ci:user"],
+      "requires": ["dev:example-app:user"],
+      "things": ["example-wiki"],
+      "groups": ["dev:example-app:user", "dev:example-wiki:viewer"]
+    },
+    {
+      "name": "an override thing is matched whole: not a prefix, a suffix or a scope",
+      "held": ["dev:example-app-two:user", "dev:my-example-app:user", "example-app:other:user", "dev:example-app:user"],
+      "requires": ["dev:example-wiki:user"],
+      "things": ["example-app"],
+      "groups": ["dev:example-app:user"]
+    },
+    {
+      "name": "an override of a thing nobody holds changes nothing",
+      "held": ["dev:example-app:user"],
+      "requires": ["dev:example-app:user"],
+      "things": ["example-ci"],
+      "groups": ["dev:example-app:user"]
+    },
+    {
+      "name": "a held name of another shape is never kept, whatever the override says",
+      "held": ["dev:*:user", "*:example-app:user", "dev:example-app", "dev:example-app:user:extra", "dev:example-app:", "example-app", "dev:example-app:user"],
+      "requires": ["dev:example-app:user"],
+      "things": ["example-app", "*"],
+      "groups": ["dev:example-app:user"]
+    },
+    {
+      "name": "a requires entry of another shape names no pair",
+      "held": ["dev:example-app:user"],
+      "requires": ["dev:*:user", "*:example-app:user", "dev:example-app", "dev:example-app:user:extra"],
+      "groups": []
+    },
+    {
+      "name": "the delimiter respells each name of the claim",
+      "held": ["dev:example-app:admin", "dev:example-app:user", "dev:example-wiki:admin"],
+      "requires": ["dev:example-app:user"],
+      "delimiter": ".",
+      "groups": ["dev.example-app.admin", "dev.example-app.user"]
+    },
+    {
+      "name": "the delimiter does not change which names are kept",
+      "held": ["dev:example-app:user", "dev:example-wiki:viewer", "dev:example-ci:user"],
+      "requires": ["dev:example-app:user"],
+      "things": ["example-wiki"],
+      "delimiter": "/",
+      "groups": ["dev/example-app/user", "dev/example-wiki/viewer"]
+    },
+    {
+      "name": "a delimiter of several characters",
+      "held": ["dev:example-app:user"],
+      "requires": ["dev:example-app:user"],
+      "delimiter": "~~",
+      "groups": ["dev~~example-app~~user"]
+    },
+    {
+      "name": "no delimiter keeps the colon",
+      "held": ["dev:example-app:user"],
+      "requires": ["dev:example-app:user"],
+      "delimiter": "",
+      "groups": ["dev:example-app:user"]
+    },
+    {
+      "name": "the delimiter respells an empty claim as an empty claim",
+      "held": ["dev:example-ci:user"],
+      "requires": ["dev:example-app:user"],
+      "delimiter": ".",
+      "groups": []
+    }
+  ],
+  "delimiters": {
+    "about": "A groups_delimiter the loader accepts: one to eight printable ASCII characters, none of them a letter, a digit, '-' or '_' (which a scope, a thing or a role is written with), ':' (the separator it replaces), a double quote or a comma. A name holds none of them, so two names never become one after the rewrite. The empty string leaves the key out.",
+    "accepted": [".", "/", "|", "~", "#", "@", "!", "..", "~~", "+", "=", "%", ";", "^", "`", "[", "{", "<", "\\", "'", "$", "&", "*", "(", ")", "?", ".|.", "........"],
+    "refused": [
+      { "value": ":", "why": "the separator it replaces" },
+      { "value": "::", "why": "holds the separator" },
+      { "value": ".:.", "why": "holds the separator" },
+      { "value": "a", "why": "a letter of a name" },
+      { "value": "Z", "why": "a letter of a name" },
+      { "value": "0", "why": "a digit of a name" },
+      { "value": "-", "why": "a character of a name" },
+      { "value": "_", "why": "a character of a name" },
+      { "value": ".a", "why": "holds a letter" },
+      { "value": "._.", "why": "holds an underscore" },
+      { "value": " ", "why": "whitespace" },
+      { "value": ". .", "why": "holds whitespace" },
+      { "value": "\t", "why": "a control character" },
+      { "value": "\u007f", "why": "a control character" },
+      { "value": ",", "why": "a comma" },
+      { "value": "\"", "why": "a double quote" },
+      { "value": "é", "why": "not ASCII" },
+      { "value": ".é", "why": "holds a character that is not ASCII" },
+      { "value": ".........", "why": "nine characters, one more than the limit" }
+    ]
+  }
+}

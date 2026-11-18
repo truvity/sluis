@@ -41,7 +41,7 @@ Every token's `aud` is exactly one registered client id, never a URL; a resource
 - **Redirect URIs and sign-out pages**, per client. A loopback redirect may differ in its port, for native apps.
 - **Resources.** A resource is a declared URL with its own `requires` and lifetime cap, matched exactly; an undeclared or unentitled resource is refused. Clients that describe themselves with an HTTPS URL (a client identity document) are admitted only from allow-listed hosts, and only to the groups the document gate names ([0021](/decisions/0021-clients/#self-described-clients)).
 - **Long-running agents** get a session class with a longer chain, shorter tokens and a consent page that is never silent ([0018](/decisions/0018-sessions/#agent-sessions)).
-- **Groups in the token** are narrowed to the groups the audience requires.
+- **Groups in the token** are narrowed to the groups the audience requires, and a client may name more things in `groups` (every scope and role of each) and a `groups_delimiter` that replaces each `:` of a name, for a verifier that splits a group on `:` ([0020](/decisions/0020-grant-vocabulary-and-token-claims/#the-claims-of-a-token)).
 
 ## Verifying tokens
 
@@ -69,6 +69,8 @@ clients:
     redirects: [https://deploy.example.org/auth/callback]
     requires: [platform-admin, platform-viewer]
     signing_alg: ES384
+    groups: [example-wiki]      # also every held grant name of this thing, in every scope and role
+    groups_delimiter: "."       # a group is written dev.example-wiki.viewer, not dev:example-wiki:viewer
 resources:
   https://mcp.example.org/metrics:
     client: mcp-metrics

@@ -894,11 +894,31 @@ fn credential_name(name: &str) -> bool {
 /// (docs/reference/policy.md "Format").
 fn grant_name(s: &str) -> bool {
     let parts: Vec<&str> = s.split(':').collect();
-    parts.len() == 3
-        && parts.iter().all(|p| {
-            (1..=64).contains(&p.len())
-                && p.bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    parts.len() == 3 && parts.iter().all(|p| grant_segment(p))
+}
+
+/// One part of a grant name, a scope, a thing or a role: 1 to 64 ASCII letters, digits, `-` and `_`.
+fn grant_segment(s: &str) -> bool {
+    (1..=64).contains(&s.len())
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
+/// The most characters of a `groups_delimiter`.
+const GROUPS_DELIMITER_MAX: usize = 8;
+
+/// A `groups_delimiter` that is safe to put in place of each `:` of a grant name: one to eight printable ASCII characters,
+/// none of them a character of a grant name (a letter, a digit, `-` or `_`), the separator it replaces, a double quote or a
+/// comma, which a quoted list would need to escape. A grant name holds none of them, so two different names never become
+/// one after the rewrite, and the loader has no table of the declared names to search for a collision (v1 had one, because
+/// its names had no fixed alphabet). The same rule is the pattern of `groups_delimiter` in the schema, and the shared
+/// vectors of `kits/conformance/token/groups-vectors.json` hold the two to each other.
+fn groups_delimiter_ok(s: &str) -> bool {
+    (1..=GROUPS_DELIMITER_MAX).contains(&s.len())
+        && s.bytes().all(|b| {
+            b.is_ascii_graphic()
+                && !b.is_ascii_alphanumeric()
+                && !matches!(b, b'-' | b'_' | b':' | b'"' | b',')
         })
 }
 
@@ -966,6 +986,31 @@ fn installation_client(mut o: Obj, id: &str) -> R<pb::InstallationClient> {
             "a client that takes the nonce in place of PKCE must name its secret",
         );
     }
+    // The things whose grant names the client's tokens carry in every scope and role, beyond the pairs of `requires`
+    // (ADR 0020, "The claims of a token"; REQ-CLIENT-049). A thing is a name of the vocabulary, which is checked with the
+    // snapshot; a wildcard and a grant name are no thing, and a thing named twice is a slip that would read as two.
+    let groups = o.strings("groups")?;
+    for (i, g) in groups.iter().enumerate() {
+        let at = format!("{}[{i}]", o.at("groups"));
+        if g.contains('*') {
+            return err(&at, "a wildcard is not allowed in groups");
+        }
+        if !grant_segment(g) {
+            return err(&at, "is not a thing name");
+        }
+        if groups[..i].contains(g) {
+            return err(&at, "names a thing twice");
+        }
+    }
+    // What replaces each `:` of a grant name in the groups of the client's tokens, for a verifier that splits on `:`
+    // (ADR 0020; REQ-CLIENT-048). Empty keeps the colon.
+    let groups_delimiter = o.string("groups_delimiter")?;
+    if !groups_delimiter.is_empty() && !groups_delimiter_ok(&groups_delimiter) {
+        return err(
+            &o.at("groups_delimiter"),
+            "is not one to eight printable ASCII characters outside letters, digits, -, _, :, a quote and a comma",
+        );
+    }
     o.done()?;
     Ok(pb::InstallationClient {
         id: client_id,
@@ -977,6 +1022,8 @@ fn installation_client(mut o: Obj, id: &str) -> R<pb::InstallationClient> {
         profile,
         signing_alg,
         pkce,
+        groups,
+        groups_delimiter,
         ..pb::InstallationClient::default()
     })
 }

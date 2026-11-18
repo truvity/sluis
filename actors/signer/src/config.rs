@@ -86,7 +86,7 @@ impl Issuer {
 }
 
 /// A registered client.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Registered {
     /// The longest token lifetime the client may get, in seconds, when it sets one.
     pub ttl_cap_secs: Option<i64>,
@@ -94,6 +94,9 @@ pub struct Registered {
     /// loader refuses such a value; if one is here anyway, `signer` signs nothing for the client and never falls back to
     /// ES384.
     pub signing_alg: Option<Alg>,
+    /// What replaces each `:` of a grant name in the client's `groups`: empty keeps `:`. The groups of a token for this
+    /// audience are checked as grant names written with it.
+    pub groups_delimiter: String,
 }
 
 /// The algorithm a client's `signing_alg` names: empty is the default, ES384.
@@ -186,6 +189,7 @@ impl Config {
             Ok(Ok(item)) => Ok(Some(Registered {
                 ttl_cap_secs: secs(item.value.ttl_cap.as_option()),
                 signing_alg: signing_alg(&item.value.signing_alg),
+                groups_delimiter: item.value.groups_delimiter.clone(),
             })),
             Ok(Err(StoreError::NotFound | StoreError::Address(_))) => Ok(None),
             _ => Err(Unreadable::Store),

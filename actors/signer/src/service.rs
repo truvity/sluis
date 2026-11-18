@@ -219,7 +219,8 @@ impl Signer {
         m: &SignTokenRequest,
     ) -> Result<(SignTokenResponse, Typ, claims::Shaped), Refuse> {
         let typ = Typ::parse(&m.typ).ok_or(refuse(ErrorCode::InvalidArgument, "typ", "typ"))?;
-        let c = claims::shape(typ, &m.claims_json)?;
+        // The audience names the client that says how the groups are written, so the groups wait for it (below).
+        let c = claims::shape_with(typ, &m.claims_json, None)?;
         let issuer = self.config.issuer().await?;
         claims::check_issuer(&c, &issuer.url)?;
         let audience = self
@@ -227,6 +228,8 @@ impl Signer {
             .client(&c.audience)
             .await?
             .ok_or(Bad("claims.aud"))?;
+        // A group is a grant name, written with the delimiter of the audience's client when it declares one.
+        c.check_groups(&audience.groups_delimiter)?;
         if let Some(id) = &c.client_id {
             self.config
                 .client(id)

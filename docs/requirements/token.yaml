@@ -545,7 +545,7 @@ requirements:
       - {kind: integration-test, ref: "subject derivation review test"}
   - id: REQ-TOKEN-033
     area: TOKEN
-    statement: "An access token and an ID token MUST carry in groups only the held grants whose scope and thing appear among the pairs of the audience's requires."
+    statement: "An access token and an ID token MUST carry in groups only the held grants whose scope and thing appear among the pairs of the audience's requires, and those of the things its groups override names."
     rationale: "A relying party must not read a grant meant for another system (ADR 0020)."
     level: MUST
     source: design-decision
@@ -553,9 +553,10 @@ requirements:
     milestone: first-version
     runtimes: all
     standards: []
-    issues: [776]
+    issues: [776, 788, 1815]
     verification:
       - {kind: integration-test, ref: "hold grants on two things: the token for the first audience carries only that thing's grants"}
+      - {kind: test-vectors, ref: "kits/conformance/token/groups-vectors.json, narrowing: kits/go/groupsclaim holds the rule, and session and exchange take their claim from it"}
   - id: REQ-TOKEN-034
     area: TOKEN
     statement: "sluis MUST NOT issue a claim that is not in the declared claim set of its token type."
@@ -722,3 +723,49 @@ requirements:
     issues: [782, 785]
     verification:
       - {kind: integration-test, ref: "a token of the trusted realm yields a sluis token with the three claims; a request that names them changes nothing"}
+
+  - id: REQ-TOKEN-046
+    area: TOKEN
+    statement: "A token for a client MUST carry in groups every held grant name of each thing that the client's groups override names, in every scope and role, in addition to the pairs of its requires."
+    rationale: "One relying party may read more than the pairs it requires, and the thing list names what, so a reviewer sees it (ADR 0020)."
+    level: MUST
+    source: v1-parity
+    status: done
+    milestone: first-version
+    runtimes: all
+    standards: []
+    issues: [788, 1815]
+    tests: [kits/go/groupsclaim/groupsclaim_test.go, actors/session/internal/sessiond/token_test.go, actors/exchange/internal/exchanged/exchange_test.go]
+    verification:
+      - {kind: test-vectors, ref: "kits/conformance/token/groups-vectors.json, narrowing: an override keeps every scope and role of a thing, adds to the pairs and takes none away, matches the thing whole"}
+      - {kind: integration-test, ref: "sign-in, refresh and exchange give the ID token and the access token the same claim for a client with an override"}
+  - id: REQ-TOKEN-047
+    area: TOKEN
+    statement: "A token for a client that declares a groups delimiter MUST carry each group written with that delimiter in place of each colon of the grant name, after narrowing."
+    rationale: "Some verifiers split a group on the colon, and the audience that has one must be given names they can read (ADR 0020)."
+    level: MUST
+    source: v1-parity
+    status: done
+    milestone: first-version
+    runtimes: all
+    standards: []
+    issues: [788, 1815]
+    tests: [kits/go/groupsclaim/groupsclaim_test.go, actors/session/internal/sessiond/token_test.go, actors/exchange/internal/exchanged/exchange_test.go]
+    verification:
+      - {kind: test-vectors, ref: "kits/conformance/token/groups-vectors.json, narrowing: the delimiter respells every kept name, one or several characters, and changes which names are kept in no case"}
+      - {kind: integration-test, ref: "ID token and access token, at sign-in and at a refresh, and the access token of an exchange, carry the respelled claim"}
+  - id: REQ-TOKEN-048
+    area: TOKEN
+    statement: "signer MUST refuse a token whose groups are not grant names written with the groups delimiter of the audience's client, or with the colon when it declares none."
+    rationale: "What signer signs must be what the policy of the claim allows, and a name written another way is a claim that nothing checked (ADR 0020)."
+    level: MUST
+    source: v1-parity
+    status: done
+    milestone: first-version
+    runtimes: all
+    standards: []
+    actors: [signer]
+    issues: [788, 1815]
+    tests: [actors/signer/tests/sign.rs]
+    verification:
+      - {kind: integration-test, ref: "ID and access tokens for a client with a dot, a slash and no delimiter: the right names sign; another delimiter, the colon, a short or long name, a wildcard and a repeat are refused at claims.groups"}

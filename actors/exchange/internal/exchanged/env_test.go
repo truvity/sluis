@@ -410,6 +410,8 @@ type envOptions struct {
 	lifetime    time.Duration // TokenLifetime.access_token; 0 declares none
 	clientCap   time.Duration // ttl_cap of example-app
 	requires    []string      // requires of example-app
+	groups      []string      // the groups override of example-app
+	delimiter   string        // the groups_delimiter of example-app
 	unbound     bool          // the directory is Unbound
 }
 
@@ -452,7 +454,7 @@ func newEnv(t *testing.T, o envOptions) *env {
 	st.put("installation-client", "sluis-cli", &configv2alpha1.InstallationClient{Id: "sluis-cli", Kind: "public", Profile: "native"})
 	// A public client with no profile is not a native one: its token is not a subject (REQ-EXCH-020).
 	st.put("installation-client", "bare-app", &configv2alpha1.InstallationClient{Id: "bare-app", Kind: "public"})
-	app := &configv2alpha1.InstallationClient{Id: "example-app", Kind: "confidential", Requires: o.requires}
+	app := &configv2alpha1.InstallationClient{Id: "example-app", Kind: "confidential", Requires: o.requires, Groups: o.groups, GroupsDelimiter: o.delimiter}
 	if o.clientCap > 0 {
 		app.TtlCap = durationpb.New(o.clientCap)
 	}

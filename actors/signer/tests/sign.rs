@@ -846,6 +846,20 @@ impl World {
                 .encode_to_vec(),
             );
         }
+        // `dot-app` and `slash-app` write the groups of their tokens with a delimiter in place of the colon.
+        for (id, delimiter) in [("dot-app", "."), ("slash-app", "/")] {
+            store.put(
+                "installation-client",
+                id,
+                InstallationClient {
+                    id: id.into(),
+                    kind: "public".into(),
+                    groups_delimiter: delimiter.into(),
+                    ..InstallationClient::default()
+                }
+                .encode_to_vec(),
+            );
+        }
         // The KeyPlan lists the token key alone: the RS256 purpose is not enabled until a test says so.
         store.put("key-plan", "default", key_plan(false));
         let key = new_fake_key();
@@ -975,9 +989,20 @@ impl World {
     }
 
     fn claims_at(&self, typ: &str, aud: &str, iat: i64, lifetime: i64) -> Vec<u8> {
+        self.claims_with_groups(typ, aud, iat, lifetime, &["dev:app:admin"])
+    }
+
+    fn claims_with_groups(
+        &self,
+        typ: &str,
+        aud: &str,
+        iat: i64,
+        lifetime: i64,
+        groups: &[&str],
+    ) -> Vec<u8> {
         let mut c = json!({
             "iss": ISSUER, "sub": "p-0001", "aud": aud, "iat": iat, "exp": iat + lifetime,
-            "groups": ["dev:app:admin"],
+            "groups": groups,
         });
         if typ == "at+jwt" {
             c["jti"] = json!("j-0001");
@@ -1007,6 +1032,15 @@ async fn key_set(c: &Client) -> Vec<u8> {
         .unwrap()
         .into_owned()
         .jwks_json
+}
+
+/// The field that the last refusal of `signer` names in its audit fact (the error says only `claims`).
+fn refused_path(w: &World) -> String {
+    let facts = w.spool.records("signer.refused");
+    facts.last().unwrap()["unmapped"]["sluis"]["path"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned()
 }
 
 fn reason(e: &ConnectError) -> String {
@@ -3086,6 +3120,122 @@ async fn an_unknown_signing_alg_signs_no_id_token_and_falls_back_to_nothing() {
         .await
         .unwrap();
     assert_eq!(header_of(&at.token)["alg"], "ES384");
+}
+
+/// A group of a token is a grant name written the way the audience's client says: with `:` when it declares no delimiter,
+/// and with its `groups_delimiter` in place of each `:` when it does. A name written the other way, a name that is no grant
+/// name once the delimiter is read back, and a delimiter inside a segment are each refused at `claims.groups`, in an ID token
+/// and in an access token alike. The refusal names the path and never the group.
+///
+/// verifies: REQ-TOKEN-048
+#[tokio::test]
+async fn the_groups_of_a_token_are_written_with_the_delimiter_of_the_audience() {
+    let w = World::new().await;
+    let c = w.signer().await;
+    let groups = |typ: &str, aud: &str, g: &[&str]| {
+        let at = w.clock.secs();
+        w.claims_with_groups(typ, aud, at, 600, g)
+    };
+    for typ in ["JWT", "at+jwt"] {
+        for (aud, good, bad) in [
+            (
+                "dot-app",
+                &["dev.app.admin", "dev.app-two.user_1"][..],
+                &[
+                    "dev:app:admin",
+                    "dev/app/admin",
+                    "dev.app",
+                    "dev.app.admin.x",
+                    "dev..admin",
+                    "dev.*.admin",
+                    ".app.admin",
+                ][..],
+            ),
+            (
+                "slash-app",
+                &["dev/app/admin"][..],
+                &["dev.app.admin", "dev:app:admin", "dev//admin"][..],
+            ),
+            (
+                "sluis-cli",
+                &["dev:app:admin", "all:app:admin"][..],
+                &[
+                    "dev.app.admin",
+                    "dev/app/admin",
+                    "dev:app",
+                    "dev:*:admin",
+                    "dev:app:admin:x",
+                ][..],
+            ),
+        ] {
+            let ok = sign(&c, typ, groups(typ, aud, good)).await;
+            assert!(ok.is_ok(), "{typ} {aud} {good:?}");
+            for b in bad {
+                let e = sign(&c, typ, groups(typ, aud, &[b])).await.unwrap_err();
+                assert_eq!(reason(&e), "claims", "{typ} {aud} {b}");
+                assert_eq!(refused_path(&w), "claims.groups", "{typ} {aud} {b}");
+            }
+            // One name of the wrong shape among good ones refuses the whole claim.
+            let mixed: Vec<&str> = good.iter().copied().chain([bad[0]]).collect();
+            let e = sign(&c, typ, groups(typ, aud, &mixed)).await.unwrap_err();
+            assert_eq!(reason(&e), "claims", "{typ} {aud} mixed");
+            assert_eq!(refused_path(&w), "claims.groups", "{typ} {aud} mixed");
+        }
+    }
+    // The same name twice is refused whatever the delimiter.
+    let e = sign(
+        &c,
+        "JWT",
+        groups("JWT", "dot-app", &["dev.app.admin", "dev.app.admin"]),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(reason(&e), "claims");
+    assert_eq!(refused_path(&w), "claims.groups");
+    // An audience nobody registered is refused as it was, before its groups are read.
+    let e = sign(&c, "JWT", groups("JWT", "nobody", &["dev:app:admin"]))
+        .await
+        .unwrap_err();
+    assert_eq!(reason(&e), "claims");
+    assert_eq!(refused_path(&w), "claims.aud");
+}
+
+/// The wire numbers of `groups` and `groups_delimiter` are held by hand, as the number of `signing_alg` is: a client document
+/// whose bytes are written here, with `groups` as field 10 and `groups_delimiter` as field 11 of `InstallationClient` (tags 0x52
+/// and 0x5a, strings), is read by `signer` with the delimiter, so a name written with it signs and one written with `:` does not.
+///
+/// verifies: REQ-TOKEN-048
+#[tokio::test]
+async fn a_client_that_names_groups_delimiter_as_field_11_gets_groups_written_with_it() {
+    let w = World::new().await;
+    let id = "wire-dot";
+    let mut b = vec![0x0a, u8::try_from(id.len()).unwrap()];
+    b.extend(id.as_bytes());
+    b.extend([0x12, 6]);
+    b.extend(b"public");
+    b.extend([0x52, 3]);
+    b.extend(b"app");
+    b.extend([0x5a, 1]);
+    b.extend(b".");
+    w.store.put("installation-client", id, b);
+    let c = w.signer().await;
+    let at = w.clock.secs();
+    sign(
+        &c,
+        "JWT",
+        w.claims_with_groups("JWT", id, at, 600, &["dev.app.admin"]),
+    )
+    .await
+    .unwrap();
+    let e = sign(
+        &c,
+        "JWT",
+        w.claims_with_groups("JWT", id, at, 600, &["dev:app:admin"]),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(reason(&e), "claims");
+    assert_eq!(refused_path(&w), "claims.groups");
 }
 
 /// Revoking the key of one algorithm leaves the other signing and in the key set, in both directions; a replacement of the
