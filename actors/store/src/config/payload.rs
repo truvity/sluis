@@ -963,6 +963,12 @@ fn installation_client(mut o: Obj, id: &str) -> R<pb::InstallationClient> {
         check_redirect(r, &format!("{}[{i}]", o.at("redirects")))?;
     }
     let requires = o.strings("requires")?;
+    // What a client asks of a person is never left out: an empty list admits nobody, and a client that nobody can sign in to
+    // is a slip that should stop the load, not wait for the first request (ADR 0021, "The fields added at parity";
+    // REQ-CLIENT-050).
+    if requires.is_empty() {
+        return err(&o.at("requires"), "must name at least one grant");
+    }
     for (i, r) in requires.iter().enumerate() {
         // A wildcard in `requires` would admit by pattern, where the rule should name the thing (ADR 0020, "Grant
         // names and the vocabulary"; REQ-POLICY-012). Whether the name is declared is checked with the vocabulary.
@@ -980,7 +986,18 @@ fn installation_client(mut o: Obj, id: &str) -> R<pb::InstallationClient> {
     if ttl_cap.is_some_and(|d| d > ACCESS_TOKEN_CAP) {
         return err(&o.at("ttl_cap"), "above the built-in cap of one hour");
     }
+    // The profile is a public client's alone (ADR 0021, "The client declaration"): `browser`, whose redirects are exact https
+    // addresses, or `native`, an app on the person's own host with the loopback redirects of RFC 8252. Left out, a public
+    // client is a browser's. A confidential client is the `service` profile and an exchange client the `machine` profile by
+    // their kind, so they say none (REQ-CLIENT-051).
     let profile = o.string("profile")?;
+    if kind == "public" {
+        if !["", "browser", "native"].contains(&profile.as_str()) {
+            return err(&o.at("profile"), "a public client is browser or native");
+        }
+    } else if !profile.is_empty() {
+        return err(&o.at("profile"), "only a public client has a profile");
+    }
     // Where the client's secret is in the secret source (ADR 0005, "Secret sources": config names it). The value is
     // never in the document, only the name of a credential.
     let secret = o.string("secret")?;
@@ -1018,6 +1035,18 @@ fn installation_client(mut o: Obj, id: &str) -> R<pb::InstallationClient> {
             &o.at("pkce"),
             "a client that takes the nonce in place of PKCE must name its secret",
         );
+    }
+    // A confidential client is one that proves who it is at the token endpoint, so it names the credential that holds its
+    // secret; without one it could never redeem a code (REQ-CLIENT-020; v1 refused it at load too).
+    if secret.is_empty() && kind == "confidential" {
+        return err(
+            &o.at("secret"),
+            "a confidential client must name its secret",
+        );
+    }
+    // An exchange client never asks for a person's code, so it has nothing to bind (REQ-CLIENT-020).
+    if !pkce.is_empty() && kind == "exchange" {
+        return err(&o.at("pkce"), "an exchange client is given no code to bind");
     }
     // The things whose grant names the client's tokens carry in every scope and role, beyond the pairs of `requires`
     // (ADR 0020, "The claims of a token"; REQ-CLIENT-049). A thing is a name of the vocabulary, which is checked with the
