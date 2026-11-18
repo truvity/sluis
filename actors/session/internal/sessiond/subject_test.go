@@ -13,6 +13,7 @@ import (
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	integrationv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/integration/v2alpha1"
 	sessionv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/session/v2alpha1"
+	"github.com/truvity/sluis/v2/kits/go/subject"
 )
 
 // The tests of this file are about the sub a relying party reads: who gets which, and what it is made of (ADR 0034,
@@ -282,4 +283,38 @@ func tokenClaimsOf(t *testing.T, token string) map[string]any {
 	t.Helper()
 	_, c := tokenClaims(t, token)
 	return c
+}
+
+// The sub of both tokens has one of the forms of the contract (kits/conformance/token/sub-vectors.json, shape): a
+// pairwise value for a tenant of a named sector, and the person's own subject, which is the id of the Person item,
+// for a tenant that declares the public sector. The upstream here names an address, and the sub is none of the things
+// that the vectors say have no form: an address, a name or number of the upstream, a v1 spelling.
+//
+// verifies: REQ-SUBJ-071
+func TestTheSubjectOfATokenHasOneOfTheFormsOfTheContract(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		sector sessiond.Sector
+		kind   subject.Kind
+	}{
+		{"a named sector", sessiond.Sector{Name: "sector-a"}, subject.KindPairwise},
+		{"the public sector", sessiond.Sector{Public: true}, subject.KindPerson},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, func(o *options) { o.sectors = func(string) sessiond.Sector { return tc.sector } })
+			e.upstream.assertion = upstreamAssertion("email", "ada.lovelace@example.test")
+			resp := e.signInClient(testClient)
+			id, access := subs(t, resp)
+			for _, sub := range []string{id, access} {
+				if kind, ok := subject.Classify(sub); !ok || kind != tc.kind {
+					t.Errorf("sub %q has the form %q, want %q", sub, kind, tc.kind)
+				}
+			}
+			if tc.kind == subject.KindPerson {
+				if person := e.store.ids("person", testTenant)[0]; id != person {
+					t.Errorf("sub %q is not the person's own id %q", id, person)
+				}
+			}
+		})
+	}
 }

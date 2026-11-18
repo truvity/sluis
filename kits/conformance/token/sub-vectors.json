@@ -1,0 +1,452 @@
+{
+  "about": "The three forms a `sub` can have in v2 and how each is spelled (ADR 0020, \"The claims of a token\"; ADR 0019, \"Assigning a subject\"; ADR 0022, \"SPIFFE identities\"; REQ-SUBJ-071, REQ-WORKLOAD-008). shape: Classify says person (the person's own subject, 128 random bits as 26 lower-case base32 characters, the sub of a tenant whose sector is public), pairwise (a Mac cut to 256 bits as 43 base64url characters, ADR 0034, which ADR 0045 cancels and the code still makes) or spiffe (the SPIFFE ID of a workload), and an empty kind for a string that is none of them: an e-mail address, a name of the upstream, a v1 spelling, a person's subject whose spare bits are set. ci_job and service_account: the SPIFFE ID made from what a verified proof says, or the part that was refused (trust_domain, segment); length (an ID of more than 2048 bytes) is tested in the unit test, as the vector would be as long as the limit. The ID names the repository or the ServiceAccount and never the run. v1_spellings: what v1 wrote as `sub` for each kind of subject, with the v2 form where v2 has one (v2 is null where v2 issues nothing like it); v2 never issues a v1 spelling, so each v1 string classifies as none, and a v2 given for a v1 CI or ServiceAccount spelling is the ID that the inputs make. decision says where the change is recorded: ADR 0015 (cutover), ADR 0022, or open (a question to the maintainer, on issue 1816). kits/go/subject is held to this file; session and exchange are held to shape for the sub of a person.",
+  "limits": {
+    "trust_domain_max": 255,
+    "id_max_bytes": 2048,
+    "trust_domain_alphabet": "a-z 0-9 . - _",
+    "segment_alphabet": "A-Z a-z 0-9 . - _, not empty, not . or .."
+  },
+  "shape": [
+    {
+      "name": "a person's own subject",
+      "sub": "o2jmhljvic5yapacbm5o4zwnra",
+      "kind": "person"
+    },
+    {
+      "name": "another person's own subject",
+      "sub": "h7cmz7tulbyofqgzt5y7gd7qmu",
+      "kind": "person"
+    },
+    {
+      "name": "128 bits of zero",
+      "sub": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "kind": "person"
+    },
+    {
+      "name": "128 bits of one",
+      "sub": "77777777777777777777777774",
+      "kind": "person"
+    },
+    {
+      "name": "a pairwise subject",
+      "sub": "dpLDrTVAu4A8Ags67mbNiIcSMjTqDG5xQ8Ct1z_0Me0",
+      "kind": "pairwise"
+    },
+    {
+      "name": "another pairwise subject",
+      "sub": "P8TM_nRYcOLA2Z9x8w_wZWyN7dQcwdfT03aw2-aF4vM",
+      "kind": "pairwise"
+    },
+    {
+      "name": "256 bits of zero",
+      "sub": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "kind": "pairwise"
+    },
+    {
+      "name": "256 bits of one",
+      "sub": "__________________________________________8",
+      "kind": "pairwise"
+    },
+    {
+      "name": "the SPIFFE ID of a CI job",
+      "sub": "spiffe://prod.example.com/ci/github/example-org/example-app",
+      "kind": "spiffe"
+    },
+    {
+      "name": "the SPIFFE ID of a ServiceAccount",
+      "sub": "spiffe://prod.example.com/k8s/example-cluster/ns/example-ns/sa/example-sa",
+      "kind": "spiffe"
+    },
+    {
+      "name": "an e-mail address",
+      "sub": "ada.lovelace@example.com",
+      "kind": ""
+    },
+    {
+      "name": "an e-mail address of the length of a subject",
+      "sub": "ada.lovelace@example.com.x",
+      "kind": ""
+    },
+    {
+      "name": "the name of an upstream account",
+      "sub": "alice",
+      "kind": ""
+    },
+    {
+      "name": "the number of an upstream account",
+      "sub": "10042",
+      "kind": ""
+    },
+    {
+      "name": "nothing",
+      "sub": "",
+      "kind": ""
+    },
+    {
+      "name": "a subject with a space in front",
+      "sub": " o2jmhljvic5yapacbm5o4zwnr",
+      "kind": ""
+    },
+    {
+      "name": "a person's subject in capitals",
+      "sub": "O2JMHLJVIC5YAPACBM5O4ZWNRA",
+      "kind": ""
+    },
+    {
+      "name": "a person's subject with a spare bit set in its last character",
+      "sub": "o2jmhljvic5yapacbm5o4zwnrb",
+      "kind": ""
+    },
+    {
+      "name": "a person's subject with a digit outside the alphabet",
+      "sub": "o2jmhljvic5yapacbm5o4zwnr1",
+      "kind": ""
+    },
+    {
+      "name": "a person's subject one character short",
+      "sub": "o2jmhljvic5yapacbm5o4zwnr",
+      "kind": ""
+    },
+    {
+      "name": "a person's subject one character long",
+      "sub": "o2jmhljvic5yapacbm5o4zwnraa",
+      "kind": ""
+    },
+    {
+      "name": "a pairwise subject with a spare bit set in its last character",
+      "sub": "dpLDrTVAu4A8Ags67mbNiIcSMjTqDG5xQ8Ct1z_0MeB",
+      "kind": ""
+    },
+    {
+      "name": "a pairwise subject with padding",
+      "sub": "dpLDrTVAu4A8Ags67mbNiIcSMjTqDG5xQ8Ct1z_0Me0=",
+      "kind": ""
+    },
+    {
+      "name": "a pairwise subject in the standard alphabet",
+      "sub": "++++++++++++++++++++++++++++++++++++++++++8",
+      "kind": ""
+    },
+    {
+      "name": "an ID with no path",
+      "sub": "spiffe://prod.example.com",
+      "kind": ""
+    },
+    {
+      "name": "an ID with an empty path",
+      "sub": "spiffe://prod.example.com/",
+      "kind": ""
+    },
+    {
+      "name": "an ID with an empty segment",
+      "sub": "spiffe://prod.example.com/ci//example-app",
+      "kind": ""
+    },
+    {
+      "name": "an ID with a dot segment",
+      "sub": "spiffe://prod.example.com/ci/../example-app",
+      "kind": ""
+    },
+    {
+      "name": "an ID with a trust domain in capitals",
+      "sub": "spiffe://Prod.example.com/ci/github/example-org/example-app",
+      "kind": ""
+    },
+    {
+      "name": "an ID with a port",
+      "sub": "spiffe://prod.example.com:8443/ci/github/example-org/example-app",
+      "kind": ""
+    },
+    {
+      "name": "an ID with a query",
+      "sub": "spiffe://prod.example.com/ci/github/example-org/example-app?run=1",
+      "kind": ""
+    },
+    {
+      "name": "an ID with a user",
+      "sub": "spiffe://ada@prod.example.com/ci/github/example-org/example-app",
+      "kind": ""
+    },
+    {
+      "name": "the v1 spelling of a CI job",
+      "sub": "github:example-org/example-app",
+      "kind": ""
+    },
+    {
+      "name": "the v1 spelling of a ServiceAccount with a cluster",
+      "sub": "example-cluster:k8s:example-ns:example-sa",
+      "kind": ""
+    },
+    {
+      "name": "the v1 spelling of a ServiceAccount with no cluster",
+      "sub": "k8s:example-ns:example-sa",
+      "kind": ""
+    },
+    {
+      "name": "the name the API server gives a ServiceAccount",
+      "sub": "system:serviceaccount:example-ns:example-sa",
+      "kind": ""
+    },
+    {
+      "name": "the v1 spelling of an AWS role",
+      "sub": "aws:123456789012:role/service/example-role",
+      "kind": ""
+    }
+  ],
+  "ci_job": [
+    {
+      "name": "a repository",
+      "trust_domain": "prod.example.com",
+      "repository": "example-org/example-app",
+      "sub": "spiffe://prod.example.com/ci/github/example-org/example-app"
+    },
+    {
+      "name": "the case of the token is kept",
+      "trust_domain": "prod.example.com",
+      "repository": "Example-Org/Example-App",
+      "sub": "spiffe://prod.example.com/ci/github/Example-Org/Example-App"
+    },
+    {
+      "name": "dots, dashes and underscores",
+      "trust_domain": "a-b_c.example.com",
+      "repository": "example.org/app_name.v2-x",
+      "sub": "spiffe://a-b_c.example.com/ci/github/example.org/app_name.v2-x"
+    },
+    {
+      "name": "a repository with no slash",
+      "trust_domain": "prod.example.com",
+      "repository": "example-app",
+      "refused": "segment"
+    },
+    {
+      "name": "an empty organisation",
+      "trust_domain": "prod.example.com",
+      "repository": "/example-app",
+      "refused": "segment"
+    },
+    {
+      "name": "an empty repository",
+      "trust_domain": "prod.example.com",
+      "repository": "example-org/",
+      "refused": "segment"
+    },
+    {
+      "name": "a repository of three parts",
+      "trust_domain": "prod.example.com",
+      "repository": "example-org/example-app/extra",
+      "refused": "segment"
+    },
+    {
+      "name": "an organisation that is a dot",
+      "trust_domain": "prod.example.com",
+      "repository": "./example-app",
+      "refused": "segment"
+    },
+    {
+      "name": "a repository that is two dots",
+      "trust_domain": "prod.example.com",
+      "repository": "example-org/..",
+      "refused": "segment"
+    },
+    {
+      "name": "a space in the repository",
+      "trust_domain": "prod.example.com",
+      "repository": "example-org/example app",
+      "refused": "segment"
+    },
+    {
+      "name": "an at sign in the organisation",
+      "trust_domain": "prod.example.com",
+      "repository": "ada@example-org/example-app",
+      "refused": "segment"
+    },
+    {
+      "name": "an empty repository claim",
+      "trust_domain": "prod.example.com",
+      "repository": "",
+      "refused": "segment"
+    },
+    {
+      "name": "no trust domain",
+      "trust_domain": "",
+      "repository": "example-org/example-app",
+      "refused": "trust_domain"
+    },
+    {
+      "name": "a trust domain in capitals",
+      "trust_domain": "Prod.example.com",
+      "repository": "example-org/example-app",
+      "refused": "trust_domain"
+    },
+    {
+      "name": "a trust domain with a port",
+      "trust_domain": "prod.example.com:8443",
+      "repository": "example-org/example-app",
+      "refused": "trust_domain"
+    },
+    {
+      "name": "a trust domain with a slash",
+      "trust_domain": "prod.example.com/x",
+      "repository": "example-org/example-app",
+      "refused": "trust_domain"
+    },
+    {
+      "name": "a trust domain with a user",
+      "trust_domain": "ada@prod.example.com",
+      "repository": "example-org/example-app",
+      "refused": "trust_domain"
+    }
+  ],
+  "service_account": [
+    {
+      "name": "a ServiceAccount",
+      "trust_domain": "prod.example.com",
+      "cluster": "example-cluster",
+      "namespace": "example-ns",
+      "name_of": "example-sa",
+      "sub": "spiffe://prod.example.com/k8s/example-cluster/ns/example-ns/sa/example-sa"
+    },
+    {
+      "name": "the same namespace and name on another cluster is another subject",
+      "trust_domain": "prod.example.com",
+      "cluster": "example-other",
+      "namespace": "example-ns",
+      "name_of": "example-sa",
+      "sub": "spiffe://prod.example.com/k8s/example-other/ns/example-ns/sa/example-sa"
+    },
+    {
+      "name": "the same cluster in another trust domain is another subject",
+      "trust_domain": "stage.example.com",
+      "cluster": "example-cluster",
+      "namespace": "example-ns",
+      "name_of": "example-sa",
+      "sub": "spiffe://stage.example.com/k8s/example-cluster/ns/example-ns/sa/example-sa"
+    },
+    {
+      "name": "a cluster named with dots",
+      "trust_domain": "prod.example.com",
+      "cluster": "example-cluster.example.com",
+      "namespace": "example-ns",
+      "name_of": "example-sa",
+      "sub": "spiffe://prod.example.com/k8s/example-cluster.example.com/ns/example-ns/sa/example-sa"
+    },
+    {
+      "name": "no cluster: v1 wrote an older three-part form, v2 has none",
+      "trust_domain": "prod.example.com",
+      "cluster": "",
+      "namespace": "example-ns",
+      "name_of": "example-sa",
+      "refused": "segment"
+    },
+    {
+      "name": "no namespace",
+      "trust_domain": "prod.example.com",
+      "cluster": "example-cluster",
+      "namespace": "",
+      "name_of": "example-sa",
+      "refused": "segment"
+    },
+    {
+      "name": "no name",
+      "trust_domain": "prod.example.com",
+      "cluster": "example-cluster",
+      "namespace": "example-ns",
+      "name_of": "",
+      "refused": "segment"
+    },
+    {
+      "name": "a colon in the name",
+      "trust_domain": "prod.example.com",
+      "cluster": "example-cluster",
+      "namespace": "example-ns",
+      "name_of": "example:sa",
+      "refused": "segment"
+    },
+    {
+      "name": "a slash in the namespace",
+      "trust_domain": "prod.example.com",
+      "cluster": "example-cluster",
+      "namespace": "example/ns",
+      "name_of": "example-sa",
+      "refused": "segment"
+    },
+    {
+      "name": "a namespace of two dots",
+      "trust_domain": "prod.example.com",
+      "cluster": "example-cluster",
+      "namespace": "..",
+      "name_of": "example-sa",
+      "refused": "segment"
+    },
+    {
+      "name": "no trust domain",
+      "trust_domain": "",
+      "cluster": "example-cluster",
+      "namespace": "example-ns",
+      "name_of": "example-sa",
+      "refused": "trust_domain"
+    }
+  ],
+  "v1_spellings": [
+    {
+      "subject_type": "a person's sign-in",
+      "v1": "ada.lovelace@example.com",
+      "v1_form": "the e-mail address",
+      "v2_kind": "person",
+      "v2": null,
+      "change": "replaced by an opaque subject",
+      "decision": "ADR 0015"
+    },
+    {
+      "subject_type": "a CI job",
+      "v1": "github:example-org/example-app",
+      "v1_form": "github:<org>/<repo>",
+      "v2_kind": "spiffe",
+      "trust_domain": "prod.example.com",
+      "repository": "example-org/example-app",
+      "v2": "spiffe://prod.example.com/ci/github/example-org/example-app",
+      "change": "respelled as the SPIFFE ID of the same repository",
+      "decision": "ADR 0022"
+    },
+    {
+      "subject_type": "a Kubernetes ServiceAccount",
+      "v1": "example-cluster:k8s:example-ns:example-sa",
+      "v1_form": "<cluster>:k8s:<namespace>:<name>",
+      "v2_kind": "spiffe",
+      "trust_domain": "prod.example.com",
+      "cluster": "example-cluster",
+      "namespace": "example-ns",
+      "name_of": "example-sa",
+      "v2": "spiffe://prod.example.com/k8s/example-cluster/ns/example-ns/sa/example-sa",
+      "change": "respelled as the SPIFFE ID of the same account",
+      "decision": "ADR 0022"
+    },
+    {
+      "subject_type": "a Kubernetes ServiceAccount of a deployment that names no cluster",
+      "v1": "k8s:example-ns:example-sa",
+      "v1_form": "k8s:<namespace>:<name>",
+      "v2_kind": null,
+      "v2": null,
+      "change": "not issued: v2 has no spelling without the cluster, so a ServiceAccount's trust domain and cluster are always named",
+      "decision": "ADR 0022"
+    },
+    {
+      "subject_type": "a Kubernetes ServiceAccount at the API server",
+      "v1": "system:serviceaccount:example-ns:example-sa",
+      "v1_form": "system:serviceaccount:<namespace>:<name>",
+      "v2_kind": null,
+      "v2": null,
+      "change": "not issued: v1 reads this name as one more spelling of a ServiceAccount, and v2 issues the SPIFFE ID of the account and no other spelling",
+      "decision": "ADR 0022"
+    },
+    {
+      "subject_type": "an AWS role",
+      "v1": "aws:123456789012:role/service/example-role",
+      "v1_form": "aws:<account>:role/<path><name>",
+      "v2_kind": null,
+      "v2": null,
+      "change": "not issued: v2 has no proof of an AWS role and no spelling for it",
+      "decision": "open"
+    }
+  ]
+}

@@ -978,3 +978,21 @@ requirements:
     features: ["parity"]
     verification:
       - {kind: manual, ref: "the operations guide names the new binding as the remedy for a recreated upstream account"}
+  - id: REQ-SUBJ-071
+    area: SUBJ
+    statement: "The sub of a token MUST have the form of a person's own subject (26 lower-case base32 characters), of a pairwise subject (43 base64url characters) or of a SPIFFE ID, and no other."
+    rationale: "A relying party that keys its records or its trust policy on sub reads one of three forms and never an address, a name of the upstream or a v1 spelling (ADR 0020, ADR 0019, ADR 0022; v1: the e-mail address, `github:<org>/<repo>`, `<cluster>:k8s:<namespace>:<name>`)."
+    level: MUST
+    source: v1-parity
+    status: done
+    milestone: first-version
+    runtimes: all
+    standards: []
+    issues: [1081, 1816]
+    tests:
+      - kits/go/subject/sub_test.go
+      - actors/session/internal/sessiond/subject_test.go
+      - actors/exchange/internal/exchanged/exchange_test.go
+    verification:
+      - {kind: test-vectors, ref: "kits/conformance/token/sub-vectors.json, shape: the three forms classify; an address, a name of the upstream, a malformed ID and each v1 spelling have none"}
+      - {kind: integration-test, ref: "the sub of a sign-in's two tokens, named and public sector, and of an exchanged token has a form of the contract, though the upstream names an address"}
