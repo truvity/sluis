@@ -171,12 +171,15 @@ message TokenKeyResponse {
 
 // MacRequest computes a keyed hash.
 message MacRequest {
-  string purpose = 1;  // mac, pseudonym or pairwise
-  string tenant = 2;   // the tenant whose key is used
+  string purpose = 1;  // mac or pseudonym
+  string tenant = 2;   // the tenant whose key is used; empty for mac
   string label = 3;    // separates uses of the same purpose
   bytes input = 4;     // the value to hash
   string epoch = 5;    // YYYYMM for pseudonym
-  bytes grant = 6;     // the sealed grant (0006: Mac(purpose, input, grant)); not checked tonight under D-5, boundary purposes are checked by rule only
+  // Field 6 was the sealed grant, which only made a tenant's first pairwise key. The pairwise purpose is retired (0006,
+  // decision SB1 A), and mac and pseudonym are checked by rule alone.
+  reserved 6;
+  reserved "grant";
 }
 
 // MacResponse carries the keyed hash.
