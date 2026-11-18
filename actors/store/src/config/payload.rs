@@ -16,6 +16,7 @@ use buffa::Message as _;
 use buffa_types::google::protobuf::Duration as PbDuration;
 use sluis_proto::sluis::config::v2alpha1 as pb;
 use sluis_registry::{Class, Kind};
+use sluis_store::ratebound;
 
 use crate::address::valid_part;
 use crate::yaml::{self, Value};
@@ -71,7 +72,7 @@ pub fn readable(kind: &Kind) -> bool {
     kind.class == Class::Config && SKELETON.contains(&kind.name)
 }
 
-const SKELETON: [&str; 12] = [
+const SKELETON: [&str; 13] = [
     "Boundary",
     "KeyPlan",
     "TokenLifetime",
@@ -84,6 +85,7 @@ const SKELETON: [&str; 12] = [
     "InstallationClient",
     "FrontHost",
     "SignInMethods",
+    "RateBound",
 ];
 
 /// Whether a kind has one item, `default`; the keyed kinds use their name.
@@ -179,6 +181,7 @@ fn item(kind: &str, id: &str, v: Value) -> R<Vec<u8>> {
         "InstallationClient" => installation_client(o, id)?.encode_to_vec(),
         "FrontHost" => front_host(o)?.encode_to_vec(),
         "SignInMethods" => sign_in_methods(o)?.encode_to_vec(),
+        "RateBound" => rate_bound(o)?.encode_to_vec(),
         _ => return err(id, "this build has no reader for the kind"),
     })
 }
@@ -1218,5 +1221,53 @@ fn sign_in_methods(mut o: Obj) -> R<pb::SignInMethods> {
         registration_client,
         upstream_recheck: upstream_recheck.map(pb_duration).unwrap_or_default(),
         ..pb::SignInMethods::default()
+    })
+}
+
+/// RateBound (ADR 0036 "Inside sluis"): the limits of the token buckets that `entry` keeps. Each limit that is named is a count and a
+/// window, and is held to the bounds the release builds in (`sluis_store::ratebound`); a limit that is left out keeps its default.
+fn rate_bound(mut o: Obj) -> R<pb::RateBound> {
+    let mut limit =
+        |key: &str| -> R<buffa::MessageField<pb::RateLimit, buffa::Inline<pb::RateLimit>>> {
+            let at = o.at(key);
+            let mut l = match o.take(key) {
+                None | Some(Value::Null) => return Ok(buffa::MessageField::none()),
+                Some(v) => Obj::new(v, &at)?,
+            };
+            let count = l.uint32("limit")?;
+            let window = l.required_duration("window")?;
+            l.done()?;
+            let rate = ratebound::Rate {
+                limit: count,
+                window,
+            };
+            if !(1..=ratebound::LIMIT_MAX).contains(&rate.limit) {
+                return err(&format!("{at}.limit"), "must be between 1 and 100000");
+            }
+            if !(ratebound::WINDOW_MIN..=ratebound::WINDOW_MAX).contains(&rate.window) {
+                return err(
+                    &format!("{at}.window"),
+                    "must be between 1 second and 1 hour",
+                );
+            }
+            Ok(buffa::MessageField::some(pb::RateLimit {
+                limit: count,
+                window: pb_duration(window),
+                ..pb::RateLimit::default()
+            }))
+        };
+    let token_client = limit("token_client")?;
+    let token_address = limit("token_address")?;
+    let authorize_client = limit("authorize_client")?;
+    let authorize_address = limit("authorize_address")?;
+    let recovery_address = limit("recovery_address")?;
+    o.done()?;
+    Ok(pb::RateBound {
+        token_client,
+        token_address,
+        authorize_client,
+        authorize_address,
+        recovery_address,
+        ..pb::RateBound::default()
     })
 }

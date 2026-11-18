@@ -2744,6 +2744,14 @@ async fn a_change_of_a_watched_kind_asks_for_its_log_row_in_the_same_transaction
         let value = if kind.name == "KeyRevocation" {
             tenant = "";
             revocation("purpose", "p1", "drill")
+        } else if kind.name == "RateWindow" {
+            // The message of the kind, with no tenant: the bucket of a limit of `entry`.
+            tenant = "";
+            buffa::Message::encode_to_vec(&sluis_proto::sluis::entry::v2alpha1::RateWindow {
+                milli_tokens: 1000,
+                at_ms: 1,
+                ..Default::default()
+            })
         } else {
             sealed_for(kind.segment)
         };
