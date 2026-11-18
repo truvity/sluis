@@ -15,6 +15,7 @@ import (
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	exchangev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/exchange/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1/storev2alpha1connect"
+	lifetimekit "github.com/truvity/sluis/v2/kits/go/lifetime"
 	"github.com/truvity/sluis/v2/kits/go/store"
 )
 
@@ -27,7 +28,7 @@ const (
 	singleton = "default"
 
 	// hardCap is the longest lifetime of any token (ADR 0020, "Lifetimes": the built-in maximum of one hour).
-	hardCap = time.Hour
+	hardCap = lifetimekit.Maximum
 )
 
 // Config reads the configuration and the kinds of exchange from store@.
