@@ -6,6 +6,8 @@ sluis is an OpenID Connect issuer for workforce access. It signs people in again
 [![Release](https://img.shields.io/github/v/release/truvity/sluis?include_prereleases)](https://github.com/truvity/sluis/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+> **The name.** *sluis* is Dutch for a sluice or canal lock (plural *sluizen*). Pronounced /slœy̯s/, roughly "slouse", with the Dutch *ui* sound of *huis*. [Hear it](https://commons.wikimedia.org/wiki/File:Nl-sluis.ogg) · [Wiktionary](https://en.wiktionary.org/wiki/sluis)
+
 ## What you get
 
 | Capability | What it does | Read |
