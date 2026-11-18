@@ -60,14 +60,14 @@ shapes:
     nodes: 3
     node_agent: true
     edge: cloudflared
-    ports: { keys: yubikey-piv, state: rqlite, blob: r2, transport: spool, index: rqlite_index }
+    ports: { keys: yubikey-piv, state: rqlite, blob: fs, transport: spool, index: rqlite_index }
     keys: One YubiKey per node
     state: rqlite (Raft) across three nodes
     use: Integration tests and tutorials. A Cloudflare tunnel serves sluis.example.com.
     notes:
       - text: "The audit pieces run on the same nodes as sluis. Each node runs its own writer, with its own spool and log key, so each node keeps its own audit log, and the other two nodes are its peer witnesses (2-of-3). Readers merge the logs of a project by time."
         status: decided
-      - text: "The blob is Cloudflare R2, through the one s3-compatible driver, with R2 temporary credentials scoped to the bucket and a prefix. An account administrator can remove R2's lock (lock mode removable), so the peer witnesses protect against a rewritten history."
+      - text: "The blob is the fs driver on each board's local disk, with no lock, so the peer witnesses carry the tamper evidence and a reinstalled board starts a fresh log. Cloudflare R2 through the s3-compatible driver, with R2 temporary credentials scoped to the bucket and a prefix, belongs to the Cloudflare add-on (ADR 0009); the core holds no Cloudflare credential."
         status: decided
       - text: "The index is rqlite, a replicated SQLite, so the reader can run on any node (ADR 0028). If its full-text index does not hold up on the boards, they fall back to sqlite on the indexer's node."
         status: decided
@@ -86,7 +86,7 @@ shapes:
     state: DynamoDB
     use: Integration tests and tutorials.
     notes:
-      - text: "The default index here is postgres on Aurora (ADR 0028), reached through RDS Proxy with IAM authentication and one database role per actor kind; the indexer and the reader run in the VPC. A small install can also run sluis audit search from the CLI, which builds a local sqlite index from the log."
+      - text: "The default index here is postgres on Aurora Serverless v2 with auto-pause (ADR 0028), reached directly with IAM authentication and one database role per actor kind, with no RDS Proxy at first (decision L1b of 2026-11-18); the indexer and the reader run in the VPC. A small install can also run sluis audit search from the CLI, which builds a local sqlite index from the log."
         status: decided
       - text: "The transport is an SQS queue here. Direct mode is not available on serverless, because its fallback is a local spool and a function has no disk."
         status: decided
@@ -100,10 +100,10 @@ shapes:
     nodes: N
     node_agent: false
     edge: relay
-    ports: { keys: aws, state: aws, blob: s3, transport: nats, index: postgres }
+    ports: { keys: aws, state: postgres-state, blob: s3, transport: nats, index: postgres }
     keys: AWS KMS
-    state: DynamoDB
-    use: The customer-identity installation, and the reference installation of the nats-jetstream driver.
+    state: PostgreSQL on CloudNativePG
+    use: A tested installation of the core on EKS, and the reference installation of the nats-jetstream driver and of the postgres store driver.
     notes:
       - text: "Each actor and each holder is a pod with its own service account. A driver is a native sidecar container in its holder's pod, with its socket on an emptyDir, and the cloud token is mounted only into the driver container, so a work pod has no cloud identity (ADR 0003, ADR 0005)."
         status: decided
@@ -115,6 +115,8 @@ shapes:
       - text: "A cell is one replica of each actor, co-scheduled by pod affinity and spread across nodes and zones; a Service with trafficDistribution PreferClose keeps a call inside its cell, and a PodDisruptionBudget keeps the cell's replicas up during a drain (ADR 0003)."
         status: decided
       - text: "The audit transport is NATS JetStream, with NATS accounts and permission templates, the index is postgres in the cnpg mode in the same cluster, and the blob is an S3 bucket (ADR 0028)."
+        status: decided
+      - text: "The store is PostgreSQL through CloudNativePG, with the new postgres driver of store@'s durable and temp ports. The store and the audit index are separate databases with separate roles of one cluster, so the credential of one does not open the other (ADR 0005, decision K2 B of 2026-11-18). The keys stay on AWS KMS."
         status: decided
 
 # What each runtime turns a process id into. {id} is the process id, {driver}
@@ -230,7 +232,7 @@ edges_kinds:
     sub: Lambda Web Adapter
     line2: "Lambda Web Adapter"
     line3: "loopback TCP"
-    does: The Lambda Web Adapter, pinned and vendored into sluis's own layer, behind API Gateway. It forwards the invocation to entry over a loopback TCP port inside the sandbox, which holds only sluis processes.
+    does: The Lambda Web Adapter, pinned and vendored into sluis's own layer, behind API Gateway. In front of API Gateway sits the Cloudflare edge, proxied to an API Gateway custom domain with mutual TLS (Cloudflare's authenticated-pull CA as the truststore), and the API's default execute-api endpoint is disabled (decisions E1 and E2 A of 2026-11-18). It forwards the invocation to entry over a loopback TCP port inside the sandbox, which holds only sluis processes.
     listen: Loopback TCP inside the sandbox (127.0.0.1:8080 is an example).
     transport: Loopback TCP (127.0.0.1)
     status: decided
@@ -239,8 +241,8 @@ edges_kinds:
     sub: key-less edge relay container
     line2: "edge relay"
     line3: "unix socket"
-    does: "A key-less container in entry's pod. It listens on the pod address, so the cluster's gateway can route to it, and forwards to entry's Unix socket in a shared volume. entry itself stays socket-only. A cloudflared sidecar is a supported mode."
-    listen: The pod address, reached by the gateway or the ingress controller.
+    does: "A key-less container in entry's pod. It listens on the pod address, so the cluster's gateway can route to it, and forwards to entry's Unix socket in a shared volume. entry itself stays socket-only. The default edge is the cluster's own Cloudflare tunnel and gateway, which route to the relay by an HTTPRoute or an Ingress; a cloudflared sidecar in entry's pod is an optional mode for a cluster without its own tunnel (decisions E1, E3 and E3b of 2026-11-18)."
+    listen: The pod address, reached by the gateway or the ingress controller behind the cluster's Cloudflare tunnel.
     transport: Unix socket (a volume shared in the pod)
     status: decided
 
@@ -300,6 +302,16 @@ drivers:
     does: One binary for KMS (the key store of key@), DynamoDB (the durable and temp ports of store@), S3 or an S3-compatible store (the audit blob) and SQS (the audit transport). Each holder runs its own instance, as that holder's uid or as an extension of its own function, so the cloud's own IAM or key policy is the enforcer.
     holds: Nothing. Credentials come from the platform identity, or from a workload JWT exchanged for cloud credentials.
     backing: AWS KMS, DynamoDB, S3 or SQS
+    status: decided
+  postgres-state:
+    port: state
+    title: postgres (store)
+    instance: per-actor
+    shared_name: null
+    binary: drivers/postgres
+    does: "The durable and temp ports of store@ on PostgreSQL through CloudNativePG: Get, Query, Transact and TailLog, the change log read from a sequence. The store and the audit index are separate databases and roles of one CloudNativePG cluster, so the credential of one does not open the other. A core driver on the Kubernetes installation (ADR 0005, decision K2 B of 2026-11-18)."
+    holds: Nothing. The database login is platform-provided.
+    backing: PostgreSQL on CloudNativePG
     status: decided
   spool:
     port: transport
@@ -400,7 +412,7 @@ drivers:
     instance: per-actor
     shared_name: null
     binary: drivers/postgres
-    does: "The index port on Postgres, one driver with a provisioning mode: rds or aurora on AWS (the lambda default is aurora, reached through RDS Proxy with IAM authentication), cnpg on Kubernetes (its default), or external, a connection string only. Exposing CNPG through a load balancer is not a driver of its own; it is external."
+    does: "The index port on Postgres, one driver with a provisioning mode: rds or aurora on AWS (the lambda default is aurora, Aurora Serverless v2 with auto-pause, reached directly with IAM authentication and without RDS Proxy at first), cnpg on Kubernetes (its default), or external, a connection string only. Exposing CNPG through a load balancer is not a driver of its own; it is external."
     holds: Nothing
     backing: Postgres
     status: decided
@@ -506,7 +518,7 @@ roles:
     uses: [transport]
     resources:
       - "data: it writes only Switch and LogLevelOverride itself; every other write goes to the owning actor"
-      - "calls: session (session check), the owning actors of the kinds an operator changes (exchange for enrolments and hosts, an integration for its console-managed kinds), quota (the push of an allowance correction), reader (the audit page)"
+      - "calls: session (session check), the owning actors of the kinds an operator changes (exchange for enrolments and hosts, an integration for its console-managed kinds), reader (the audit page)"
       - "keys: none"
       - "transport: put (every operator change, under the operator's name)"
   policy:
@@ -531,7 +543,7 @@ roles:
     uses: [keys, state, transport]
     resources:
       - "keys: sign a JWS signing input with the token-signing key"
-      - "data: SigningRing, the key set it publishes (each entry with its x5c chain)"
+      - "data: SigningRing, the key set it publishes (an x5c chain on each entry only when the optional token certificate is on; it is off in the core)"
       - "transport: put"
   ca:
     status: decided
@@ -565,13 +577,13 @@ roles:
     name: quota
     kind: actor
     binary: actors/quota
-    does: "Keeps the allowance of each tenant, counts it down with a conditional update, refuses at zero and records every admit, refusal and push as an audit fact. It is a work actor of the quota module, not an audit piece, and it runs beside sluis, sharing its store, or in an installation of its own (ADR 0039)."
-    holds: No credential and no key. The allowance and the admit records are kinds that store@ holds
+    does: "Reserved for the allowance engine of ADR 0039, which ADR 0046 superseded on 2026-11-12: it is not built, and sluis keeps no allowance or balance. The usage stream and the limit check of ADR 0046 are built right after the core, and which actor serves the check is decided with its first caller. The registry row stays until a change removes it."
+    holds: No credential and no key. The kinds of the reserved engine are kinds that store@ would hold
     uses: [state, transport]
     resources:
-      - "data: Allowance (a conditional update, no change-log row), AdmitRecord, SpentPush"
-      - "calls: policy; called by: entry, exchange, console"
-      - "transport: put (each admit, refusal and push)"
+      - "data: Allowance, AdmitRecord, SpentPush (the kinds of the reserved allowance engine)"
+      - "calls: policy; called by: entry, exchange, console (reserved)"
+      - "transport: put"
   writer:
     status: decided
     name: writer
@@ -703,6 +715,7 @@ externals:
 
 # What a port's backing node says, per port and driver.
 backing_lines:
+  blob.fs: ["local directory", "no lock"]
   blob.r2: ["R2 bucket", "S3 API, lock removable"]
   index.rqlite_index: ["rqlite index", "replicated SQLite"]
   keys.software: ["software keys", "files under key@"]
@@ -711,6 +724,7 @@ backing_lines:
   state.rqlite-one: ["rqlited", "one node"]
   state.rqlite: ["rqlited", "Raft, 3 nodes"]
   state.aws: ["DynamoDB", "a table per engine"]
+  state.postgres-state: ["PostgreSQL", "CloudNativePG"]
   blob.s3: ["S3 bucket", "S3 API, Object Lock"]
   transport.spool: ["local spool", "fsync'd segments"]
   transport.sqs: ["SQS queue", "dead-letter queue"]
@@ -730,7 +744,7 @@ calls:
   - { f: entry, t: exchange, m: "Route: exchange", d: "Token exchange, enrolment and downstream mint go to exchange." }
   - { f: entry, t: console, m: "Route: console", d: "The operator API goes to console." }
   - { f: entry, t: ssh-ca, m: "Route: SSH cert", d: "An SSH certificate request goes to ssh-ca." }
-  - { f: entry, t: quota, m: "Route: quota", d: "A product's allowance push or admit call, authenticated at entry, goes to quota." }
+  - { f: entry, t: quota, m: "Route: quota", d: "Reserved with the allowance engine (ADR 0039, superseded by ADR 0046): the route of a limit write is decided with the limit check." }
   - { f: entry, t: int-facts, m: "Route: push", d: "A product's push notification goes to the integration that owns the object; the integration then pulls the full state." }
   - { f: session, t: int-upstream, m: "Authorize / Callback", d: Human sign-in upstream. }
   - { f: session, t: policy, m: Decide, d: "Maps the upstream facts to grants, and says whether fresh MFA is needed." }
@@ -740,11 +754,11 @@ calls:
   - { f: console, t: session, m: "Check session", d: "session checks the HttpOnly cookie and its freshness for the boundary." }
   - { f: console, t: exchange, m: "Operator write", d: "Approve a pending enrolment, create an enrolment token; exchange validates and writes its own records." }
   - { f: console, t: int-facts, m: "Operator write", d: "A kind an integration owns, such as a chat integration's managed channels." }
-  - { f: console, t: quota, m: "Push", d: "Routes an operator's correction of an allowance to quota (ADR 0039)." }
+  - { f: console, t: quota, m: "Push", d: "Reserved: an operator's correction of an allowance (ADR 0039, superseded by ADR 0046)." }
   - { f: console, t: reader, m: Search, d: The console audit page. }
   - { f: exchange, t: int-workload, m: Verify, d: Check a workload subject token. }
   - { f: exchange, t: policy, m: Decide, d: "host.enrol, token exchange and mint decisions." }
-  - { f: exchange, t: quota, m: Admit, d: Rate and count limits. }
+  - { f: exchange, t: quota, m: Admit, d: "Reserved: rate and count limits, decided with the limit check (ADR 0046)." }
   - { f: exchange, t: signer, m: SignToken, d: Issue a token. }
   - { f: exchange, t: ca, m: Issue, d: "A host or workload SVID, bound to the requester's identity." }
   - { f: exchange, t: drv-keys, m: "Open(enrolment)", d: "Opens an HPKE-sealed enrolment request; the enrolment key never leaves key@." }
@@ -867,14 +881,14 @@ flows:
         nodes: [exchange, policy]
         edges: ["exchange>policy"]
         text: policy maps the facts to a grant, or refuses. A refusal stops here with a reason and is audited the same way.
-      - title: The limit is adjusted
-        nodes: [exchange, quota, drv-state]
-        edges: ["exchange>quota", "quota>drv-state"]
-        text: quota admits the request and counts the tenant's allowance down with a conditional update; it refuses at zero. Caps and rate limits live in core.
+      - title: The limit is checked
+        nodes: [exchange, drv-state]
+        edges: ["exchange>drv-state"]
+        text: A limit check compares a usage counter per customer, organisation and product with a limit that the product writes, and refuses at the limit. It is built right after the core (ADR 0046), and which actor serves it is decided with its first caller. sluis keeps no allowance or balance. Caps and rate limits live in core.
       - title: signer signs the token
         nodes: [exchange, signer, drv-keys, store-keys]
         edges: ["exchange>signer", "signer>drv-keys", "drv-keys>store-keys"]
-        text: signer signs the token under its signing policy, through key@. The token is sender-constrained (DPoP or mutual TLS) and carries exactly one audience.
+        text: signer signs the token under its signing policy, through key@. The token carries exactly one audience, and can be bound to the client's DPoP key where an audience asks for it. Binding by mutual TLS comes later, with a design for forwarding the client certificate through the Cloudflare edge.
         variants:
           - { shapes: [lambda, kubernetes], text: "The token is signed directly with the non-extractable KMS token-signing key; each signature is a billed KMS request." }
           - { shapes: [boards], text: "The node's YubiKey signs each token itself with the token-signing key, through signer's own socket at key@, far faster than the load needs." }
@@ -1056,13 +1070,13 @@ flows:
         text: The indexer follows each log's signed checkpoints from its cursor, fetches the entry bundles they cover and applies them to the index; the reader answers queries from it. Verification never trusts the index. The audit explorer shows the lag and the integrity chain.
         variants:
           - { shapes: [boards], text: "The index is rqlite (ADR 0028), so the reader can run on any node. Readers merge the three logs by time." }
-          - { shapes: [lambda], text: "The index here is postgres on Aurora, reached through RDS Proxy." }
+          - { shapes: [lambda], text: "The index here is postgres on Aurora Serverless v2 with auto-pause, reached directly with IAM authentication and no RDS Proxy at first." }
           - { shapes: [kubernetes], text: "The index here is postgres in the cnpg mode, a CloudNativePG cluster in the same Kubernetes cluster." }
 
 # What runs where on a cluster of boards (bare-metal with N nodes).
 cluster:
   - { process: edge connector, where: every node, status: decided }
-  - { process: quota, where: "a work actor of the quota module, beside sluis and sharing its store, or in an installation of its own; it counts each tenant's allowance down and refuses at zero (ADR 0039)", status: decided }
+  - { process: quota, where: "reserved for the allowance engine of ADR 0039, superseded by ADR 0046 and not built", status: decided }
   - { process: "Search (indexer, search index, reader)", where: "follows the index driver: with an rqlite or postgres index the reader runs on any node; with a sqlite index it runs on the indexer's node", status: decided }
   - { process: entry, where: "every node, on a Unix socket behind that node's edge connector, with no network", status: decided }
   - { process: "session, console, exchange", where: "every node, beside entry. Their kinds are held by store@ in the installation's rqlite cluster; console writes only Switch and LogLevelOverride", status: decided }

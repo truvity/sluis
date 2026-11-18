@@ -139,7 +139,7 @@ sluis needs two separate credentials from Google: an OAuth client for **sign-in*
 In a Google Cloud project, create an OAuth client of type *Web application*, with the sign-in callback sluis prints (and, for admin consent, the connect callback) as redirect URIs. The consent screen asks for `openid`, `email` and `profile` only. For one organisation it can be *Internal*; for several tenants it must be *In production*, because in testing a second tenant gets an access error and refresh tokens expire after seven days.
 
 - **The operator's client is an `Upstream`:** config, with its client secret in a secret source (`UpstreamSecret`).
-- **A tenant's own identity provider is not connected to sluis.** In a customer installation it is configured in the broker, which is the one upstream ([0033](/decisions/0033-customer-connections/#which-upstreams-an-installation-has)).
+- **A tenant's own identity provider is not connected to sluis.** In a customer installation it is configured in the trusted realm, which is the one upstream ([0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/#realms-follow-boundaries)).
 
 ### The directory: three methods
 
@@ -213,7 +213,7 @@ For any provider that publishes OpenID Connect discovery:
 1. Register sluis as a client at the provider, with the callback sluis prints.
 2. **For the operator's own upstream,** commit an `Upstream` (issuer, client id, subject claim, and the name of its client secret in `secret`) and put the client secret in the secret source under that name; store@ serves it as `UpstreamSecret` to `adapter-upstream-oidc` alone.
 3. **Declare the e-mail domains** the upstream serves in the `Upstream`, then run `sluis integrations check oidc partner`.
-4. Choose what the connection's claims are worth: map the allow-listed claims to facts; asserted groups and roles are never read ([0033](/decisions/0033-customer-connections/#claims-and-groups)).
+4. Choose what the connection's claims are worth: map the allow-listed claims to facts; asserted groups and roles are never read ([0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/#the-exchange-and-the-claims)).
 
 The checks on every ID token are on [Generic OIDC and peer sluis](/integrations/oidc-upstream/).
 

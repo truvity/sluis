@@ -149,7 +149,7 @@ The decision point: a declared Cedar policy maps facts to grants; it keeps no st
 
 ### `ca`
 
-The X.509 certificate authority: host and workload SVIDs, sluis's own mutual-TLS certificates and database client certificates, each logged in its issuance log. The first working version makes the token certificate only, which is not logged (ADR 0023).
+The X.509 certificate authority: host and workload SVIDs, sluis's own mutual-TLS certificates and database client certificates, each logged in its issuance log. Until the PKI add-on it makes the token certificate only, which is not logged, and that is optional and off in the core (ADR 0023, ADR 0006).
 
 - **Family:** work; holds no credential at rest.
 - **Language:** Go, rule R4 of the [language record](/decisions/0012-the-language-follows-the-executable/).
@@ -181,11 +181,11 @@ The SSH certificate authority, for user and host certificates that carry identit
 
 ### `quota`
 
-Keeps the allowance of each tenant, counts it down with a conditional update, refuses at zero, and records every admit, refusal and top-up as an audit fact.
+Reserved for the allowance engine of ADR 0039, which ADR 0046 superseded; not built, and sluis keeps no balance. Which actor serves the limit check of ADR 0046 is decided with its first caller.
 
 - **Family:** work; holds no credential at rest.
 - **Language:** Rust, rule R11 of the [language record](/decisions/0012-the-language-follows-the-executable/). Rust unless its design names a serious trade-off.
-- **Placement:** beside sluis, or on its own; any number of instances; on bare-metal, serverless, kubernetes. Runs beside sluis, sharing its store, or in an installation of its own.
+- **Placement:** beside sluis, or on its own; any number of instances; on bare-metal, serverless, kubernetes. Reserved with the allowance engine; not built.
 - **Ports:** `data`, `keys`, `audit-emit`.
 - **Calls:** `policy`.
 - **Egress:** none.

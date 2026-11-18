@@ -8,7 +8,7 @@ sidebar:
 
 The bootstrap file is the one local file store@ reads at start. It says where things are: the boundary, one driver socket for each of store@'s four ports, and the public keys of the publishers that sign config. Everything else is a signed config document ([Signed config](/reference/signed-config/)). The reasons and the roads not taken are in [0005](/decisions/0005-the-store/#the-bootstrap-file); this page fixes the shape of the file, schema v1.
 
-Schema v1 has only the keys that code of the first working version reads ([principle 8](/principles/#8-nothing-without-a-consumer)). A key joins the schema with the pull request that reads it. Adding a key or a value is compatible; removing or changing one is a new schema version beside v1 ([0013](/decisions/0013-release-train-packaging-and-distribution/#compatibility-between-releases)).
+Schema v1 has only the keys that code of the core reads ([principle 8](/principles/#8-nothing-without-a-consumer)). A key joins the schema with the pull request that reads it. Adding a key or a value is compatible; removing or changing one is a new schema version beside v1 ([0013](/decisions/0013-release-train-packaging-and-distribution/#compatibility-between-releases)).
 
 ## Where it lives
 
@@ -74,7 +74,7 @@ Schema v1 has only the keys that code of the first working version reads ([princ
 ## Schema and validation
 
 - **The schema is the JSON Schema generated from the Protobuf message of the file,** draft 2020-12, with the `$id` `https://sluis.id/schema/bootstrap/v1/bootstrap.schema.json`. The message is `Bootstrap` in [`proto/sluis/config/v2alpha1/bootstrap.proto`](https://github.com/truvity/sluis/blob/main/proto/sluis/config/v2alpha1/bootstrap.proto), its rules are protovalidate rules, and `tools/gen/configschema` makes the schema from them. The schema is committed as the golden file [`schema/bootstrap/v1/bootstrap.schema.json`](https://github.com/truvity/sluis/blob/main/schema/bootstrap/v1/bootstrap.schema.json), which CI compares with what the message makes (`just config-schema-check`) ([0004](/decisions/0004-the-data-model/#schemas-are-protobuf)). `unevaluatedProperties: false` is on every object, so an unknown key is an error that names its path, and an error never shows a value.
-- **The order of validation is fixed.** The reader applies the strict profile, the binary validates the document against the embedded JSON Schema, decodes it, and then checks the decoded document against the rules of the message. The binaries that read the file are store@, key@ and the card driver of key@; each embeds the schema and applies it to the whole file before it decodes anything, so a file that one refuses at the schema, all refuse. In the first working version the decoder of store@ is hand-written and checks the rules of the message by hand ([Approved libraries](/reference/approved-libraries/#protovalidate)), and it is never looser than the schema. The JSON Schema is a derived subset: cross-field rules, duration ranges, exact byte lengths and the strictness of a URI are enforced by protovalidate only, so a file that the schema accepts can still be refused at load ([#1177](https://github.com/truvity/sluis/issues/1177), measured 2026-11-03).
+- **The order of validation is fixed.** The reader applies the strict profile, the binary validates the document against the embedded JSON Schema, decodes it, and then checks the decoded document against the rules of the message. The binaries that read the file are store@, key@ and the card driver of key@; each embeds the schema and applies it to the whole file before it decodes anything, so a file that one refuses at the schema, all refuse. In the core the decoder of store@ is hand-written and checks the rules of the message by hand ([Approved libraries](/reference/approved-libraries/#protovalidate)), and it is never looser than the schema. The JSON Schema is a derived subset: cross-field rules, duration ranges, exact byte lengths and the strictness of a URI are enforced by protovalidate only, so a file that the schema accepts can still be refused at load ([#1177](https://github.com/truvity/sluis/issues/1177), measured 2026-11-03).
 - **An error names a path and a rule, and never a value.** The path is made of the keys of this page and the positions of list items (`publishers[0].kid`), and a key that the page does not list is shown as `<key>`, because it is the file's own text. When a file has several faults the error names the first by path, then by rule, the same one in every binary. The rules, in the words of the error:
 
   | Failure of the schema | The error says |
@@ -117,13 +117,13 @@ A destination names the driver behind one of store@'s four ports and the Unix so
 
 #### Drivers
 
-Each port has one driver until a second real installation needs another ([0005](/decisions/0005-the-store/#drivers)). The values the first working version accepts are the local installation's and the boards'; the drivers of the other tested installations are added with them ([0011](/decisions/0011-runtimes-and-installations/#installations)).
+Each port has one driver until a second real installation needs another ([0005](/decisions/0005-the-store/#drivers)). The values the core accepts are the local installation's and the boards'; the drivers of the other tested installations are added with them ([0011](/decisions/0011-runtimes-and-installations/#installations)).
 
 | Key | Values in v1 | Added with |
 |---|---|---|
 | `config_source` | `file` | `appconfig`, with the serverless installation |
 | `secret_source` | `credential` | `ssm`, with the serverless and Kubernetes installations |
-| `durable`, `temp` | `rqlite` | `dynamodb`, with the serverless and Kubernetes installations |
+| `durable`, `temp` | `rqlite` | `dynamodb`, with the serverless installation; `postgres`, with the Kubernetes installation (built in the core phase) |
 
 `sluis config check --runtime serverless` refuses a driver that does not fit the runtime, such as `rqlite` ([0005](/decisions/0005-the-store/#drivers)). An in-memory engine exists for tests only and is not a value of this file in a release.
 

@@ -183,8 +183,8 @@ The listener is public by design, and the actor each request is routed to authen
 | ------------------------ | -------- | ------------ |
 | bare-metal: local | A Unix socket on a shared volume; `entry`'s container has no network | The forwarder, a Compose service (a generic reverse proxy that ends TLS) that mounts the socket and publishes a port for the developer's browser or the test harness ([The local installation](/runtimes/local/)). Production installations never publish one ([0011](/decisions/0011-runtimes-and-installations/#the-local-installation)) |
 | bare-metal: boards, or a virtual machine | A Unix socket | `cloudflared` on the same host, a tunnel to the public hostname |
-| serverless: lambda | `127.0.0.1:<port>` inside the function's sandbox, a micro-VM that holds only sluis's own processes | The Lambda Web Adapter, pinned and vendored into sluis's own layer; API Gateway in front |
-| kubernetes | A Unix socket in the pod | The edge relay in the same pod (the default), or a `cloudflared` sidecar |
+| serverless: lambda | `127.0.0.1:<port>` inside the function's sandbox, a micro-VM that holds only sluis's own processes | The Lambda Web Adapter, pinned and vendored into sluis's own layer; API Gateway in front, on a custom domain with mutual TLS that only Cloudflare's authenticated pull can pass, with the default `execute-api` endpoint disabled (decisions E1 and E2 A of 2026-11-18) |
+| kubernetes | A Unix socket in the pod | The edge relay in the same pod, routed from the cluster's own Cloudflare tunnel and gateway by an HTTPRoute or an Ingress (the default), or a `cloudflared` sidecar for a cluster without its own tunnel |
 
 ### The console's static host
 

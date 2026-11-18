@@ -230,7 +230,7 @@ A driver is a separate binary behind one port, private to its owner ([0005](/dec
 
 ### The item contract
 
-`sluis.port.item.v2alpha1.ItemService`, served by the `rqlite` and `dynamodb` drivers on the durable and the temp socket.
+`sluis.port.item.v2alpha1.ItemService`, served by the `rqlite` and `dynamodb` drivers on the durable and the temp socket, and by the `postgres` driver of the Kubernetes installation once it is built ([0005](/decisions/0005-the-store/#amendment-of-2026-11-18-kubernetes-stores-in-postgresql-through-cloudnativepg)).
 
 ```proto
 service ItemService {
@@ -337,7 +337,7 @@ Every driver binary has the same four commands.
 | `version` | Prints the driver's version and the contract versions it speaks |
 | `conformance` | Runs the port's suite against the driver. A driver passes the suite or it is not a driver |
 
-The in-memory engine, for tests only, passes the same suite as `rqlite` and `dynamodb`. The suite holds the conditional-update, expiry, ordering and change-log cases of the item contract and the capability cases of the source contract.
+The in-memory engine, for tests only, passes the same suite as `rqlite` and `dynamodb`, and the `postgres` driver passes it too. The suite holds the conditional-update, expiry, ordering and change-log cases of the item contract and the capability cases of the source contract.
 
 ## The sealed envelope
 

@@ -143,7 +143,7 @@ Name, unit and kind of each meter; never changes once used.
 
 ### `Quota`
 
-The quotas that exist, their unit and the bounds an allowance push must respect.
+Reserved with the allowance engine of ADR 0039, which ADR 0046 superseded; not built. The quotas that exist, their unit and the bounds an allowance push must respect.
 
 - **Class:** config; scope boundary; plain; profile Fixed; module quota module; serves the work family.
 - **Writer:** `IaC`.
@@ -529,7 +529,7 @@ Name (a slug of lower-case letters, digits and hyphens, not free text; a display
 
 ### `Allowance`
 
-Id is the quota name. Mode (prepaid, limited, unlimited) and units left, counted down by quota. A product changes it by a push: a request id, an operation (add \| set \| write-off) and, optionally, the expected version. A push is idempotent by request id (its SpentPush marker), is applied with a conditional update on the units (a delta), and is an audit fact. Admits use the same conditional update, so they race with pushes safely. Hot counter: the driver contract allows a single conditional update.
+Reserved with the allowance engine of ADR 0039, which ADR 0046 superseded; not built. Id is the quota name. Mode (prepaid, limited, unlimited) and units left, counted down by quota. A product changes it by a push: a request id, an operation (add \| set \| write-off) and, optionally, the expected version. A push is idempotent by request id (its SpentPush marker), is applied with a conditional update on the units (a delta), and is an audit fact. Admits use the same conditional update, so they race with pushes safely. Hot counter: the driver contract allows a single conditional update.
 
 - **Class:** durable; scope boundary+tenant; plain; profile Tenant-adjustable; module quota module; serves the work family.
 - **Writer:** [`quota`](/reference/actors/#quota).
@@ -538,7 +538,7 @@ Id is the quota name. Mode (prepaid, limited, unlimited) and units left, counted
 
 ### `AdmitRecord`
 
-Idempotency of an admit by operation id; rebuilt from usage facts after a restore. The admit's decrement of the Allowance is the same conditional update that a push uses.
+Reserved with the allowance engine of ADR 0039, which ADR 0046 superseded; not built. Idempotency of an admit by operation id; rebuilt from usage facts after a restore. The admit's decrement of the Allowance is the same conditional update that a push uses.
 
 - **Class:** durable; scope boundary+tenant; plain; profile none; module quota module; serves the work family.
 - **Writer:** [`quota`](/reference/actors/#quota).
@@ -1070,7 +1070,7 @@ The hash of a sealed grant used for a one-shot irreversible action (an artifact 
 
 ### `SpentPush`
 
-The hash of the request id of an allowance push that was applied, so a retried push changes nothing. A hashed spent marker, like SpentGrant, but with one writer.
+Reserved with the allowance engine of ADR 0039, which ADR 0046 superseded; not built. The hash of the request id of an allowance push that was applied, so a retried push changes nothing. A hashed spent marker, like SpentGrant, but with one writer.
 
 - **Class:** temp; scope boundary+tenant; hashed; profile none; module quota module; serves the work family.
 - **Writer:** [`quota`](/reference/actors/#quota).

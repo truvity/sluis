@@ -36,7 +36,7 @@ Every vendor-shaped value travels as an opaque reference or a namespaced attribu
 - A **Provisioner** pulls a desired state **addressed by its digest** and reconciles to it. It does not choose what the state should be ([0026](/decisions/0026-reconcilers/#the-contract)).
 - **Work that no caller starts** has no grant to bring, such as a scheduled directory re-sync or a reconcile pass. The adapter asks `policy` for a grant for that pass, for one tenant at a time. The grant is short-lived like any other ([0025](/decisions/0025-integrations/#adapters-and-connections)).
 
-Caps and rate limits live in core, in `policy` and `quota`, so an adapter never holds a rule about how much is too much.
+Caps and rate limits live in core, in `policy` and the limit check, so an adapter never holds a rule about how much is too much.
 
 ```mermaid
 sequenceDiagram
@@ -68,7 +68,7 @@ An integration has two parts that are stored differently ([0004](/decisions/0004
 
 - **Who connects decides.** A tenant's own connection to a provider is never config committed by the operator, so a customer's change does not wait for review ([0004](/decisions/0004-the-data-model/#who-connects-decides)). The company that runs the installation is a tenant too, so its own connections are durable.
 - **An IaC tool may create a connection by calling the API.** What it writes is durable data of the tenant, not config.
-- **The adapter that completes a connect flow writes the connection,** under ids that start with its own name. A tenant has no sign-in connection: the upstreams are the operator's config ([0033](/decisions/0033-customer-connections/#which-upstreams-an-installation-has)).
+- **The adapter that completes a connect flow writes the connection,** under ids that start with its own name. A tenant has no sign-in connection: the upstreams are the operator's config ([0025](/decisions/0025-integrations/#the-upstream-contract)).
 - **An installation-wide credential stays in a secret source,** and only the adapter named in the registry reads it ([0005](/decisions/0005-the-store/#secret-sources)). The kinds are in the [kind registry](/reference/kinds/).
 
 ## Core calls adapters, never the reverse
@@ -94,7 +94,7 @@ The AWS and Kubernetes pages sit between the two: the integration part is the wo
 
 Every page has the same parts: what it is for, the kinds it plays, what sluis asks the vendor for, what policy controls, what is audited, and setup. v1 behaviour and the parity issues are on the [v1 parity checklist](/features/).
 
-The first working version has the `Integration` and `Upstream` contracts, served by `adapter-upstream-oidc`. The other contracts arrive with their first consumer at the parity milestone ([0025](/decisions/0025-integrations/#the-first-working-version)).
+The core has the `Integration` and `Upstream` contracts, served by `adapter-upstream-oidc`. The other contracts arrive with their first consumer: the GitHub and Cloudflare minters in their add-ons, on the shared Cloudflare, AWS and GitHub clients, and the rest at parity ([0025](/decisions/0025-integrations/#the-first-working-version)).
 
 | Page | Kinds | The use cases it serves |
 |---|---|---|
@@ -109,4 +109,4 @@ The first working version has the `Integration` and `Upstream` contracts, served
 
 ## Examples are illustrative
 
-The commands of the first working version are on [Commands](/reference/cli/) and the keys of the bootstrap file on [Bootstrap file](/reference/bootstrap-file/); those pages are decided. A command or a configuration key on these pages that they do not list belongs to the parity milestone: it shows the shape, not a decided name, until it is designed ([#1097](https://github.com/truvity/sluis/issues/1097)).
+The commands of the core are on [Commands](/reference/cli/) and the keys of the bootstrap file on [Bootstrap file](/reference/bootstrap-file/); those pages are decided. A command or a configuration key on these pages that they do not list belongs to the parity milestone: it shows the shape, not a decided name, until it is designed ([#1097](https://github.com/truvity/sluis/issues/1097)).

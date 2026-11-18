@@ -15,7 +15,7 @@ A **boundary** is the unit of keys and policy in sluis: what one compromised or 
 | **Environment** | The machine plane of one environment (clusters, hosts, workloads, certificates, SSH and workload identity) and the identity plane of the companies that work in it, as tenants | Yes |
 | **Customer** | The keys, issuer or failure domain of a party that needs its own, such as a regulated customer | Yes, its own |
 
-A **company is a tenant** of an environment boundary, not a boundary. Its directory, chat workspace, code host and provider accounts, its upstream, people and operator delegation are kinds of that tenant. A party that needs authority keys is a customer boundary and never a tenant. Production never shares a key or a store with development. Customer boundaries belong to the CIAM layer ([0032](/decisions/0032-customer-identity-installations/)).
+A **company is a tenant** of an environment boundary, not a boundary. Its directory, chat workspace, code host and provider accounts, its upstream, people and operator delegation are kinds of that tenant. A party that needs authority keys is a customer boundary and never a tenant. Production never shares a key or a store with development. One installation serves one boundary and trusts one realm for its customers ([0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)); the broker of the cancelled CIAM layer is not built, and [0032](/decisions/0032-customer-identity-installations/) stands only as its amendment says.
 
 ## The ladder
 
@@ -26,7 +26,7 @@ Each boundary declares a level, and each level includes the ones below it. A ten
 | **L0 tenant** | Separation by the store's rules, a grant sealed for the tenant, and the tenant's own five data keys |
 | **L1 keys** | Its own key@ and wrapping key (a KMS key, or a card of its own, such as a second card per board), so its own authority keys, intermediates and issuer. It uses the parent's store@, units and engine |
 | **L2 process** | Its own store@ and its own units, with their own uid or role, on the parent's engine under its own address prefix |
-| **L3 engine** | Its own engine (an rqlite cluster or a DynamoDB table), bucket and queue |
+| **L3 engine** | Its own engine (an rqlite cluster, a DynamoDB table or a PostgreSQL database), bucket and queue |
 | **L4 runtime** | Its own runtime: its own cloud account, cluster or hosts, joined to the others by declared trust |
 
 - **The level follows the need.** A boundary pays only for the level it declares.
@@ -35,7 +35,7 @@ Each boundary declares a level, and each level includes the ones below it. A ten
 
 ## Tenants
 
-A **tenant** is a scope inside a boundary with its own settings, clients, allowance and five data keys: `data`, `pseudonym`, `evidence`, `chain` and `credential` ([Keys](/concepts/keys/#data-keys)). It is the second address dimension, used by durable and temp kinds only. By default a tenant has no authority key and no wrapping key (a tenant declared to keep its keys in a customer account has them there, [ADR 0006](/decisions/0006-keys-and-sealing/#where-a-tenants-keys-live)), it has an issuer host of its own, and it may exist in several boundaries, each holding its own copy with its own data keys.
+A **tenant** is a scope inside a boundary with its own settings, clients and five data keys: `data`, `pseudonym`, `evidence`, `chain` and `credential` ([Keys](/concepts/keys/#data-keys)). It is the second address dimension, used by durable and temp kinds only. By default a tenant has no authority key and no wrapping key (a tenant declared to keep its keys in a customer account has them there, [ADR 0006](/decisions/0006-keys-and-sealing/#where-a-tenants-keys-live)), and it may exist in several boundaries, each holding its own copy with its own data keys.
 
 Tenants of one boundary share its actors, its authority keys and its fate: a flaw in shared code reaches every tenant of the boundary. That is the accepted L0 risk, and a tenant that cannot accept it is **promoted** to a boundary of its own. Promotion moves the tenant's kinds to the new boundary and rewraps its data keys for the new boundary's wrapping key; the tenant keeps its name, its clients' names and its settings ([ADR 0008](/decisions/0008-boundaries-and-tenants/#promotion)).
 
@@ -106,7 +106,7 @@ Each environment boundary has its own issuer, and each tenant has an issuer host
 | `aud` | **Exactly one registered `client_id`**, never a URL. An RFC 8707 `resource=` selects a registered client and is never copied into `aud`. Between actors of two boundaries, `aud` is the target's SPIFFE ID |
 | `sub` | The person's opaque random id ([Identity](/concepts/identity/#a-persons-subject)); for a JWT-SVID, the SPIFFE ID |
 | `acr`, `amr`, `auth_time` | How and when the person signed in |
-| `cnf` | Only when the audience declares a binding: `cnf.jkt` for DPoP, `cnf.x5t#S256` for mutual TLS ([ADR 0038](/decisions/0038-fapi-2-profile/#binding-is-declared-per-audience)). A bearer token has no `cnf` |
+| `cnf` | Only when the audience declares a binding: `cnf.jkt` for DPoP, which the core offers; `cnf.x5t#S256` for mutual TLS comes later ([ADR 0038](/decisions/0038-fapi-2-profile/#binding-is-declared-per-audience)). A bearer token has no `cnf` |
 | grant names | Only that boundary's grant names, narrowed per audience |
 
 Client ids are unique per issuer and readable. An AWS role is a client of its own, `aws:<account>:<role>`, and every relying party pins `iss` and `aud` ([ADR 0017](/decisions/0017-identity-and-sign-in/#audiences)). The claims and lifetimes are [ADR 0020](/decisions/0020-grant-vocabulary-and-token-claims/#the-claims-of-a-token).

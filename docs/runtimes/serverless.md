@@ -103,4 +103,4 @@ The auto-pause behaviour and the resume time of a paused cluster are not measure
 - Outside a VPC, egress is unrestricted. In a VPC, egress rules work by IP, not by name, so a per-function allow-list by host name needs a proxy or firewall.
 - One zip and one IAM role per actor and per holder raise the number of artifacts and resources to keep in step; the generator derives them all from the registries.
 - The vendored adapter is part of the supply chain. It is pinned to a version and rebuilt into sluis's layer with the rest of the release.
-- Search over the audit trail puts an Aurora database, an RDS Proxy and a VPC path under the reader: every lambda installation pays for them by default ([0028](/decisions/0028-audit-pieces/)).
+- Search over the audit trail puts an Aurora Serverless v2 database (auto-pause, direct IAM authentication, no RDS Proxy at first) and a VPC path under the reader: every lambda installation pays for them by default ([0028](/decisions/0028-audit-pieces/)).
