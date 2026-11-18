@@ -305,7 +305,7 @@ requirements:
       - {kind: integration-test, ref: "a_revoked_key_leaves_the_set_and_its_tokens_fail_against_the_document: the next key set in a directory lacks the kid and its token fails; a crash or a reader never sees half a document. Bucket: #1454"}
   - id: REQ-EXPORT-021
     area: EXPORT
-    statement: "After a change of KeyRevocation or SigningRing, exporter@ MUST write the document, purge its public address, read it back and write its report, in this order."
+    statement: "After a change of KeyRevocation or SigningRing, exporter@ MUST write the document, purge its public address where the destination has one, read it back and write its report, in this order."
     rationale: "The purge must come after the write or the edge fills again with the old document, and the report must come after the read back; the behaviour is UNVERIFIED on a real edge until the first measurement, and only the in-memory driver has played an edge so far (ADR 0009)."
     level: MUST
     source: design-decision
@@ -385,8 +385,8 @@ requirements:
       - {kind: integration-test, ref: "the bucket is stopped: the public address still answers with the live key set, and the revoked kid is absent"}
   - id: REQ-EXPORT-026
     area: EXPORT
-    statement: "The purge credential of exporter@ MUST allow purging only the public addresses of the documents of its destinations."
-    rationale: "A purge credential that could evict anything would let a compromised exporter@ take the edge cache of other services (ADR 0009)."
+    statement: "Where a destination has a purge address, the purge credential of exporter@ MUST allow purging only the public addresses of the documents of its destinations."
+    rationale: "A purge credential that could evict anything would let a compromised exporter@ take the edge cache of other services; the core holds no Cloudflare credential, so the purge belongs to an installation whose destination has a purge address (ADR 0009; ADR 0011, the amendment of 2026-11-18, decision E2 A)."
     level: MUST
     source: design-decision
     status: planned
@@ -417,7 +417,7 @@ requirements:
   - id: REQ-EXPORT-028
     area: EXPORT
     split_from: REQ-EXPORT-021
-    statement: "exporter@ MUST complete the write, the purge and the read back of a key set within 60 seconds of seeing a change of KeyRevocation."
+    statement: "Where a destination has a purge address, exporter@ MUST complete the write, the purge and the read back of a key set within 60 seconds of seeing a change of KeyRevocation."
     rationale: "A revoked key must leave the edge at once; 60 seconds is a target and not a measurement, and the first drill replaces it with the measured figure (ADR 0009)."
     level: MUST
     source: design-decision
