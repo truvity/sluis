@@ -3,9 +3,13 @@
 package sessiond_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"sync"
@@ -131,8 +135,8 @@ func TestRefreshGraceAnswersASpentTokenWithTheSameSuccessor(t *testing.T) {
 	}
 	// Nothing was written for the replays: the chain is the one the rotation left (REQ-SESS-001 holds: one rotation).
 	chain, version, ok := e.chain(sid)
-	if !ok || version != versionAfterRotation || len(chain.GetSpentHashes()) != 1 {
-		t.Errorf("chain: present %v, version %d (was %d), %d spent", ok, version, versionAfterRotation, len(chain.GetSpentHashes()))
+	if !ok || version != versionAfterRotation || chain.GetGeneration() != 1 {
+		t.Errorf("chain: present %v, version %d (was %d), generation %d", ok, version, versionAfterRotation, chain.GetGeneration())
 	}
 	// The successor is the live token: it rotates on.
 	if r := e.token(refreshRequest(rt2)); r.GetStatus() != http.StatusOK {
@@ -316,7 +320,7 @@ func TestRefreshOfOneTokenAtOnceRotatesOnceAndAnswersAllTheSame(t *testing.T) {
 	arrived.Add(requests)
 	release := make(chan struct{})
 	e.key.macHook = func(label string) {
-		if label == "sluis-refresh-successor-v1" {
+		if label == successorLabel {
 			arrived.Done()
 			<-release
 		}
@@ -348,8 +352,8 @@ func TestRefreshOfOneTokenAtOnceRotatesOnceAndAnswersAllTheSame(t *testing.T) {
 		}
 	}
 	chain, version, ok := e.chain(sid)
-	if !ok || version != before+1 || len(chain.GetSpentHashes()) != 1 {
-		t.Fatalf("chain: present %v, version %d (was %d), %d spent: it was rotated more than once or ended", ok, version, before, len(chain.GetSpentHashes()))
+	if !ok || version != before+1 || chain.GetGeneration() != 1 {
+		t.Fatalf("chain: present %v, version %d (was %d), generation %d: it was rotated more than once or ended", ok, version, before, chain.GetGeneration())
 	}
 	// One of the twelve rotated; the other eleven were answered as retries, and the record of each says so.
 	if granted, replays := e.grants(); granted != requests || replays != requests-1 {
@@ -407,8 +411,8 @@ func TestRefreshOfOneTokenAtOnceFreeRunning(t *testing.T) {
 				t.Fatalf("round %d: answer %d = %q, first = %q", round, i, tk, tokens[0])
 			}
 		}
-		if chain, version, ok := e.chain(sid); !ok || version != 2 || len(chain.GetSpentHashes()) != 1 {
-			t.Fatalf("round %d: chain present %v, version %d, %d spent", round, ok, version, len(chain.GetSpentHashes()))
+		if chain, version, ok := e.chain(sid); !ok || version != 2 || chain.GetGeneration() != 1 {
+			t.Fatalf("round %d: chain present %v, version %d, generation %d", round, ok, version, chain.GetGeneration())
 		}
 	}
 }
@@ -485,7 +489,7 @@ func (e *env) replicaAt(offset time.Duration) *sessiond.Service {
 	return s
 }
 
-const successorLabel = "sluis-refresh-successor-v1"
+const successorLabel = "sluis-refresh-tag-v1"
 
 // A replica whose clock runs ahead stamps a rotation in the future. That stamp must not open the window for as long as
 // the clock is ahead (a replay 90 minutes later is a reuse), and one inside the tolerance of a few seconds is a retry.
@@ -768,18 +772,50 @@ func TestRefreshChainEndIsAnswerEvenWhenItsRecordIsLost(t *testing.T) {
 
 // The successor is pinned by a known answer: the label, the encoding of the input, the cut to 256 bits and base64url.
 // Two replicas of different builds that derive differently, in a rolling deploy, turn every retry in the window into a
-// sign-out, so this vector changes only with a migration. The mac key is the fake key@'s, whose construction is
-// HMAC-SHA384 over u16(len label) | label | input (REQ-KEYS-042), and the answer was computed apart from the code.
+// sign-out, so these vectors change only with a migration. The mac key is the fake key@'s, whose construction is
+// HMAC-SHA384 over u16(len label) | label | input (REQ-KEYS-042), and the answers were computed apart from the code.
 //
 // verifies: REQ-SESS-013
-func TestRefreshSuccessorKnownAnswer(t *testing.T) {
+func TestRefreshTokenKnownAnswer(t *testing.T) {
 	const (
-		sid    = "abcdefghijklmnopqrstuvwxyz"
-		secret = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg"
-		// HMAC-SHA384("test mac key|mac|", u16(26) | label | u32(4) "acme" | u32(26) sid | u32(48) SHA-384(secret))[:32]
-		successor = "Bk-SNMY1n3BU79iKajCsWU7Nqae_KyDhe-a9kELJYlw"
+		sid = "abcdefghijklmnopqrstuvwxyz"
+		// The salt is the bytes 0 to 31. A secret is base64url(u64(generation) | HMAC-SHA384("test mac key|mac|",
+		// u16(20) | "sluis-refresh-tag-v1" | u32(4) "acme" | u32(26) sid | u32(8) u64(generation) | u32(32) salt)[:24]).
+		generation0 = "AAAAAAAAAABm9plE4ZZUCgvDhSkdHQCHhdJbglrT-a0"
+		generation1 = "AAAAAAAAAAFFvKaJdPuyr35siIepy6ak2JUm_NjHPYE"
 	)
 	e := newEnv(t, nil)
+	now := e.clk.now()
+	salt := make([]byte, 32)
+	for i := range salt {
+		salt[i] = byte(i)
+	}
+	facts, err := e.key.sealForTest("chain", &typev2alpha1.Address{Kind: "session-chain", Tenant: testTenant, Id: sid},
+		&sessionv2alpha1.SignInFacts{Accounts: []string{"workforce/alice"}, RefreshSalt: salt})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.store.put("session-chain", testTenant, sid, &sessionv2alpha1.SessionChain{
+		Subject: "subject-1", ClientId: testClient, Class: "human", Scope: "openid", RefreshHash: sha384Of(generation0),
+		StartedAt: timestampOf(now), EndsAt: timestampOf(now.Add(12 * time.Hour)), RefreshedAt: timestampOf(now),
+		AuthTime: timestampOf(now), SealedFacts: facts,
+	})
+	r := e.token(refreshRequest(sid + "." + generation0))
+	if r.GetStatus() != http.StatusOK {
+		t.Fatalf("refresh: %d %s", r.GetStatus(), r.GetBody())
+	}
+	if got := body(t, r)["refresh_token"]; got != sid+"."+generation1 {
+		t.Errorf("refresh token = %v, want %s.%s", got, sid, generation1)
+	}
+}
+
+// A chain of before the tag has no salt, and its tokens are of the old form (43 random characters): they are refused as
+// unknown, the current one too, and nothing is decided for them (the alpha testers sign in again).
+//
+// verifies: REQ-SESS-014
+func TestRefreshTokenOfTheOldFormIsRefused(t *testing.T) {
+	e := newEnv(t, nil)
+	const sid, old = "abcdefghijklmnopqrstuvwxyz", "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg"
 	now := e.clk.now()
 	facts, err := e.key.sealForTest("chain", &typev2alpha1.Address{Kind: "session-chain", Tenant: testTenant, Id: sid},
 		&sessionv2alpha1.SignInFacts{Accounts: []string{"workforce/alice"}})
@@ -787,43 +823,203 @@ func TestRefreshSuccessorKnownAnswer(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.store.put("session-chain", testTenant, sid, &sessionv2alpha1.SessionChain{
-		Subject: "subject-1", ClientId: testClient, Class: "human", Scope: "openid", RefreshHash: sha384Of(secret),
+		Subject: "subject-1", ClientId: testClient, Class: "human", Scope: "openid", RefreshHash: sha384Of(old),
 		StartedAt: timestampOf(now), EndsAt: timestampOf(now.Add(12 * time.Hour)), RefreshedAt: timestampOf(now),
 		AuthTime: timestampOf(now), SealedFacts: facts,
 	})
-	r := e.token(refreshRequest(sid + "." + secret))
-	if r.GetStatus() != http.StatusOK {
-		t.Fatalf("refresh: %d %s", r.GetStatus(), r.GetBody())
-	}
-	if got := body(t, r)["refresh_token"]; got != sid+"."+successor {
-		t.Errorf("refresh token = %v, want %s.%s", got, sid, successor)
+	assertOAuth(t, e.token(refreshRequest(sid+"."+old)), http.StatusBadRequest, "invalid_grant")
+	if _, _, ok := e.chain(sid); !ok {
+		t.Fatal("a token of the old form ended the chain")
 	}
 }
 
-// What the spent markers do not remember is not a reuse. A chain keeps the hashes of its last 16 rotations, so a token
-// older than that is refused like any token the chain does not know, and the chain goes on. This pins that edge as it
-// is: it is the "last 16 rotations" of REQ-SESS-014, which the owner worded so on 2026-11-07. With 17 rotations the
-// first token is out of the 16 and the chain holds exactly 16 markers (a limit of 15 or 17 fails here).
+// rotated signs in and refreshes n times, a second apart, and returns every token of the chain, first to current.
+func (e *env) rotated(n int) (sid string, tokens []string) {
+	e.t.Helper()
+	first, _ := e.redeemed()
+	rt := first["refresh_token"].(string)
+	sid, _, _ = strings.Cut(rt, ".")
+	tokens = []string{rt}
+	for range n {
+		e.clk.advance(time.Second)
+		r := e.token(refreshRequest(rt))
+		if r.GetStatus() != http.StatusOK {
+			e.t.Fatalf("rotation %d: %d %s", len(tokens), r.GetStatus(), r.GetBody())
+		}
+		rt = body(e.t, r)["refresh_token"].(string)
+		tokens = append(tokens, rt)
+	}
+	return sid, tokens
+}
+
+// Any token the chain spent ends it, however many rotations ago: the first token of a chain that rotated 40 times, the
+// token just before the current one (after the window), and one in between. The chain does not grow with the rotations:
+// its stored size is that of a chain rotated once, whatever the count (REQ-SESS-014: "the last 16 rotations" is gone).
 //
 // verifies: REQ-SESS-014
-func TestRefreshTokenOlderThanTheSpentMarkersIsRefusedAndTheChainLives(t *testing.T) {
+func TestRefreshAnyOldTokenOfAChainEndsIt(t *testing.T) {
+	const rotations = 40
+	for _, pick := range []struct {
+		name string
+		at   func(n int) int
+	}{
+		{"the first", func(int) int { return 0 }},
+		{"the middle", func(n int) int { return n / 2 }},
+		{"just past the sixteenth", func(n int) int { return n - 17 }},
+		{"the one before the current", func(n int) int { return n - 1 }},
+	} {
+		t.Run(pick.name, func(t *testing.T) {
+			e := newEnv(t, nil)
+			sid, tokens := e.rotated(rotations)
+			current := tokens[rotations]
+			if chain, _, _ := e.chain(sid); chain.GetGeneration() != rotations {
+				t.Fatalf("generation %d, want %d", chain.GetGeneration(), rotations)
+			}
+			e.clk.advance(testGrace + time.Second)
+			assertOAuth(t, e.token(refreshRequest(tokens[pick.at(rotations)])), http.StatusBadRequest, "invalid_grant")
+			if _, _, ok := e.chain(sid); ok {
+				t.Fatal("the chain lives after a spent token")
+			}
+			// The live token ends with the chain.
+			assertOAuth(t, e.token(refreshRequest(current)), http.StatusBadRequest, "invalid_grant")
+			if e.count("session.chain.end", "") != 1 {
+				t.Errorf("%d records of an end, want 1", e.count("session.chain.end", ""))
+			}
+		})
+	}
+}
+
+// The chain does not grow: after 40 rotations it is as large as after one, and holds no list of spent tokens.
+//
+// verifies: REQ-SESS-014
+func TestRefreshChainDoesNotGrowWithItsRotations(t *testing.T) {
+	size := func(rotations int) int {
+		e := newEnv(t, nil)
+		sid, _ := e.rotated(rotations)
+		raw, _, ok := e.store.raw("session-chain", testTenant, sid)
+		if !ok {
+			t.Fatal("no chain")
+		}
+		return len(raw)
+	}
+	one, many := size(1), size(40)
+	// The generation is a varint of one byte up to 127, and the stamp may differ by a byte or two: no more than that.
+	if many > one+4 {
+		t.Errorf("a chain of 40 rotations is %d bytes, of one rotation %d: it grows", many, one)
+	}
+}
+
+// A token whose tag is not the one key@ makes ends nothing: a stranger who knows the sid (it is in every token, so it is
+// no secret) and guesses a generation, in any form: below the chain's (a reuse if the tag were right), the chain's, above
+// it, the first and the largest number there is, with a tag of random, zero or copied bytes (the tag of another
+// generation). The chain lives, its live token still rotates, and nothing is recorded as a reuse.
+//
+// verifies: REQ-SESS-014
+func TestRefreshTokenWithABadTagEndsNothing(t *testing.T) {
 	e := newEnv(t, nil)
-	first, _ := e.redeemed()
-	rt1 := first["refresh_token"].(string)
-	sid, _, _ := strings.Cut(rt1, ".")
-	rt := rt1
-	for range 17 {
-		e.clk.advance(time.Second)
-		rt = body(t, e.token(refreshRequest(rt)))["refresh_token"].(string)
+	sid, tokens := e.rotated(5)
+	e.clk.advance(testGrace + time.Second)
+	forge := func(generation uint64, tag []byte) string {
+		b := binary.BigEndian.AppendUint64(nil, generation)
+		return sid + "." + base64.RawURLEncoding.EncodeToString(append(b, tag...))
 	}
-	assertOAuth(t, e.token(refreshRequest(rt1)), http.StatusBadRequest, "invalid_grant")
-	chain, _, ok := e.chain(sid)
-	if !ok || len(chain.GetSpentHashes()) != 16 {
-		t.Fatalf("chain present %v, %d spent markers", ok, len(chain.GetSpentHashes()))
+	realTag := func(rt string) []byte {
+		_, secret, _ := strings.Cut(rt, ".")
+		b, _ := base64.RawURLEncoding.DecodeString(secret)
+		return b[8:]
 	}
-	if r := e.token(refreshRequest(rt)); r.GetStatus() != http.StatusOK {
-		t.Fatalf("the live token: %s", r.GetBody())
+	zero, junk := make([]byte, 24), bytes.Repeat([]byte{0xA5}, 24)
+	guesses := map[string]string{
+		"generation 0, zero tag":                      forge(0, zero),
+		"generation 0, the tag of generation 1":       forge(0, realTag(tokens[1])),
+		"generation 2, junk tag":                      forge(2, junk),
+		"the generation of the chain, junk tag":       forge(5, junk),
+		"the generation of the chain, the tag of 4":   forge(5, realTag(tokens[4])),
+		"above the chain, the tag of the chain's own": forge(6, realTag(tokens[5])),
+		"the largest generation":                      forge(math.MaxUint64, junk),
 	}
+	for name, rt := range guesses {
+		t.Run(name, func(t *testing.T) {
+			assertOAuth(t, e.token(refreshRequest(rt)), http.StatusBadRequest, "invalid_grant")
+			if _, _, ok := e.chain(sid); !ok {
+				t.Fatal("a guess ended the chain")
+			}
+		})
+	}
+	if n := e.count("session.chain.end", ""); n != 0 {
+		t.Errorf("%d records of an end after guesses", n)
+	}
+	if r := e.token(refreshRequest(tokens[5])); r.GetStatus() != http.StatusOK {
+		t.Fatalf("the live token after the guesses: %d %s", r.GetStatus(), r.GetBody())
+	}
+}
+
+// A token with a good tag of another chain ends nothing of this one: the tag is made over the sid and the salt.
+//
+// verifies: REQ-SESS-014
+func TestRefreshTagOfAnotherChainEndsNothing(t *testing.T) {
+	e := newEnv(t, nil)
+	_, a := e.rotated(3)
+	sidB, b := e.rotated(3)
+	_, secretA, _ := strings.Cut(a[1], ".")
+	e.clk.advance(testGrace + time.Second)
+	assertOAuth(t, e.token(refreshRequest(sidB+"."+secretA)), http.StatusBadRequest, "invalid_grant")
+	if _, _, ok := e.chain(sidB); !ok {
+		t.Fatal("the secret of another chain ended this one")
+	}
+	if r := e.token(refreshRequest(b[3])); r.GetStatus() != http.StatusOK {
+		t.Fatalf("live token: %d", r.GetStatus())
+	}
+}
+
+// The grace window answers the token of the last rotation, however long the chain, with the same successor; the token
+// before that is a reuse already inside the window.
+//
+// verifies: REQ-SESS-013, REQ-SESS-014
+func TestRefreshGraceOfALongChainAnswersOnlyTheLastRotation(t *testing.T) {
+	e := newEnv(t, nil)
+	sid, tokens := e.rotated(30)
+	r := e.token(refreshRequest(tokens[29]))
+	if r.GetStatus() != http.StatusOK || body(t, r)["refresh_token"] != tokens[30] {
+		t.Fatalf("the replay of the last rotation: %d %s", r.GetStatus(), r.GetBody())
+	}
+	assertOAuth(t, e.token(refreshRequest(tokens[28])), http.StatusBadRequest, "invalid_grant")
+	if _, _, ok := e.chain(sid); ok {
+		t.Fatal("the token of two rotations ago did not end the chain")
+	}
+}
+
+// A client revokes a chain with any token of it, current or spent, and with no other: a bad tag ends nothing and says so
+// to nobody (RFC 7009 answers 200 whatever the token).
+//
+// verifies: REQ-SESS-014
+func TestRevokeWithAnOldTokenOfAChain(t *testing.T) {
+	forged := func(rt string) string {
+		sid, secret, _ := strings.Cut(rt, ".")
+		b, _ := base64.RawURLEncoding.DecodeString(secret)
+		b[len(b)-1] ^= 1 // one flipped bit in the tag, same shape
+		return sid + "." + base64.RawURLEncoding.EncodeToString(b)
+	}
+	t.Run("an old token", func(t *testing.T) {
+		e := newEnv(t, nil)
+		sid, tokens := e.rotated(20)
+		if r := e.revoke(revokeRequest(tokens[1])); r.GetStatus() != http.StatusOK {
+			t.Fatalf("revoke: %d", r.GetStatus())
+		}
+		if _, _, ok := e.chain(sid); ok {
+			t.Fatal("a spent token did not end the chain it revoked")
+		}
+	})
+	t.Run("a bad tag", func(t *testing.T) {
+		e := newEnv(t, nil)
+		sid, tokens := e.rotated(20)
+		if r := e.revoke(revokeRequest(forged(tokens[1]))); r.GetStatus() != http.StatusOK {
+			t.Fatalf("revoke: %d", r.GetStatus())
+		}
+		if _, _, ok := e.chain(sid); !ok {
+			t.Fatal("a token with a bad tag ended the chain")
+		}
+	})
 }
 
 // An ordinary sign-in, code and refresh of a person who is not held must not write a refusal at store@ for every

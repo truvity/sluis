@@ -57,15 +57,15 @@ func TestRefreshRotatesTheToken(t *testing.T) {
 	if second["scope"] != "openid" {
 		t.Errorf("scope = %v", second["scope"])
 	}
-	// The new token rotates again; the chain keeps the old hashes as spent markers.
+	// The new token rotates again; the chain moves its generation on and keeps no spent marker.
 	e.clk.advance(time.Minute)
 	if r := e.token(refreshRequest(rt2)); r.GetStatus() != http.StatusOK {
 		t.Fatalf("second refresh: %s", r.GetBody())
 	}
 	chainRaw, version, _ := e.store.raw("session-chain", testTenant, sid)
 	chain := protoOf(t, chainRaw, &sessionv2alpha1.SessionChain{})
-	if len(chain.GetSpentHashes()) != 2 || version != 3 {
-		t.Errorf("spent %d, version %d", len(chain.GetSpentHashes()), version)
+	if chain.GetGeneration() != 2 || version != 3 {
+		t.Errorf("generation %d, version %d", chain.GetGeneration(), version)
 	}
 	// Policy decided at every refresh.
 	reqs := e.policy.requests()
@@ -328,14 +328,14 @@ func TestSessionChainIsATempKindThatHoldsOnlyHashes(t *testing.T) {
 	sid, secret1, _ := strings.Cut(rt1, ".")
 	start := e.clk.now()
 
-	// What session wrote: one chain under the kind's segment, holding the SHA-384 of the secret and no spent marker yet.
+	// What session wrote: one chain under the kind's segment, holding the SHA-384 of the secret, generation 0 and a sealed salt.
 	if ids := e.store.ids(kind.Segment, testTenant); len(ids) != 1 || ids[0] != sid {
 		t.Fatalf("chains %v, want [%s]", ids, sid)
 	}
 	chainRaw, version, _ := e.store.raw(kind.Segment, testTenant, sid)
 	chain := protoOf(t, chainRaw, &sessionv2alpha1.SessionChain{})
-	if want := sha384Of(secret1); !bytes.Equal(chain.GetRefreshHash(), want) || len(chain.GetSpentHashes()) != 0 || version != 1 {
-		t.Errorf("refresh_hash %x, spent %d, version %d; want %x, 0, 1", chain.GetRefreshHash(), len(chain.GetSpentHashes()), version, want)
+	if want := sha384Of(secret1); !bytes.Equal(chain.GetRefreshHash(), want) || chain.GetGeneration() != 0 || version != 1 {
+		t.Errorf("refresh_hash %x, generation %d, version %d; want %x, 0, 1", chain.GetRefreshHash(), chain.GetGeneration(), version, want)
 	}
 	// A temp kind has a lifetime: the chain is written with a ttl of the human session's absolute limit.
 	ttlOf := func() time.Duration {
@@ -348,7 +348,7 @@ func TestSessionChainIsATempKindThatHoldsOnlyHashes(t *testing.T) {
 		t.Errorf("chain ttl = %s, want %s (kind maximum %s)", got, absolute, kind.TTLMax)
 	}
 
-	// A refresh rotates: the new hash replaces the current one and the old one becomes a spent marker. Still hashes only,
+	// A refresh rotates: the new hash replaces the current one and the generation counts up and nothing is kept of the old one. Still hashes only,
 	// and the ttl counts down to the same absolute end, so a rotation does not extend the chain.
 	e.clk.advance(time.Hour)
 	second := body(t, e.token(refreshRequest(rt1)))
@@ -356,9 +356,8 @@ func TestSessionChainIsATempKindThatHoldsOnlyHashes(t *testing.T) {
 	_, secret2, _ := strings.Cut(rt2, ".")
 	chainRaw, version, _ = e.store.raw(kind.Segment, testTenant, sid)
 	chain = protoOf(t, chainRaw, &sessionv2alpha1.SessionChain{})
-	if version != 2 || !bytes.Equal(chain.GetRefreshHash(), sha384Of(secret2)) ||
-		len(chain.GetSpentHashes()) != 1 || !bytes.Equal(chain.GetSpentHashes()[0], sha384Of(secret1)) {
-		t.Errorf("after a refresh: version %d, refresh_hash %x, spent %x", version, chain.GetRefreshHash(), chain.GetSpentHashes())
+	if version != 2 || !bytes.Equal(chain.GetRefreshHash(), sha384Of(secret2)) || chain.GetGeneration() != 1 {
+		t.Errorf("after a refresh: version %d, refresh_hash %x, generation %d", version, chain.GetRefreshHash(), chain.GetGeneration())
 	}
 	if got, want := ttlOf(), absolute-time.Hour; got != want {
 		t.Errorf("chain ttl after a refresh = %s, want %s", got, want)

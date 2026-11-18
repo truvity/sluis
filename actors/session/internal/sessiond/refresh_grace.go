@@ -3,6 +3,7 @@ package sessiond
 import (
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"time"
 
@@ -21,20 +22,32 @@ import (
 // the protocol's retry, not something an installation tunes.
 const refreshGrace = 30 * time.Second
 
-// labelRefreshSuccessor separates the keyed hash that makes a successor from every other use of the boundary's mac key.
-const labelRefreshSuccessor = "sluis-refresh-successor-v1"
+// labelRefreshTag separates the keyed hash that makes a refresh token's tag from every other use of the boundary's mac
+// key. It is inside the prefix that key@ reserves to session (sluis-refresh-).
+const labelRefreshTag = "sluis-refresh-tag-v1"
 
-// refreshSuccessor is the refresh token that replaces the one whose SHA-384 is predecessor: a keyed hash (HMAC-SHA384
-// at key@, under the boundary's mac key) of the tenant, the sid and that hash, cut to 256 bits. It is a function of
-// the predecessor so that every replica, and a retry, derives the same successor without the chain holding any token:
-// the store keeps hashes only (0004 "Treatment"), and the secret of a token never reaches key@. Nobody without key@
-// can compute it, and a holder of an old token cannot walk forward to the current one.
-func (k keys) refreshSuccessor(ctx context.Context, tenant, sid string, predecessor []byte) (string, error) {
-	m, err := k.mac(ctx, "mac", "", labelRefreshSuccessor, lengthPrefixed(tenant, sid, string(predecessor)), nil)
+// refreshSaltLen is the size of the salt of a chain: 256 random bits.
+const refreshSaltLen = 32
+
+// refreshTagLen is how much of the keyed hash is the tag of a token: 192 bits, and with the 8 bytes of the generation
+// the 32 bytes of a secret, 43 characters as before.
+const refreshTagLen = 24
+
+// refreshSecret is the secret half of the refresh token of a generation of a chain: the generation (8 bytes, big
+// endian) and its tag, 43 characters of base64url. The tag is a keyed hash (HMAC-SHA384 at key@, under the boundary's mac
+// key) of the tenant, the sid, the generation and the salt of the chain, cut to 192 bits. A token is a function of the
+// chain and its generation, so every replica derives the same one (the grace window of REQ-SESS-013 answers a retry with
+// the successor it would have had), and the chain holds the hash of the current token, the generation and the salt, never
+// a token and never a list of spent ones: a token of any older generation is recognised by making its tag again
+// (REQ-SESS-014). Nobody without key@ and the salt can make one: the salt is sealed under the tenant's chain key, so a
+// copy of the store is no help, and a holder of a token cannot make another. The secret of a token never reaches key@.
+func (k keys) refreshSecret(ctx context.Context, tenant, sid string, generation uint64, salt []byte) (string, error) {
+	g := binary.BigEndian.AppendUint64(nil, generation)
+	m, err := k.mac(ctx, "mac", "", labelRefreshTag, lengthPrefixed(tenant, sid, string(g), string(salt)), nil)
 	if err != nil {
 		return "", err
 	}
-	return base64.RawURLEncoding.EncodeToString(m[:32]), nil
+	return base64.RawURLEncoding.EncodeToString(append(g, m[:refreshTagLen]...)), nil
 }
 
 // refreshSkew is how far ahead of this clock another replica's stamp may be and still count as recent: the time a

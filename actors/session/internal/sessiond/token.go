@@ -218,10 +218,18 @@ func (s *Service) codeGrant(ctx context.Context, r *sessionv2alpha1.TokenRequest
 	if err != nil {
 		return nil, internal("random", err)
 	}
-	secret, err := randomToken()
+	// The salt of the chain's refresh tokens is sealed with the facts, under the tenant's chain key, in the same
+	// envelope (ADR 0018 "Session chains"): the copy of the facts that the code held has none. The first token is the
+	// chain's generation 0.
+	salt, err := randomBytes(refreshSaltLen)
 	if err != nil {
 		return nil, internal("random", err)
 	}
+	secret, err := s.keys.refreshSecret(ctx, tc.tenant, sid, 0, salt)
+	if err != nil {
+		return nil, unavailable("key", err)
+	}
+	facts.RefreshSalt = salt
 	// One copy of the facts, under the chain key of the tenant: session opens it at a refresh, exchange for a token
 	// exchange, and the tenant's exit deletes the key (REQ-KEYS-082).
 	chainFacts, err := s.keys.sealChain(ctx, tc.tenant, sid, &facts, v.grant)
