@@ -9,7 +9,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     actors: [exporter]
     standards:
@@ -26,7 +26,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     actors: [exporter]
     standards:
@@ -102,7 +102,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [exporter]
     standards: []
@@ -120,7 +120,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [1014]
@@ -134,7 +134,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [1217]
@@ -147,7 +147,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: v1-parity
+    milestone: parity
     gap: partly-built
     runtimes: all
     actors: [exporter]
@@ -175,7 +175,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [1714, 864]
@@ -201,7 +201,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [exporter]
     standards: []
@@ -217,7 +217,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     actors: [exporter]
     standards: []
@@ -233,7 +233,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [exporter]
     standards: []
@@ -248,7 +248,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [exporter]
     standards: []
@@ -264,7 +264,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [exporter]
     standards: []
@@ -279,7 +279,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     actors: [exporter]
     standards: []
@@ -293,7 +293,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [exporter]
     standards: []
@@ -311,7 +311,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [exporter]
     standards: []
@@ -328,7 +328,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [exporter]
     standards: []
@@ -345,7 +345,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [exporter]
     standards: []
@@ -360,7 +360,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [exporter]
     standards: []
@@ -376,7 +376,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [exporter]
     standards: []
@@ -390,7 +390,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [exporter]
     standards: []
@@ -405,7 +405,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [exporter]
     standards: []
@@ -422,7 +422,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [exporter]
     standards: []
@@ -436,10 +436,49 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [exporter]
     standards: []
     features: ["parity"]
     verification:
       - {kind: integration-test, ref: "a fake destination refuses the first Put with 401: the write and the purge still finish within the 60 seconds of REQ-EXPORT-028; two refusals fail the Put after two attempts"}
+  - id: REQ-EXPORT-030
+    area: EXPORT
+    statement: "On Lambda, a change of an exportable item in the store's table MUST wake exporter@ through DynamoDB Streams."
+    rationale: "Nothing is pushed to exporter@ on Lambda, so the stream of the table is its trigger (ADR 0009, the amendment of 2026-11-18, decision L2)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: [serverless]
+    standards: []
+    issues: [1797]
+    verification:
+      - {kind: integration-test, ref: "a change of KeyRevocation in the table starts exporter@, and a change of an item that is not exportable does not"}
+  - id: REQ-EXPORT-031
+    area: EXPORT
+    statement: "exporter@ on Lambda MUST read the kinds through store@ and take nothing from the record of its wake-up."
+    rationale: "The stream is a wake-up and not a second path to the data (ADR 0009, the amendment of 2026-11-18)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: [serverless]
+    standards: []
+    issues: [1797]
+    verification:
+      - {kind: integration-test, ref: "exporter@ run from a stream record that holds a value other than the stored one publishes the stored one, and its role may not read the table"}
+  - id: REQ-EXPORT-032
+    area: EXPORT
+    statement: "On Lambda, exporter@ MUST run on a daily schedule that rebuilds the documents and removes what is gone."
+    rationale: "A missed wake-up or an edit made at a destination is corrected within a day (ADR 0009, the amendment of 2026-11-18, decision L2)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: [serverless]
+    standards: []
+    issues: [1797]
+    verification:
+      - {kind: integration-test, ref: "a document that the stream did not produce is rebuilt by the daily run, and a document of a removed item is deleted by it"}

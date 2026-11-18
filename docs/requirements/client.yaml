@@ -9,7 +9,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "2.3", depth: Full}
@@ -25,7 +25,7 @@ requirements:
     source: v1-parity
     status: partial
     gap: partly-built
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "2.3.1", depth: Full}
@@ -41,7 +41,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-01, section: "2.3", depth: Full}
@@ -59,7 +59,7 @@ requirements:
     source: v1-parity
     status: partial
     gap: no-proving-test
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-01, section: "2.3", depth: Full}
@@ -75,7 +75,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-01, section: "2.3", depth: Full}
@@ -90,8 +90,9 @@ requirements:
     level: SHOULD
     source: stakeholder-ciam
     # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Restored 2026-11-18 as REQ-CLIENT-058: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
-    superseded_by: [REQ-AUTHN-112]
+    superseded_by: [REQ-CLIENT-058]
     runtimes: all
     standards:
       - {id: ST-20, section: "7523 2.2", depth: Full}
@@ -108,8 +109,9 @@ requirements:
     level: SHOULD
     source: stakeholder-ciam
     # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Restored 2026-11-18 as REQ-CLIENT-054: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
-    superseded_by: [REQ-AUTHN-112]
+    superseded_by: [REQ-CLIENT-054]
     runtimes: all
     standards:
       - {id: ST-20, section: "7523 2.2", depth: Full}
@@ -126,8 +128,9 @@ requirements:
     level: SHOULD
     source: stakeholder-ciam
     # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Restored 2026-11-18 as REQ-CLIENT-055: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
-    superseded_by: [REQ-AUTHN-112]
+    superseded_by: [REQ-CLIENT-055]
     runtimes: all
     standards:
       - {id: ST-20, section: "7523 2.2", depth: Full}
@@ -143,8 +146,9 @@ requirements:
     level: SHOULD
     source: stakeholder-ciam
     # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Restored 2026-11-18 as REQ-CLIENT-056: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
-    superseded_by: [REQ-AUTHN-112]
+    superseded_by: [REQ-CLIENT-056]
     runtimes: all
     standards:
       - {id: ST-20, section: "7523 2.2", depth: Full}
@@ -159,7 +163,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "2.1", depth: Full}
@@ -175,7 +179,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "2.1", depth: Full}
@@ -190,7 +194,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "5.2", depth: Full}
@@ -204,7 +208,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-22, section: "4", depth: Full}
@@ -250,7 +254,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-20, section: "7523", depth: Partial}
@@ -265,7 +269,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-20, section: "7523", depth: Partial}
@@ -279,7 +283,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "3.3", depth: Partial}
@@ -294,7 +298,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "3.3", depth: Partial}
@@ -309,7 +313,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-09, section: "3", depth: Full}
@@ -325,7 +329,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-25, section: "auth", depth: Full}
@@ -344,8 +348,9 @@ requirements:
     level: MAY
     source: stakeholder-ciam
     # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Restored 2026-11-18 as REQ-CLIENT-059: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
-    superseded_by: [REQ-AUTHN-112]
+    superseded_by: [REQ-CLIENT-059]
     runtimes: all
     standards:
       - {id: ST-19, section: "2-3", depth: Full}
@@ -374,7 +379,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [791]
@@ -387,7 +392,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [791]
@@ -400,7 +405,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [792]
@@ -413,7 +418,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [792]
@@ -426,7 +431,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [792]
@@ -439,7 +444,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [792]
@@ -452,7 +457,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [792]
@@ -465,7 +470,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [823]
@@ -478,7 +483,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [823]
@@ -491,7 +496,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [790]
@@ -504,7 +509,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [792]
@@ -517,8 +522,9 @@ requirements:
     level: MUST
     source: standard
     # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Restored 2026-11-18 as REQ-CLIENT-053: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
-    superseded_by: [REQ-AUTHN-112]
+    superseded_by: [REQ-CLIENT-053]
     runtimes: all
     standards:
       - {id: ST-37, depth: Partial}
@@ -532,8 +538,9 @@ requirements:
     level: MUST
     source: standard
     # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Restored 2026-11-18 as REQ-CLIENT-052: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
-    superseded_by: [REQ-AUTHN-112]
+    superseded_by: [REQ-CLIENT-052]
     runtimes: all
     standards:
       - {id: ST-16, depth: Partial}
@@ -547,8 +554,9 @@ requirements:
     level: MUST
     source: standard
     # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Restored 2026-11-18 as REQ-AUTHN-113: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
-    superseded_by: [REQ-AUTHN-112]
+    superseded_by: [REQ-AUTHN-113]
     runtimes: all
     standards:
       - {id: ST-16, depth: Partial}
@@ -562,8 +570,9 @@ requirements:
     level: MUST
     source: standard
     # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Restored 2026-11-18 as REQ-CLIENT-054: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
-    superseded_by: [REQ-AUTHN-112]
+    superseded_by: [REQ-CLIENT-054]
     runtimes: all
     standards:
       - {id: ST-20, depth: Partial}
@@ -577,8 +586,9 @@ requirements:
     level: MUST
     source: standard
     # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Restored 2026-11-18 as REQ-CLIENT-055: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
-    superseded_by: [REQ-AUTHN-112]
+    superseded_by: [REQ-CLIENT-055]
     runtimes: all
     standards:
       - {id: ST-20, depth: Partial}
@@ -592,8 +602,9 @@ requirements:
     level: MUST
     source: standard
     # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Restored 2026-11-18 as REQ-CLIENT-056: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
-    superseded_by: [REQ-AUTHN-112]
+    superseded_by: [REQ-CLIENT-056]
     runtimes: all
     standards:
       - {id: ST-20, depth: Partial}
@@ -624,7 +635,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "2.3", depth: Full}
@@ -640,7 +651,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [789]
@@ -654,7 +665,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [789]
@@ -668,7 +679,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "2.3", depth: Full}
@@ -683,7 +694,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [788, 1818]
@@ -699,7 +710,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [788]
@@ -713,7 +724,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [788, 1815]
@@ -728,7 +739,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [788, 1815]
@@ -743,7 +754,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [789, 1819]
@@ -758,7 +769,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-04, section: "7.3", depth: Partial}
@@ -766,3 +777,105 @@ requirements:
     tests: [actors/store/tests/config.rs]
     verification:
       - {kind: test-vectors, ref: "client-vectors.json (kits/conformance/token), config: browser, native and none load for a public client; another word or spelling, and any profile on another kind, are refused at the field"}
+  - id: REQ-CLIENT-052
+    area: CLIENT
+    statement: "For a client of profile fapi2, the authorization endpoint MUST accept only a request_uri that a pushed authorization request returned."
+    rationale: "The profile requires pushed authorization requests, and the default clients are not held to it (ADR 0038, the amendment of 2026-11-18)."
+    level: MUST
+    source: standard
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-16, depth: Partial}
+      - {id: ST-37, section: "5", depth: Partial}
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "a direct authorization request from a client of profile fapi2 is refused, and one from a client of no profile is accepted"}
+  - id: REQ-CLIENT-053
+    area: CLIENT
+    statement: "A client of profile fapi2 MUST authenticate with private_key_jwt rather than a client secret."
+    rationale: "The profile forbids shared secrets; mutual-TLS client authentication is not offered in the core (ADR 0038, the amendment of 2026-11-18)."
+    level: MUST
+    source: standard
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-37, depth: Partial}
+      - {id: ST-20, section: "7523 2.2", depth: Partial}
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "a client of profile fapi2 that presents a client secret or a TLS client certificate is refused at the token endpoint"}
+  - id: REQ-CLIENT-054
+    area: CLIENT
+    statement: "A client assertion MUST be refused unless iss and sub equal the client and aud equals the issuer."
+    rationale: "The assertion rules protect a key-based client from an assertion made for another party (RFC 7523 section 3)."
+    level: MUST
+    source: standard
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-20, section: "7523 3", depth: Partial}
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "an assertion with a wrong iss, sub or aud, with alg none and with HMAC is refused"}
+  - id: REQ-CLIENT-055
+    area: CLIENT
+    statement: "A client assertion MUST have a lifetime of at most 60 seconds."
+    rationale: "A short assertion limits replay (ADR 0038)."
+    level: MUST
+    source: standard
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-20, section: "7523 3", depth: Partial}
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "an assertion that lives longer than 60 seconds is refused"}
+  - id: REQ-CLIENT-056
+    area: CLIENT
+    statement: "A client assertion MUST carry a jti that is accepted once."
+    rationale: "A replayed assertion must fail (ADR 0038)."
+    level: MUST
+    source: standard
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-20, section: "7523 3", depth: Partial}
+    issues: [912]
+    verification:
+      - {kind: integration-test, ref: "an assertion presented twice is refused the second time"}
+  - id: REQ-CLIENT-058
+    area: CLIENT
+    statement: "sluis MUST support private_key_jwt client authentication."
+    rationale: "Asymmetric client authentication removes shared secrets (ADR 0038, the amendment of 2026-11-18)."
+    level: MUST
+    source: standard
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-20, section: "7523 2.2", depth: Full}
+      - {id: ST-28, section: "9", depth: Full}
+    issues: [912]
+    verification:
+      - {kind: conformance-suite, ref: "FAPI2-SP"}
+      - {kind: integration-test, ref: "a client authenticates at the token endpoint with a signed assertion and no secret"}
+  - id: REQ-CLIENT-059
+    area: CLIENT
+    statement: "sluis MAY support mutual-TLS client authentication and certificate-bound access tokens once the edge forwards the client certificate to sluis."
+    rationale: "Some external systems can use only client certificates, and a Cloudflare tunnel or a plain gateway may not pass the certificate; the design of the forwarding comes first (ADR 0038, the amendment of 2026-11-18)."
+    level: MAY
+    source: standard
+    status: planned
+    milestone: backlog
+    runtimes: all
+    standards:
+      - {id: ST-19, section: "2-3", depth: Full}
+    issues: [912]
+    verification:
+      - {kind: conformance-suite, ref: "FAPI2-SP (MTLS variant)"}

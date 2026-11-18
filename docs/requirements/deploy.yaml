@@ -9,7 +9,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: partial
-    milestone: v1-parity
+    milestone: core
     gap: partly-built
     runtimes: all
     standards:
@@ -25,7 +25,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: partial
-    milestone: v1-parity
+    milestone: core
     gap: partly-built
     runtimes: all
     standards:
@@ -41,7 +41,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards:
       - {id: NC-09, section: "OCI", depth: Full}
@@ -57,7 +57,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: ["serverless"]
     standards:
       - {id: NC-09, section: "OCI", depth: Full}
@@ -72,7 +72,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: ["kubernetes"]
     standards:
       - {id: NC-09, section: "OCI", depth: Full}
@@ -86,7 +86,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards:
       - {id: ST-97, section: "1", depth: Partial}
@@ -101,7 +101,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards:
       - {id: ST-97, section: "1", depth: Partial}
@@ -115,7 +115,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: ["bare-metal"]
     standards:
       - {id: ST-81, section: "8446", depth: Full}
@@ -130,7 +130,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: v1-parity
+    milestone: core
     gap: no-proving-test
     runtimes: ["bare-metal"]
     standards:
@@ -146,7 +146,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: v1-parity
+    milestone: core
     runtimes: ["bare-metal"]
     standards:
       - {id: ST-88, section: "1", depth: Partial}
@@ -160,7 +160,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: v1-parity
+    milestone: core
     gap: partly-built
     runtimes: ["kubernetes"]
     standards:
@@ -176,7 +176,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-104, section: "1", depth: Full}
@@ -191,7 +191,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: first-version
+    milestone: core
     gap: attestation-missing
     runtimes: all
     standards:
@@ -207,7 +207,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: v1-parity
+    milestone: core
     gap: partly-built
     runtimes: all
     standards: []
@@ -221,7 +221,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [845]
@@ -236,7 +236,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: ["kubernetes"]
     standards: []
     issues: [876]
@@ -249,7 +249,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: ["kubernetes"]
     standards: []
     issues: [876]
@@ -262,7 +262,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: ["kubernetes"]
     standards: []
     issues: [876]
@@ -275,7 +275,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: ["kubernetes"]
     standards: []
     issues: [876]
@@ -288,7 +288,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: ["kubernetes"]
     standards: []
     issues: [876]
@@ -302,7 +302,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: ["kubernetes"]
     standards: []
     issues: [876]
@@ -315,7 +315,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: ["kubernetes"]
     standards: []
     issues: [876, 1713]
@@ -328,7 +328,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: ["kubernetes"]
     standards: []
     issues: [876]
@@ -336,17 +336,17 @@ requirements:
       - {kind: integration-test, ref: "chart corpus: the render of every preset holds no RBAC object, and with the direct path the Role names only the exported Secrets"}
   - id: REQ-DEPLOY-024
     area: DEPLOY
-    statement: "sluis config check MUST refuse a production Kubernetes installation whose store engine is not dynamodb or whose key@ driver is not aws-kms."
-    rationale: "Kubernetes in 2.0 means Kubernetes on AWS (EKS) with DynamoDB, AWS KMS and S3; a cluster without AWS is not in 2.0 (ADR 0011, Kubernetes; ADR 0005, Engines)."
+    statement: "sluis config check MUST refuse a production Kubernetes installation whose store engine is not postgres or whose key@ driver is not aws-kms."
+    rationale: "Kubernetes in 2.0 keeps its state in PostgreSQL through CloudNativePG and its keys in AWS KMS; a key driver for a cluster without AWS is later (ADR 0011, Kubernetes; ADR 0005, the amendment of 2026-11-18, decision K2 B)."
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: ["kubernetes"]
     standards: []
-    issues: [876]
+    issues: [876, 1833]
     verification:
-      - {kind: integration-test, ref: "config check: a production Kubernetes bootstrap file with rqlite or postgres as the engine, or with a key driver other than aws-kms, is refused"}
+      - {kind: integration-test, ref: "config check: a production Kubernetes bootstrap file with rqlite or dynamodb as the engine, or with a key driver other than aws-kms, is refused; postgres with aws-kms is accepted"}
   - id: REQ-DEPLOY-025
     area: DEPLOY
     statement: "On Kubernetes a holder's cloud credential MUST come from a projected service-account token mounted only into its driver container and exchanged by web identity through the cluster's IAM OIDC provider."
@@ -354,7 +354,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: ["kubernetes"]
     standards:
       - {id: ST-46, section: "AssumeRoleWithWebIdentity", depth: Full}
@@ -368,7 +368,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -380,7 +380,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -392,7 +392,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -404,7 +404,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -416,7 +416,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -429,7 +429,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -442,7 +442,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -456,7 +456,7 @@ requirements:
     status: partial
     gap: partly-built
     issues: [860]
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     verification:
@@ -472,7 +472,7 @@ requirements:
     status: partial
     gap: partly-built
     features: [design]
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -486,7 +486,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -498,7 +498,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -510,7 +510,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -522,7 +522,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -534,7 +534,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -547,7 +547,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -559,7 +559,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     tests:
@@ -574,7 +574,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -588,7 +588,7 @@ requirements:
     source: design-decision
     status: planned
     features: [design]
-    milestone: v1-parity
+    milestone: parity
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -603,7 +603,7 @@ requirements:
     status: partial
     gap: no-proving-test
     features: ["design"]
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -618,7 +618,7 @@ requirements:
     status: partial
     gap: no-proving-test
     features: ["design"]
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -633,7 +633,7 @@ requirements:
     status: partial
     gap: partly-built
     features: ["design"]
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -646,7 +646,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     issues: [1584]
@@ -660,7 +660,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     issues: [1223]
@@ -674,7 +674,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -686,7 +686,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     issues: [1223]
@@ -700,7 +700,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
@@ -712,10 +712,115 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     verification:
       - {kind: integration-test, ref: "kits/go/backoff and kits/rust/sluis-kit backoff, fake clock: 2, 4, 8, 16, 30, 30; the reset; a real SIGTERM ends the sleep; no sleep outside systemd; a file that is no count, a link"}
       - {kind: integration-test, ref: "kits/go/cli and kits/rust/sluis-kit cli: a serve that fails (a wrong command line too) waits; check and version do not; a clean serve forgets the count"}
       - {kind: integration-test, ref: "tools/gen/units: no generated file names RestartSteps or RestartMaxDelaySec; install tier: systemd-analyze verify passes on Amazon Linux 2023 with no warning forgiven"}
+  - id: REQ-DEPLOY-053
+    area: DEPLOY
+    statement: "One CloudNativePG cluster MUST hold the store and the audit index of a Kubernetes installation as separate databases with separate roles."
+    rationale: "The credential of one must not open the other (ADR 0005, the amendment of 2026-11-18; ADR 0028, PostgreSQL row-level security)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: [kubernetes]
+    standards: []
+    issues: [1834]
+    verification:
+      - {kind: integration-test, ref: "the role of the store cannot connect to the database of the index, and the role of the index cannot connect to the database of the store"}
+  - id: REQ-DEPLOY-054
+    area: DEPLOY
+    statement: "The deploy code of a Lambda installation MUST put the API behind a custom domain that requires mutual TLS, with the authenticated-pull CA of the edge as its truststore."
+    rationale: "Only the edge may reach the API (ADR 0011, the amendment of 2026-11-18, decisions E1 and E2 A)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: [serverless]
+    standards: []
+    issues: [1835]
+    verification:
+      - {kind: integration-test, ref: "a request to the custom domain without the client certificate of the edge is refused at the TLS handshake"}
+  - id: REQ-DEPLOY-055
+    area: DEPLOY
+    statement: "The deploy code of a Lambda installation MUST disable the default `execute-api` endpoint of the API."
+    rationale: "The default endpoint is a second way in that bypasses the edge (ADR 0011, the amendment of 2026-11-18, decisions E1 and E2 A)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: [serverless]
+    standards: []
+    issues: [1835]
+    verification:
+      - {kind: integration-test, ref: "a request to the default execute-api address of the API is refused"}
+  - id: REQ-DEPLOY-056
+    area: DEPLOY
+    statement: "The deploy code of a Lambda installation MUST set cache headers on the key set and the discovery document with a cache time below the pre-publication lead time of keys."
+    rationale: "A cache that outlives the lead time would serve a key set without the next key (ADR 0011, the amendment of 2026-11-18, decision E1)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: [serverless]
+    standards: []
+    issues: [1835]
+    verification:
+      - {kind: integration-test, ref: "the key set and the discovery document answer with a cache time below the lead time that config declares"}
+  - id: REQ-DEPLOY-057
+    area: DEPLOY
+    statement: "The chart MUST route the key-less relay of `entry` from the cluster's own Cloudflare tunnel and gateway by an HTTPRoute or an Ingress."
+    rationale: "The edge of a Kubernetes installation is the cluster's own tunnel and gateway, and that is the chart's default (ADR 0011, the amendment of 2026-11-18, decision E3)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: [kubernetes]
+    standards: []
+    issues: [1836]
+    verification:
+      - {kind: integration-test, ref: "the rendered chart holds an HTTPRoute or an Ingress to the relay and no route to entry itself"}
+  - id: REQ-DEPLOY-058
+    area: DEPLOY
+    statement: "The chart MAY ship a `cloudflared` sidecar in the pod of `entry` as an optional value that is off by default."
+    rationale: "A cluster without its own Cloudflare tunnel needs one beside the relay (ADR 0011, the amendment of 2026-11-18, decision E3b)."
+    level: MAY
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: [kubernetes]
+    standards: []
+    issues: [1837]
+    verification:
+      - {kind: integration-test, ref: "the chart renders no cloudflared container by default and renders one when the value is on"}
+  - id: REQ-DEPLOY-059
+    area: DEPLOY
+    statement: "The scripts of the boards installation MUST deploy `cloudflared` as the edge of the installation."
+    rationale: "Every production shape sits behind the Cloudflare edge, and on the boards it is `cloudflared` (ADR 0011, the amendment of 2026-11-18, decision E1)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: [bare-metal]
+    standards: []
+    issues: [1838]
+    verification:
+      - {kind: integration-test, ref: "the three-board test installation runs cloudflared and serves a token request through it"}
+  - id: REQ-DEPLOY-060
+    area: DEPLOY
+    statement: "The documentation of an installation MUST state the Cloudflare records, rules, rate limits and cache times that its own infrastructure code applies."
+    rationale: "sluis holds no Cloudflare credential in the core, so each installation applies its own edge (ADR 0011, the amendment of 2026-11-18, decision E2 A)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: all
+    standards: []
+    issues: [1839]
+    manual_reason: "A statement in published documentation is checked by reading it."
+    verification:
+      - {kind: manual, ref: "the release documentation lists the records, the rules, the rate limits on /token and the recovery paths, and the cache times of the key set and the discovery document"}
