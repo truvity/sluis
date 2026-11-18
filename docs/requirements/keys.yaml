@@ -3618,7 +3618,7 @@ requirements:
     tests: [actors/key/internal/keyd/slotmap_test.go, kits/go/slotplan/slotplan_test.go, actors/store/src/config/slotplan.rs]
     verification:
       - {kind: test-vectors, ref: "the slot map vectors, read in Go and Rust: an RS256 purpose in a shared slot, a bad slot or listed twice is refused; one in 89 is refused on a card; with no slot it takes 88"}
-      - {kind: integration-test, ref: "Init and Check on a card refuse the RS256 purpose in another spare slot and accept it in 88 or by default (TestACardIsNotGivenAPlanItDoesNotFollow)"}
+      - {kind: integration-test, ref: "Init and Check on a card refuse the RS256 purpose in another slot (89) and accept it in 88 or by default (TestACardIsNotGivenAPlanItDoesNotFollow)"}
   - id: REQ-KEYS-269
     area: KEYS
     statement: "key@ MUST rate-limit the RS256 purpose with a bucket of its own, so that a burst of one purpose neither slows nor draws on another."
@@ -3762,3 +3762,34 @@ requirements:
     verification:
       - {kind: integration-test, ref: "four signatures at once, then rate before the driver is asked, one more for each half second on the test's clock; ES384 and the software store unaffected (TestTheRS256PurposeHasASlowerBucketOnACard)"}
       - {kind: manual, ref: "MEASURED 2026-11-08, YubiKey 5 Nano fw 5.8.0: RSA sign median 173 ms, ES384 148 ms alone and 473 ms beside back-to-back RSA (one sample); 2 a second is a third of the card"}
+  # ---- the default card slot map, version 2 (maintainer decision S1 A, 2026-11-18; ADR 0006, amendment of 2026-11-18)
+  - id: REQ-KEYS-278
+    area: KEYS
+    statement: "The default card slot map MUST be version 2: the ten slots of version 1 as they were, slots 89 to 8f for the issuance log, the enrolment key, the three FAPI token keys, the witness key and a second audit writer instance, rotation spares in 90 to 95, and no slot for the Yubico attestation slot f9, for cloud federation keys or for NATS keys."
+    rationale: "Every board of a version has the same layout, so enabling a purpose later never renumbers the keys of a live card, and keys that live in the key service never take a card slot (ADR 0006)."
+    level: MUST
+    source: design-decision
+    status: done
+    milestone: first-version
+    runtimes: ["bare-metal", "kubernetes"]
+    actors: [key]
+    standards: []
+    issues: [1881]
+    tests: [kits/go/slotplan/slotplan_test.go, drivers/key/yubikey-piv/internal/driver/slotplan_test.go]
+    verification:
+      - {kind: integration-test, ref: "the kit's map is the registry's slot plan, version 1's rows kept, none in 90 to 95 (TestTheDefaultIsTheRegistrys); the driver's table is a part (TestTheDriversTableIsTheSlotPlanKitsDefault)"}
+  - id: REQ-KEYS-279
+    area: KEYS
+    statement: "The slot map check MUST give a purpose that the default map holds the slot of the map when the KeyPlan lists the purpose without a slot."
+    rationale: "A purpose enabled later takes the slot that every board of the version has for it, and a purpose the map does not hold is still refused without a slot (REQ-PKI-038), so that no slot is chosen by accident (ADR 0006)."
+    level: MUST
+    source: design-decision
+    status: done
+    milestone: first-version
+    runtimes: all
+    actors: [key]
+    standards: []
+    issues: [1881]
+    tests: [kits/go/slotplan/slotplan_test.go, actors/store/src/config/slotplan.rs]
+    verification:
+      - {kind: test-vectors, ref: "the slot map vectors, in Go and Rust: a purpose of version 2 with no slot is accepted and takes its own, and one in the slot of another is refused"}

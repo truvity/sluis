@@ -185,7 +185,7 @@ for (const [i, p] of (Array.isArray(keys.purposes) ? keys.purposes : []).entries
 const plan = keys.slot_plan;
 if (!isObj(plan)) error(`${KEYS}: slot_plan is missing`);
 else {
-  if (plan.version !== 1) error(`${KEYS}: slot_plan.version must be 1`);
+  if (plan.version !== 2) error(`${KEYS}: slot_plan.version must be 2`);
   const slots = isObj(plan.slots) ? plan.slots : {};
   for (const [slot, name] of Object.entries(slots)) {
     if (!PIV_SLOTS.has(slot)) error(`${KEYS}: slot_plan.slots: ${slot} is not a PIV slot`);

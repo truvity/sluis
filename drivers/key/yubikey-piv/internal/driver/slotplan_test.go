@@ -47,9 +47,9 @@ func readKeysYAML(t *testing.T) keysYAML {
 // The default slot plan of the card driver gives each key its own slot (ADR 0006, "The slot plan"). Three things are
 // checked together: no slot holds two purposes and no purpose sits in two slots, so no key shares a card slot with
 // another; the slot of each purpose is the slot that docs/architecture/keys.yaml gives it, with the algorithm that
-// the card holds there; and a purpose that the registry puts in a spare slot (an on-use purpose or a named exception,
-// one key per purpose and algorithm) has no row, so the driver does not serve it from a slot of the default map.
-// The installation's own slot map is checked where it is read, by DecodeSlotMap (kits/go/pinrelease).
+// the card holds there; and a purpose of the registry's slot plan that the driver has no row for yet (the slots 89 to 8f of
+// version 2) is not served from a slot of the default map. The installation's own slot map is checked where it is read, by
+// DecodeSlotMap (kits/go/pinrelease).
 //
 // verifies: REQ-KEYS-046
 func TestTheDefaultSlotPlanGivesEveryKeyASlotOfItsOwn(t *testing.T) {
@@ -74,6 +74,7 @@ func TestTheDefaultSlotPlanGivesEveryKeyASlotOfItsOwn(t *testing.T) {
 	}
 	// keys.yaml names the same slots and purposes as the driver, once each.
 	seen := map[string]bool{}
+	unserved := 0
 	for slot, purpose := range k.SlotPlan.Slots {
 		if seen[purpose] {
 			t.Errorf("keys.yaml puts %s in two slots", purpose)
@@ -81,7 +82,11 @@ func TestTheDefaultSlotPlanGivesEveryKeyASlotOfItsOwn(t *testing.T) {
 		seen[purpose] = true
 		e, ok := planFor(purpose)
 		if !ok {
-			t.Errorf("keys.yaml puts %s in slot %s, and the driver has no row for it", purpose, slot)
+			// The slots of version 2 that the driver does not serve yet: the map holds them, the card does not.
+			if slotplan.CardServed[purpose] {
+				t.Errorf("keys.yaml puts %s in slot %s, and the driver has no row for it, though the kit says the card serves it", purpose, slot)
+			}
+			unserved++
 			continue
 		}
 		if got := e.slot.String(); got != slot {
@@ -93,24 +98,40 @@ func TestTheDefaultSlotPlanGivesEveryKeyASlotOfItsOwn(t *testing.T) {
 			t.Errorf("the driver has a row for %s that keys.yaml's slot plan does not", e.purpose)
 		}
 	}
-	if len(slotPlan) != len(k.SlotPlan.Slots) {
-		t.Errorf("%d rows in the driver, %d slots in keys.yaml", len(slotPlan), len(k.SlotPlan.Slots))
+	if len(slotPlan)+unserved != len(k.SlotPlan.Slots) {
+		t.Errorf("%d rows in the driver and %d slots it does not serve, %d slots in keys.yaml", len(slotPlan), unserved, len(k.SlotPlan.Slots))
+	}
+	if unserved == 0 {
+		t.Fatal("the registry's slot plan holds no slot that the driver lacks: the sweep of version 2's new slots checked nothing")
+	}
+	// No row of the driver is a slot that a board does not use: the Yubico attestation slot f9 is never touched, and the
+	// rotation spares 90 to 95 have no row (a rotation puts its key there by the installation's plan, not by the default map).
+	for _, e := range slotPlan {
+		n := uint8(e.slot)
+		if board := n == 0x9a || n == 0x9c || n == 0x9d || n >= 0x82 && n <= 0x8f; !board {
+			t.Errorf("%s: the driver has a row in slot %s, which the default map does not use for a purpose", e.purpose, e.slot)
+		}
 	}
 
 	norm := func(s string) string { return strings.ReplaceAll(s, "-", "") }
-	spare := 0
+	pinned := 0
 	for _, p := range k.Purposes {
 		switch p.Board.Slot {
 		case "none":
 		case "spare":
-			spare++
-			if _, ok := planFor(p.Name); ok {
-				t.Errorf("%s is a spare-slot purpose, and the default plan has a row for it", p.Name)
-			}
+			// Version 2 keeps no purpose in a spare slot: a purpose has a pinned slot or none (the key service's keys).
+			t.Errorf("%s: keys.yaml gives it a spare slot, and version 2 pins every card purpose", p.Name)
 		default:
+			pinned++
 			e, ok := planFor(p.Name)
 			if !ok {
-				t.Errorf("%s: keys.yaml gives it slot %s, and the driver has no row", p.Name, p.Board.Slot)
+				// A purpose of version 2 that the driver does not serve yet: its slot is the kit's, and no row is the driver's.
+				if slotplan.CardServed[p.Name] {
+					t.Errorf("%s: keys.yaml gives it slot %s, and the driver has no row", p.Name, p.Board.Slot)
+				}
+				if got := slotplan.Default[p.Name]; got != p.Board.Slot {
+					t.Errorf("%s: keys.yaml slot %s, the kit's default %q", p.Name, p.Board.Slot, got)
+				}
 				continue
 			}
 			want := p.Algorithm
@@ -125,9 +146,15 @@ func TestTheDefaultSlotPlanGivesEveryKeyASlotOfItsOwn(t *testing.T) {
 			}
 		}
 	}
-	// One purpose and one algorithm per spare-slot key: no two purposes of the registry are the same name.
-	if spare == 0 {
-		t.Fatal("no purpose takes a spare slot: the sweep checked nothing")
+	// One purpose and one algorithm per card key: no two purposes of the registry are the same name. The keys that live in the
+	// key service (the NATS keys, the cloud federations) have no card slot.
+	if pinned != len(k.SlotPlan.Slots) {
+		t.Errorf("%d purposes have a card slot in keys.yaml, the slot plan holds %d", pinned, len(k.SlotPlan.Slots))
+	}
+	for _, p := range k.Purposes {
+		if p.Name == "nats" && p.Board.Slot != "none" {
+			t.Errorf("nats has slot %q: the NATS keys live in the key service, not on a card", p.Board.Slot)
+		}
 	}
 	names := map[string]bool{}
 	for _, p := range k.Purposes {
@@ -180,13 +207,29 @@ func TestAnInstallationSlotMapCannotShareASlotBetweenKeys(t *testing.T) {
 
 // The card driver's table is the default map that key@ checks a KeyPlan against (kits/go/slotplan), slot for slot: key@
 // refuses a plan the card would not follow only if the two tables are one.
+//
+// The kit's map is version 2 and holds more than the card serves: the driver's table is the part the kit lists as served
+// (slotplan.CardServed), slot for slot, and has no row for the other slots of the map.
+//
+// verifies: REQ-KEYS-278
 func TestTheDriversTableIsTheSlotPlanKitsDefault(t *testing.T) {
-	if len(slotPlan) != len(slotplan.Default) {
-		t.Fatalf("the driver has %d purposes, the kit %d", len(slotPlan), len(slotplan.Default))
+	if len(slotPlan) != len(slotplan.CardServed) {
+		t.Fatalf("the driver has %d purposes, the kit lists %d as served", len(slotPlan), len(slotplan.CardServed))
+	}
+	if len(slotplan.Default) <= len(slotPlan) {
+		t.Fatalf("the kit's map holds %d purposes, the driver %d: version 2 holds more than the card serves", len(slotplan.Default), len(slotPlan))
 	}
 	for _, e := range slotPlan {
+		if !slotplan.CardServed[e.purpose] {
+			t.Errorf("%s: the driver has a row the kit does not list as served", e.purpose)
+		}
 		if got := slotplan.Default[e.purpose]; got != e.slot.String() {
 			t.Errorf("%s: the driver's slot %s, the kit's %q", e.purpose, e.slot, got)
+		}
+	}
+	for purpose, slot := range slotplan.Default {
+		if _, ok := planFor(purpose); !ok && slotplan.CardServed[purpose] {
+			t.Errorf("%s: the kit lists slot %s as served, and the driver has no row", purpose, slot)
 		}
 	}
 }

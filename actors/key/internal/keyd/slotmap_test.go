@@ -37,8 +37,9 @@ func TestAWrongSlotMapStopsNodeInitialisationAndTheCheck(t *testing.T) {
 			add("x509-intermediate", "ES384", "9c")(p)
 			p.Purposes[1].Slot = "9c" // token-signing
 		}, "shared with"},
-		"two purposes in one named slot":  {add("release-signing", "ES384", "9a"), "shared with token-signing"},
-		"an enabled purpose with no slot": {add("issuance-log", "ES384", ""), "no slot"},
+		"two purposes in one named slot": {add("release-signing", "ES384", "9a"), "shared with token-signing"},
+		// A purpose that the default map does not hold (a further trust domain's intermediate) needs a slot that the plan names.
+		"an enabled purpose with no slot": {add("second-intermediate", "ES384", ""), "no slot"},
 		// An RS256 purpose is a card-key purpose like the others: it has a slot of its own (88), and is not skipped.
 		"the RS256 purpose in the token key's slot": {add("token-signing-rs256", "RS256", "9a"), "shared with token-signing"},
 	} {
@@ -68,9 +69,9 @@ func TestAWrongSlotMapStopsNodeInitialisationAndTheCheck(t *testing.T) {
 
 // verifies: REQ-PKI-035, REQ-KEYS-268
 // A plan that the card driver would not follow is refused at start and in the check command, with the entry named, before
-// any key is asked of the driver: a slot other than the card's for a purpose of its map, and a card-key purpose that the
-// map lacks (the spare slots, which the card driver does not serve yet; REQ-KEYS-063), the RS256 purpose in another spare slot
-// than its own 88 among them. The same plan is accepted by the
+// any key is asked of the driver: a slot other than the card's for a purpose of its map, and a card-key purpose that the card
+// driver has no row for (the slots 89 to 8f of the default map, which it does not serve yet; REQ-KEYS-063), the RS256 purpose in
+// another slot (89) than its own 88 among them. The same plan is accepted by the
 // software driver, which has no slots, and the default plan is accepted on the card.
 func TestACardIsNotGivenAPlanItDoesNotFollow(t *testing.T) {
 	cases := map[string]struct {
@@ -82,7 +83,7 @@ func TestACardIsNotGivenAPlanItDoesNotFollow(t *testing.T) {
 			p.Purposes = append(p.Purposes, &configv2alpha1.KeyPurposePlan{Purpose: "issuance-log", Algorithm: "ES384", Slot: "88"})
 		}, "the card driver serves no slot for this purpose"},
 		// The RS256 purpose has the slot 88 on the card by a fixed row, and no other: the driver verifies no override.
-		"the RS256 purpose in another spare slot": {func(p *configv2alpha1.KeyPlan) {
+		"the RS256 purpose in another slot (89)": {func(p *configv2alpha1.KeyPlan) {
 			p.Purposes = append(p.Purposes, &configv2alpha1.KeyPurposePlan{Purpose: "token-signing-rs256", Algorithm: "RS256", Slot: "89"})
 		}, "purposes[4].slot: differs from the slot of the card driver"},
 	}
@@ -140,5 +141,50 @@ func TestACardIsNotGivenAPlanItDoesNotFollow(t *testing.T) {
 	n := e.newNode(nodeOpts{driver: d})
 	if err := n.srv.Init(t.Context()); err != nil {
 		t.Fatalf("the default plan on a card: %v", err)
+	}
+}
+
+// verifies: REQ-KEYS-279
+// A purpose that the default map holds (version 2) takes the slot of the map when the KeyPlan lists it without one: the issuance
+// log is accepted with no slot, and in the slot of another purpose it is refused with the entry named. A card, whose driver
+// has no row for the slot 89 yet, refuses it either way, and the software store, which has no slots, carries it.
+func TestAPurposeOfTheDefaultMapTakesItsSlot(t *testing.T) {
+	plan := func(slot string, other *configv2alpha1.KeyPurposePlan) *configv2alpha1.KeyPlan {
+		p := proto.Clone(defaultPlan()).(*configv2alpha1.KeyPlan)
+		p.Purposes = append(p.Purposes, &configv2alpha1.KeyPurposePlan{Purpose: "issuance-log", Algorithm: "ES384", Slot: slot})
+		if other != nil {
+			p.Purposes = append(p.Purposes, other)
+		}
+		return p
+	}
+	e := newTestEnv(t, "development")
+	e.putPlan(plan("", nil))
+	n := e.newNode(nodeOpts{})
+	if err := n.srv.Init(t.Context()); err != nil {
+		t.Fatalf("the issuance log with no slot on the software store: %v", err)
+	}
+	if err := n.srv.Check(t.Context()); err != nil {
+		t.Fatalf("Check of the issuance log with no slot: %v", err)
+	}
+
+	// Another purpose in slot 89, the slot of the issuance log in the map: refused with the entry named, though the map's holder
+	// is listed first and no slot is named for it.
+	e = newTestEnv(t, "development")
+	e.putPlan(plan("", &configv2alpha1.KeyPurposePlan{Purpose: "release-signing", Algorithm: "ES384", Slot: "89"}))
+	n = e.newNode(nodeOpts{})
+	err := n.srv.Init(t.Context())
+	if err == nil || !strings.Contains(err.Error(), "card slot map") || !strings.Contains(err.Error(), "shared with issuance-log") {
+		t.Fatalf("Init = %v, want a refusal of the slot map: shared with issuance-log", err)
+	}
+
+	// A card has no row for slot 89 yet.
+	e = newTestEnv(t, "development")
+	e.putPlan(plan("", nil))
+	d := newFakeDriver("yubikey-piv")
+	d.now = e.clock.now
+	n = e.newNode(nodeOpts{driver: d})
+	err = n.srv.Init(t.Context())
+	if err == nil || !strings.Contains(err.Error(), "the card driver serves no slot for this purpose") {
+		t.Fatalf("Init on a card = %v, want the card driver's refusal", err)
 	}
 }

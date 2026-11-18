@@ -130,7 +130,7 @@ Each board has a card of its own, a YubiKey in PIV mode with 24 slots and no sym
 
 ### The card slot map
 
-A documented, versioned map says which slot serves which purpose: one slot per purpose and per algorithm, and a shared spare range. This is the default map, version 1.
+A documented, versioned map says which slot serves which purpose: one slot per purpose and per algorithm, and six rotation spares. This is the default map, version 2 (decided 2026-11-18; version 1 left `89` to `95` spare). Every board of a version has the same layout, so enabling a purpose later never renumbers the keys of a live card.
 
 | Slot | Purpose |
 |---|---|
@@ -144,10 +144,17 @@ A documented, versioned map says which slot serves which purpose: one slot per p
 | `86` | Workload issuer, for `sluis-node` (enabled on use) |
 | `87` | PIN release key: signs the request of a locked board (PIN policy never, touch never) |
 | `88` | RS256 token key of the per-audience exception (RSA-2048, enabled on use) |
-| `89` to `95` | Spare, thirteen slots shared by every purpose |
+| `89` | Issuance log key of `ca` (P-384) |
+| `8a` | Enrolment key of `exchange` (P-384 ECDH) |
+| `8b` | FAPI PS256 token key (RSA-2048) |
+| `8c` | FAPI ES256 token key (P-256) |
+| `8d` | FAPI EdDSA token key (Ed25519, firmware 5.7 or newer) |
+| `8e` | Witness key (Ed25519) |
+| `8f` | Log key of a second audit writer instance (P-256) |
+| `90` to `95` | Rotation spares (six) |
 | `9e` | Not used: the card-authentication slot signs without a PIN by default |
 
-A second purpose or algorithm takes a spare slot, named in the installation's key plan; the spare range also holds the new key of an event rotation while the old one finishes. `sluis config check`, `sluis key request` and board initialisation refuse a collision and an enabled purpose with no slot. The release subkey lives in a PIV slot like every other board key; the OpenPGP applet is not used ([ADR 0006](/decisions/0006-keys-and-sealing/#the-slot-plan)).
+A slot is generated only when its purpose is enabled; the rotation spares hold the new key of an event rotation while the old one finishes, and a purpose that the map does not hold (a further trust domain's intermediate) is named in the installation's key plan with one of them. Cloud federation keys and NATS keys are not card keys. Slot `f9`, the Yubico attestation slot, is never touched. `sluis config check`, `sluis key request` and board initialisation refuse a collision and an enabled purpose with no slot. The release subkey lives in a PIV slot like every other board key; the OpenPGP applet is not used ([ADR 0006](/decisions/0006-keys-and-sealing/#the-slot-plan)).
 
 ## The token-signing key
 

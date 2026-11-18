@@ -1236,9 +1236,10 @@ var keyRules = map[string]map[KeyUse]uint8{
 		{Scope: "boundary", Purpose: "witness"}: 0x14, // sign public-key
 	},
 	"writer": {
-		{Scope: "boundary", Purpose: "audit-log"}:    0x14, // sign public-key
-		{Scope: "boundary", Purpose: "issuance-log"}: 0x14, // sign public-key
-		{Scope: "tenant", Purpose: "evidence"}:       0x01, // seal
+		{Scope: "boundary", Purpose: "audit-log"}:        0x14, // sign public-key
+		{Scope: "boundary", Purpose: "audit-log-second"}: 0x14, // sign public-key
+		{Scope: "boundary", Purpose: "issuance-log"}:     0x14, // sign public-key
+		{Scope: "tenant", Purpose: "evidence"}:           0x01, // seal
 	},
 }
 

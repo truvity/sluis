@@ -457,9 +457,10 @@ fn a_client_that_wants_rs256_needs_the_key_plan_to_list_the_purpose() {
 /// The KeyPlan's slot map is checked as key@ checks it, on the whole set: two purposes in one slot, an enabled
 /// purpose with no slot, a slot that is no slot of a board and a purpose listed twice are each one failed `set` line
 /// that names the entry (`default.purposes[2].slot`) and a word, and no slot is printed. A plan that lists none of the
-/// purposes of an installation that issues no SSH certificates is accepted (the local set), and so is a spare slot.
+/// purposes of an installation that issues no SSH certificates is accepted (the local set), and so is a purpose of the default
+/// map with no slot or a purpose that the map does not hold in a rotation spare.
 ///
-/// verifies: REQ-PKI-037, REQ-PKI-038, REQ-PKI-042
+/// verifies: REQ-PKI-037, REQ-PKI-038, REQ-PKI-042, REQ-KEYS-279
 #[test]
 fn a_key_plan_with_a_wrong_slot_map_fails_the_set_and_a_plan_without_ssh_purposes_does_not() {
     let plan = source("key-plan");
@@ -479,8 +480,8 @@ fn a_key_plan_with_a_wrong_slot_map_fails_the_set_and_a_plan_without_ssh_purpose
             "default.purposes[1].slot: shared with wrapping",
         ),
         (
-            "an enabled purpose with no slot",
-            with(&line("issuance-log", "ES384", "")),
+            "an enabled purpose that the map does not hold has no slot",
+            with(&line("second-intermediate", "ES384", "")),
             "default.purposes[3]: no slot",
         ),
         (
@@ -506,11 +507,27 @@ fn a_key_plan_with_a_wrong_slot_map_fails_the_set_and_a_plan_without_ssh_purpose
         );
         assert!(f[0].contains(want), "{name}: {f:?}");
     }
-    // An enabled purpose that the map gives a spare slot, and a plan that lists no SSH purpose, are accepted.
-    let e = env();
-    e.sign("key-plan", &with(&line("issuance-log", "ES384", "88")));
-    let (code, _, all) = run(&e.bootstrap(), e.docs.path());
-    assert_eq!(code, Some(0), "{all}");
+    // A purpose of the default map (version 2) with no slot takes its own, and a purpose the map does not hold is accepted in a
+    // rotation spare; a plan that lists no SSH purpose is accepted too.
+    for (name, text) in [
+        (
+            "the issuance log takes slot 89",
+            with(&line("issuance-log", "ES384", "")),
+        ),
+        (
+            "a purpose that the map does not hold in a rotation spare",
+            with(&line("second-intermediate", "ES384", "90")),
+        ),
+        (
+            "a slot of an override",
+            with(&line("issuance-log", "ES384", "88")),
+        ),
+    ] {
+        let e = env();
+        e.sign("key-plan", &text);
+        let (code, _, all) = run(&e.bootstrap(), e.docs.path());
+        assert_eq!(code, Some(0), "{name}: {all}");
+    }
 }
 
 fn installation_checks(checks: &[Value]) -> Vec<(String, String)> {

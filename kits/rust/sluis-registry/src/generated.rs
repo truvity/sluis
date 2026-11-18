@@ -2636,6 +2636,7 @@ pub(crate) static KEY_RULES: &[(&str, &str, &str, u8)] = &[
     ("store", "boundary", "grant", 0x02),
     ("witness", "boundary", "witness", 0x14),
     ("writer", "boundary", "audit-log", 0x14),
+    ("writer", "boundary", "audit-log-second", 0x14),
     ("writer", "boundary", "issuance-log", 0x14),
     ("writer", "tenant", "evidence", 0x01),
 ];

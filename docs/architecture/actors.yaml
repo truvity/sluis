@@ -457,6 +457,7 @@ actors:
     egress: [audit-blob, audit-transport]
     key_purposes:
       - { purpose: audit-log, ops: [sign, public-key] }
+      - { purpose: audit-log-second, ops: [sign, public-key] }
       - { purpose: issuance-log, ops: [sign, public-key] }
       - { purpose: evidence, ops: [seal] }
     adrs: ['0002', '0012', '0028', '0029']
