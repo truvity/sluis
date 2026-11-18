@@ -55,6 +55,7 @@ export const answers = {
   sso: {
     heading: 'One sign-in, trusted everywhere',
     text: 'People sign in through the identity provider that already knows them, such as Google Workspace or any OpenID Connect provider. sluis issues the tokens, and AWS, Kubernetes, PostgreSQL, SSH and your applications each get one short trust entry for sluis instead of a login of their own.',
+    status: 'Built in alpha.1: sign-in through a generic OpenID Connect provider, and tokens that any application verifies against the key set. Designed, not built: trust entries for cloud and Kubernetes after parity with v1, and SSH and PostgreSQL certificates in the PKI, SSH and database add-on.',
     links: [
       { text: 'Integrations', href: '/integrations/' },
       { text: 'Google Workspace', href: '/integrations/google-workspace/' },
@@ -69,6 +70,7 @@ export const answers = {
   code: {
     heading: 'Declared in a reviewed file, checked for drift',
     text: 'Each integration is declared as data. sluis runs the vendor ceremony once, keeps what comes back sealed, compares what was granted with what was declared, and does nothing until the integration is enabled. Where a vendor has no STS, sluis plays that part: a job trades its identity for a token that lasts minutes and reaches one repository, one zone or one bucket.',
+    status: 'Built in alpha.1: configuration declared as signed data and checked offline with sluis config check. Designed, not built: the vendor ceremonies and the minting for GitHub and Cloudflare, which are add-ons that come after the core.',
     links: [
       { text: 'Connecting integrations', href: '/integrations/connecting/' },
       { text: 'GitHub', href: '/integrations/github/' },
@@ -128,10 +130,10 @@ export const band = {
   root: {
     target: '#no-root',
     headline: 'Where does the root key live?',
-    text: 'For certificates, SSH and release signing, few small setups can say where the root key lives and who can use it.',
+    text: 'For certificates and SSH access, few small setups can say where the root key lives and who can use it.',
     chain: [
       { name: 'ritueel', role: 'the root of custody' },
-      { name: 'sluis', role: 'identity, tokens, certificates, audit' },
+      { name: 'sluis', role: 'identity, tokens, audit, later certificates' },
       { name: 'Your systems', role: 'cloud, git, chat, CI, databases, SSH' },
     ],
   },

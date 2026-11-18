@@ -1,0 +1,25 @@
+---
+// The order of v2's phases, as a strip on the home page and "you are here" on the first. The
+// names are the ones of the roadmap (docs/roadmap.md, "Phases"); the diagram of the same order
+// is on the design guide (docs/contributing/design.md). The status words are the page statuses:
+// being built, or designed.
+const phases = [
+  { name: 'Core', note: 'alpha.2', href: '/roadmap/#core', now: true },
+  { name: 'Customer identity and quota', note: '', href: '/roadmap/#customer-identity-and-quota' },
+  { name: 'Re-plan', note: 'a decision', href: '/roadmap/#re-plan' },
+  { name: 'Parity with v1', note: '', href: '/roadmap/#parity' },
+  { name: 'The switch', note: '', href: '/roadmap/#the-switch' },
+  { name: 'PKI, SSH and database', note: 'add-on', href: '/roadmap/#the-pki-ssh-and-database-add-on' },
+];
+---
+
+<nav class="phases" aria-label="The phases of v2, in order">
+  <ol>
+    {phases.map((p) => (
+      <li class:list={[{ now: p.now }]} aria-current={p.now ? 'step' : undefined}>
+        <a href={p.href}><b>{p.name}</b>{p.note && <span>{p.note}</span>}</a>
+        {p.now && <em>being built</em>}
+      </li>
+    ))}
+  </ol>
+</nav>
