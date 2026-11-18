@@ -267,7 +267,7 @@ func (s *Service) enrolCallback(ctx context.Context, r *sessionv2alpha1.Callback
 	}
 	v, err := s.decide(ctx, question{
 		tenant: tenant, subject: candidate, accounts: []string{account}, state: stateLive,
-		client: cl, assure: assure, now: now, verbs: []string{"create", "update"}, ops: []string{"seal", "open", "mac"},
+		client: cl, assure: assure, now: now, verbs: []string{"create", "update"}, ops: []string{"seal", "open"},
 	})
 	if err != nil {
 		return nil, unavailable("policy", err)
@@ -388,7 +388,7 @@ func (s *Service) PasskeyRegister(ctx context.Context, req *connect.Request[sess
 	}
 	v, err := s.decide(ctx, question{
 		tenant: tenant, subject: c.GetSubject(), accounts: []string{c.GetAccount()}, state: stateLive,
-		client: cl, assure: assuranceOfCeremony(c), now: now, verbs: []string{"create", "update"}, ops: []string{"seal", "open", "mac"},
+		client: cl, assure: assuranceOfCeremony(c), now: now, verbs: []string{"create", "update"}, ops: []string{"seal", "open"},
 	})
 	if err != nil {
 		return nil, unavailable("policy", err)

@@ -68,7 +68,7 @@ const dataKeyAlgorithm = "AES-256-GCM"
 // that name AES-256-GCM in a KeyPlan.
 var dataKeyPurposes = map[string]bool{
 	"data": true, "evidence": true, "chain": true, "grant": true, "cookie": true,
-	"mac": true, "pseudonym": true, "pairwise": true,
+	"mac": true, "pseudonym": true,
 }
 
 // auditLogPurpose is the one purpose whose key is ES256 (ADR 0006, "Named exceptions"; REQ-KEYS-081).

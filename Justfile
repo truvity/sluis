@@ -1411,7 +1411,7 @@ local-passkey-smoke:
 
 # The M2 proof against the running local installation (`just local-up` first): the CLI signs alice in through the forwarder,
 # entry, session, the upstream adapter and the identity provider; `sluis token --audience example-app` has exchange
-# do the RFC 8693 exchange. It prints the claims of the ID token (sub pairwise, acr and amr as the upstream gave them) and of
+# do the RFC 8693 exchange. It prints the claims of the ID token (sub the person's own subject, acr and amr as the upstream gave them) and of
 # the exchanged token (groups narrowed to the audience), checks both against /jwks, finds the records of every step in the
 # audit log and runs `sluis audit verify` on it. Exits non-zero on any failure. Needs Docker. The job `smokes` of CI runs it.
 local-person-smoke:

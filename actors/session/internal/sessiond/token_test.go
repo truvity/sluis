@@ -4,10 +4,7 @@ package sessiond_test
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha512"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/json"
 	"net/http"
 	"slices"
@@ -20,13 +17,11 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"github.com/truvity/sluis/v2/actors/session/internal/sessiond"
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	policyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/policy/v2alpha1"
 	sessionv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/session/v2alpha1"
 	storev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1"
 	typev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/type/v2alpha1"
-	"github.com/truvity/sluis/v2/kits/go/subject"
 )
 
 // codeRequest is the token request of the CLI for a code.
@@ -134,13 +129,13 @@ func TestTokenCodeGrantIssuesTheTokens(t *testing.T) {
 	if g, _ := id["groups"].([]any); len(g) != 1 || g[0] != testGroup {
 		t.Errorf("groups = %v", id["groups"])
 	}
-	// sub is the tenant's pairwise subject, not the person's own id (0034).
+	// sub is the person's own subject (ADR 0019), and nothing of the upstream account.
 	sub, _ := id["sub"].(string)
-	if sub == "" || sub == person || strings.Contains(sub, person) || strings.Contains(sub, "alice") {
-		t.Errorf("sub = %q", sub)
+	if sub != person || strings.Contains(sub, "alice") {
+		t.Errorf("sub = %q, want the person's own id %q", sub, person)
 	}
-	if len(sub) != 43 {
-		t.Errorf("sub %q is not 256 bits of base64url", sub)
+	if len(sub) != 26 {
+		t.Errorf("sub %q is not 128 bits of base32", sub)
 	}
 
 	// The access token (RFC 9068 section 2.2): typ at+jwt, jti, client_id, the same sub and sid, and no nonce.
@@ -191,7 +186,7 @@ func TestTokenCodeGrantIssuesTheTokens(t *testing.T) {
 	reqs := e.policy.requests()
 	last := reqs[len(reqs)-1]
 	if last.GetPerson().GetSubject() != person || last.GetPerson().GetAccounts()[0] != "workforce/alice" ||
-		strings.Join(last.GetGrantStoreVerbs(), ",") != "update,create" || strings.Join(last.GetGrantKeyOps(), ",") != "seal,mac" {
+		strings.Join(last.GetGrantStoreVerbs(), ",") != "update,create" || strings.Join(last.GetGrantKeyOps(), ",") != "seal" {
 		t.Errorf("decision = %v", last)
 	}
 	// What was signed is what the signer is allowed to sign: types JWT and at+jwt, one per token.
@@ -585,7 +580,9 @@ func TestTokenLifetimes(t *testing.T) {
 	})
 }
 
-func TestSubjectIsPairwiseUnlessThePublicSectorIsDeclared(t *testing.T) {
+// The sub of a token is the person's own subject, the id of the Person item, whatever the tenant and the client, and it is
+// the same every time the person signs in (ADR 0019, "Assigning a subject").
+func TestSubjectIsThePersonsOwn(t *testing.T) {
 	sub := func(e *env) (string, string) {
 		b, _ := e.redeemed()
 		_, id := tokenClaims(t, b["id_token"].(string))
@@ -593,34 +590,13 @@ func TestSubjectIsPairwiseUnlessThePublicSectorIsDeclared(t *testing.T) {
 	}
 	e := newEnv(t, nil)
 	s1, person := sub(e)
-	if s1 == person {
-		t.Fatal("sub is the person's own id")
+	if s1 != person {
+		t.Fatalf("sub %q is not the person's own id %q", s1, person)
 	}
-	// The same person at the same tenant gets the same sub every time.
 	e.clk.advance(time.Second)
 	s2, _ := sub(e)
 	if s1 != s2 {
 		t.Errorf("sub changed: %q then %q", s1, s2)
-	}
-	// A declared public sector gets the person's own id (0034).
-	e = newEnv(t, func(o *options) {
-		o.sectors = func(string) sessiond.Sector { return sessiond.Sector{Name: "public", Public: true} }
-	})
-	s3, person3 := sub(e)
-	if s3 != person3 {
-		t.Errorf("public sector: sub %q, person %q", s3, person3)
-	}
-	// A sector that is only called "public" is not the public sector: only a declaration makes one.
-	e = newEnv(t, func(o *options) { o.sectors = func(string) sessiond.Sector { return sessiond.Sector{Name: "public"} } })
-	if s4, person4 := sub(e); s4 == person4 {
-		t.Error("a sector named public was taken for the public one")
-	}
-	// Two sectors give one person two different subjects.
-	other := newEnv(t, func(o *options) { o.sectors = func(string) sessiond.Sector { return sessiond.Sector{Name: "other"} } })
-	sa, _ := sub(newEnv(t, nil))
-	sb, _ := sub(other)
-	if sa == sb {
-		t.Error("two sectors, one subject")
 	}
 }
 
@@ -798,23 +774,14 @@ func TestTokenSpendAndChainAreOneWrite(t *testing.T) {
 	}
 }
 
-// The ID token's sub and the sub exchange makes for the same person, tenant and sector must be equal (0034). Both
-// units build the Mac input with subject.PairwiseInput, so this test computes the expected sub from that function
-// alone, with the Mac of the fake key@.
-// verifies: REQ-TOKEN-032, REQ-SUBJ-068
-func TestSubIsTheMacOfTheSharedPairwiseInput(t *testing.T) {
+// The ID token's sub is the person's own id, which is the sub exchange gives the person (ADR 0019, ADR 0020).
+// verifies: REQ-TOKEN-032, REQ-SUBJ-072
+func TestSubIsThePersonsOwnID(t *testing.T) {
 	e := newEnv(t, nil)
 	b, _ := e.redeemed()
 	_, id := tokenClaims(t, b["id_token"].(string))
-	person := e.store.ids("person", testTenant)[0]
-
-	h := hmac.New(sha512.New384, []byte("test mac key|pairwise|"+testTenant))
-	h.Write(binary.BigEndian.AppendUint16(nil, uint16(len("pairwise"))))
-	h.Write([]byte("pairwise"))
-	h.Write(subject.PairwiseInput(testTenant, person)) // the sector of a tenant is its own name (decision D-4)
-	want := base64.RawURLEncoding.EncodeToString(h.Sum(nil)[:32])
-	if id["sub"] != want {
-		t.Errorf("sub = %v, want %s", id["sub"], want)
+	if person := e.store.ids("person", testTenant)[0]; id["sub"] != person {
+		t.Errorf("sub = %v, want the person's id %s", id["sub"], person)
 	}
 }
 

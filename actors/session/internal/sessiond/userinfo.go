@@ -19,7 +19,7 @@ import (
 // chain is gone are all refused as invalid_token. The scope openid is needed (section 5.3.1), and without it the answer is
 // insufficient_scope.
 //
-// What is released is sub, the same pairwise subject the ID token carries (section 5.3.2: they must be the same), taken
+// What is released is sub, the same subject the ID token carries (section 5.3.2: they must be the same), taken
 // from the verified token. Nothing releases a name or an e-mail address yet: the claims the upstream gives wait for the
 // allow-list of REQ-TOKEN-006, so the scopes profile and email add nothing here, and the answer never holds a claim that was
 // not decided. The person's state is not read: UserInfo does not look at a hold or a suspension, and a refresh that policy

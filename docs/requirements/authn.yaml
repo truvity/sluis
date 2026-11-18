@@ -174,7 +174,7 @@ requirements:
     issues: [774]
     verification:
       - {kind: conformance-suite, ref: "OIDF suite v5.3.4: Config OP is red for one condition, RS256 (ADR 0006); public client, not the certification profile (docs/standards/conformance.md)"}
-      - {kind: test-vectors, ref: "own golden (actors/entry/tests/testdata/discovery.json): no request_uri, iss on every redirect, pairwise subjects; entry, session and signer tests read it"}
+      - {kind: test-vectors, ref: "own golden (actors/entry/tests/testdata/discovery.json): no request_uri, iss on every redirect, the public subject type; entry, session and signer tests read it"}
   - id: REQ-AUTHN-029
     area: AUTHN
     split_from: REQ-AUTHN-006
