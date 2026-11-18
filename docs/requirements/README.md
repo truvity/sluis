@@ -40,6 +40,21 @@ An id is `REQ-<AREA>-<nnn>`, for example `REQ-AUTHN-002`.
 - An area whose records are all withdrawn is marked `retired: true` in `index.yaml`. It keeps its file and its ids, and the site leaves it out of the area lists. `SECRETS` and `VAULT` are retired. `just site-lint` refuses `retired: true` on an area that still has a record that is not withdrawn.
 - Records are not merged. A record that no longer applies gets `status: withdrawn` and `superseded_by: [ids]`. A record about a subject that moved to another product (root custody moved to ritueel on 2026-11-01) gets `status: withdrawn` and `moved_to` instead.
 
+## Milestones
+
+A record's `milestone` is the phase of the [roadmap](../roadmap.md#phases) in which its work is done. The slug is the key in `index.yaml`; the board option is the name that `index.yaml` maps it to, and the status page lists the options in the order of the board.
+
+| Slug | Board option | Phase of the roadmap | What belongs to it |
+|---|---|---|---|
+| `core` | Core | [Core](../roadmap.md#core) | What every installation needs: the actors and flows, the building blocks (store, key, policy, audit with usage and limits, KV), the security hardening, and the local, boards, Lambda and Kubernetes installations with release management. |
+| `customer-identity` | Customer identity | [Customer identity and quota](../roadmap.md#customer-identity-and-quota) | The exchange of a token of the trusted realm for a sluis token with customer, org and product (ADR 0045). Not the cancelled broker. |
+| `quota` | Quota | [Customer identity and quota](../roadmap.md#customer-identity-and-quota) | The usage stream and the limit check (ADR 0046). Not an allowance or a balance. |
+| `parity` | Parity | [Parity](../roadmap.md#parity) | What v1 does and the core does not yet: integrations, clients, the console, backup and restore, the rest of audit. Re-planned after the core, customer identity and quota. |
+| `pki-ssh-db` | PKI, SSH and database | [PKI, SSH and database](../roadmap.md#the-pki-ssh-and-database-add-on) | The certificate, SSH and database add-on: the intermediate hand-off, certificate profiles, SSH certificates, database client certificates. |
+| `backlog` | Backlog | not scheduled | Superseded designs that stay for the record, and later drivers and features. |
+
+The board still carries the earlier option names until the maintainer's script renames and orders them (First working version to Core, v1 parity to Parity, CIAM upstream to Customer identity, and a new PKI, SSH and database option). Until then `just check-requirements` warns, with a board at hand, that an option is missing, and the status page puts the records of a missing option under "Unassigned".
+
 ## Record fields
 
 | Field | Rule |
@@ -52,7 +67,7 @@ An id is `REQ-<AREA>-<nnn>`, for example `REQ-AUTHN-002`.
 | `runtimes` | `all`, or a list of `bare-metal`, `serverless`, `kubernetes`. |
 | `standards` | `{id, section, depth}`: an id from `standards.yaml`, the section, and `Full` or `Partial`. |
 | `features` | Optional: `parity` (part of v1 parity, no single issue) or `design` (specified, no issue yet). Issue numbers go in `issues`, never here. |
-| `milestone` | The Product milestone of the record: a key of `milestones` in `index.yaml` (`first-version`, `v1-parity`, `ciam-upstream`, `quota`, `backlog`), which maps it to the name of an option of the board's `Product milestone` field. Required for every live record (a record that is not `withdrawn`): the switch below is on. |
+| `milestone` | The Product milestone of the record: a key of `milestones` in `index.yaml` (`core`, `customer-identity`, `quota`, `parity`, `pki-ssh-db`, `backlog`; see [Milestones](#milestones)), which maps it to the name of an option of the board's `Product milestone` field. Required for every live record (a record that is not `withdrawn`): the switch below is on. |
 | `issues` | Optional: the numbers of the truvity/sluis issues that deliver the record, for example `[915]`. Unique positive integers, at least one when present. They are the work; the `milestone` is where the record belongs. `just check-requirements` warns when a board is at hand and none of the issues is in the record's milestone. |
 | `tests` | Optional: the repository paths of the files that hold the tests, for example `[core/authn/authorize_test.go]`, as an index for the reader. Each path is relative to the repository root, names an existing file, and the file names the record's id. What counts as evidence is the tag, not this list. |
 | `actors` | Optional: the actors that implement the record, by their names in the [actor registry](../architecture/actors.yaml), for example `[policy]`. Each must be an actor whose requirement areas include the record's area; `just check-actors` checks it. A withdrawn record keeps no `actors`. |

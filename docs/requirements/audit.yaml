@@ -9,7 +9,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: partial
-    milestone: first-version
+    milestone: core
     gap: partly-built
     runtimes: all
     standards:
@@ -25,7 +25,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: partial
-    milestone: first-version
+    milestone: core
     gap: partly-built
     runtimes: all
     standards:
@@ -40,7 +40,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Full}
@@ -55,7 +55,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Full}
@@ -69,7 +69,7 @@ requirements:
     level: MUST
     source: security-review
     status: partial
-    milestone: first-version
+    milestone: core
     gap: partly-built
     runtimes: all
     standards:
@@ -85,7 +85,7 @@ requirements:
     level: MUST
     source: security-review
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-98, section: "OTLP", depth: Partial}
@@ -99,7 +99,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-78, section: "8785", depth: Full}
@@ -113,7 +113,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-77, section: "2.1", depth: Full}
@@ -133,7 +133,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-77, section: "2.1", depth: Full}
@@ -168,7 +168,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-49, section: "7515", depth: Full}
@@ -187,7 +187,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-49, section: "7515", depth: Full}
@@ -202,7 +202,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-77, section: "2.1", depth: Partial}
@@ -217,7 +217,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: v1-parity
+    milestone: parity
     gap: partly-built
     runtimes: all
     standards:
@@ -233,7 +233,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
@@ -254,7 +254,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
@@ -270,7 +270,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: v1-parity
+    milestone: parity
     gap: smoke-not-in-ci
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -288,7 +288,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-73, section: "1", depth: Partial}
@@ -304,7 +304,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-74, section: "1", depth: Partial}
@@ -319,7 +319,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-74, section: "1", depth: Partial}
@@ -334,7 +334,7 @@ requirements:
     level: MAY
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-71, section: "1", depth: Full}
@@ -367,7 +367,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: first-version
+    milestone: core
     gap: attestation-missing
     runtimes: all
     standards:
@@ -384,7 +384,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
@@ -399,7 +399,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-97, section: "1", depth: Partial}
@@ -414,7 +414,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: ST-97, section: "1", depth: Partial}
@@ -431,7 +431,7 @@ requirements:
     source: design-decision
     status: partial
     gap: attestation-missing
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [802]
@@ -449,7 +449,7 @@ requirements:
     level: MAY
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [802]
@@ -463,7 +463,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
@@ -479,7 +479,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
@@ -493,7 +493,7 @@ requirements:
     level: SHOULD
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
@@ -508,7 +508,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
@@ -523,7 +523,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: partial
-    milestone: v1-parity
+    milestone: parity
     gap: no-proving-test
     runtimes: all
     standards:
@@ -539,7 +539,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: first-version
+    milestone: core
     gap: partly-built
     runtimes: all
     standards:
@@ -556,7 +556,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-80, section: "5905", depth: Full}
@@ -585,7 +585,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
@@ -600,7 +600,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: first-version
+    milestone: core
     gap: partly-built
     runtimes: all
     standards:
@@ -615,7 +615,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Partial}
@@ -630,7 +630,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: partial
-    milestone: v1-parity
+    milestone: parity
     gap: no-proving-test
     runtimes: all
     standards:
@@ -645,7 +645,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: v1-parity
+    milestone: core
     gap: smoke-not-in-ci
     runtimes: all
     standards:
@@ -660,7 +660,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [writer]
     standards:
@@ -675,7 +675,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: v1-parity
+    milestone: core
     # Owner decision 2026-11-07: to v1 parity. Proven: only the writer has a rule for the audit-log key (a sweep of the registry), and key@
     # refuses every other caller. Not proven, and not provable by key@'s rules: that only the writer instance that owns the key can use it.
     # key@ rules name actors, not instances, so two writer instances on one key@ would share the key.
@@ -694,7 +694,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-49, section: "7515", depth: Partial}
@@ -709,7 +709,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: ["serverless"]
     standards:
       - {id: ST-97, section: "1", depth: Partial}
@@ -723,7 +723,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: v1-parity
+    milestone: core
     gap: partly-built
     runtimes: all
     standards:
@@ -738,7 +738,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: v1-parity
+    milestone: core
     gap: smoke-not-in-ci
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -753,7 +753,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [1120]
@@ -766,7 +766,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-75, section: "1", depth: Partial}
@@ -781,7 +781,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-75, section: "1", depth: Partial}
@@ -797,7 +797,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-74, section: "1", depth: Partial}
@@ -812,7 +812,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-72, section: "1", depth: Partial}
@@ -829,7 +829,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: NC-02, section: "5.7", depth: Partial}
@@ -843,7 +843,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
@@ -858,7 +858,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
@@ -873,7 +873,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: first-version
+    milestone: core
     gap: partly-built
     runtimes: all
     standards:
@@ -888,7 +888,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [writer]
     standards:
@@ -903,7 +903,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-77, section: "2.1", depth: Partial}
@@ -917,7 +917,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [840]
@@ -930,7 +930,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-74, section: "1", depth: Partial}
@@ -944,7 +944,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-74, section: "1", depth: Partial}
@@ -958,7 +958,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [837]
@@ -971,7 +971,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-103, section: "test plan", depth: Full}
@@ -986,7 +986,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [837]
@@ -999,7 +999,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [837]
@@ -1012,7 +1012,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [key]
     standards: []
@@ -1039,7 +1039,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-80, section: "5905", depth: Partial}
@@ -1053,7 +1053,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: first-version
+    milestone: core
     gap: partly-built
     runtimes: all
     standards:
@@ -1069,7 +1069,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [indexer]
     standards: []
@@ -1083,10 +1083,10 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: ["serverless", "kubernetes"]
     standards: []
-    issues: [839]
+    issues: [839, 1807, 1832]
     verification:
       - {kind: integration-test, ref: "index row-level security test"}
   - id: REQ-AUDIT-070
@@ -1096,7 +1096,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-103, section: "test plan", depth: Full}
@@ -1112,7 +1112,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [839]
@@ -1125,7 +1125,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-77, section: "2.1.1", depth: Partial}
@@ -1140,7 +1140,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [reader]
     standards:
@@ -1158,7 +1158,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [839]
@@ -1174,25 +1174,25 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: ["serverless", "kubernetes"]
     standards: []
-    issues: [839]
+    issues: [839, 1807, 1832]
     verification:
       - {kind: integration-test, ref: "default index test"}
   - id: REQ-AUDIT-076
     area: AUDIT
-    statement: "Serverless functions MUST reach a `postgres` index through RDS Proxy with IAM authentication and one database role per actor kind."
-    rationale: "Short-lived functions must not exhaust connections, and each actor kind keeps its own role."
+    statement: "Serverless functions MUST reach a `postgres` index directly with IAM authentication and one database role per actor kind."
+    rationale: "The index runs on Aurora Serverless v2, the indexer and the reader connect without RDS Proxy at first, and each actor kind keeps its own role; RDS Proxy is added if the reader's concurrency grows (ADR 0028, decision L1b of 2026-11-18)."
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: ["serverless"]
     standards: []
-    issues: [839]
+    issues: [839, 1832]
     verification:
-      - {kind: integration-test, ref: "RDS Proxy IAM role test"}
+      - {kind: integration-test, ref: "a function connects with an IAM token as the database role of its actor kind, a role of another kind is refused, and no proxy sits between the function and the index"}
   - id: REQ-AUDIT-077
     area: AUDIT
     statement: "An audit installation MUST run its own `entry` on its own host, also when the audit pieces are combined with sluis."
@@ -1200,7 +1200,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [985]
@@ -1213,7 +1213,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: NC-05, section: "cookie prefixes", depth: Partial}
@@ -1227,7 +1227,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [985]
@@ -1240,7 +1240,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [985]
@@ -1253,7 +1253,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-07, section: "2", depth: Partial}
@@ -1268,7 +1268,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [985]
@@ -1281,7 +1281,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [985]
@@ -1294,7 +1294,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: v1-parity
+    milestone: core
     gap: partly-built
     runtimes: all
     standards: []
@@ -1308,7 +1308,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-59, section: "5.1.4.1", depth: Partial}
@@ -1336,7 +1336,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-78, section: "8785", depth: Partial}
@@ -1351,7 +1351,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-114, section: "metadata", depth: Partial}
@@ -1365,7 +1365,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-114, section: "deprecation", depth: Partial}
@@ -1379,7 +1379,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-114, section: "actor", depth: Partial}
@@ -1396,7 +1396,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-114, section: "base event", depth: Partial}
@@ -1410,7 +1410,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-114, section: "metadata", depth: Partial}
@@ -1439,7 +1439,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [writer]
     standards:
@@ -1528,7 +1528,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-96, section: "2020-12", depth: Full}
@@ -1542,7 +1542,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-114, section: "validation", depth: Partial}
@@ -1559,7 +1559,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: first-version
+    milestone: core
     gap: partly-built
     runtimes: all
     standards:
@@ -1588,7 +1588,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-103, section: "blob port", depth: Full}
@@ -1630,7 +1630,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-78, section: "8785", depth: Full}
@@ -1645,7 +1645,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-78, section: "8785", depth: Partial}
@@ -1699,7 +1699,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: first-version
+    milestone: core
     gap: partly-built
     runtimes: all
     standards:
@@ -1714,7 +1714,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: first-version
+    milestone: core
     gap: partly-built
     runtimes: all
     standards:
@@ -1729,7 +1729,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [writer]
     standards: []
@@ -1743,7 +1743,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [1120]
@@ -1756,7 +1756,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [1121, 1120]
@@ -1770,7 +1770,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-114, section: "metadata", depth: Partial}
@@ -1787,7 +1787,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-114, section: "metadata", depth: Partial}
@@ -1804,7 +1804,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-114, section: "metadata", depth: Partial}
@@ -1819,7 +1819,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [1120]
@@ -1832,7 +1832,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-114, section: "profiles", depth: Partial}
@@ -1850,7 +1850,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-114, section: "Event Log Activity", depth: Partial}
@@ -1864,7 +1864,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-114, section: "authentication", depth: Partial}
@@ -1878,7 +1878,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-114, section: "certificate", depth: Partial}
@@ -1892,7 +1892,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-114, section: "delegation", depth: Partial}
@@ -1906,7 +1906,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [914]
@@ -1948,7 +1948,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [key]
     standards:
@@ -1964,7 +1964,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: NC-06, section: "HMAC", depth: Partial}
@@ -1978,7 +1978,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: NC-06, section: "HMAC", depth: Partial}
@@ -1992,7 +1992,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: NC-06, section: "HMAC", depth: Partial}
@@ -2006,7 +2006,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: NC-06, section: "HMAC", depth: Partial}
@@ -2072,7 +2072,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [840]
@@ -2085,7 +2085,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [840]
@@ -2098,7 +2098,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [851, 837]
@@ -2111,7 +2111,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [837]
@@ -2124,7 +2124,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [837]
@@ -2139,7 +2139,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: v1-parity
+    milestone: parity
     gap: partly-built
     runtimes: all
     actors: [writer]
@@ -2168,7 +2168,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [837, 985]
@@ -2181,7 +2181,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [reader]
     standards: []
@@ -2197,7 +2197,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [indexer]
     standards: []
@@ -2212,7 +2212,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [writer]
     standards: []
@@ -2226,7 +2226,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [1120]
@@ -2240,7 +2240,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [writer]
     standards: []
@@ -2256,7 +2256,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: v1-parity
+    milestone: parity
     gap: partly-built
     runtimes: all
     standards: []
@@ -2270,7 +2270,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [writer]
     standards: []
@@ -2301,7 +2301,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [writer]
     standards: []
@@ -2315,7 +2315,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [indexer]
     standards: []
@@ -2329,7 +2329,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [key]
     standards: []
@@ -2347,7 +2347,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [writer]
     standards: []
@@ -2361,7 +2361,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [indexer, reader]
     standards: []
@@ -2375,7 +2375,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [writer]
     standards: []
@@ -2389,7 +2389,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [reader]
     standards: []
@@ -2403,7 +2403,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [1218]
@@ -2444,7 +2444,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: first-version
+    milestone: core
     gap: partly-built
     runtimes: all
     standards: []
@@ -2458,7 +2458,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [841]
@@ -2471,7 +2471,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     features: ["design"]
@@ -2484,7 +2484,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     features: ["design"]
@@ -2497,7 +2497,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [1220]
@@ -2510,7 +2510,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [writer, witness, indexer, reader]
     standards: []
@@ -2524,7 +2524,7 @@ requirements:
     level: SHOULD
     source: v1-parity
     status: planned
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [writer]
     standards: []
@@ -2538,7 +2538,7 @@ requirements:
     level: MUST
     source: security-review
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     features: ["design"]
@@ -2551,7 +2551,7 @@ requirements:
     level: MUST
     source: security-review
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     features: ["design"]
@@ -2564,7 +2564,7 @@ requirements:
     level: MUST
     source: security-review
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     features: ["design"]
@@ -2577,7 +2577,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [writer, witness, indexer, reader]
     standards: []
@@ -2591,7 +2591,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [writer, witness, indexer, reader]
     standards: []
@@ -2605,7 +2605,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [writer, witness, indexer, reader]
     standards: []
@@ -2619,7 +2619,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [writer, witness, indexer, reader]
     standards: []
@@ -2633,7 +2633,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [writer]
     standards: []
@@ -2649,7 +2649,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [writer]
     standards: []
@@ -2664,7 +2664,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     tests:
@@ -2692,7 +2692,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [writer]
     standards: []
@@ -2710,7 +2710,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [writer]
     standards: []
@@ -2725,7 +2725,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [writer]
     standards: []
@@ -2740,7 +2740,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [indexer]
     standards: []
@@ -2756,7 +2756,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [indexer]
     standards: []
@@ -2770,7 +2770,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-114, section: "base event and core classes", depth: Partial}
@@ -2790,7 +2790,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: quota
     runtimes: all
     standards: []
     issues: [841]
@@ -2804,7 +2804,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: quota
     runtimes: all
     standards: []
     issues: [841]
@@ -2818,9 +2818,22 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: quota
     runtimes: all
     standards: []
     issues: [841]
     verification:
       - {kind: integration-test, ref: "the same usage record sent twice is one record in the usage log"}
+  - id: REQ-AUDIT-192
+    area: AUDIT
+    statement: "The `aurora` mode MUST provision the audit index of a Lambda installation as an Aurora Serverless v2 cluster that pauses automatically when idle."
+    rationale: "An index that nobody reads should cost nothing but its storage (ADR 0028, the amendment of 2026-11-18, decision L1 B and L1b)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: [serverless]
+    standards: []
+    issues: [1832]
+    verification:
+      - {kind: integration-test, ref: "the provisioned cluster is Aurora Serverless v2 with auto-pause on, and an idle cluster pauses"}
