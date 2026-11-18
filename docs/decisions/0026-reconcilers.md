@@ -129,7 +129,7 @@ B's exit must destroy B's personal data ([0008](/decisions/0008-boundaries-and-t
 - **Store a part in the tenant of its source directory, and let the provisioner open the other tenant's key.** It would widen every provisioner and break the rule that an adapter opens only its own tenant's credentials.
 - **Leave the writer open.** The reconcilers would have nothing to reconcile to, and the milestone would stall on the first pass.
 - **General sharing of data between tenants, with a cross-tenant grant per kind.** Every kind would become a possible path between companies, and each share needs a review on both sides that only an integration's own contract gives.
-- **Link a person across tenants by subject.** A person's `sub` differs per tenant, and comparing subjects would need one tenant's `pairwise` key in another.
+- **Link a person across tenants by subject.** A person's Person item and its `sub` belong to one tenant, and a link across tenants would need a record that no tenant owns.
 - **Let the source's shred alone end a share.** The parts are sealed under the owner's key, so the people would stay in the owner's tenant and container.
 - **Delete the source's parts at its exit.** A missing part is unreadable and holds its people, so no one would be removed.
 - **Remove a withdrawn person in `strict` mode only.** Every `extend` container would keep an exited company's people, against the exit's promise; `extend` exists for members that sluis does not manage.

@@ -138,7 +138,6 @@ These are written in the [threat model](/security/threat-model/#accepted-risks) 
 
 | Key | What a leak allows | Why it is accepted | Revisited |
 |---|---|---|---|
-| `pairwise` | The thief links a person's subjects across relying parties | A replacement changes every `sub` and breaks every account link | When CIAM gives subjects their meaning |
 | `mac` | The thief confirms guessed e-mail addresses or upstream ids offline against any id seen | A new key changes every link id, and a migration needs sealed inputs | At v1 parity, after a migration is measured |
 | `evidence` (what it sealed before the declaration) | The thief reads a tenant's audit and usage evidence from before | Shredding it destroys evidence the law may require | When the first tenant with an evidence retention exits, or at v1 parity |
 | Lambda cache | A warm function opens a revoked integrity-key generation until its entry expires | A shorter time to live costs key service calls | After the first drill |
