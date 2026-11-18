@@ -325,6 +325,7 @@ func policyControllersSchema() m {
 		"github": obj("The GitHub controller.", m{
 			"enabledOrgs": list("The organisations it changes. Each must be bound by the github table.", m{"type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$"}),
 			"appNames":    m{"type": "object", "propertyNames": m{"pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$"}, "additionalProperties": m{"type": "string", "minLength": 1, "maxLength": 34}, "description": "For an organisation the github table binds, the name its App is created with on GitHub (at most 34 characters). Optional: an organisation with no entry gets the built-in default, cut to the limit. An App already created keeps the name it has."},
+			"orgSettings": orgSettingsSchema(),
 			"appRefs":     m{"type": "object", "propertyNames": m{"pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$"}, "additionalProperties": m{"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$"}, "description": "For an organisation the github table binds, the id of the catalogue App (in `apps.github.apps`, created under that organisation) whose key its record refers to, `app_ref`. Optional: an organisation whose record already names an App keeps it, so an entry only overrides it or declares an organisation anew."},
 		}),
 		"slack": obj("The Slack controller.", m{

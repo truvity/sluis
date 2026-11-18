@@ -34,6 +34,7 @@ import (
 	"github.com/truvity/sluis/internal/githubapp"
 	"github.com/truvity/sluis/internal/githubroster/connection"
 	"github.com/truvity/sluis/internal/githubroster/link"
+	"github.com/truvity/sluis/internal/githubroster/orgconfig"
 	"github.com/truvity/sluis/internal/githubroster/reconcile"
 	"github.com/truvity/sluis/internal/githubroster/status"
 	"github.com/truvity/sluis/internal/port"
@@ -81,6 +82,11 @@ type Config struct {
 	// wait for the full interval. Zero is thirty seconds; negative turns it
 	// off.
 	CredentialPoll time.Duration
+	// OrgSettings are the organisations whose Actions variables, secrets and
+	// code security configurations the controller reconciles from the
+	// organisation's own document, with the mode of each (ADR 0080). An
+	// organisation with no entry has none.
+	OrgSettings map[string]orgconfig.Config
 }
 
 // Deps are what the controller talks to.
@@ -113,6 +119,10 @@ type Deps struct {
 	// Trigger says that a target has work: a notification runs that
 	// target's tick. Nil is an in-process trigger.
 	Trigger port.Trigger
+	// Settings reads each organisation's settings document and secrets, in
+	// the organisation's own account. Nil reads none, and an organisation
+	// with settings configured then reports its document unreadable.
+	Settings SettingsReader
 	// Apps is where the organisations' credentials, the link App's and the
 	// operators' requests for a pass are read from when they are kept on the
 	// State port. Nil reads the mounted directories of [Config].
@@ -387,6 +397,7 @@ func (c *Controller) organisation(
 	c.deps.Log.InfoContext(ctx, "passed over an organisation", slog.String("org", org), slog.Bool("enabled", enabled),
 		slog.Any("outcome", report.Tick.Outcome), slog.Int("changes", report.Tick.Changes), slog.Int("held", report.Tick.Held),
 		slog.Int("waiting", report.Tick.Waiting))
+	c.settings(ctx, org, client, token, &report)
 	c.journal.Remember(org, report)
 	return report, otherPolicy
 }

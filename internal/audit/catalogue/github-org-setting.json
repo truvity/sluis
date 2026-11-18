@@ -1,0 +1,50 @@
+{
+  "$id": "https://schemas.example/access-roster/v1/github-org-setting.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "type": "string",
+      "description": "What was changed: a variable, a secret or a security_configuration.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true,
+      "enum": [
+        "variable",
+        "secret",
+        "security_configuration"
+      ]
+    },
+    "name": {
+      "type": "string",
+      "description": "The name of the setting. Never its value.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "action": {
+      "type": "string",
+      "description": "What was done, or would be in report mode.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true,
+      "enum": [
+        "create",
+        "update",
+        "delete",
+        "attach",
+        "detach"
+      ]
+    },
+    "mode": {
+      "type": "string",
+      "description": "The organisation's mode: report records what differs and changes nothing, enforce applies it.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true,
+      "enum": [
+        "report",
+        "enforce"
+      ]
+    }
+  }
+}

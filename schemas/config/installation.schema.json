@@ -2114,6 +2114,118 @@
               "default": "15m",
               "description": "How long between passes. Positive."
             },
+            "orgSettings": {
+              "additionalProperties": {
+                "additionalProperties": false,
+                "description": "One organisation's settings.",
+                "properties": {
+                  "mode": {
+                    "default": "report",
+                    "description": "`report` computes and reports what differs and changes nothing; `enforce` applies it. The organisation's document has no key for this, so the installation can always hold an organisation to `report`.",
+                    "enum": [
+                      "report",
+                      "enforce"
+                    ]
+                  },
+                  "platformValued": {
+                    "description": "Variable names whose value the platform sets and whose visibility and repositories the organisation chooses: the document may declare them with no value.",
+                    "items": {
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "platformVariables": {
+                    "description": "path.Match patterns of the variable names the platform owns: `CI_RUNNER_LABEL_*`. The organisation's document may not declare one; its value is set under `variables`.",
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "read": {
+                    "additionalProperties": false,
+                    "description": "Where the organisation's document is and as whom the controller reads it.",
+                    "properties": {
+                      "parameter": {
+                        "description": "The name of the parameter that holds the document: the `org` section of a company fragment (docs/reference/sluis/policy-fragment.md).",
+                        "pattern": "^/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$",
+                        "type": "string"
+                      },
+                      "region": {
+                        "description": "The region of that account's parameter store.",
+                        "pattern": "^[a-z]{2}(-[a-z]+)+-[0-9]$",
+                        "type": "string"
+                      },
+                      "roleArn": {
+                        "description": "The role the controller assumes in the organisation's own AWS account. It can read the document and the secrets' parameters and nothing else, and it trusts only the controller's role.",
+                        "pattern": "^arn:[a-z-]+:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,512}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "roleArn",
+                      "region",
+                      "parameter"
+                    ],
+                    "type": "object"
+                  },
+                  "secretPrefix": {
+                    "description": "The prefix every secret's parameter must have in the organisation's own parameter store, ending in a slash. Unset puts secrets out of scope.",
+                    "pattern": "^/([A-Za-z0-9_.-]+/)+$",
+                    "type": "string"
+                  },
+                  "variables": {
+                    "additionalProperties": {
+                      "additionalProperties": false,
+                      "description": "One variable.",
+                      "properties": {
+                        "repositories": {
+                          "description": "Repositories of the organisation, by name, when the visibility is `selected`.",
+                          "items": {
+                            "pattern": "^[A-Za-z0-9._-]{1,100}$",
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "value": {
+                          "description": "The value.",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "visibility": {
+                          "default": "all",
+                          "description": "Which repositories see it. For a platform-valued name the organisation's document may choose its own.",
+                          "enum": [
+                            "all",
+                            "private",
+                            "selected"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "value"
+                      ],
+                      "type": "object"
+                    },
+                    "description": "The variables the installation sets, by name. Each name must match `platformVariables` or be listed in `platformValued`.",
+                    "propertyNames": {
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                    },
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "read"
+                ],
+                "type": "object"
+              },
+              "description": "Optional. For an organisation the github table binds, how the controller reconciles its Actions variables, Actions secrets and code security configurations from the typed document the organisation keeps in its own account (docs/guides/sluis/github-organisation-settings.md). An organisation with no entry has none of this.",
+              "propertyNames": {
+                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9])*$"
+              },
+              "type": "object"
+            },
             "recordsDir": {
               "default": "/var/run/github-roster/records",
               "description": "The console's records, mounted. Read only with `ports.adapter: legacy`.",

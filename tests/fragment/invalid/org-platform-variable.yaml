@@ -1,0 +1,6 @@
+# owner-org-platform: a variable the platform owns
+org:
+  variables:
+    CI_RUNNER_LABEL_DEFAULT:
+      value: self-hosted
+      visibility: all

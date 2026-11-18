@@ -9,6 +9,7 @@ import (
 
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
 	"github.com/truvity/sluis/internal/githubroster/appid"
+	"github.com/truvity/sluis/internal/githubroster/orgconfig"
 	"github.com/truvity/sluis/internal/githubroster/runnerapp"
 	"github.com/truvity/sluis/internal/githubroster/status"
 )
@@ -347,5 +348,48 @@ func (d *PolicyDocument) validateAppRefs() []error {
 			errs = append(errs, fmt.Errorf("controllers.github.appRefs: %s names %q, which is created under %s", org, ref, found.Org))
 		}
 	}
+	return errs
+}
+
+// OrgSettings is the configuration of one organisation's settings
+// (`controllers.github.orgSettings`), or false when it has none.
+func (d *PolicyDocument) OrgSettings(org string) (orgconfig.Config, bool) {
+	if d == nil || d.Controllers == nil || d.Controllers.GitHub == nil {
+		return orgconfig.Config{}, false
+	}
+
+	c, ok := d.Controllers.GitHub.OrgSettings[org]
+
+	return c, ok
+}
+
+// OrgSettingsOrgs are the organisations that have settings configured.
+func (d *PolicyDocument) OrgSettingsOrgs() []string {
+	if d == nil || d.Controllers == nil || d.Controllers.GitHub == nil {
+		return nil
+	}
+
+	return slices.Sorted(maps.Keys(d.Controllers.GitHub.OrgSettings))
+}
+
+// validateOrgSettings holds `controllers.github.orgSettings` to the
+// organisations the policy binds and to what the controller can act on.
+func (d *PolicyDocument) validateOrgSettings() []error {
+	if d.Controllers == nil || d.Controllers.GitHub == nil {
+		return nil
+	}
+
+	var errs []error
+
+	for _, org := range slices.Sorted(maps.Keys(d.Controllers.GitHub.OrgSettings)) {
+		if _, bound := d.Policy.GitHub[org]; !bound {
+			errs = append(errs, fmt.Errorf("controllers.github.orgSettings names %s, which the policy's github table does not bind", org))
+		}
+
+		if err := d.Controllers.GitHub.OrgSettings[org].Validate(); err != nil {
+			errs = append(errs, fmt.Errorf("controllers.github.orgSettings.%s: %w", org, err))
+		}
+	}
+
 	return errs
 }

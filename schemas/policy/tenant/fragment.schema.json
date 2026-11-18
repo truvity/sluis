@@ -43,6 +43,32 @@
       ],
       "type": "object"
     },
+    "attachment": {
+      "additionalProperties": false,
+      "description": "The repositories a configuration is attached to.",
+      "properties": {
+        "repositories": {
+          "description": "The repositories, by name, when scope is selected.",
+          "items": {
+            "pattern": "^[A-Za-z0-9._-]{1,100}$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "scope": {
+          "description": "Every repository of the organisation, or the selected `repositories`.",
+          "enum": [
+            "all",
+            "selected"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "scope"
+      ],
+      "type": "object"
+    },
     "awsRole": {
       "additionalProperties": false,
       "description": "One IAM role, exactly.",
@@ -222,6 +248,101 @@
       },
       "type": "object"
     },
+    "orgSecret": {
+      "additionalProperties": false,
+      "description": "One Actions secret. The controller reads the value from the parameter, seals it for GitHub and never stores it.",
+      "properties": {
+        "parameter": {
+          "description": "The SecureString parameter, in the organisation's own account, under the prefix the ceiling allows.",
+          "pattern": "^/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$",
+          "type": "string"
+        },
+        "repositories": {
+          "description": "The repositories that see it, by name, when visibility is selected.",
+          "items": {
+            "pattern": "^[A-Za-z0-9._-]{1,100}$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "visibility": {
+          "description": "Which repositories see it: all, private ones, or the selected `repositories`.",
+          "enum": [
+            "all",
+            "private",
+            "selected"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "parameter",
+        "visibility"
+      ],
+      "type": "object"
+    },
+    "orgSection": {
+      "additionalProperties": false,
+      "description": "What the company states for one GitHub organisation it holds. The GitHub controller reads it at run time from the organisation's own account (ADR 0080); the installation does not merge it.",
+      "properties": {
+        "secrets": {
+          "additionalProperties": {
+            "$ref": "#/$defs/orgSecret"
+          },
+          "description": "Actions secrets, by name. A secret names the SecureString parameter that holds its value.",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "type": "object"
+        },
+        "security_configurations": {
+          "additionalProperties": {
+            "$ref": "#/$defs/securityConfiguration"
+          },
+          "description": "Code security configurations, by name.",
+          "type": "object"
+        },
+        "variables": {
+          "additionalProperties": {
+            "$ref": "#/$defs/orgVariable"
+          },
+          "description": "Actions variables, by name. A name the platform owns is refused.",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "orgVariable": {
+      "additionalProperties": false,
+      "description": "One Actions variable. A name whose value the platform sets carries no value.",
+      "properties": {
+        "repositories": {
+          "description": "The repositories that see it, by name, when visibility is selected.",
+          "items": {
+            "pattern": "^[A-Za-z0-9._-]{1,100}$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "value": {
+          "description": "The value, up to 48 KiB. Empty for a name whose value the installation sets.",
+          "type": "string"
+        },
+        "visibility": {
+          "description": "Which repositories see it: all, private ones, or the selected `repositories`.",
+          "enum": [
+            "all",
+            "private",
+            "selected"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "population": {
       "additionalProperties": false,
       "description": "A set of directory groups and, as the exception, individual addresses.",
@@ -300,6 +421,161 @@
           "type": "array"
         }
       },
+      "type": "object"
+    },
+    "securityConfiguration": {
+      "additionalProperties": false,
+      "description": "One code security configuration and where it is attached.",
+      "properties": {
+        "attach": {
+          "$ref": "#/$defs/attachment"
+        },
+        "description": {
+          "description": "One line about the configuration. GitHub requires one.",
+          "maxLength": 255,
+          "minLength": 1,
+          "type": "string"
+        },
+        "settings": {
+          "additionalProperties": false,
+          "description": "GitHub's own setting names and values.",
+          "properties": {
+            "advanced_security": {
+              "enum": [
+                "enabled",
+                "disabled",
+                "code_security",
+                "secret_protection"
+              ],
+              "type": "string"
+            },
+            "code_scanning_default_setup": {
+              "enum": [
+                "enabled",
+                "disabled",
+                "not_set"
+              ],
+              "type": "string"
+            },
+            "code_security": {
+              "enum": [
+                "enabled",
+                "disabled",
+                "not_set"
+              ],
+              "type": "string"
+            },
+            "dependabot_alerts": {
+              "enum": [
+                "enabled",
+                "disabled",
+                "not_set"
+              ],
+              "type": "string"
+            },
+            "dependabot_security_updates": {
+              "enum": [
+                "enabled",
+                "disabled",
+                "not_set"
+              ],
+              "type": "string"
+            },
+            "dependency_graph": {
+              "enum": [
+                "enabled",
+                "disabled",
+                "not_set"
+              ],
+              "type": "string"
+            },
+            "dependency_graph_autosubmit_action": {
+              "enum": [
+                "enabled",
+                "disabled",
+                "not_set"
+              ],
+              "type": "string"
+            },
+            "enforcement": {
+              "enum": [
+                "enforced",
+                "unenforced"
+              ],
+              "type": "string"
+            },
+            "private_vulnerability_reporting": {
+              "enum": [
+                "enabled",
+                "disabled",
+                "not_set"
+              ],
+              "type": "string"
+            },
+            "secret_protection": {
+              "enum": [
+                "enabled",
+                "disabled",
+                "not_set"
+              ],
+              "type": "string"
+            },
+            "secret_scanning": {
+              "enum": [
+                "enabled",
+                "disabled",
+                "not_set"
+              ],
+              "type": "string"
+            },
+            "secret_scanning_generic_secrets": {
+              "enum": [
+                "enabled",
+                "disabled",
+                "not_set"
+              ],
+              "type": "string"
+            },
+            "secret_scanning_generic_secrets_push_protection": {
+              "enum": [
+                "enabled",
+                "disabled",
+                "not_set"
+              ],
+              "type": "string"
+            },
+            "secret_scanning_non_provider_patterns": {
+              "enum": [
+                "enabled",
+                "disabled",
+                "not_set"
+              ],
+              "type": "string"
+            },
+            "secret_scanning_push_protection": {
+              "enum": [
+                "enabled",
+                "disabled",
+                "not_set"
+              ],
+              "type": "string"
+            },
+            "secret_scanning_validity_checks": {
+              "enum": [
+                "enabled",
+                "disabled",
+                "not_set"
+              ],
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "description",
+        "attach"
+      ],
       "type": "object"
     },
     "slackChannel": {
@@ -448,6 +724,9 @@
         "pattern": "^[^:*\\s]+:[^:*\\s]+:[^:*\\s]+$"
       },
       "type": "object"
+    },
+    "org": {
+      "$ref": "#/$defs/orgSection"
     },
     "projects": {
       "additionalProperties": {

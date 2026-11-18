@@ -45,6 +45,11 @@ type (
 		// installation adds them to its clients ([Gate.Client]); they are
 		// not part of [compile.Model].
 		Gates map[string]Gate
+		// Org is what the company states for one GitHub organisation it
+		// holds: Actions variables and secrets and code security
+		// configurations (ADR 0080). The installation does not merge it
+		// into the model: the GitHub controller reads it at run time.
+		Org OrgSection
 	}
 
 	// AppGrant is one grant of a GitHub App: who may ask for its tokens, for
@@ -115,6 +120,9 @@ type (
 		// declare a gate under: `acme-*`. They must not match a client of
 		// the installation's own.
 		Clients []string `yaml:"clients"`
+		// Org is how far the org section may reach: the variables the
+		// platform owns and the prefix of the secrets' parameters.
+		Org OrgCeiling `yaml:"org"`
 	}
 
 	// Owner is a company with its ceiling.
@@ -174,6 +182,14 @@ const (
 	// has no redirect or no group, or a redirect or sign-out page is not
 	// `https://` on a host in the owner's zones.
 	OwnerGate = "owner-gate"
+	// OwnerOrg: the org section declares a variable, secret or code security
+	// configuration GitHub would refuse or the ceiling does not allow: a
+	// malformed name, a visibility with no repositories, a parameter outside
+	// the secret prefix, a setting GitHub does not have.
+	OwnerOrg = "owner-org"
+	// OwnerOrgPlatform: the org section declares a variable the platform
+	// owns, or gives a value for one whose value is the installation's.
+	OwnerOrgPlatform = "owner-org-platform"
 )
 
 // IsZero reports whether the ceiling allows nothing.
@@ -181,7 +197,7 @@ func (c Ceiling) IsZero() bool {
 	return len(c.Directories) == 0 && len(c.Groups) == 0 && len(c.Rungs) == 0 &&
 		len(c.GitHubOrgs) == 0 && len(c.SlackWorkspaces) == 0 &&
 		len(c.Clusters) == 0 && len(c.AWSAccounts) == 0 &&
-		len(c.GitHubApps) == 0 && len(c.Zones) == 0 && len(c.Clients) == 0
+		len(c.GitHubApps) == 0 && len(c.Zones) == 0 && len(c.Clients) == 0 && c.Org.IsZero()
 }
 
 // IsEmpty reports whether the fragment declares nothing. A key with no
@@ -189,7 +205,7 @@ func (c Ceiling) IsZero() bool {
 func (f Fragment) IsEmpty() bool {
 	return len(f.Rungs) == 0 && len(f.Projects) == 0 && len(f.Applications) == 0 &&
 		len(f.GitHub) == 0 && len(f.Slack) == 0 && len(f.Jobs) == 0 && len(f.Workloads) == 0 &&
-		len(f.AppGrants) == 0 && len(f.Gates) == 0
+		len(f.AppGrants) == 0 && len(f.Gates) == 0 && f.Org.IsEmpty()
 }
 
 // String is the violation as one line: `owner acme: owner-rung: rungs[ops]: ...`.

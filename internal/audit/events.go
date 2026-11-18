@@ -979,6 +979,26 @@ func GitHubOwnerReported(m Member, change, reason string) *record.Record {
 		personParty(m.Person), m.targets(), data{"change": change})
 }
 
+// ------------------------------------------------ GitHub: organisation settings
+
+// GitHubOrgSettingChanged is one change to a GitHub organisation's Actions
+// variable, Actions secret or code security configuration: made by the
+// controller in enforce mode, or found and not made in report mode, which the
+// mode says. kind is `variable`, `secret` or `security_configuration` and
+// action one of `create`, `update`, `delete`, `attach` and `detach`. The
+// record names the setting and never carries a value.
+func GitHubOrgSettingChanged(org, kind, name, action, mode string, o Outcome) *record.Record {
+	return build("roster.github_org_setting.changed", System(), o, nil, []*record.Target{targetOrg(org)},
+		data{"kind": kind, "name": name, "action": action, "mode": mode})
+}
+
+// GitHubOrgSettingsRefused is an organisation's settings document not applied:
+// outcome is `unreadable`, `refused` or `failed`, and reason says why.
+func GitHubOrgSettingsRefused(org, outcome, mode, reason string) *record.Record {
+	return build("roster.github_org_settings.refused", System(), Failed(reason), nil, []*record.Target{targetOrg(org)},
+		data{"outcome": outcome, "mode": mode})
+}
+
 // ------------------------------------------------------------------- helpers
 
 type data map[string]any

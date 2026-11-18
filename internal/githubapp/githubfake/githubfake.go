@@ -92,6 +92,8 @@ type Org struct {
 	// as GitHub answers.
 	Repositories []string
 
+	settings settingsState
+
 	nextID int64
 	server *httptest.Server
 	// codes and tokens are the person-token grants issued, by value.
@@ -234,7 +236,9 @@ func Start(t *testing.T, login string) *Org {
 		Accounts: map[string]*Account{}, codes: map[string]string{}, access: map[string]string{}, fresh: map[string]string{},
 		Public: map[string]string{}, Hits: map[string]int{}, Seats: 100, Installations: map[int64]*Installation{},
 	}
+	org.initSettings()
 	mux := http.NewServeMux()
+	org.settingsRoutes(mux)
 	mux.HandleFunc("POST /app/installations/{id}/access_tokens", org.accessToken)
 	mux.HandleFunc("GET /app", org.app)
 	mux.HandleFunc("GET /app/installations/{id}", org.installation)

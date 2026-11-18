@@ -61,3 +61,29 @@ gates:
     signed_out: [https://web.dev.acme.example/]
     requires: ["dev:web:deployer"]
     ttl_cap: 5m
+org:
+  variables:
+    ACME_REGION:
+      value: eu-west-1
+      visibility: all
+    ACME_DEPLOY_HOSTS:
+      value: web.acme.example
+      visibility: selected
+      repositories: [shop, web]
+    ACCESS_ROSTER_ISSUER:
+      visibility: selected
+      repositories: [shop]
+  secrets:
+    ACME_DEPLOY_KEY:
+      parameter: /acme/sluis/credentials/deploy-key
+      visibility: private
+  security_configurations:
+    baseline:
+      description: Scanning on for every repository.
+      settings:
+        secret_scanning: enabled
+        secret_scanning_push_protection: enabled
+        dependabot_alerts: enabled
+        enforcement: unenforced
+      attach:
+        scope: all

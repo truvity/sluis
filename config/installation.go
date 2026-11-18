@@ -11,6 +11,7 @@ import (
 
 	sluis "github.com/truvity/sluis"
 	internal "github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/githubroster/orgconfig"
 	"github.com/truvity/sluis/policy"
 	"github.com/truvity/sluis/storage/keys"
 )
@@ -272,6 +273,12 @@ type GitHubController struct {
 	// the github table binds (at most 34 characters). Optional: an
 	// organisation with no entry gets the built-in default.
 	AppNames map[string]string `json:"appNames,omitempty"`
+	// OrgSettings configures, by organisation, the Actions variables and
+	// secrets and the code security configurations the controller reconciles
+	// from the organisation's own document (ADR 0080). Optional: an
+	// organisation with no entry has none. It goes to the policy document's
+	// `controllers.github.orgSettings`.
+	OrgSettings map[string]orgconfig.Config `json:"orgSettings,omitempty"`
 }
 
 // SlackController is [GitHubController] for Slack.

@@ -16,3 +16,7 @@ github_apps:
     metadata: read
 zones: [acme.example]
 clients: ["acme-*"]
+org:
+  platform_variables: ["CI_RUNNER_LABEL_*", "CI_REMOTE_BUILDERS*", "CI_OPENBAO_*"]
+  platform_valued: [ACCESS_ROSTER_ISSUER]
+  secret_prefix: /acme/sluis/credentials/

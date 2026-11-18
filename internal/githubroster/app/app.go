@@ -29,6 +29,8 @@ import (
 	"github.com/truvity/sluis/internal/config"
 	"github.com/truvity/sluis/internal/consoleauth"
 	"github.com/truvity/sluis/internal/githubroster/controller"
+	"github.com/truvity/sluis/internal/githubroster/orgconfig"
+	"github.com/truvity/sluis/internal/githubroster/orgsettings"
 	"github.com/truvity/sluis/internal/health"
 	"github.com/truvity/sluis/internal/maintenance"
 	"github.com/truvity/sluis/internal/port"
@@ -59,7 +61,10 @@ type Config struct {
 	recordsDir string
 	interval   time.Duration
 	enabled    map[string]bool
-	logLevel   slog.Level
+	// orgSettings are the organisations whose settings the controller
+	// reconciles from their own documents, with the mode of each.
+	orgSettings map[string]orgconfig.Config
+	logLevel    slog.Level
 	// probes is where /healthz and /readyz answer.
 	probes string
 	// serve is where the module answers the issuer's calls on Kubernetes; nil
@@ -139,6 +144,13 @@ func FromConfig(f *config.ControllerGitHub, p *config.PolicyDocument) (Config, e
 		if org = strings.TrimSpace(org); org != "" {
 			c.enabled[org] = true
 		}
+	}
+	for _, org := range p.OrgSettingsOrgs() {
+		settings, _ := p.OrgSettings(org)
+		if c.orgSettings == nil {
+			c.orgSettings = map[string]orgconfig.Config{}
+		}
+		c.orgSettings[org] = settings
 	}
 	c.interval = 15 * time.Minute
 	if f.Interval != nil {
@@ -260,6 +272,27 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		}
 	}
 
+	for org := range cfg.orgSettings {
+		if _, bound := declared.GitHub[org]; !bound {
+			return nil, fmt.Errorf("controllers.github.orgSettings names %s, which the policy does not bind", org)
+		}
+		if err = cfg.orgSettings[org].Validate(); err != nil {
+			return nil, fmt.Errorf("controllers.github.orgSettings.%s: %w", org, err)
+		}
+	}
+	var settingsReader controller.SettingsReader
+	if len(cfg.orgSettings) > 0 {
+		readings := make(map[string]orgconfig.Read, len(cfg.orgSettings))
+		for org := range cfg.orgSettings {
+			readings[org] = cfg.orgSettings[org].Read
+		}
+		reader, err := orgsettings.NewAWSReader(ctx, readings)
+		if err != nil {
+			return nil, err
+		}
+		settingsReader = reader
+	}
+
 	stores, err := store.Open(ctx, cfg.stores, log)
 	if err != nil {
 		return nil, err
@@ -338,7 +371,10 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		probes:      cfg.probes,
 		trail:       trail,
 		fatal:       fatal,
-		controller: controller.New(controller.Config{Interval: cfg.interval, Enabled: cfg.enabled, AppsDir: cfg.appsDir, RecordsDir: cfg.recordsDir}, controller.Deps{
+		controller: controller.New(controller.Config{
+			Interval: cfg.interval, Enabled: cfg.enabled, AppsDir: cfg.appsDir, RecordsDir: cfg.recordsDir, OrgSettings: cfg.orgSettings,
+		}, controller.Deps{
+			Settings: settingsReader,
 			Log:      log,
 			GitHub:   web,
 			Access:   directoryrosterv1connect.NewAccessServiceClient(console),

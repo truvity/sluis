@@ -454,11 +454,13 @@ func (in *Installation) policyDocument() (*internal.PolicyDocument, error) {
 	}
 	if c := in.Controllers; c != nil {
 		pc := &internal.PolicyControllers{}
-		if c.GitHub != nil && (len(c.GitHub.EnabledOrgs) > 0 || len(c.GitHub.AppRefs) > 0 || len(c.GitHub.AppNames) > 0) {
+		if c.GitHub != nil && (len(c.GitHub.EnabledOrgs) > 0 || len(c.GitHub.AppRefs) > 0 || len(c.GitHub.AppNames) > 0 ||
+			len(c.GitHub.OrgSettings) > 0) {
 			pc.GitHub = &internal.ControllersGitHub{
 				EnabledOrgs: sortedSet(c.GitHub.EnabledOrgs),
 				AppRefs:     maps.Clone(c.GitHub.AppRefs),
 				AppNames:    maps.Clone(c.GitHub.AppNames),
+				OrgSettings: maps.Clone(c.GitHub.OrgSettings),
 			}
 		}
 		if c.Slack != nil && len(c.Slack.EnabledWorkspaces) > 0 {

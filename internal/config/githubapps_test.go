@@ -161,3 +161,50 @@ controllers:
 		t.Errorf("a name of exactly the limit was refused: %v", err)
 	}
 }
+
+const orgSettingsSection = `controllers:
+  github:
+    orgSettings:
+      example-org:
+        mode: enforce
+        read: {roleArn: "arn:aws:iam::111122223333:role/sluis-read", region: eu-west-1, parameter: /example/sluis/github-org}
+        platformVariables: ["CI_RUNNER_LABEL_*"]
+        platformValued: [ACCESS_ROSTER_ISSUER]
+        secretPrefix: /example/sluis/credentials/
+        variables:
+          CI_RUNNER_LABEL_DEFAULT: {value: self-hosted}
+          ACCESS_ROSTER_ISSUER: {value: "https://sluis.example.com"}
+`
+
+func TestOrgSettingsAreReadAndHeldToWhatTheControllerCanActOn(t *testing.T) {
+	d, err := policyWith(t, orgSettingsSection)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	settings, ok := d.OrgSettings("example-org")
+	if !ok || settings.EffectiveMode() != "enforce" || settings.Read.Parameter != "/example/sluis/github-org" || len(settings.Variables) != 2 {
+		t.Fatalf("settings = %+v, %v", settings, ok)
+	}
+
+	if _, ok = d.OrgSettings("other"); ok || !slices.Equal(d.OrgSettingsOrgs(), []string{"example-org"}) {
+		t.Errorf("settings of an organisation that has none: %v", d.OrgSettingsOrgs())
+	}
+
+	for name, change := range map[string]func(string) string{
+		"an unbound organisation": func(s string) string { return strings.Replace(s, "      example-org:", "      other-org:", 1) },
+		"an unknown mode":         func(s string) string { return strings.Replace(s, "mode: enforce", "mode: apply", 1) },
+		"no role": func(s string) string {
+			return strings.Replace(s, "arn:aws:iam::111122223333:role/sluis-read", "not-an-arn", 1)
+		},
+		"a variable nobody owns": func(s string) string { return strings.Replace(s, "CI_RUNNER_LABEL_DEFAULT:", "SOMEONES_VARIABLE:", 1) },
+		"a bad prefix":           func(s string) string { return strings.Replace(s, "/example/sluis/credentials/", "example/secrets", 1) },
+		"a mode key in the document's place": func(s string) string {
+			return strings.Replace(s, "mode: enforce", "mode: enforce\n        unknownKey: 1", 1)
+		},
+	} {
+		if _, err := policyWith(t, change(orgSettingsSection)); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+}
