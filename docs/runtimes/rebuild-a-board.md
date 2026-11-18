@@ -24,7 +24,7 @@ Names below are placeholders: `<board>` is the board that was reinstalled, `<pee
 What is **not** lost: the YubiKey and everything on it (the PIN, the keys in the slots, the slot `87` key), because the card is a separate device. The reinstall of a board that keeps its card therefore keeps its recipient, its token key and its slot `87` key (MEASURED 2026-11-07: all three unchanged). Its entry in the signed slot map keeps its public keys but not its bytes ([step 8](#8-re-enrol-its-recipient)). A board whose card was replaced, or that ran the software key driver, has a new recipient.
 
 :::caution[The audit log of a board does not survive its reinstall]
-This is a risk of the installation, not of the rebuild, and it is a stage rather than the design. [ADR 0029](/decisions/0029-the-audit-log/) says the boards keep their logs on R2, with the spool as the local buffer; the `s3-compatible` blob driver that this needs is not built (`drivers/writer` holds `fs` and `spool` only, READ 2026-11-07). The maintainer accepted the local log for now on 2026-11-07, because it holds test data, and it is to be revisited before any real PIN or real data. Until then, with the `fs` blob driver on the board's disk, the audit trail of a board is as durable as that disk. If a board's disk is lost, reinstalled or replaced, its records are gone, and a copy elsewhere is the only way back (the `fs` driver keeps no history, see [a damaged segment](/runtimes/bare-metal/#the-end-of-a-deploy)). Before a planned reinstall, copy the board's blob directory and its log somewhere off the board if the records matter. An installation that has to keep the audit trail across a lost board needs the blob store off the board, which is the R2 driver of the design ([One node](/runtimes/bare-metal/#one-node), [Limits and residual risk](/runtimes/bare-metal/#limits-and-residual-risk)).
+This is a risk of the installation, not of the rebuild, and it is a stage rather than the design. [ADR 0029](/decisions/0029-the-audit-log/) says the boards keep their logs on R2, with the spool as the local buffer; R2 and its credentials now belong to the Cloudflare add-on ([0009](/decisions/0009-export/)), and the `s3-compatible` blob driver that this needs is not built (`drivers/writer` holds `fs` and `spool` only, READ 2026-11-07). The maintainer accepted the local log for now on 2026-11-07, because it holds test data, and it is to be revisited before any real PIN or real data. Until then, with the `fs` blob driver on the board's disk, the audit trail of a board is as durable as that disk. If a board's disk is lost, reinstalled or replaced, its records are gone, and a copy elsewhere is the only way back (the `fs` driver keeps no history, see [a damaged segment](/runtimes/bare-metal/#the-end-of-a-deploy)). Before a planned reinstall, copy the board's blob directory and its log somewhere off the board if the records matter. An installation that has to keep the audit trail across a lost board needs the blob store off the board, which is the R2 driver of the design ([One node](/runtimes/bare-metal/#one-node), [Limits and residual risk](/runtimes/bare-metal/#limits-and-residual-risk)).
 :::
 
 ## Why trust does not rest on the SSH host keys
@@ -43,6 +43,23 @@ If the old card or key may be in someone else's hands (a lost or stolen board), 
 - Check the healthy boards first. `SLUIS_BOARDS="<peer-a> <peer-b>" devbox run -- just boards-status` must show every unit active and, for each rqlite node, a line like `rqlite: ready; 3 nodes (3 voters), leader ...` under each board's heading. The cluster still counts the dead board as a voter at this point. The status reads each named board only, and notes that a run of fewer boards than the cluster is expected to differ. It also exits 1 for a run of two boards, because the firewall sets on each board still hold three ([the firewall](/runtimes/bare-metal/#the-rqlite-firewall) compares them with `SLUIS_BOARDS`); read the lines, not the exit status.
 
 ## Steps
+
+The ten steps fall in three parts: take the board out of the cluster, bring it back, and give it back its trust.
+
+```mermaid
+flowchart LR
+  subgraph out["Out"]
+    s1["1 remove the<br/>stale node"] --> s2["2 reinstall"] --> s3["3 known-hosts"]
+  end
+  subgraph back["Back in"]
+    s4["4 rejoin Raft"] --> s5["5 deploy"] --> s6["6 unlock"] --> s7["7 firewall"]
+  end
+  subgraph trust["Trust"]
+    s8["8 re-enrol<br/>recipient"] --> s9["9 re-sign<br/>KeyPlan"] --> s10["10 verify"]
+  end
+  s3 --> s4
+  s7 --> s8
+```
 
 | # | Step | State |
 |---|---|---|

@@ -111,7 +111,7 @@ purposes:
     aws: { key_spec: ECC_NIST_P384, per: trust domain, baseline: true }
     board: { slot: '9c' }
     users: [ca]
-    notes: "The X.509 intermediate of a trust domain, certified by a root that root custody holds; sluis holds intermediates only."
+    notes: "The X.509 intermediate of a trust domain, certified by a root that root custody holds; sluis holds intermediates only. The core needs none: the key is generated only when the PKI add-on turns the token certificate on (decision X1 A of 2026-11-18)."
 
   - name: ssh-user
     kind: signing

@@ -10,8 +10,8 @@ sluis gives credentials to people and to machines. A person comes from an upstre
 
 ## A person's subject
 
-- **A person has an opaque random id, and it is the `sub` of every token the person gets,** for every client: v2 issues no pairwise `sub` ([ADR 0020](/decisions/0020-grant-vocabulary-and-token-claims/#the-sub-of-a-token)). A relying party that needs a readable name reads the `email` claim of the ID token. sluis assigns the id when it first sees a person: at a directory read where the upstream has a directory, so it is known before the first sign-in, and otherwise at the first sign-in, which is how the first working version works. An upstream account is tied to the person by the issuer and a configured subject claim (`sub`, or `oid` for Microsoft Entra), never by e-mail ([ADR 0019](/decisions/0019-person-and-upstream-link/)). The subject is never an e-mail address or a directory account name, so it survives a rename and keeps personal data out of log lines.
-- **The directory account and `email` are claims of their own**, beside `acr`, `amr` and `auth_time`. A token for an audience that declares a binding also carries `cnf` (`cnf.jkt` for DPoP, `cnf.x5t#S256` for mutual TLS); DPoP comes later ([ADR 0038](/decisions/0038-fapi-2-profile/)).
+- **A person has an opaque random id, and it is the `sub` of every token the person gets,** for every client: v2 issues no pairwise `sub` ([ADR 0020](/decisions/0020-grant-vocabulary-and-token-claims/#the-sub-of-a-token)). A relying party that needs a readable name reads the `email` claim of the ID token. sluis assigns the id when it first sees a person: at a directory read where the upstream has a directory, so it is known before the first sign-in, and otherwise at the first sign-in, which is how the core works today. An upstream account is tied to the person by the issuer and a configured subject claim (`sub`, or `oid` for Microsoft Entra), never by e-mail ([ADR 0019](/decisions/0019-person-and-upstream-link/)). The subject is never an e-mail address or a directory account name, so it survives a rename and keeps personal data out of log lines.
+- **The directory account and `email` are claims of their own**, beside `acr`, `amr` and `auth_time`. A token for an audience that declares a binding also carries `cnf`: `cnf.jkt` for DPoP, which the core offers as part of its FAPI 2.0 profile ([ADR 0038](/decisions/0038-fapi-2-profile/#amendment-of-2026-11-18-the-profile-is-revived-for-the-core-issuer)). Binding by mutual TLS (`cnf.x5t#S256`) comes later, with a design for forwarding the client certificate through the Cloudflare edge.
 - **A person disabled in the directory, or held by an operator, is refused at once**, whatever the cached state.
 - **A person has four states** (live, held, suspended and left), computed from the kinds and never stored; a person who is not live is refused at sign-in, refresh, exchange and step-up ([ADR 0019](/decisions/0019-person-and-upstream-link/#states)).
 
@@ -62,13 +62,28 @@ Each kind of proof is a **verifier** inside `exchange`. A verifier holds public 
 
 | Verifier | What it proves | Milestone |
 |---|---|---|
-| `github-oidc` | A GitHub Actions OIDC token, as used by the signing API's callers | v1 parity (moved out of the first working version on 2026-11-07) |
+| `github-oidc` | A GitHub Actions OIDC token, as used by the signing API's callers | The GitHub add-on (moved out of the first working version on 2026-11-07) |
 | `aws-iid` | The EC2 instance identity document, accepted **once per instance** | Parity |
-| `k8s-sa-token` | A projected ServiceAccount token from a cluster sluis trusts | Parity |
+| `k8s-sa-token` | A projected ServiceAccount token from a cluster sluis trusts | Core, for the slice that KV needs; the rest is Parity |
 | `yubikey-attestation` | A PIV attestation, chained through Yubico's published intermediates to **Yubico Attestation Root 1**, which sluis ships, and checked against the registry of known cards | Parity |
 | `enrol-token` | A single-use or reusable enrolment token (below) | Parity |
 | Manual approval | A person approved the request in the console | Parity |
 | `tailscale-whois`, TPM | The Tailscale node behind the connection; a TPM quote | Later |
+
+## Customers sign in upstream
+
+sluis signs in its staff and operators itself, with passkeys. A customer signs in only at the upstream identity provider: sluis hosts no customer account, page or registration ([ADR 0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)). One installation serves one boundary and trusts one realm, which the `ExchangeTrust` config kind declares, so a token of another realm is refused. `exchange` takes a token of the trusted realm (Keycloak in the tested installations) as the subject token and issues a sluis token for one audience. It sets three claims from the upstream token, through the mapping that the installation declares, and never from the request.
+
+```mermaid
+flowchart LR
+  user["person"] --> realm["trusted realm<br/>(Keycloak)"]
+  realm -->|"realm token"| xchg["exchange<br/>RFC 8693"]
+  trust["ExchangeTrust<br/>declares the realm"] -.-> xchg
+  xchg -->|"sluis token<br/>customer, org, product"| svc["service"]
+  other["token of another realm"] -.->|"refused"| xchg
+```
+
+This is built right after the core, in the Customer identity phase ([roadmap](/roadmap/#customer-identity-and-quota)). The customer-facing broker of the earlier plan ([0031](/decisions/0031-ciam-is-a-broker/) and the records that follow it) stays superseded. A person who works for several vendors keeps one identity per tenant and holds several sessions in parallel on the client, not one subject shared across tenants ([#1894](https://github.com/truvity/sluis/issues/1894)).
 
 ## How an actor reaches a cloud
 
@@ -88,7 +103,7 @@ A unit that talks to a cloud, such as the audit writer writing to a bucket, need
 | GCP | Workload Identity Federation | ES256 |
 | Azure | A federated credential on an Entra application | RS256 |
 
-GCP and Azure need an algorithm other than P-384; the key that signs workload tokens for that cloud is a key of its own, a named exception of [ADR 0006](/decisions/0006-keys-and-sealing/#named-exceptions). Cloudflare has no federation for R2: its adapter holds the account's connection credential, sealed, and mints R2 temporary credentials scoped to a bucket and a prefix ([ADR 0025](/decisions/0025-integrations/#credential-minters)).
+GCP and Azure need an algorithm other than P-384; the key that signs workload tokens for that cloud is a key of its own, a named exception of [ADR 0006](/decisions/0006-keys-and-sealing/#named-exceptions). Cloudflare has no federation for R2: its adapter, part of the Cloudflare add-on, holds the account's connection credential, sealed, and mints R2 temporary credentials scoped to a bucket and a prefix ([ADR 0025](/decisions/0025-integrations/#credential-minters)). The core holds no Cloudflare credential.
 
 ### An actor getting AWS credentials
 

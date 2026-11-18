@@ -48,7 +48,7 @@ The keyless method is the target for new installations. It needs the GCP exchang
 
 ## What policy controls
 
-- **Which domains route to which upstream**: the operator declares them in the `Upstream` ([0033](/decisions/0033-customer-connections/#which-upstreams-an-installation-has)); an address whose domain no upstream declares goes to the client's default upstream ([0033](/decisions/0033-customer-connections/#choosing-the-connection)).
+- **Which domains route to which upstream**: the operator declares them in the `Upstream` ([0025](/decisions/0025-integrations/#the-upstream-contract)); an address whose domain no upstream declares goes to the client's default upstream.
 - **Which groups are read.** The mirrored groups can be narrowed, so a policy can refer only to those.
 - **Who may sign in at all.** Sign-in proves an identity; whether it is admitted to a client is the client's `requires`.
 - **Freshness.** How long held facts may be used when the directory cannot be read; after that window sluis refuses rather than guesses, and a person disabled in the directory is refused at once ([0017](/decisions/0017-identity-and-sign-in/#directory-outages)).

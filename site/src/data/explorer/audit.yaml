@@ -58,7 +58,7 @@ transport_kinds:
     mode: queue
     short: "queue, NATS JetStream"
     title: "nats-jetstream: a JetStream stream (queue)"
-    used_on: "the installation default on Kubernetes; the installation of the CIAM layer (0032) on Kubernetes is its reference"
+    used_on: "the installation default on Kubernetes, and the reference installation of the driver"
     durable: "the stream accepted the message; it is replicated when the NATS service has three nodes"
     wait: "In the JetStream stream, up to its retention limits."
     recv: "The writer pulls from a durable consumer and acknowledges what it has sealed."
@@ -100,8 +100,8 @@ shapes:
   boards:
     log_key: "each board's own card signs that board's log, through key@, which lets only that board's writer use the key"
     witness: "peer: the other two boards cosign each board's log (2-of-3)"
-    blob: "Cloudflare R2, through the s3-compatible driver with credentials from the cloudflare cloud driver"
-    lock: "lock mode removable (an R2 account administrator can remove the lock); the peer witnesses protect the history, which is what lets a production log run here"
+    blob: "a local directory on each board (fs); Cloudflare R2 through the s3-compatible driver belongs to the Cloudflare add-on, and the core holds no Cloudflare credential (ADR 0009)"
+    lock: "lock mode none on the fs blob (an R2 bucket's lock, in the add-on, is removable by an account administrator); the peer witnesses protect the history, which is what lets a production log run here, and a reinstalled board starts a fresh log"
     cluster: "three boards; each board has its own instance of each project's writer, with its own spool and log; the audit pieces run on the same boards"
     index_placement: "rqlite, a replicated SQLite (ADR 0028), so the reader can run on any node; sqlite on the indexer's node is the fallback"
   lambda:
@@ -110,8 +110,8 @@ shapes:
     blob: "an S3 bucket"
     lock: "lock mode compliance (Object Lock)"
     cluster: "managed by the platform; each project's writer runs with a reserved concurrency of 1 on a standard SQS queue, and correctness comes from create-if-absent on the bucket"
-    index_placement: "postgres on Aurora by default (ADR 0028), reached through RDS Proxy with IAM authentication; the indexer and the reader run in the VPC"
-    note: "The default index here is postgres on Aurora (ADR 0028), reached through RDS Proxy with IAM authentication and one database role per actor kind. A small install can also run sluis audit search from the CLI, which builds a local sqlite index from the log. The search index is a rebuildable cache; the log in the blob is the record."
+    index_placement: "postgres on Aurora Serverless v2 with auto-pause by default (ADR 0028), reached directly with IAM authentication and no RDS Proxy at first; the indexer and the reader run in the VPC"
+    note: "The default index here is postgres on Aurora Serverless v2 with auto-pause (ADR 0028), reached directly with IAM authentication and one database role per actor kind, with no RDS Proxy at first (decision L1b of 2026-11-18). A small install can also run sluis audit search from the CLI, which builds a local sqlite index from the log. The search index is a rebuildable cache; the log in the blob is the record."
   kubernetes:
     log_key: "one KMS key per writer instance, whose key policy names key@'s role alone; key@ lets only the writer use it"
     witness: "optional: peer or external"
@@ -180,14 +180,14 @@ nodes:
     row: 4.5
     cls: role
     title: quota
-    l2: allowance, countdown
-    l3: quota module
+    l2: reserved, not built
+    l3: superseded by 0046
     kind: actor
     status: decided
-    does: "Counts the allowance of each tenant down and refuses at zero. It is a work actor of the quota module, not an audit piece, and it runs beside sluis or in an installation of its own (ADR 0039). Every admit, refusal and push is an audit fact, so it is a producer like every other actor, and the only one whose usage part carries the facts of an allowance (ADR 0030)."
+    does: "Reserved for the allowance engine of ADR 0039, which ADR 0046 superseded on 2026-11-12. It is not built, and sluis keeps no allowance or balance. The usage stream and the limit check of ADR 0046 are built right after the core: a usage record is never dropped, and the limit check refuses at a limit that the product writes. It is not an audit piece."
     rows:
-      - { k: Placement, v: "A work actor, beside sluis or in an installation of its own; not an audit piece." }
-      - { k: State, v: "The durable kind Allowance, changed by one conditional update; nobody watches it (ADR 0039)." }
+      - { k: Placement, v: "Reserved; not an audit piece. Which actor serves the limit check is decided with its first caller (ADR 0046)." }
+      - { k: State, v: "The kind Allowance of the superseded engine; no balance is kept in sluis (ADR 0046)." }
     holds: Put on the transport; the write of Allowance, with a grant sealed for the tenant
     never: Blob, index or key access for audit
   recovery:
@@ -324,8 +324,8 @@ calls:
   - { f: entry, t: transport, m: Put, d: Records the exchange. }
   - { f: producers, t: transport, m: Put, d: Record of what each actor did. }
   - { f: entry, t: read, m: Search, d: "Forwards the search with the caller's grant." }
-  - { f: entry, t: quota, m: Admit, d: "Rate and count limits." }
-  - { f: quota, t: transport, m: Put, d: "Records each admit, refusal and push." }
+  - { f: entry, t: quota, m: Admit, d: "Reserved: the limit check of ADR 0046 has no actor yet." }
+  - { f: quota, t: transport, m: Put, d: "Reserved with the actor." }
   - { f: writer, t: transport, m: "Receive, Ack", d: "Takes records; its cursor moves when the batch is registered." }
   - { f: read, t: transport, m: Put, d: Records each read of the trail. }
   - { f: witness, t: transport, m: Put, d: Records each cosignature. }
@@ -354,13 +354,13 @@ flows:
         edges: ["client>entry"]
         text: A CI job or workload posts its token through the edge connector to entry. Whatever happens next, success or refusal, leaves a record.
       - title: entry asks the other actors
-        nodes: [entry, producers, quota]
-        edges: ["entry>producers", "entry>quota"]
-        text: entry has the subject verified, asks policy to decide, quota to admit and signer to sign. A refusal stops here with a reason, and is audited the same way.
+        nodes: [entry, producers]
+        edges: ["entry>producers"]
+        text: entry has the subject verified, asks policy to decide and signer to sign. A refusal stops here with a reason, and is audited the same way.
       - title: Each actor puts its record on the transport
-        nodes: [producers, quota, transport]
-        edges: ["producers>transport", "quota>transport"]
-        text: Every actor that acted puts what it did (a decision, a limit check, a signature) on the transport over its own socket, to the queue or stream of its project. In queue mode the record is queued; in direct mode it is streamed to the writer, or kept in a local spool when the writer is down.
+        nodes: [producers, transport]
+        edges: ["producers>transport"]
+        text: Every actor that acted puts what it did (a decision, a signature) on the transport over its own socket, to the queue or stream of its project. In queue mode the record is queued; in direct mode it is streamed to the writer, or kept in a local spool when the writer is down.
         variants:
           - { shapes: [local, boards], text: "The spool keeps a directory per producer uid, so it knows which actor appended." }
           - { shapes: [lambda], text: "Each actor sends under its own IAM role." }
@@ -410,7 +410,7 @@ flows:
         text: The indexer sees the new checkpoint, checks its signature and its consistency with the previous one, fetches the entry bundles it covers, opens each record at key@ under its tenant's evidence key, applies the records to the search index and advances its cursor in the index. It indexes only what a signed checkpoint covers.
         variants:
           - { shapes: [boards], text: "The index is rqlite (ADR 0028), replicated across the boards, so the reader can run on any board. The reader merges the three logs of a project by recorded time." }
-          - { shapes: [lambda], text: "The index here is postgres on Aurora, reached through RDS Proxy." }
+          - { shapes: [lambda], text: "The index here is postgres on Aurora Serverless v2 with auto-pause, reached directly with IAM authentication and no RDS Proxy at first." }
           - { shapes: [kubernetes], text: "The index here is postgres in the cnpg mode, a CloudNativePG cluster in the same Kubernetes cluster." }
   - id: search
     title: An auditor searches
@@ -574,7 +574,7 @@ promises:
     text: "Each boundary has one audit. Each emitting unit (sluis itself, the infrastructure, each product) is a project with its own bucket, writer, log keys and queue. The bucket has a prefix per log kind: audit, usage, and the product's billing log, which no audit piece writes (ADR 0028, ADR 0029)."
     status: decided
   - title: Audit is four pieces on the foundation
-    text: "The writer, the witness, the indexer and the reader are credential holders of the audit family. They have the data and keys ports every actor has, and the blob, transport and index ports of their own. They read AuditLog, AuditWitnesses and AuditCatalogue through the data port, and every signature goes through key@. The emitter is a library, not a piece. quota is a work actor of its own module, not an audit piece."
+    text: "The writer, the witness, the indexer and the reader are credential holders of the audit family. They have the data and keys ports every actor has, and the blob, transport and index ports of their own. They read AuditLog, AuditWitnesses and AuditCatalogue through the data port, and every signature goes through key@. The emitter is a library, not a piece. quota is a reserved work actor of the superseded allowance engine, not an audit piece."
     status: decided
 
 chain:
@@ -623,7 +623,7 @@ index_notes:
     text: The search index can be thrown away. A rebuild builds a new generation from the log beside the serving one, then switches the reader to it atomically.
     status: decided
   - title: The blob
-    text: Object storage, S3-compatible (for example R2) or S3, or a local directory, through the blob port. Its lock mode (none, removable or compliance) depends on the installation. Log objects are never edited or deleted early.
+    text: Object storage, S3-compatible (R2 comes with the Cloudflare add-on) or S3, or a local directory, through the blob port. Its lock mode (none, removable or compliance) depends on the installation. Log objects are never edited or deleted early.
     status: decided
 
 compare:

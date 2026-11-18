@@ -123,7 +123,7 @@ Every kind has exactly one writer. For a durable or temp kind it is an actor, na
 - **Rules:** an actor may use a verb on a kind, denied by default. The store also checks the schema, the version, the bounds and direction rule of a layered kind, and that the writer is the kind's one writer. Every write to a tenant-scoped kind carries a grant sealed for that tenant, which is the store's half of the two independent checks ([Keys](/concepts/keys/#sealed-grants)).
 - **Watch** streams the changes of a kind from a **resume point**. The store writes a change-log row in the same transaction as each change. On Lambda nothing is pushed: readers re-read with an ETag.
 - **Drivers** are separate binaries behind one port, private to their owner (store@, key@ or exporter@). Each port has one contract and one CLI (`serve`, `check`, `version`, `conformance`), and a driver sees only items: a key, a version, bytes, a time to live and index entries.
-- **Engines:** DynamoDB on AWS; rqlite on boards, where every board holds the data and temp data is replicated too so any board serves any request, and with one node on the local installation; an in-memory engine for tests only. A boundary below L3 is served by its parent's engine under its prefix.
+- **Engines:** DynamoDB on Lambda; PostgreSQL through CloudNativePG on Kubernetes, with the store and the audit index as separate databases and roles of one cluster; rqlite on boards, where every board holds the data and temp data is replicated too so any board serves any request, and with one node on the local installation; an in-memory engine for tests only. A boundary below L3 is served by its parent's engine under its prefix.
 - **Time to live:** an item past its expiry reads as absent whatever the engine holds, and a sweeper only frees space.
 
 ### Leases and fencing tokens
@@ -162,6 +162,19 @@ A check that cannot run is reported as not run, never as passed ([principle 4](/
 Read-only secrets come from a **secret source** and are written by infrastructure code. The store fetches a value on first use and holds it in memory only, and it never appears in an audit fact, a log line or a span. A secret source holds its values in the clear for whoever may read it, so they pass through store@ in memory: a compromised store@ yields secret-source values and no sealed data. On AWS, having the actor open at key@ a value that store@ fetched undecrypted is a follow-up ([#1182](https://github.com/truvity/sluis/issues/1182)).
 
 sluis is a store of static secrets and not a general secrets engine. KV, a building block of the core, keeps versioned secrets in **KV stores** that no tenant owns, each under a data key of its own, with policy deciding by path and every successful access a blocking audit fact; External Secrets reads it through a subset of the Vault KV v2 API ([ADR 0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/)). It offers no dynamic secrets, leases or transit. Where a caller needs a credential for a vendor, sluis mints a scoped credential instead of storing the caller's own ([Integrations](/integrations/)).
+
+A read of one secret takes this path. KV is built in the core phase, after the core features and before the shapes, and it needs the slice of workload exchange for a Kubernetes ServiceAccount token:
+
+```mermaid
+flowchart LR
+  es["External Secrets"] -->|"Vault KV v2 subset"| kv["kv"]
+  kv -->|"may this identity read this path?"| pol["policy"]
+  kv -->|"open under the<br/>store's data key"| key["key@"]
+  kv -->|"read"| st["store@"]
+  kv -->|"blocking audit fact<br/>on success"| aud["audit"]
+```
+
+The caller gets a value only when policy allows the path, and every successful read leaves a blocking audit fact. A board installation serves its consumers this way and needs no cloud for them.
 
 ## Export
 

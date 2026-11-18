@@ -10,14 +10,14 @@ A sluis executable is static or nearly so, but the host or the image around it i
 
 ## What is built today
 
-The package columns of the matrix are the specification for packages that do not exist yet. They are not an inventory.
+Read on 2026-11-18, against `main` and the release `v2.0.0-alpha.1` of 2026-11-08. The package columns of the matrix are the specification for packages that are built but not published yet. They are not an inventory.
 
 | Form | Built today? | Where it is defined |
 |---|---|---|
-| Packages (`.deb`, `.rpm`) | Partly. `tools/release/packages` builds and checks them for amd64 and arm64: the executables, the exact dependencies between the packages and the system dependencies of `sluis-cli` (`ca-certificates`, `xdg-utils`) and `sluis` (`systemd`). The units, users and directories, the card driver and the meta-package are not in them yet, and nothing publishes them until the release job does | [Packages](/distribution/packages/#how-the-packages-are-built) |
+| Packages (`.deb`, `.rpm`) | Partly. `tools/release/packages` builds and checks them for amd64 and arm64: the executables, the exact dependencies between the packages and the system dependencies of `sluis-cli` (`ca-certificates`, `xdg-utils`) and `sluis` (`systemd`). The units, users and directories are in them, and an install tier proves them on Ubuntu 26.04 and Rocky Linux 10 (the CI job `install`); the card driver and the meta-package are not in them yet. `v2.0.0-alpha.1` predates the packages, so no release has published them: the release job does, from the bytes of a release candidate | [Packages](/distribution/packages/#how-the-packages-are-built) |
 | Boards deploy (executables, generated units and a stage over ssh) | Yes | `deploy/boards/`, [Bare-metal](/runtimes/bare-metal/#deploy-and-prove-on-three-boards) |
-| Tarballs, checksums, SBOMs | Dry run only: `.goreleaser.yaml` builds every executable but the card driver for amd64 and arm64, with an SPDX SBOM for each archive, and CI runs it when a change can affect the release, and on every push to main. Nothing is published until the first tag | [Binaries](/distribution/packages/#binaries) |
-| Container images | The release images are built by the dry run of every pull request, one per actor and driver but the card driver, and the engine ([OCI images](/distribution/packages/#oci-images)); `deploy/local/Dockerfile` and `deploy/local/Dockerfile.rqlite` still build the same for a local installation from source. Nothing is on GHCR until the first tag | [Local](/runtimes/local/), [OCI images](/distribution/packages/#oci-images) |
+| Tarballs, checksums, SBOMs | `.goreleaser.yaml` builds every executable but the card driver for amd64 and arm64, with an SPDX SBOM for each archive, and CI runs it when a change can affect the release, and on every push to main. `v2.0.0-alpha.1` published the archives, `SHA256SUMS`, the SBOMs and the audit catalogue on the GitHub release | [Binaries](/distribution/packages/#binaries) |
+| Container images | The release images are built by the dry run of every pull request, one per actor and driver but the card driver, and the engine ([OCI images](/distribution/packages/#oci-images)); `deploy/local/Dockerfile` and `deploy/local/Dockerfile.rqlite` still build the same for a local installation from source. `v2.0.0-alpha.1` published them to GHCR, by digest, listed in its `release-images.txt` | [Local](/runtimes/local/), [OCI images](/distribution/packages/#oci-images) |
 | Kubernetes chart | No ([#876](https://github.com/truvity/sluis/issues/876)) | [Kubernetes](/runtimes/kubernetes/#packaging-and-the-baseline) |
 | Lambda zips, layers, extensions | No | [Lambda zips](/distribution/packages/#lambda-zips), [Serverless](/runtimes/serverless/) |
 

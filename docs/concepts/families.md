@@ -14,7 +14,7 @@ What runs where, what each actor calls and which kinds it may touch is generated
 
 | Family | Actors | What the family may hold |
 |---|---|---|
-| **Work** | `entry`, `session`, `console`, `exchange`, `policy`, `signer`, `ca`, `ssh-ca`, `quota`, and the adapters (`adapter-github`, `adapter-slack`, `adapter-upstream-oidc`) | **Nothing at rest.** No storage, key or audit credential |
+| **Work** | `entry`, `session`, `console`, `exchange`, `policy`, `signer`, `ca`, `ssh-ca`, `quota` (reserved), and the adapters (`adapter-github`, `adapter-slack`, `adapter-upstream-oidc`) | **Nothing at rest.** No storage, key or audit credential |
 | **Data** | `store@`, `exporter@` | The credentials of storage (store@) and of export destinations (exporter@) |
 | **Keys** | `key@` | The card PIN on a board, the KMS permission on AWS |
 | **Audit** | The emitter library, the audit transport, the writer, the witness, the indexer and the reader | The audit blob and index credentials, held by the writer, the witness, the indexer and the reader |
@@ -44,14 +44,14 @@ flowchart LR
 | `signer` | Signs tokens under a signing policy, and artifacts for a grant that `policy` sealed. It asks key@ to sign |
 | `ca` | The X.509 certificate authority |
 | `ssh-ca` | The SSH certificate authority, a separate actor because it is a different authority |
-| `quota` | Counts the allowance of a tenant down and refuses at zero |
+| `quota` | Reserved for the allowance engine of [0039](/decisions/0039-quota-allowance/), which [0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/) superseded; not built. sluis keeps no balance |
 | `adapter-<vendor>` | The work actor of an integration. It returns facts or carries out effects that core authorised, never decides, and opens each tenant's connection credential at key@ for each call ([Integrations](/integrations/)) |
 
 `signer`, `policy`, `ca` and `ssh-ca` run per [boundary](/concepts/boundaries/). The verifiers of proofs are not actors: they are verifiers inside `exchange`.
 
 `entry`, which faces the internet, holds nothing and has no outbound network. It is written in a memory-safe language, parses only closed parameter lists, is fuzzed, loads no plugin and runs on a read-only file system. Where each actor listens, by runtime, is in [ADR 0003](/decisions/0003-units-transports-and-fusion/#listeners): on a board no actor has a TCP listener.
 
-A copied authorization code is useless, because codes are bound by PKCE. Tokens are bearer tokens in the first working version; an audience that declares a binding, DPoP or mutual TLS, gets sender-constrained tokens ([ADR 0038](/decisions/0038-fapi-2-profile/#binding-is-declared-per-audience)).
+A copied authorization code is useless, because codes are bound by PKCE. Tokens are bearer tokens unless an audience declares a binding. The core offers DPoP binding; binding by mutual TLS comes later, with a design for forwarding the client certificate through the Cloudflare edge ([ADR 0038](/decisions/0038-fapi-2-profile/#binding-is-declared-per-audience)).
 
 ### The console
 
@@ -97,7 +97,7 @@ The holders are exactly four kinds of unit: store@ and exporter@ (data), key@ (k
 
 ## The foundation and the modules
 
-The data and keys families, store@, exporter@ and key@, are the **foundation**: every installation runs them, and their binaries do not change with what runs above them. Identity (the work actors other than `quota`, the adapters included), audit and quota are **modules**. A module is a set of actors on top of the foundation, and it brings its own kinds and key purposes into the registries.
+The data and keys families, store@, exporter@ and key@, are the **foundation**: every installation runs them, and their binaries do not change with what runs above them. Identity (the work actors other than `quota`, the adapters included) and audit are **modules**; the quota module is reserved with the superseded allowance engine ([0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/)). A module is a set of actors on top of the foundation, and it brings its own kinds and key purposes into the registries.
 
 An installation runs the foundation and the modules it needs. It may run the foundation with the audit module only, to keep the audit trail of a product that does not use sluis for sign-in ([Audit](/concepts/audit/#audit-alone)). The foundation and the modules are a grouping, not a fifth family: each actor stays in one family ([ADR 0002](/decisions/0002-families-of-actors/#the-foundation-and-the-modules)).
 
@@ -150,7 +150,7 @@ On a small machine memory is tight, so an installation may **fuse** work actors 
 
 > A holder never shares a unit with a work actor, key@ never shares one with `entry`, and `entry` never shares one with an actor that signs.
 
-The store applies the union of the fused actors' rules to the unit, so fusion never grants what no member was allowed. `ca` and `ssh-ca` stay separate. Small work actors that hold nothing and have no listener, such as `quota`, may share a unit on a board ([Board capacity](/runtimes/bare-metal/#board-capacity) has the measurements). `sluis config check` refuses a configuration that breaks the rule, and the build runs the same check ([ADR 0003](/decisions/0003-units-transports-and-fusion/#fusion)).
+The store applies the union of the fused actors' rules to the unit, so fusion never grants what no member was allowed. `ca` and `ssh-ca` stay separate. Small work actors that hold nothing and have no listener may share a unit on a board ([Board capacity](/runtimes/bare-metal/#board-capacity) has the measurements). `sluis config check` refuses a configuration that breaks the rule, and the build runs the same check ([ADR 0003](/decisions/0003-units-transports-and-fusion/#fusion)).
 
 :::note[Proposed]
 Invokes between actor functions are fast enough on Lambda, so no in-process store exception is needed and no Lambda function links store@ into a work actor ([0003](/decisions/0003-units-transports-and-fusion/#fusion), measured in [#1179](https://github.com/truvity/sluis/issues/1179)).
@@ -162,4 +162,4 @@ A **cell** is one replica of each actor, scheduled together on one node: on Kube
 
 ## Platform pieces
 
-A platform piece is a program an installation runs that belongs to no family: the edge connector (`cloudflared` on boards, the pinned Lambda Web Adapter on Lambda, an edge relay container on Kubernetes), the host's card service, the engines (rqlite, DynamoDB) and the node agent `sluis-node`. The edge connector holds no key. The card is reached only through key@, and the engines only through store@'s drivers. `sluis-node` issues each unit a short-lived workload token and asks key@ to sign it ([Identity](/concepts/identity/#how-an-actor-reaches-a-cloud)). See [Runtimes](/runtimes/) for each runtime and the four tested installations.
+A platform piece is a program an installation runs that belongs to no family: the edge connector (`cloudflared` on boards, the pinned Lambda Web Adapter on Lambda, an edge relay container on Kubernetes, each behind the Cloudflare edge), the host's card service, the engines (rqlite, DynamoDB, PostgreSQL through CloudNativePG) and the node agent `sluis-node`. The edge connector holds no key. The card is reached only through key@, and the engines only through store@'s drivers. `sluis-node` issues each unit a short-lived workload token and asks key@ to sign it ([Identity](/concepts/identity/#how-an-actor-reaches-a-cloud)). See [Runtimes](/runtimes/) for each runtime and the four tested installations.
