@@ -1,7 +1,7 @@
 # 0040 — A meter has a name, a unit and a kind, and only declared outcomes become usage evidence
 
 **Status:** Accepted
-**Layer:** quota module
+**Layer:** quota
 **Date:** 2026-11-03
 
 Proposal: [issue #841](https://github.com/truvity/sluis/issues/841).

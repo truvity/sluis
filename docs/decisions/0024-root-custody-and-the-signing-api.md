@@ -1,6 +1,7 @@
 # 0024 — sluis holds no root: it asks root custody to certify its intermediates, and signs artifacts through a signing API
 
 **Status:** Accepted; amended by 0044
+**Layer:** add-on
 **Date:** 2026-11-12
 
 Proposal: [issue #1001](https://github.com/truvity/sluis/issues/1001).
@@ -151,6 +152,13 @@ Later, not in the first working version. OpenPGP has no intermediates as X.509 d
 ### Amendment of 2026-11-12: what ritueel builds and who publishes
 
 2026-11-12 ([0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#the-ritueel-boundary)). ritueel owns the roots, the root list, the CA bundle, the revocation lists, the keyring file, what it knows about its cards, and the SSH CA. It builds and signs the trust files and does not publish them for sluis; a pipeline outside ritueel publishes them. The names follow ritueel's ([0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#names)): a root key is one key, the CA bundle is the PEM file and the trust bundle is SPIFFE's, and a ceremony is an act that uses a root key. The section on company OpenPGP certification (a trust signature made at a ritueel ceremony) is superseded with the ritueel half of [0043](/decisions/0043-a-person-binds-their-own-keys-to-their-identity-in-sluis/).
+
+### Amendment of 2026-11-18: the core needs no intermediate and no signing API
+
+2026-11-18 (maintainer decisions X1 A and 1; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv)). Read "The first working version" in this record with these changes.
+
+- **The core requests no `x509-intermediate`.** The token certificate is off in the core, so there is no intermediate to certify and no test certifier ([0006](/decisions/0006-keys-and-sealing/#amendment-of-2026-11-18-the-token-certificate-is-optional-and-off-in-the-core)). The request and the hand-off are for an installation that turns the token certificate on, and for the PKI add-on, which starts when the ritueel release candidate with a software root exists and a cloud root is adopted. The follow-up that the boards keep the test certifier until a ritueel certifier is built applies from then on.
+- **The signing API is not in the core.** The amendment of 2026-11-07 above moved it to v1 parity, and the table row "First working version: a detached `.asc` signature" and the sentence "The first working version has this one method, `SignDetached`" read "the Parity phase" ([#890](https://github.com/truvity/sluis/issues/890)).
 
 ## Consequences
 

@@ -1,6 +1,7 @@
 # 0005 — store@ holds every storage credential: one generic store service, typed clients, drivers private to their owner, and signed configuration loaded as a whole
 
 **Status:** Accepted
+**Layer:** building block
 **Date:** 2026-11-03
 
 Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).

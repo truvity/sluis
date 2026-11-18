@@ -108,6 +108,30 @@ The order is reviewed when each installation ships, and a change of order is rec
 - **sluis does its own side and documents the rest** (decision E2 A). Its deploy code sets what is in the installation: on Lambda, the default endpoint off, the mutual TLS truststore and the cache headers; in the Kubernetes chart, a `cloudflared` sidecar option. The Cloudflare records, rules and rate limits are documented, and each installation's own infrastructure code applies them. sluis holds no Cloudflare credential in the core.
 - **On Kubernetes the edge is the cluster's own Cloudflare tunnel and gateway** (decision E3, corrected the same day), routed to the key-less edge relay of `entry` by an HTTPRoute or an Ingress. That is the chart's default. A `cloudflared` sidecar in `entry`'s pod may stay as an optional value for a cluster without its own tunnel; the maintainer agreed to this option on 2026-11-18 (decision E3b).
 
+### Amendment of 2026-11-18: the order after the core, and what the table and the chapters read as
+
+2026-11-18 (maintainer decisions Order, Placement, E1, L1b, K2 B and A4 A; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv); the [roadmap](/roadmap/#phases)). Read the text above with these changes.
+
+- **The delivery order is the roadmap's:** Core (local, the three boards, Lambda and Kubernetes, with KV after the core features and `v2.0.0-alpha.2` before the shapes), then Customer identity and Quota, then a re-plan, then Parity, the switch of the platform installation, and the PKI, SSH and database add-on. The amendment above of the same date said that the maintainer re-plans after the core; the re-plan now follows Customer identity and Quota, which are built right after the core. The four numbered milestones of "Delivery order" and the title of this record are the plan before 2026-11-12.
+- **"Shape" is the term for the runtime kind of an installation:** boards, Lambda or Kubernetes. The "deployment shapes" of the Context are the older use of the word, which mixed three things, and are not meant.
+- **Leases are temp kinds in the engine of the installation:** `rqlite` on the boards and the local installation, `dynamodb` on Lambda, `postgres` through CloudNativePG on Kubernetes (K2 B). The words "`dynamodb` on Lambda and Kubernetes" read that way.
+- **The Lambda installation needs Aurora Serverless v2** for its audit index, with auto-pause and direct IAM authentication and no RDS Proxy at first (decision L1b, [0028](/decisions/0028-audit-pieces/#amendment-of-2026-11-18-the-lambda-index-runs-on-aurora-serverless-v2-without-rds-proxy)). The row of the table lists the services it needs without it.
+- **The reference Kubernetes installation is the core's EKS installation** with PostgreSQL through CloudNativePG, `aws-kms`, `nats-jetstream` and the cluster's own Cloudflare tunnel. It is not a customer-identity installation, and the conformance set it runs is OpenID Connect and the FAPI 2.0 profile of the core issuer ([0038](/decisions/0038-fapi-2-profile/#amendment-of-2026-11-18-the-profile-is-revived-for-the-core-issuer)); the sentence that names 0032, 0033 and "the customer-identity plans" reads that way, and 0033 stays superseded.
+- **The chart has no `quota-install` preset,** because no quota module is built ([0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/)). The chart is a core deliverable ([#844](https://github.com/truvity/sluis/issues/844), [#876](https://github.com/truvity/sluis/issues/876)).
+- **Consequences:** "until the parity milestone ships an installation" and "the parity milestone puts three installations in flight" read "the core": the boards, Lambda and Kubernetes are built and tested in the core phase, and v2's production installation is the platform's switch, after Parity.
+- **The boards' audit blob.** The R2 credentials are the Cloudflare add-on's (E2 A), and the audit logs on R2 and the peer witnesses were parity items in "Delivery order". Which blob the platform installation's boards use is part of the re-plan; the core's boards row of the roadmap does not list R2.
+
+Every production shape sits behind the Cloudflare edge (E1); the picture shows the path in and the engine, key driver and audit index of each.
+
+```mermaid
+flowchart LR
+    CF((Cloudflare edge))
+    CF -- cloudflared --> BO["boards: rqlite, yubikey-piv"]
+    CF -- "API Gateway, mTLS" --> LA["Lambda: DynamoDB, aws-kms, Aurora index"]
+    CF -- "cluster tunnel" --> KU["Kubernetes: CNPG postgres, aws-kms, nats-jetstream"]
+    LO["local: rqlite, software key"]
+```
+
 ## Consequences
 
 - Adding a platform adds one runtime at most, and often none. A new driver of a holder changes which installations are possible, not which runtimes exist; `sluis config check` reports which ones work.

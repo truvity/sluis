@@ -88,6 +88,13 @@ There are no build profiles: the runtime decides the packaging, and every artifa
 
 Amendment of 2026-11-07. The maintainer decided that no release artifact is signed in the first working version, and not in v1 parity either: no keyless cosign signature, no build-provenance or SBOM attestation, and no OpenPGP signature. A release carries `SHA256SUMS`, the per-file checksums and the SBOMs, and the maintainer still signs each tag by hand. Signing release artifacts, keyless or OpenPGP, is in Backlog with the staff key and GPG work ([Roadmap](/roadmap/#later)). The bullets above, and the two lines of Consequences that name attestations, describe that work for when it returns and do not apply until then. This takes the road "Checksums only until the first OpenPGP-signed release" of Roads not taken, and accepts its cost: nothing ties a release to the build that made it except the checksums and the signed tag. The signing API of [0024](/decisions/0024-root-custody-and-the-signing-api/#the-signing-api) is a separate thing and moves to v1 parity.
 
+### Amendment of 2026-11-18: the chart is core, and there is no quota package
+
+2026-11-18 (maintainer decisions Order and A2; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv); [The core is done when](/roadmap/#the-core-is-done-when)). Read the text above with these changes.
+
+- **The Helm chart is built in the core phase.** "Helm, from the parity milestone", "The first working version ships images and no chart; a chart that installs them follows at parity" and the follow-up for the parity milestone read "the core": one release carries the packages, the images, the chart and the Lambda zips at one version, and upgrade and rollback are tested on every shape ([#876](https://github.com/truvity/sluis/issues/876)).
+- **There is no quota module, package or preset.** `sluis-quota` and the `quota-install` preset describe the allowance engine of [0039](/decisions/0039-quota-allowance/), which [0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/) superseded. The usage stream and the limit check are part of the audit pieces.
+
 ## Consequences
 
 - `sluis config check` needs two executables of one release, the CLI and store. A pipeline that checks config before it publishes installs both, on Linux.

@@ -63,6 +63,14 @@ Principle 6 joins products by a contract with vectors; principle 1 says v1's key
 - **The new-capabilities gate** is what v1 never did: the SSH CA, database certificates, host enrolment, trust sync, the cert-manager issuer, the peer witness and the boards installation. It is delivered by the installation that needs it and does not hold v1 back.
 - The [Roadmap](/roadmap/) states both gates.
 
+### Amendment of 2026-11-18: the switch replaces the two gates
+
+2026-11-18 (maintainer decision V6 A; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv); [The switch](/roadmap/#the-switch)). Read "The v1 parity milestone has two gates" and "The cutover" with these changes.
+
+- **The platform installation runs v2 as a new issuer beside v1,** the new issuer of the platform installation, and never takes over v1's host. The principle above stands; the issuer host is not named here.
+- **No relying party moves until v2 covers every required v1 parity row.** The re-plan after Customer identity and Quota decides which rows are required. The relying parties then move in waves, and v1 is switched off two weeks after the last wave. This replaces "every row of the v1 parity checklist is `Done` or `Changed`" as the condition of the move.
+- **The lambda and kubernetes installations and the boards installation are core,** built before Parity. They are no longer conditions of the retirement gate or items of the new-capabilities gate. The sentence "The Roadmap states both gates" reads: the roadmap states the Parity phase and the switch.
+
 ## Consequences
 
 - A release causes no downtime inside a major version, on every runtime, at the price of a rule that CI has to enforce: vectors for each contract, item and document, kept from release to release.

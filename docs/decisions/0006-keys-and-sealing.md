@@ -1,6 +1,7 @@
 # 0006 — key@ holds a boundary's keys: it seals, opens and signs in place, with five data keys per tenant and one key per purpose and algorithm
 
 **Status:** Accepted; amended by 0047
+**Layer:** building block
 **Date:** 2026-11-04
 
 Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).

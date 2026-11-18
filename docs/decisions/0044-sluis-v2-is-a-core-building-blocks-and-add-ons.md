@@ -105,6 +105,63 @@ The ritueel half of [0043](/decisions/0043-a-person-binds-their-own-keys-to-thei
 - **The console is part of the core layer, and it is built in the Parity phase (A3 B).** It is not an add-on. The core actors listed under "The shape" gain `console` and are read that way; the build waits for Parity ([0002](/decisions/0002-families-of-actors/#the-console), [0027](/decisions/0027-the-console/)).
 - **KV is a building block, not an add-on, and is built in the core phase (A4 A).** The building blocks are store, key, policy, audit with usage and limits, and KV. It comes after the core features and before the Lambda and Kubernetes shapes, and it replaces the store-of-record export path for consumers: External Secrets reads KV through the Vault KV v2 subset, so a board installation needs no cloud for its consumers. The add-ons are the PKI, SSH and database access, then Cloudflare, then GitHub. [0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/#amendment-of-2026-11-18-kv-is-a-building-block-built-in-the-core-phase) carries the change, and [0009](/decisions/0009-export/#amendment-of-2026-11-18-kv-replaces-the-store-of-record-for-consumers) the export side.
 
+### Amendment of 2026-11-18: how to read the body, the layers and the order
+
+2026-11-18 (the decisions of the two amendments above; [roadmap](/roadmap/#phases)). The roadmap says that older records name the phases P0 to P4 and that they are corrected when next amended. This is that correction for this record. It changes no decision.
+
+| In the body | Read as |
+|---|---|
+| P0 | The records, the first step of the roadmap ([Records](/roadmap/#records)) |
+| P1, "the first working version", "the first version" | The [Core](/roadmap/#core): the local installation, the three boards, Lambda and Kubernetes, with KV, the hardening H1 to H7 and release management |
+| P2, "identity and audit" | [Customer identity and quota](/roadmap/#customer-identity-and-quota), right after the core, with the narrow scope of the second amendment above |
+| P3 | Two phases: [The switch](/roadmap/#the-switch) of the platform installation, after Parity, and [the PKI, SSH and database add-on](/roadmap/#the-pki-ssh-and-database-add-on) |
+| P4 | [Block extraction](/roadmap/#block-extraction), not scheduled |
+
+- **The Consequences that the amendments replace.** "The cutover of the v1 platform is later than the core... and it needs the Cloudflare add-on" reads: the platform's switch follows Parity, and where it runs is part of the re-plan ([The switch](/roadmap/#the-switch)). "The PKI add-on runs on a test root until ritueel has built the SSH CA key list and the cloud root" reads with the entry condition of X1 A: a ritueel release candidate with a software root, and a cloud root adopted. "A cost: the Kubernetes and Lambda installations come late" no longer holds; they are core. "The first version is smaller... `ca` as a v0" reads with X1 A: `ca` is built and off.
+- **The table of the superseded records.** The row that lists [0038](/decisions/0038-fapi-2-profile/) is read for customer-facing use only, as the amendment above says.
+- **The Follow-up** that the boards keep the test certifier until a ritueel certifier is built applies when the token certificate or the add-on is on, as [0024](/decisions/0024-root-custody-and-the-signing-api/#amendment-of-2026-11-18-the-core-needs-no-intermediate-and-no-signing-api) says. The "Name constraints" section reads the same way.
+- **The core's shape lists `console` and `kv`.** The `console` actor is part of the core layer and is built in Parity (A3 B); `kv` is a core building block (A4 A).
+
+The layers, from the core down to what an installation may leave out:
+
+```mermaid
+flowchart TB
+    subgraph AD["Add-ons"]
+        PKI["PKI, SSH, database"]
+        CFA[Cloudflare]
+        GHA[GitHub]
+    end
+    subgraph SH["Shared building blocks"]
+        CL["Cloudflare, AWS, GitHub clients"]
+    end
+    subgraph BB["Core building blocks"]
+        ST[store]
+        KY[key]
+        PO[policy]
+        AU["audit, usage, limits"]
+        KV[KV]
+    end
+    subgraph CO["Core"]
+        EN[entry]
+        SE[session]
+        EX[exchange]
+        SI[signer]
+        CN["console (Parity)"]
+        CA["ca (off)"]
+    end
+    AD --> SH
+    AD --> BB
+    CO --> BB
+```
+
+The order, with the phases as links on the [roadmap](/roadmap/#phases):
+
+```mermaid
+flowchart LR
+    R[Records] --> C["Core, alpha.2"] --> CQ["Customer identity and quota"] --> RP[Re-plan] --> P[Parity] --> SW[The switch] --> PK["PKI, SSH, database"]
+    BE["Block extraction, not scheduled"]
+```
+
 ## Consequences
 
 - The first version is smaller and has no Cloudflare dependency at run time. A revoked key leaves the key set that the directory driver publishes; the confirmation through an edge comes with the Cloudflare add-on.

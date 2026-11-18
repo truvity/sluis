@@ -116,6 +116,13 @@ Amendment of 2026-11-07. The firewall of the first bullet above is a table that 
 - **Requests and limits are measured, not guessed.** The chart ships the values measured for each pod under load, and a PodDisruptionBudget keeps a cell's replicas up during a drain. Rolling updates never remove a replica before its replacement is ready.
 - **The baseline of a cluster:** native sidecars, the `restricted` Pod Security level, projected service-account tokens and a CNI that enforces NetworkPolicy. Cilium is optional, for egress by host name ([0011](/decisions/0011-runtimes-and-installations/#kubernetes)).
 
+### Amendment of 2026-11-18: no quota actor, and the chart is core work
+
+2026-11-18 ([0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv)). Read the text above with these changes.
+
+- **"Small work actors that hold nothing, such as `quota`" reads without `quota`.** No quota actor is built ([0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/)); the fusion rule is unchanged for the actors that exist.
+- **The Helm chart is part of the core,** not of the parity milestone: the Kubernetes installation is one of the four the core is done on, and one release carries the chart with the images and the packages ([The core is done when](/roadmap/#the-core-is-done-when), [#844](https://github.com/truvity/sluis/issues/844), [#876](https://github.com/truvity/sluis/issues/876)). The follow-up "for the parity milestone" reads "for the core".
+
 ## Consequences
 
 - A test on boards proves the steps and checks of a request; the transport of each installation is tested on that installation. The four tested installations ([0011](/decisions/0011-runtimes-and-installations/#installations)) cover the three transports.

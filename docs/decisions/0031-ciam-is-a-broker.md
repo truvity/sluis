@@ -1,12 +1,14 @@
 # 0031 — CIAM is a broker: a customer-identity product owns the accounts, sluis owns the session and the tokens, and the contract between them is written down
 
 **Status:** Superseded by 0045
-**Layer:** CIAM module
+**Layer:** customer identity
 **Date:** 2026-11-12
 
 Proposal: [issue #1023](https://github.com/truvity/sluis/issues/1023).
 
 > Superseded on 2026-11-12 by [0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/): customers sign in through the upstream identity provider, which owns the accounts and the organisations (maintainer decision D1 B, D7 A, 2026-11-12). sluis keeps the session and the token.
+
+> Read with the amendment of 2026-11-18 of [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv): the Customer identity phase returns with a narrow scope, the exchange of a token of the trusted realm for a sluis token with customer, org and product ([0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)). This record stays superseded and nothing in it is built.
 
 ## Context
 

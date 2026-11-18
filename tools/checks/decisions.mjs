@@ -22,7 +22,7 @@
 //   - one `Proposal: [issue #N](https://github.com/truvity/sluis/issues/N)` line comes before the first section;
 //   - no line of the template's instructions comment (<!-- ... -->) is left, no "(inferred" marker and no
 //     "Rewritten in place" history line; an Accepted record says nothing is "not decided" or "will be decided";
-//   - the README index has exactly one row for it, linking the file, with the same status.
+//   - the README index has exactly one row for it, linking the file, with the same layer (no Layer line is core) and status.
 // And the index has no row without a file.
 //
 // Then the citations, in docs/ (Markdown and YAML), site/src/, the root Markdown files and .claude/:
@@ -221,14 +221,15 @@ const indexStart = readme.slice(0, idx?.index ?? 0).split('\n').length;
   const n = indexStart + i;
   const cells = line.replace(/^\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
   const link = /^\[(\d{4})\]\(([^)#\s]+)\)$/.exec(cells[0] ?? '');
-  if (cells.length !== 3 || !link) { E(`README.md:${n}: an index row is "| [NNNN](NNNN-slug.md) | decision | status |"`); return; }
+  if (cells.length !== 4 || !link) { E(`README.md:${n}: an index row is "| [NNNN](NNNN-slug.md) | decision | layer | status |"`); return; }
   const [, num, target] = link;
   if (rows.has(num)) E(`README.md:${n}: a second index row for ${num}`);
-  rows.set(num, { n, target, status: cells[2] });
+  rows.set(num, { n, target, layer: cells[2], status: cells[3] });
   const rec = records.get(num);
   if (!rec) { E(`README.md:${n}: index row ${num} has no record in docs/decisions/`); return; }
   if (target !== rec.name) E(`README.md:${n}: index row ${num} links ${target}, the file is ${rec.name}`);
-  if (rec.Status !== undefined && cells[2] !== rec.Status) E(`README.md:${n}: index row ${num} says "${cells[2]}", the record says "${rec.Status}"`);
+  if (rec.Status !== undefined && cells[3] !== rec.Status) E(`README.md:${n}: index row ${num} says "${cells[3]}", the record says "${rec.Status}"`);
+  if (cells[2] !== (rec.Layer ?? 'core')) E(`README.md:${n}: index row ${num} says layer "${cells[2]}", the record says "${rec.Layer ?? 'core'}" (no Layer line is core)`);
 });
 for (const rec of records.values()) {
   if (!rows.has(rec.num)) E(`docs/decisions/${rec.name}: no row in the README index`);

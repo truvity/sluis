@@ -1,12 +1,14 @@
 # 0033 — An installation federates to a fixed set of upstreams that its operator declares, and a customer installation sees exactly one
 
 **Status:** Superseded by 0045
-**Layer:** CIAM module
+**Layer:** customer identity
 **Date:** 2026-11-12
 
 Proposal: [issue #916](https://github.com/truvity/sluis/issues/916).
 
 > Superseded on 2026-11-12 by [0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/): federation of customers' own identity providers is a feature of the upstream realms, and an installation trusts the one realm of its boundary (D1 B, D3, D7 A, 2026-11-12).
+
+> Read with the amendment of 2026-11-18 of [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv): the Customer identity phase returns with a narrow scope, the exchange of a token of the trusted realm for a sluis token with customer, org and product ([0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)). This record stays superseded and nothing in it is built.
 
 ## Context
 

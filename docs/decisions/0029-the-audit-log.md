@@ -1,6 +1,7 @@
 # 0029 — The audit log is a tiled log in a blob, sealed by its one writer, with pseudonyms, lifecycle tiers and per-tenant keys
 
 **Status:** Accepted; amended by 0046
+**Layer:** building block
 **Date:** 2026-11-12
 
 Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).

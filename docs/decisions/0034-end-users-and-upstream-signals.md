@@ -1,12 +1,14 @@
 # 0034 — An end user is a person with five states, erased by deleting its records, and upstream signals end sessions or suspend and erase
 
 **Status:** Superseded by 0045
-**Layer:** CIAM module
+**Layer:** customer identity
 **Date:** 2026-11-12
 
 Proposal: [issue #1024](https://github.com/truvity/sluis/issues/1024).
 
 > Superseded on 2026-11-12 by [0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/): the lifecycle of an end-user account belongs to the upstream, and pairwise subjects per sector are cancelled (D1 B, D7 A, 2026-11-12).
+
+> Read with the amendment of 2026-11-18 of [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv): the Customer identity phase returns with a narrow scope, the exchange of a token of the trusted realm for a sluis token with customer, org and product ([0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)). This record stays superseded and nothing in it is built.
 
 ## Context
 

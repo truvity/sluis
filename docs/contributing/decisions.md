@@ -20,7 +20,7 @@ The format, the numbering and the status values are in [docs/decisions/README.md
 
 1. **Proposal.** Open an issue with the *Decision proposal* form: the question, the context, the options with pros and cons, and the options you would not take. The form labels it `type:decision`; give it a `Product milestone` on the project board, which places the planned record on the [project status](/status/) page.
 2. **Record.** When the direction is clear, copy [the template](https://github.com/truvity/sluis/blob/main/docs/decisions/0000-template.md) to `docs/decisions/NNNN-short-title-in-kebab-case.md`, with the next free number. Link the proposal issue in the context.
-3. **Index.** Add the record to the index table in `docs/decisions/README.md`, with its status. Every record has a row, and every row has a record.
+3. **Index.** Add the record to the index table in `docs/decisions/README.md`, with its layer and status. Every record has a row, and every row has a record.
 4. **Requirements.** A decision that creates an obligation adds a requirement or cites an existing one ([Requirements](#requirements)).
 5. **Pages.** The pages that the decision changes follow in the same pull request, or in the next one ([Pages and writing style](/contributing/pages/)).
 6. **Pull request.** At most five records per pull request. A larger batch is split.

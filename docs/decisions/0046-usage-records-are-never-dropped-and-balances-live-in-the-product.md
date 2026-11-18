@@ -1,6 +1,7 @@
 # 0046 — Usage records are a class that is never dropped, and plans and balances live in the product
 
 **Status:** Accepted
+**Layer:** quota
 **Date:** 2026-11-12
 
 Proposal: [issue #841](https://github.com/truvity/sluis/issues/841), maintainer decisions D4 A and D7 A, 2026-11-12.

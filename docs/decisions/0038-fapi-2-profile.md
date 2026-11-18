@@ -50,6 +50,14 @@ The FAPI 2.0 Security Profile is in the customer-identity milestone: its done-wh
 - **The roadmap and the board:** the profile is in the core phase, not in the customer-identity milestone, and [#912](https://github.com/truvity/sluis/issues/912) and [#929](https://github.com/truvity/sluis/issues/929) move with it. This replaces the section "The roadmap and the board" above.
 - **The requirement rows** that the cancellation withdrew ([REQ-CLIENT-035](/requirements/client/#REQ-CLIENT-035) to [REQ-CLIENT-040](/requirements/client/#REQ-CLIENT-040), [REQ-TOKEN-040](/requirements/token/#REQ-TOKEN-040) and [REQ-TOKEN-041](/requirements/token/#REQ-TOKEN-041)) come back in the pull request that builds the profile, not in this one.
 
+### Amendment of 2026-11-18: the core offers DPoP binding only (W4 A)
+
+2026-11-18 (maintainer decision W4 A; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv), decision H1). The sender constraint that the core offers a client or an audience is none or DPoP. Mutual-TLS binding (`cnf.x5t#S256`) is not offered in the core. It comes later, with a design for how the client certificate reaches sluis through the Cloudflare edge.
+
+- **Why.** Every production shape sits behind the Cloudflare edge (E1), which ends the client's TLS connection, so `entry` sees a client certificate only if the edge forwards it. That forwarding has no design yet, and DPoP works behind any edge: it is the road "Mutual TLS first" of this record, for the reason it already gives.
+- **Where the text says "none, DPoP or mutual TLS"** (Binding is declared per audience, the amendment above and the claims of [0020](/decisions/0020-grant-vocabulary-and-token-claims/#binding)), the core reads "none or DPoP". The profile the core runs is the first plan of "Claims of conformance": DPoP, `private_key_jwt` and PAR. Mutual-TLS binding stays with [#912](https://github.com/truvity/sluis/issues/912) as its later part.
+- **The ES256 key "certified like the other token keys"** is certified only when the token certificate is on, which it is not in the core ([0006](/decisions/0006-keys-and-sealing/#amendment-of-2026-11-18-the-token-certificate-is-optional-and-off-in-the-core)).
+
 ## Consequences
 
 - A regulated relying party gets the profile it asks for by declaring it, and nobody else pays for it: the default clients keep ES384 and bearer tokens.

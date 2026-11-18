@@ -1,6 +1,7 @@
 # 0028 — Audit is four pieces joined by a transport, search is an index fed from the log, and an audit installation has its own front
 
 **Status:** Accepted
+**Layer:** building block
 **Date:** 2026-11-03
 
 Proposal: [issue #903](https://github.com/truvity/sluis/issues/903).
@@ -141,6 +142,23 @@ The log itself, its projects and buckets, sealing, witnesses, lock modes, encryp
 ### Amendment of 2026-11-18: the maintainer confirmed `aurora` for Lambda
 
 2026-11-18 (maintainer decision L1 B). The default index of the lambda installation stays `postgres` in the `aurora` mode, inside the Lambda shape, as written above. There is no DynamoDB index driver (see the roads not taken).
+
+### Amendment of 2026-11-18: the Lambda index runs on Aurora Serverless v2 without RDS Proxy
+
+2026-11-18 (maintainer decision L1b, after L1 B above). The Lambda installation's `postgres` index in the `aurora` mode runs on Aurora Serverless v2 with auto-pause. The indexer, one instance, and the reader connect to it directly with IAM authentication, with one database role per actor and no RDS Proxy at first. RDS Proxy is added if the reader's concurrency grows.
+
+- **This replaces two sentences.** "A serverless indexer and reader reach Postgres through RDS Proxy with IAM authentication" reads "directly with IAM authentication", and the consequence "Every lambda installation pays for an Aurora database and an RDS Proxy" reads "an Aurora Serverless v2 database". The functions still run in the VPC and use endpoints for the other AWS APIs.
+- **The cost of auto-pause** is that the first read after an idle period waits for the database to resume; the Lambda installation's tests measure it.
+- **The allowance of the Context** ([0039](/decisions/0039-quota-allowance/)) is superseded by [0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/): the usage facts stay, the allowance facts are not built. The Kubernetes installation uses the `postgres` index in the `cnpg` mode of its CloudNativePG cluster, as a database and role of their own (K2 B).
+
+```mermaid
+flowchart LR
+    W[writer] --> B[(audit blob)]
+    I["indexer, one instance"] -->|reads the log| B
+    I -->|IAM auth| A[(Aurora Serverless v2)]
+    R[reader] -->|IAM auth| A
+    R -->|opens records| B
+```
 
 ## Consequences
 

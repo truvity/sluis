@@ -1,6 +1,7 @@
 # 0007 — Policy is Cedar in a Rust actor over four layers, and every tenant-scoped write carries a grant that policy sealed
 
 **Status:** Accepted; amended by 0047
+**Layer:** building block
 **Date:** 2026-11-03
 
 Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
