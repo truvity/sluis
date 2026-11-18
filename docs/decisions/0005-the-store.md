@@ -223,6 +223,7 @@ trait Kind {
 - **One CloudNativePG cluster holds the store and the audit index,** as separate databases with separate roles, so the credential of one does not open the other ([0028](/decisions/0028-audit-pieces/#postgresql-row-level-security)). The index stays the `postgres` index in the `cnpg` mode.
 - **Keys do not change.** `aws-kms` stays the key driver on Kubernetes, so the tested installation still needs AWS KMS for its keys. A key driver for a cluster without AWS is later and is not part of the core.
 - **Kubernetes in 2.0 is therefore not EKS-only for the store.** This takes the direction of [issue #1238](https://github.com/truvity/sluis/issues/1238) into the core. Serverless keeps DynamoDB, and the boards and the local installation keep rqlite.
+- **Requirements:** [REQ-DATA-130](/requirements/data/#REQ-DATA-130) and [REQ-DATA-131](/requirements/data/#REQ-DATA-131) for the driver, [REQ-DEPLOY-053](/requirements/deploy/#REQ-DEPLOY-053) for the cluster, and [REQ-DEPLOY-024](/requirements/deploy/#REQ-DEPLOY-024), reworded.
 
 ## Consequences
 

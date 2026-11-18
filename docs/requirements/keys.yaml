@@ -1470,7 +1470,7 @@ requirements:
       - {kind: integration-test, ref: "the kids to look for are those of the signed declaration, whatever key@ answered; with none the command prints not confirmed"}
   - id: REQ-KEYS-089
     area: KEYS
-    statement: "A replacement for a revoked token-signing key MUST sign at once when no other key of the issuer is active, with its key set published and purged at the edge before its first token."
+    statement: "A replacement for a revoked token-signing key MUST sign at once when no other key of the issuer is active, with its key set published, and purged at the edge where the destination has a purge address, before its first token."
     rationale: "Waiting for the lead time would stop every sign-in of a single-key installation, and a verifier that does not fetch the key set again on an unfamiliar kid is broken against the standard (ADR 0041)."
     level: MUST
     source: design-decision
