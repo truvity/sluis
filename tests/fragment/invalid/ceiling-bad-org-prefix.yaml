@@ -1,0 +1,4 @@
+# ceiling: a secret prefix that is not a parameter path ending in a slash
+directories: [acme.example]
+org:
+  secret_prefix: acme/secrets

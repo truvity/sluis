@@ -1,6 +1,6 @@
 # Policy: a company's access fragment
 
-A company's own rows and the ceiling an installation holds them to, part of [the policy](policy.md). Why: ADRs [0078](../../decisions/0078-a-company-access-fragment-is-owned-rows-checked-against-a-ceiling-and-by-effect.md), [0079](../../decisions/0079-a-company-fragment-carries-its-app-grants-and-its-gates.md). Go package: `policy/tenant`.
+A company's own rows and the ceiling an installation holds them to, part of [the policy](policy.md). Why: ADRs [0078](../../decisions/0078-a-company-access-fragment-is-owned-rows-checked-against-a-ceiling-and-by-effect.md), [0079](../../decisions/0079-a-company-fragment-carries-its-app-grants-and-its-gates.md), [0080](../../decisions/0080-the-github-controller-reconciles-an-organisations-settings-from-a-document-it-reads-at-run-time.md). Go package: `policy/tenant`.
 
 A fragment has no key for the matrix, the vocabulary, the lifetimes or the claims, and a rung takes no session length. An unknown key is an error.
 
@@ -19,6 +19,7 @@ Schema: `schemas/policy/tenant/fragment.schema.json`.
 | `workloads` | programs, keyed by the group each becomes: a ServiceAccount or `aws` roles |
 | `app_grants` | by App id: `group`, `repositories`, `permissions`; in `tenant.Result`, not the model |
 | `gates` | sign-in clients by id: `display_name`, `description`, `redirects`, `signed_out`, `requires`, `ttl_cap`; confidential, generated secret, PKCE required; in `tenant.Result` |
+| `org` | one GitHub organisation's `variables`, `secrets` and `security_configurations`; read at run time by the GitHub controller, not merged |
 
 ## Ceiling
 
@@ -34,6 +35,7 @@ Schema: `schemas/policy/tenant/ceiling.schema.json`. The empty ceiling allows no
 | `github_apps` | by App id, the most each permission of an App grant may be: `{contents: write}` |
 | `zones` | DNS zones the owner holds: a gate's hosts are a zone or a name under one |
 | `clients` | `path.Match` patterns of the gate ids the owner may declare: `acme-*` |
+| `org` | `platform_variables`: `path.Match` patterns of variable names the platform owns; `platform_valued`: names whose value is the platform's; `secret_prefix`: the prefix of every secret's parameter |
 
 ## Violations
 
@@ -48,6 +50,8 @@ Each has the owner, a code, a path and a sentence.
 | `owner-place` | a cluster or AWS account the owner may not run in |
 | `owner-app` | an App or permission beyond the ceiling, a repository with an owner, an empty grant |
 | `owner-gate` | an id outside `clients`, no redirect or group, a page not `https://` in the zones |
+| `owner-org-platform` | an `org` variable the platform owns, or a value for a platform-valued name |
+| `owner-org` | any other fault of the `org` section: a name or setting GitHub refuses, a visibility with no repositories, a parameter outside `secret_prefix`, two configurations on one repository |
 | `owner-collision` | a key the installation or another owner already declares; two owners minting one group or declaring one gate |
 | `owner-effect` | what the fragment does to the installation's roster reaches outside the ceiling |
 | `owner-empty-ceiling` | the empty ceiling and a fragment that declares something |
@@ -82,3 +86,11 @@ It reads two YAML or JSON files, uses no network and writes nothing.
 | Refused: a line per violation, then the `partial` line | `1` |
 | An unreadable or invalid file, or an unknown key; the error names the file | `1` |
 | A bad command line | `2` |
+
+## The org section
+
+| Part | Keys |
+|---|---|
+| `variables.<NAME>` | `value`, `visibility` (`all`, `private`, `selected`), `repositories` |
+| `secrets.<NAME>` | `parameter`, `visibility`, `repositories`; no value |
+| `security_configurations.<name>` | `description`, `settings` (GitHub's own names and values), `attach.scope` (`all`, `selected`), `attach.repositories` |

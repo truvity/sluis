@@ -15,6 +15,7 @@ import (
 
 	"github.com/truvity/sluis/config"
 	internalconfig "github.com/truvity/sluis/internal/config"
+	"github.com/truvity/sluis/internal/githubroster/orgconfig"
 	"github.com/truvity/sluis/policy"
 )
 
@@ -608,5 +609,48 @@ func TestRenderNamesTheVerifierAndNotThePassword(t *testing.T) {
 		if _, _, err := config.Render(in); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
+	}
+}
+
+// `orgSettings` set in the installation reaches the policy document and not
+// the service document, and the mode defaults to report.
+func TestRenderCarriesTheOrgSettingsOfTheGitHubController(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "example.installation.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.Replace(string(raw), "    enabledOrgs: [example-org]\n", `    enabledOrgs: [example-org]
+    orgSettings:
+      example-org:
+        read: {roleArn: "arn:aws:iam::111122223333:role/sluis-read", region: eu-west-1, parameter: /example/sluis/github-org}
+        platformVariables: ["CI_RUNNER_LABEL_*"]
+        variables:
+          CI_RUNNER_LABEL_DEFAULT: {value: self-hosted}
+`, 1)
+	file := filepath.Join(t.TempDir(), "installation.yaml")
+	if err = os.WriteFile(file, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	in, err := config.LoadInstallation(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, policy, err := config.Render(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(policy), "orgSettings:") || !strings.Contains(string(policy), "CI_RUNNER_LABEL_DEFAULT") {
+		t.Errorf("the policy document lost the organisation's settings:\n%s", policy)
+	}
+	if strings.Contains(string(policy), "mode:") {
+		t.Errorf("an unset mode was written, so the default would not be the platform's to change:\n%s", policy)
+	}
+	if strings.Contains(string(service), "orgSettings") {
+		t.Errorf("the service document carries the settings:\n%s", service)
+	}
+
+	in.Controllers.GitHub.OrgSettings["example-org"] = orgconfig.Config{Mode: "apply"}
+	if _, _, err = config.Render(in); err == nil || !strings.Contains(err.Error(), "orgSettings") {
+		t.Errorf("settings the controller cannot act on were rendered: %v", err)
 	}
 }

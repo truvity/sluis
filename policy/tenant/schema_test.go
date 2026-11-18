@@ -183,6 +183,12 @@ func TestSchemasNameTheKeysTheDecoderReads(t *testing.T) {
 		{"awsRole", def(t, fragment, "awsRole"), reflect.TypeFor[compile.WorkloadAWS]()},
 		{"appGrant", def(t, fragment, "appGrant"), reflect.TypeFor[AppGrant]()},
 		{"gate", def(t, fragment, "gate"), reflect.TypeFor[gateWire]()},
+		{"orgSection", def(t, fragment, "orgSection"), reflect.TypeFor[OrgSection]()},
+		{"orgVariable", def(t, fragment, "orgVariable"), reflect.TypeFor[OrgVariable]()},
+		{"orgSecret", def(t, fragment, "orgSecret"), reflect.TypeFor[OrgSecret]()},
+		{"securityConfiguration", def(t, fragment, "securityConfiguration"), reflect.TypeFor[SecurityConfiguration]()},
+		{"attachment", def(t, fragment, "attachment"), reflect.TypeFor[Attachment]()},
+		{"orgCeiling", ceiling["properties"].(map[string]any)["org"].(map[string]any), reflect.TypeFor[OrgCeiling]()},
 	}
 
 	for _, tc := range cases {

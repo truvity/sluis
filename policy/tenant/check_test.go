@@ -462,6 +462,7 @@ var excludedModelFields = map[string]string{
 var fragmentOnlyFields = map[string]string{
 	"AppGrants": "GitHub App grants are the installation's Apps' own list (ADR 0079)",
 	"Gates":     "a gate is one of the installation's clients (ADR 0079)",
+	"Org":       "the org section is read by the GitHub controller at run time (ADR 0080)",
 }
 
 func TestFragmentCoversEveryModelField(t *testing.T) {

@@ -1,0 +1,30 @@
+{
+  "$id": "https://schemas.example/access-roster/v1/github-org-settings-refused.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "outcome": {
+      "type": "string",
+      "description": "Why the document was not applied: unreadable, refused by its checks, or failed against GitHub.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true,
+      "enum": [
+        "unreadable",
+        "refused",
+        "failed"
+      ]
+    },
+    "mode": {
+      "type": "string",
+      "description": "The organisation's mode.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true,
+      "enum": [
+        "report",
+        "enforce"
+      ]
+    }
+  }
+}

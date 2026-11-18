@@ -1,0 +1,6 @@
+# owner-org: visibility selected naming no repository
+org:
+  variables:
+    ACME_REGION:
+      value: eu-west-1
+      visibility: selected

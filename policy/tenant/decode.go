@@ -40,6 +40,7 @@ type (
 		Workloads    map[string]workloadWire           `yaml:"workloads"`
 		AppGrants    map[string][]AppGrant             `yaml:"app_grants"`
 		Gates        map[string]gateWire               `yaml:"gates"`
+		Org          OrgSection                        `yaml:"org"`
 	}
 
 	// gateWire is a [Gate] as a company writes it.
@@ -82,6 +83,7 @@ func DecodeFragment(data []byte) (Fragment, error) {
 		GitHub:       w.GitHub,
 		Slack:        w.Slack,
 		Jobs:         w.Jobs,
+		Org:          w.Org,
 	}
 
 	if len(w.AppGrants) > 0 {

@@ -54,6 +54,7 @@ func Check(base *compile.Model, o Owner, f Fragment) []Violation {
 	c.workloadRows(f.Workloads)
 	c.appGrantRows(f.AppGrants)
 	c.gateRows(f.Gates)
+	c.orgSection(f.Org)
 	c.collisions(f)
 
 	return c.sorted()

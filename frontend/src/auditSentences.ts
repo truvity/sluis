@@ -3,7 +3,7 @@ import type { Sentences } from "@truvity/audit";
 
 export const roster: Sentences = {
   "source": "roster",
-  "version": "1.23.0",
+  "version": "1.24.0",
   "locales": [
     "en"
   ],
@@ -216,6 +216,18 @@ export const roster: Sentences = {
       "summary": "An operator asked the GitHub controller to pass over an organisation now.",
       "message": {
         "en": "{actor} asked for a pass over GitHub organisation {targets_0_id} now"
+      }
+    },
+    "roster.github_org_setting.changed": {
+      "summary": "A GitHub organisation's Actions variable, Actions secret or code security configuration was changed by the controller, or in report mode would be. It never carries a value.",
+      "message": {
+        "en": "{outcome, select, success {{targets_0_id}: {data_action} {data_kind} {data_name} ({data_mode} mode)} other {{targets_0_id}: {data_action} {data_kind} {data_name} not done ({data_mode} mode): {outcome_reason}}}"
+      }
+    },
+    "roster.github_org_settings.refused": {
+      "summary": "A GitHub organisation's settings document was not applied (it could not be read, it failed its checks, or GitHub could not be read as a whole). The last good settings stay.",
+      "message": {
+        "en": "the settings document of GitHub organisation {targets_0_id} was not applied ({data_outcome}): {outcome_reason}"
       }
     },
     "roster.github_owner.reported": {

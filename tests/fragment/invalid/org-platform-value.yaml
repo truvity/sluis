@@ -1,0 +1,6 @@
+# owner-org-platform: a value for a name whose value the installation sets
+org:
+  variables:
+    ACCESS_ROSTER_ISSUER:
+      value: https://issuer.acme.example
+      visibility: all

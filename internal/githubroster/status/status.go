@@ -81,6 +81,10 @@ type Org struct {
 	// Breaker is set when this pass would have removed more than half the
 	// organisation, and so removed nobody.
 	Breaker *Breaker `json:"breaker,omitempty"`
+	// Settings is how the organisation's Actions variables, secrets and code
+	// security configurations stand against its document (ADR 0080), or nil
+	// when the installation configures none for it. It never holds a value.
+	Settings *Settings `json:"settings,omitempty"`
 }
 
 // Seats is what the organisation pays for, beside what the policy wants.
@@ -305,4 +309,94 @@ func sortedMembers(members []Member) []Member {
 // last reported: the documents of the status contract, keyed as written.
 type ReportReader interface {
 	Reports(ctx context.Context) (map[string]string, error)
+}
+
+// Settings is one organisation's settings pass: which document it read, what
+// differs from it or was changed, and the names the controller wrote and so
+// may remove (ADR 0080).
+type Settings struct {
+	// Mode is `report` (drift is computed and reported) or `enforce` (drift
+	// is applied).
+	Mode string `json:"mode"`
+	// At is when the pass ran.
+	At time.Time `json:"at"`
+	// Document is how reading and checking the organisation's document went.
+	Document Document `json:"document"`
+	// Changes are what this pass found different, or changed. Never a value.
+	Changes []SettingChange `json:"changes,omitempty"`
+	// Managed is the record of what the controller wrote. It is the only
+	// thing the controller ever removes.
+	Managed Managed `json:"managed"`
+}
+
+// Document is the outcome of reading the organisation's document.
+type Document struct {
+	// Outcome is `applied` (read, checked and reconciled), `unreadable` (the
+	// role, the parameter or the document could not be read), `refused` (it
+	// failed its checks) or `failed` (GitHub could not be read or written
+	// as a whole).
+	Outcome DocumentOutcome `json:"outcome"`
+	// Error says why it was not applied: GitHub's or AWS's words, or the
+	// violations of the check, one per line. Never a value.
+	Error string `json:"error,omitempty"`
+}
+
+// DocumentOutcome is how reading the document went.
+type DocumentOutcome string
+
+// The outcomes of a document.
+const (
+	DocumentApplied    DocumentOutcome = "applied"
+	DocumentUnreadable DocumentOutcome = "unreadable"
+	DocumentRefused    DocumentOutcome = "refused"
+	DocumentFailed     DocumentOutcome = "failed"
+)
+
+// SettingChange is one difference between the document and GitHub.
+type SettingChange struct {
+	// Kind is `variable`, `secret` or `security_configuration`.
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+	// Action is `create`, `update`, `delete`, `attach` or `detach`.
+	Action string `json:"action"`
+	// State is `drift` (report mode: it would be done), `applied`, `failed`
+	// (GitHub refused it) or `held` (it cannot be done until something else
+	// is true: a repository that does not exist, a parameter that cannot be
+	// read).
+	State string `json:"state"`
+	// Reason is why it is failed or held, in words.
+	Reason string `json:"reason,omitempty"`
+}
+
+// The kinds, actions and states of a [SettingChange].
+const (
+	KindVariable              = "variable"
+	KindSecret                = "secret"
+	KindSecurityConfiguration = "security_configuration"
+
+	SettingCreate = "create"
+	SettingUpdate = "update"
+	SettingDelete = "delete"
+	SettingAttach = "attach"
+	SettingDetach = "detach"
+
+	SettingDrift   = "drift"
+	SettingApplied = "applied"
+	SettingFailed  = "failed"
+	SettingHeld    = "held"
+)
+
+// Managed is what the controller wrote in one organisation: the names it
+// created or changed, kept so that a name removed from the document is
+// removed from GitHub and a name the controller never wrote never is.
+type Managed struct {
+	// Variables are the names of the variables written.
+	Variables []string `json:"variables,omitempty"`
+	// Secrets are the names of the secrets written, each with the version of
+	// the parameter the written value was read from: the controller learns
+	// that a value changed from the version, and keeps no value, digest or
+	// copy of it.
+	Secrets map[string]int64 `json:"secrets,omitempty"`
+	// SecurityConfigurations are the names of the configurations created.
+	SecurityConfigurations []string `json:"security_configurations,omitempty"`
 }

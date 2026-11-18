@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/truvity/sluis/internal/githubroster/orgconfig"
 	"github.com/truvity/sluis/policy"
 )
 
@@ -153,6 +154,15 @@ func (d *PolicyDocument) merge(layer *PolicyDocument, from string) error {
 					d.Controllers.GitHub.AppNames = map[string]string{}
 				}
 				d.Controllers.GitHub.AppNames[org] = name
+			}
+			for org := range c.GitHub.OrgSettings {
+				if _, clash := d.Controllers.GitHub.OrgSettings[org]; clash {
+					return fmt.Errorf("%s: controllers.github.orgSettings: %s is declared twice across merged files", from, org)
+				}
+				if d.Controllers.GitHub.OrgSettings == nil {
+					d.Controllers.GitHub.OrgSettings = map[string]orgconfig.Config{}
+				}
+				d.Controllers.GitHub.OrgSettings[org] = c.GitHub.OrgSettings[org]
 			}
 		}
 		if c.Slack != nil {

@@ -67,6 +67,34 @@
       },
       "type": "array"
     },
+    "org": {
+      "additionalProperties": false,
+      "description": "How far the org section of a fragment may reach.",
+      "properties": {
+        "platform_valued": {
+          "description": "Variable names whose value the installation sets. A fragment may declare them for their visibility and repositories only.",
+          "items": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "platform_variables": {
+          "description": "path.Match patterns of the variable names the platform owns: `CI_RUNNER_LABEL_*`. A fragment that declares one is refused.",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "secret_prefix": {
+          "description": "The prefix every secret's parameter must have, in the organisation's own parameter store, ending in a slash: `/acme/sluis/credentials/`. Empty puts secrets out of scope.",
+          "pattern": "^/([A-Za-z0-9_.-]+/)+$",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "rungs": {
       "description": "The rungs the owner may add people to.",
       "items": {

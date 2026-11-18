@@ -12,7 +12,7 @@ The actions sluis records, from the catalogue [`internal/audit/catalogue/roster.
 
 <!-- generated: audit-actions -->
 
-Catalogue version 1.23.0, 102 actions.
+Catalogue version 1.24.0, 104 actions.
 
 | Action | Operation | Targets | Delivery | Summary |
 |---|---|---|---|---|
@@ -56,6 +56,8 @@ Catalogue version 1.23.0, 102 actions.
 | `roster.github_org.pass_requested` | modify | organisation | async | An operator asked the GitHub controller to pass over an organisation now. |
 | `roster.github_org.owner_changed` | modify | organisation | async | The directory that owns a GitHub organisation was changed by the installation-wide operator. |
 | `roster.github_org.disconnected` | remove | organisation | async | A GitHub organisation was disconnected. |
+| `roster.github_org_setting.changed` | modify | organisation | async | A GitHub organisation's Actions variable, Actions secret or code security configuration was changed by the controller, or in report mode would be. It never carries a value. |
+| `roster.github_org_settings.refused` | modify | organisation | async | A GitHub organisation's settings document was not applied (it could not be read, it failed its checks, or GitHub could not be read as a whole). The last good settings stay. |
 | `roster.github_removals.confirmed` | modify | organisation | async | An operator confirmed a set of removals the safety breaker had held. |
 | `roster.link_app.connected` | create | github_app | async | The App that links people's GitHub accounts was connected. |
 | `roster.link_app.disconnected` | remove | github_app | async | The App that links people's GitHub accounts was disconnected. |

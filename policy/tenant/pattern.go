@@ -134,6 +134,10 @@ func (c Ceiling) Validate() error {
 		}
 	}
 
+	if err := c.Org.Validate(); err != nil {
+		errs = append(errs, err)
+	}
+
 	return errors.Join(errs...)
 }
 

@@ -19,7 +19,7 @@
 # A change to what an action carries is a new version. The installation keeps
 # every version it was sent, so records already written keep their meaning.
 source: roster
-version: "1.23.0"
+version: "1.24.0"
 locales: [en]
 
 actor_kinds:
@@ -555,6 +555,28 @@ actions:
     data_schema: https://schemas.example/access-roster/v1/app-disconnected.json
     message:
       en: "{actor} disconnected GitHub organisation {targets_0_id}"
+
+  roster.github_org_setting.changed:
+    summary: A GitHub organisation's Actions variable, Actions secret or code security configuration was changed by the controller, or in report mode would be. It never carries a value.
+    operation: modify
+    categories: [configuration_change, privileged_access]
+    category: security
+    target_types: [organisation]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/github-org-setting.json
+    message:
+      en: "{outcome, select, success {{targets_0_id}: {data_action} {data_kind} {data_name} ({data_mode} mode)} other {{targets_0_id}: {data_action} {data_kind} {data_name} not done ({data_mode} mode): {outcome_reason}}}"
+
+  roster.github_org_settings.refused:
+    summary: "A GitHub organisation's settings document was not applied (it could not be read, it failed its checks, or GitHub could not be read as a whole). The last good settings stay."
+    operation: modify
+    categories: [configuration_change]
+    category: security
+    target_types: [organisation]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/github-org-settings-refused.json
+    message:
+      en: "the settings document of GitHub organisation {targets_0_id} was not applied ({data_outcome}): {outcome_reason}"
 
   roster.github_removals.confirmed:
     summary: An operator confirmed a set of removals the safety breaker had held.

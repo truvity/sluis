@@ -15,6 +15,7 @@ import (
 
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
 	"github.com/truvity/sluis/internal/githubroster/appid"
+	"github.com/truvity/sluis/internal/githubroster/orgconfig"
 	slackcatalogue "github.com/truvity/sluis/internal/slackapp/catalogue"
 	"github.com/truvity/sluis/policy"
 )
@@ -176,6 +177,11 @@ type (
 		// GitHub). Optional: an organisation with no entry is created as
 		// <org>-access-roster. GitHub's limit is 34 characters.
 		AppNames map[string]string `yaml:"appNames,omitempty"`
+		// OrgSettings configures, by organisation, the settings the controller
+		// reconciles beside membership: Actions variables and secrets and code
+		// security configurations, read from the organisation's own document
+		// (ADR 0080). Optional: an organisation with no entry has none.
+		OrgSettings map[string]orgconfig.Config `yaml:"orgSettings,omitempty"`
 	}
 
 	// ControllersSlack is what the Slack controller may change.
@@ -500,6 +506,7 @@ func (d *PolicyDocument) validateControllers() []error {
 	}
 	errs = append(errs, d.validateAppRefs()...)
 	errs = append(errs, d.validateAppNames()...)
+	errs = append(errs, d.validateOrgSettings()...)
 	for _, ws := range d.EnabledWorkspaces() {
 		if _, declared := d.Policy.Slack.Workspaces[ws]; !declared {
 			errs = append(errs, fmt.Errorf("controllers.slack.enabledWorkspaces names %s, which the policy's slack table does not declare", ws))
