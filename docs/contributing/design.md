@@ -81,8 +81,20 @@ The steps are in "Design phase" of `docs/decisions/README.md`, and the `new-deci
 
 ## Milestones are an order
 
-The phases are an order, not a wish list: P1 the core (the first working version), P2 the identity and audit blocks, then P3 the PKI, SSH and database add-on with the cutover of the v1 platform, then P4 block extraction ([Roadmap](/roadmap/#phases)). Design is finished milestone by milestone, and the code for a milestone starts after its design is. Inside the order, [ADR 0011](/decisions/0011-runtimes-and-installations/#delivery-order) sets which installation is built when.
+The phases are an order, not a wish list. Each opens when the one before it is done: the core (cut as `v2.0.0-alpha.2` before the installations), then customer identity and quota, then a re-plan that decides what parity needs, then parity with v1, then the switch of the platform from v1 to v2, then the PKI, SSH and database add-on. Block extraction stays last and is not scheduled. The phases and their exit tests are on the [roadmap](/roadmap/#phases); older records name them P0 to P4, and the roadmap maps those names to these.
+
+```mermaid
+flowchart LR
+  core["Core<br/>alpha.2"] --> ci["Customer<br/>identity<br/>and quota"]
+  ci --> replan{{"Re-plan"}}
+  replan --> parity["Parity"]
+  parity --> switch["Switch"]
+  switch --> pki["PKI, SSH<br/>and DB"]
+  pki -.-> ext["Block<br/>extraction<br/>(unscheduled)"]
+```
+
+Design is finished phase by phase, and the code for a phase starts after its design is. Nothing after customer identity and quota is planned in detail before the re-plan. Inside the core, the installations (local, boards, Lambda and Kubernetes) are built in the order of the roadmap's [Delivery order](/roadmap/#delivery-order), and [ADR 0011](/decisions/0011-runtimes-and-installations/#delivery-order) records any change to it.
 
 ## Do not make a later screen harder
 
-The first working version has the `console` actor and no pages, so a shortcut in its API reaches every screen built later. Before you write a console call, read [Before the pages exist](/decisions/0027-the-console/#before-the-pages-exist): eleven things the first version leaves out, such as an owner that cannot verify the operator, a page-shaped call, an unpaged list and a destructive write in one call.
+The console is part of the core layer but is built in the Parity phase, so it has no pages yet, and a shortcut in its API reaches every screen built later. Before you write a console call, read [Before the pages exist](/decisions/0027-the-console/#before-the-pages-exist): eleven things the first console leaves out, such as an owner that cannot verify the operator, a page-shaped call, an unpaged list and a destructive write in one call.

@@ -18,7 +18,7 @@
 #               definition here is exactly the shared one (`just check-shared-terms`); its owner and its `not` lines
 #               come from that file and are printed on /concepts/. Only the owner changes the shared wording.
 schema: 1
-checked: "2026-11-13"
+checked: "2026-11-18"
 
 categories:
   families: "Families of actors and the units that run them"
@@ -29,12 +29,51 @@ categories:
   identity: "People, machines and the proofs they present"
   boundaries: "Boundaries, tenants and installations"
   shared: "Words shared with ritueel, one owner each (docs/shared-terms.yaml)"
-  ciam: "Customer-identity installations (the account-hosting setup)"
+  structure: "The layers of sluis v2 and the shapes of an installation"
+  ciam: "Customer-identity installations (the account-hosting setup; superseded on 2026-11-12 by ADR 0045, kept because the withdrawn records use these words)"
   audit: "Audit and usage evidence"
-  quota: "Quota and the allowance"
+  quota: "Quota and the allowance (the allowance engine is superseded by ADR 0046; sluis keeps usage records and a limit check)"
   integrations: "Upstreams and integrations"
 
 terms:
+  # ---------------------------------------------------------------- structure
+  - term: core
+    definition: "The layer of sluis v2 that every installation needs: `entry`, `session`, `exchange` and `signer`. The console is in the core layer and is built in the Parity phase; `ca` is built and off by default. The core installs and runs without any add-on."
+    category: structure
+    see: ["0044-sluis-v2-is-a-core-building-blocks-and-add-ons", "/roadmap/#a-core-building-blocks-and-add-ons", "/overview/"]
+    avoid: ["first working version (as the name of the core)"]
+    notes: "The core is also the first phase of the roadmap, which ends with `v2.0.0-alpha.2` before the installations are built."
+
+  - term: building block
+    definition: "A module that a product may reuse beyond sluis, behind an interface: store, key, policy, audit with usage and limits, and KV. All are built in the core phase. The core uses them; a block holds no domain type of the core."
+    category: structure
+    see: ["0044-sluis-v2-is-a-core-building-blocks-and-add-ons", "/roadmap/#a-core-building-blocks-and-add-ons"]
+    avoid: ["core building block (as a separate term)", "library (for a block)"]
+    notes: "Not a shared building block, and not a module of actors (identity, audit)."
+
+  - term: shared building block
+    definition: "A client or a minter that add-ons and drivers reuse: the Cloudflare, AWS and GitHub clients. They form a named layer beside the building blocks. They are not core and no core actor calls them; each is built with its first consumer."
+    category: structure
+    see: ["0044-sluis-v2-is-a-core-building-blocks-and-add-ons", "/roadmap/#a-core-building-blocks-and-add-ons"]
+
+  - term: add-on
+    definition: "An optional part with a scope of its own that the core does not depend on: PKI, SSH and database access first (after parity), then Cloudflare and GitHub."
+    category: structure
+    see: ["0044-sluis-v2-is-a-core-building-blocks-and-add-ons", "/roadmap/#a-core-building-blocks-and-add-ons"]
+    avoid: ["plugin", "extension (for an add-on)"]
+    notes: "KV is a building block, not an add-on, though its record's file name still says add-on."
+
+  - term: token certificate
+    definition: "The certificate that `ca` issues for a token signing key, published as the `x5c` chain of its entry in the key set. It is optional per installation and off in the core; the PKI, SSH and database add-on turns it on, and it needs an intermediate under a root of ritueel."
+    category: structure
+    see: ["0006-keys-and-sealing#amendment-of-2026-11-18-the-token-certificate-is-optional-and-off-in-the-core"]
+    notes: "A verifier that ignores x5c fetches the key from the key set as before."
+
+  - term: Cloudflare edge
+    definition: "Cloudflare in front of a production shape: proxied to an API Gateway custom domain with mutual TLS on Lambda, the cluster's own tunnel and gateway on Kubernetes, `cloudflared` on boards. It caches the key set and the discovery document for less than the key pre-publish time, and holds the rate limits and WAF rules. sluis holds no Cloudflare credential in the core."
+    category: structure
+    see: ["0011-runtimes-and-installations", "/roadmap/#the-maintainers-decisions-of-2026-11-18"]
+
   # ---------------------------------------------------------------- families
   - term: family
     definition: "One of the four groups every actor belongs to: work, data, keys or audit. A port is never shared between two families."
@@ -173,6 +212,7 @@ terms:
     category: families
     see: ["0002-families-of-actors#the-console", "0027-the-console"]
     avoid: ["admin API (as an actor)", "part of entry"]
+    notes: "Part of the core layer, and built in the Parity phase (decision A3 B, 2026-11-18)."
 
   # ---------------------------------------------------------------- data
   - term: kind
@@ -426,7 +466,7 @@ terms:
     see: ["0005-the-store#watch-and-the-resume-point"]
 
   - term: engine
-    definition: "The database behind the durable and temp drivers: DynamoDB on AWS, rqlite on boards and on the local installation (one node), an in-memory engine in tests only."
+    definition: "The database behind the durable and temp drivers: DynamoDB on Lambda, PostgreSQL through CloudNativePG on Kubernetes (the `postgres` driver), rqlite on boards and on the local installation (one node), an in-memory engine in tests only."
     category: store
     see: ["0005-the-store#engines"]
     avoid: ["state store", "state cluster", "backend (for the engine)"]
@@ -462,7 +502,7 @@ terms:
     avoid: ["installation scope", "shared config source"]
 
   - term: KV store
-    definition: "A named, boundary-wide container of versioned static secrets, declared in signed config and owned by no tenant. Its paths form a hierarchy for policy, and its values are sealed under a data key of the store. What Vault calls a mount; it is not store@."
+    definition: "A named, boundary-wide container of versioned static secrets, declared in signed config and owned by no tenant. Its paths form a hierarchy for policy, and its values are sealed under a data key of the store. What Vault calls a mount; it is not store@. KV, served by the `kv` actor, is a building block built in the core phase, not an add-on."
     category: data
     see: ["0047-kv-is-an-add-on-of-stores-that-no-tenant-owns"]
     avoid: ["vault (except in the wire paths of the compatibility front)", "mount"]
@@ -902,7 +942,15 @@ terms:
     definition: "The kind of platform that starts the units: bare-metal (systemd), serverless (Lambda) or kubernetes."
     category: boundaries
     see: ["0011-runtimes-and-installations"]
-    avoid: ["shape", "environment (for a runtime)"]
+    avoid: ["environment (for a runtime)"]
+    notes: "The platform kind that starts the units. The kind of installation that goes with it, with its drivers, is a shape."
+
+  - term: shape
+    definition: "The kind of a production installation by its runtime and the drivers that go with it: boards (bare-metal, a three-node rqlite cluster, a YubiKey), Lambda (serverless, DynamoDB, AWS KMS, an Aurora index) or Kubernetes (EKS, PostgreSQL through CloudNativePG, AWS KMS, NATS JetStream). The local installation is for development and is not a shape. Each shape sits behind the Cloudflare edge."
+    category: boundaries
+    see: ["0011-runtimes-and-installations", "/runtimes/", "/roadmap/#the-core-is-done-when"]
+    avoid: ["environment (for a shape)", "flavour"]
+    notes: "A shape is a kind of installation, not an installation: an installation is one concrete deployment. The roadmap says 'the shapes' for the three."
 
   - term: promotion
     definition: "Moving a tenant into a boundary of its own: its kinds are moved and its data keys rewrapped for the new boundary's wrapping key."
@@ -922,9 +970,9 @@ terms:
     see: ["0027-the-console"]
 
   - term: product
-    definition: "A customer's or the operator's own application that calls sluis's API for its tenants, for example to push an allowance."
+    definition: "A customer's or the operator's own application that calls sluis's API for its tenants, for example to write a limit that sluis checks."
     category: boundaries
-    see: ["0039-quota-allowance"]
+    see: ["0046-usage-records-are-never-dropped-and-balances-live-in-the-product"]
     notes: "Not a sluis kind. Write 'a product' in examples, never a real product name."
 
   # ---------------------------------------------------------------- ciam
@@ -933,36 +981,43 @@ terms:
     category: ciam
     see: ["0008-boundaries-and-tenants#boundaries", "0032-customer-identity-installations"]
     avoid: ["company boundary", "product boundary"]
+    notes: "The boundary kind stays (a customer boundary of an installation). The account-hosting setup around it is superseded by ADR 0045 (maintainer decisions of 2026-11-12)."
 
   - term: hub installation
     definition: "In an account-hosting setup, the installation that holds customer accounts and issues pairwise subjects. An installation is a deployment, not a scope of data: its boundaries and tenants are addressed like any other."
     category: ciam
     see: ["0032-customer-identity-installations", "/requirements/acct/"]
+    notes: "Superseded: customers sign in through the upstream identity provider ([ADR 0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)), and the account-hosting setup is cancelled (maintainer decisions of 2026-11-12). Not used in new text."
 
   - term: context installation
     definition: "In an account-hosting setup, the installation of one regulated party. It has its own issuer, keys, subjects and sessions, and gets sign-in silently from the hub installation."
     category: ciam
     see: ["0032-customer-identity-installations", "/requirements/acct/"]
+    notes: "Superseded: customers sign in through the upstream identity provider ([ADR 0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)), and the account-hosting setup is cancelled (maintainer decisions of 2026-11-12). Not used in new text."
 
   - term: accounts module
     definition: "The module of a hub installation that holds the account registry and runs the registration, passkey and recovery flows."
     category: ciam
     see: ["/requirements/acct/", "/requirements/reg/"]
+    notes: "Superseded: customers sign in through the upstream identity provider ([ADR 0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)), and the account-hosting setup is cancelled (maintainer decisions of 2026-11-12). Not used in new text."
 
   - term: sector
     definition: "The name a tenant declares in its `Tenant` item and mixes into the pairwise subject of its clients, or `public` for the person's own subject. A tenant declares exactly one sector, and its clients inherit it."
     category: ciam
     see: ["0034-end-users-and-upstream-signals#subjects-and-sectors", "/requirements/subj/"]
+    notes: "Superseded: no token carries a pairwise subject any more (maintainer decision SB1 A, 2026-11-18), so a sector no longer changes a subject. Not used in new text."
 
   - term: fallback credential vault
     definition: "An external identity provider that holds an optional fallback password and one-time-password factor for a person and knows only a pseudonym."
     category: ciam
     see: ["/requirements/vault/"]
+    notes: "Superseded: customers sign in through the upstream identity provider ([ADR 0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)), and the account-hosting setup is cancelled (maintainer decisions of 2026-11-12). Not used in new text."
 
   - term: control plane
     definition: "The external system through which operators and support issue signed administrative intents."
     category: ciam
     see: ["0031-ciam-is-a-broker"]
+    notes: "Superseded: customers sign in through the upstream identity provider ([ADR 0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)), and the account-hosting setup is cancelled (maintainer decisions of 2026-11-12). Not used in new text."
 
   # ---------------------------------------------------------------- audit
   - term: emitter
@@ -997,7 +1052,7 @@ terms:
     see: ["0029-the-audit-log"]
 
   - term: usage fact
-    definition: "A usage entry: a meter reading that an action carries, or quota's admit, refusal or push, built from the same call as its audit record; the billing log of a product is built from these outside sluis."
+    definition: "A usage entry: a meter reading that an action carries, built from the same call as its audit record; the billing log of a product is built from these outside sluis. Since ADR 0046 it is written as a usage record."
     category: audit
     see: ["0040-meters-and-usage-evidence"]
     avoid: ["usage event (for a billed statement)", "finance export"]
@@ -1007,6 +1062,20 @@ terms:
     category: audit
     see: ["0029-the-audit-log", "/concepts/audit/"]
     avoid: ["audit trail (as a component)"]
+
+  - term: usage record
+    definition: "A record of a class of its own that is never dropped: the operation that produces it fails when the record cannot be stored. It has an idempotency key, so a repeat is stored once, and it names a customer, an organisation and a product by identifier, with no personal data."
+    category: audit
+    see: ["0046-usage-records-are-never-dropped-and-balances-live-in-the-product"]
+    avoid: ["usage event (for a billed statement)"]
+    notes: "A security audit fact may be lost and counted; a usage record may not."
+
+  - term: limit check
+    definition: "The check on the request path that compares a counter of usage for a customer, organisation and product in the current period with a limit that the product writes, and answers allow or refuse, next to the policy decision."
+    category: audit
+    see: ["0046-usage-records-are-never-dropped-and-balances-live-in-the-product#limits-and-balances"]
+    avoid: ["quota check (for the allowance engine)", "balance check"]
+    notes: "sluis holds the counter, never a plan, a price or a balance; those live in the product."
 
   - term: usage stream
     definition: "The usage facts, built from the same call as the audit record and kept as a separate stream."
@@ -1024,17 +1093,20 @@ terms:
     category: quota
     see: ["0039-quota-allowance"]
     avoid: ["balance", "billing account", "plan"]
+    notes: "Superseded: the allowance and balance engine of ADR 0039 is not built, and balances live in the product ([ADR 0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/)). Not used in new text."
 
   - term: allowance push
     definition: "A product's call that changes an allowance. It carries a request id, an operation (add, set or write-off) and, optionally, the expected version. It is idempotent by request id (a hashed `SpentPush` marker), is applied with a conditional update, and is an audit fact."
     category: quota
     see: ["0039-quota-allowance"]
     avoid: ["top-up (as a separate mechanism)", "balance update"]
+    notes: "Superseded: the allowance and balance engine of ADR 0039 is not built, and balances live in the product ([ADR 0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/)). Not used in new text."
 
   - term: allowance mode
     definition: "One of three built-in modes of an allowance: prepaid and limited are counted down and refused at zero; unlimited is only recorded."
     category: quota
     see: ["0039-quota-allowance"]
+    notes: "Superseded: the allowance and balance engine of ADR 0039 is not built, and balances live in the product ([ADR 0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/)). Not used in new text."
 
   # ---------------------------------------------------------------- integrations
   - term: upstream

@@ -5,14 +5,17 @@ import type { Link } from './data';
 interface Props {
   heading: string;
   text: string;
+  /** What is built and what is designed, in one or two short sentences. */
+  status: string;
   links: Link[];
 }
-const { heading, text, links } = Astro.props;
+const { heading, text, status, links } = Astro.props;
 ---
 
 <div class="answer">
   <h3>{heading}</h3>
   <p>{text}</p>
+  <p class="status-line"><b>Status.</b> {status}</p>
   <ul class="answer-links">
     {links.map((l) => <li><a href={l.href}>{l.text}</a></li>)}
   </ul>

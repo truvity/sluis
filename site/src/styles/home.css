@@ -624,6 +624,64 @@ html :is(h1#_top, .sluis-title h1) {
   margin-top: 1.25rem;
 }
 
+/* ---- The phase strip of the status block ---- */
+.home .phases ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: phase;
+}
+.home .phases li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 8.5rem;
+  max-width: 13rem;
+  padding: 0.6rem 0.85rem 0.6rem 2rem;
+  border: 1px solid var(--h-line);
+  border-radius: 0.6rem;
+  background: var(--h-card);
+  counter-increment: phase;
+}
+.home .phases li::before {
+  content: counter(phase);
+  position: absolute;
+  left: 0.7rem;
+  top: 0.6rem;
+  font-family: var(--h-serif);
+  color: var(--h-mute);
+}
+.home .phases li.now {
+  border-color: var(--h-amber);
+  border-width: 2px;
+}
+.home .phases a {
+  display: flex;
+  flex-direction: column;
+  color: var(--h-ink);
+  text-decoration: none;
+}
+.home .phases a:hover b {
+  text-decoration: underline;
+}
+.home .phases a span,
+.home .phases em {
+  font-size: 0.8125rem;
+  font-style: normal;
+  color: var(--h-mute);
+}
+.home .phases li.now em {
+  color: var(--h-amber);
+}
+.home .answer .status-line {
+  font-size: 0.9375rem;
+  color: var(--h-mute);
+}
+
 /* ---- Phones: the clouds become grids, the principles one column ---- */
 @media (max-width: 48rem) {
   .home .cloud {
