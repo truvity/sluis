@@ -96,6 +96,14 @@ The order is reviewed when each installation ships, and a change of order is rec
 
 2026-11-12 ([0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/)). The product milestones above are replaced by the phases of the [roadmap](/roadmap/#phases): P1 the core (the first working version, with the three boards), P2 the identity and audit blocks, P3 the PKI, SSH and database add-on with the cutover of the v1 platform to the three-board install, P4 block extraction. "CIAM upstream" and "Quota" are removed. Amendment (D9, 2026-11-12): the Lambda and Kubernetes installations stay as v2 targets, needed for v1 parity. They come after the cutover of the v1 platform to the three boards (P3), on the way to the remaining v1 installations. A mixed shape, where some sluis parts run on Kubernetes beside another installation, is allowed and its design is open ([#926](https://github.com/truvity/sluis/issues/926)).
 
+### Amendment of 2026-11-18: the core comes first, and the mixed shape is designed in it
+
+2026-11-18 (maintainer decisions 1, C1, L1 A, K1 and 9; the plan is on the [roadmap](/roadmap/#phases)). The delivery order changes again:
+
+- **The core is completed and polished on every installation before anything else is planned.** The boards, Lambda and Kubernetes are part of the core, each with the same smoke tests as the local installation, and so is release management, with one release carrying packages, images, the chart and the Lambda zips ([The core is done when](/roadmap/#the-core-is-done-when)). The maintainer re-plans after that. The amendment of 2026-11-12 above, which placed Lambda and Kubernetes after the cutover of the v1 platform, is replaced by this order.
+- **The mixed shape is designed in the core phase** (decision 9, with D9 of 2026-11-12). Its first use is the audit search pieces beside a Lambda installation: the indexer and the reader of a Lambda installation run on a Kubernetes cluster beside it, on the `postgres` index in the `cnpg` mode (decision L1 A, [0028](/decisions/0028-audit-pieces/#amendment-of-2026-11-18-the-index-of-a-lambda-installation-runs-beside-it-on-kubernetes)). The design of the mixed shape stays tracked by [#926](https://github.com/truvity/sluis/issues/926).
+- **The Kubernetes audit transport stays `nats-jetstream`** (decision K1), as the Kubernetes section above says.
+
 ## Consequences
 
 - Adding a platform adds one runtime at most, and often none. A new driver of a holder changes which installations are possible, not which runtimes exist; `sluis config check` reports which ones work.

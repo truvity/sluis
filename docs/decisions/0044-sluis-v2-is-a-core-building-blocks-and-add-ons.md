@@ -81,6 +81,16 @@ sluis issues a short-lived SSH user certificate to the holder of a sluis token, 
 
 The ritueel half of [0043](/decisions/0043-a-person-binds-their-own-keys-to-their-identity-in-sluis/) is superseded: ritueel dropped staff keys on 2026-11-11, so there is no ritueel card helper, no shared bundle format and no trust-signature ceremony over a sluis certification key. The sluis half (a person binds their own key, sluis checks the proof on the server) stays in Backlog with the staff-key work. [0024](/decisions/0024-root-custody-and-the-signing-api/#company-openpgp-certification) is read the same way.
 
+### Amendment of 2026-11-18: the core comes first, and the token certificate is off
+
+2026-11-18 (maintainer decisions 1, C1, C2, V5, X1 A and V6 A; the plan is on the [roadmap](/roadmap/#phases), the one place that states the phases).
+
+- **The order is Core, a re-plan, Parity, the switch, then the PKI, SSH and database add-on.** The core is completed and polished first, on the local installation, the boards, Lambda and Kubernetes, with release management ([The core is done when](/roadmap/#the-core-is-done-when)); the maintainer then re-plans. The phrases above that put the identity and audit blocks (P2) before the PKI add-on (P3), and that make P3 the add-on and the cutover together, are replaced by this order: the add-on comes after parity, and the cutover is the switch. D6 A and D5 A of 2026-11-12 are read that way.
+- **The core includes the parts of v1's contract that live in the core** (C2): group strings and per-audience narrowing of the groups claim, `sub` formats, per-audience lifetimes, RS256 per audience where a relying party needs it, confidential and public clients with PKCE, and logout.
+- **The token certificate is optional per installation and off in the core** (X1 A). The built `ca` v0 code stays, and the core does not run it. The core needs no intermediate and no test certifier, and the boards need no slot 9c in the core. This replaces the words "`ca` as a v0" in the shape of the core above, the test-certifier lines of "Name constraints of the boards' intermediates" and of Follow-ups, and the Consequence that the PKI add-on runs on a test root: the test certifier and the name constraints apply when the token certificate or the add-on is on. The PKI phase starts when the ritueel release candidate (software root) exists and a cloud root is adopted. [0006](/decisions/0006-keys-and-sealing/#amendment-of-2026-11-18-the-token-certificate-is-optional-and-off-in-the-core) carries the key set side.
+- **Lambda and Kubernetes are in the core,** not late (the cost named in Consequences is gone), and `v2.0.0-alpha.2` is cut when the core features are done, before the shapes (V5).
+- **The switch of the platform installation** (V6 A): v2 runs as a new issuer beside v1 and never takes over v1's host ([0015](/decisions/0015-evolution-and-compatibility/) stands); no relying party moves until v2 covers every required v1 parity row; the relying parties then move in waves; v1 is switched off two weeks after the last wave. The roadmap holds the text ([The switch](/roadmap/#the-switch)).
+
 ## Consequences
 
 - The first version is smaller and has no Cloudflare dependency at run time. A revoked key leaves the key set that the directory driver publishes; the confirmation through an edge comes with the Cloudflare add-on.

@@ -46,7 +46,7 @@ v1 exported typed credential documents to OpenBao and wrote Kubernetes objects. 
 
 ### Publishing public material
 
-The key set is the first public document, and the other public kinds follow the same rules. This part was decided on 2026-11-06. The first version has one issuer, and so one key set, for each boundary; the other destinations, the other kinds and the trigger on Lambda (nothing is pushed there, [0005](/decisions/0005-the-store/#watch-and-the-resume-point)) come with their installations ([#1714](https://github.com/truvity/sluis/issues/1714)).
+The key set is the first public document, and the other public kinds follow the same rules. This part was decided on 2026-11-06. The first version has one issuer, and so one key set, for each boundary; the other destinations, the other kinds and the trigger on Lambda (nothing is pushed there, [0005](/decisions/0005-the-store/#watch-and-the-resume-point); the amendment of 2026-11-18 below sets it) come with their installations ([#1714](https://github.com/truvity/sluis/issues/1714)).
 
 - **A published document is one object at an address that `ExportDestination` declares,** with its content type and its `max-age`; the address is never derived from the kind. It is written whole and atomically: a rename in a directory, one put in a bucket. A reader never sees half a document.
 - **The key set is the JSON Web Key Set of RFC 7517,** built by the rule that `entry` uses for its live key set, with `Content-Type: application/json`, `Cache-Control: public, max-age=300` and `Access-Control-Allow-Origin: *` ([REQ-KEYS-016](/requirements/keys/#REQ-KEYS-016)). <!-- terms-allow: origin (the CORS header name) -->
@@ -119,6 +119,15 @@ A driver for a store of record or a Kubernetes Secret implements `Put`, `Delete`
 - **No `kv` destination and no reserved export mount are built.** exporter@ carries no KV value. A destination of type store of record stays for values that a cluster reads through External Secrets and that sluis does not hold in KV.
 - **The mark moves** from "exportable" to "published to KV" for a secret, and a consumer is still named for each mark.
 - **A secrets engine with dynamic secrets, leases and transit is still not built.** Static KV is built (below, the road not taken).
+
+### Amendment of 2026-11-18: the exporter on Lambda is woken by the stream of the table
+
+2026-11-18 (maintainer decision L2). On Lambda nothing is pushed to exporter@ by store@ ([0005](/decisions/0005-the-store/#watch-and-the-resume-point)), so the exporter has two triggers there:
+
+- **DynamoDB Streams on the store's table wake it** when an exportable item changes. The stream is a wake-up of the function, not a second path to the data: exporter@ still reads the kinds through store@ and publishes as it does after any change.
+- **A daily scheduled run** does what the daily reconcile does everywhere: it rebuilds the documents and removes what is gone, so a missed wake-up or an edit made at a destination is corrected within a day.
+
+This is the Lambda trigger that the part "Publishing public material" above left to the installation. A revoked key still leaves the key set at once ([REQ-EXPORT-020](/requirements/export/#REQ-EXPORT-020)): the stream wakes the exporter on the change of `KeyRevocation`, and the daily run is the safety net, not the path. The conformance suite and the other destination drivers stay with [#1714](https://github.com/truvity/sluis/issues/1714), and so does the choice of which items the stream's filter lets through.
 
 ## Consequences
 
