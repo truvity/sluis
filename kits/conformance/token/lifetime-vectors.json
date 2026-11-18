@@ -1,0 +1,30 @@
+{
+  "about": "How long a token lives (ADR 0020, \"Lifetimes\"; REQ-TOKEN-036, REQ-TOKEN-037, REQ-TOKEN-049; the resource caps are REQ-TOKEN-051, planned for #791). A token lives for the shortest of the built-in maximum (3600 seconds), the issuer's lifetime for its type (TokenLifetime.id_token or .access_token), the audience's caps (the client's ttl_cap, and the resource's ttl_cap when a request names a resource) and never past the end of the session chain that backs it or of the proof that was exchanged. Every limit only shortens: a cap above the issuer's lifetime changes nothing. A limit that is left out, zero or negative is not set. All durations are whole seconds; chain_left and proof_left are the seconds from now to the end (zero or negative: already over). now_fraction_ms is how far into a second now is, because a token writes iat and exp in whole seconds and never lives past the end by rounding. lifetime is exp minus iat; refused says no token is issued (less than a second left). cap is what signer holds exp minus iat to for the type and the audience, whatever the chain or the proof says, so it ignores chain_left and proof_left. The ID token and the access token are the same rule with their own issuer lifetime. kits/go/lifetime, session and exchange are held to lifetime; actors/signer is held to cap. v1 keeps the same rule: the lifetime of the deployment, narrowed by the client's ttl_cap, and the shorter of the client's and the resource's caps wins; v2 has no resource yet, so a resource_ttl_cap vector is the rule that resources will use.",
+  "maximum": 3600,
+  "expiry": [
+    { "name": "no setting: the built-in maximum", "lifetime": 3600, "cap": 3600 },
+    { "name": "the issuer's lifetime shortens", "issuer": 600, "lifetime": 600, "cap": 600 },
+    { "name": "an issuer's lifetime above the maximum is cut to it", "issuer": 7200, "lifetime": 3600, "cap": 3600 },
+    { "name": "a client's cap shorter than the issuer's lifetime wins", "issuer": 600, "client_ttl_cap": 300, "lifetime": 300, "cap": 300 },
+    { "name": "a client's cap longer than the issuer's lifetime changes nothing", "issuer": 600, "client_ttl_cap": 1800, "lifetime": 600, "cap": 600 },
+    { "name": "a client's cap alone shortens the maximum", "client_ttl_cap": 900, "lifetime": 900, "cap": 900 },
+    { "name": "a client's cap above the maximum is cut to it", "client_ttl_cap": 7200, "lifetime": 3600, "cap": 3600 },
+    { "name": "the resource's cap is shorter than the client's: the resource's wins", "issuer": 3600, "client_ttl_cap": 900, "resource_ttl_cap": 300, "lifetime": 300, "cap": 300 },
+    { "name": "the client's cap is shorter than the resource's: the client's wins", "issuer": 3600, "client_ttl_cap": 300, "resource_ttl_cap": 900, "lifetime": 300, "cap": 300 },
+    { "name": "a resource's cap alone shortens the issuer's lifetime", "issuer": 1800, "resource_ttl_cap": 120, "lifetime": 120, "cap": 120 },
+    { "name": "a resource's cap longer than the issuer's lifetime changes nothing", "issuer": 600, "resource_ttl_cap": 3000, "lifetime": 600, "cap": 600 },
+    { "name": "a cap of zero or less is not set", "issuer": 600, "client_ttl_cap": 0, "resource_ttl_cap": -5, "lifetime": 600, "cap": 600 },
+    { "name": "an issuer's lifetime of zero is not set", "issuer": 0, "client_ttl_cap": 900, "lifetime": 900, "cap": 900 },
+    { "name": "the end of the session chain shortens the token", "issuer": 600, "chain_left": 120, "lifetime": 120, "cap": 600 },
+    { "name": "a chain that outlasts the token changes nothing", "issuer": 600, "chain_left": 86400, "lifetime": 600, "cap": 600 },
+    { "name": "the end of the exchanged proof shortens the token", "issuer": 3600, "client_ttl_cap": 300, "proof_left": 45, "lifetime": 45, "cap": 300 },
+    { "name": "the earlier of the chain and the proof wins", "issuer": 600, "chain_left": 100, "proof_left": 50, "lifetime": 50, "cap": 600 },
+    { "name": "a chain that has ended issues nothing", "issuer": 600, "chain_left": 0, "refused": true, "cap": 600 },
+    { "name": "a chain that ended before now issues nothing", "issuer": 600, "chain_left": -10, "refused": true, "cap": 600 },
+    { "name": "a proof with less than a second left issues nothing", "proof_left": 0, "refused": true, "cap": 3600 },
+    { "name": "the cap does not make a refused token live", "issuer": 600, "client_ttl_cap": 300, "proof_left": -1, "refused": true, "cap": 300 },
+    { "name": "late in a second, the lifetime is still whole seconds from iat", "now_fraction_ms": 900, "issuer": 600, "lifetime": 600, "cap": 600 },
+    { "name": "late in a second, an end one second away leaves a second, never more", "now_fraction_ms": 900, "chain_left": 1, "lifetime": 1, "cap": 3600 },
+    { "name": "late in a second, an end inside the same second leaves nothing", "now_fraction_ms": 900, "chain_left": 0, "refused": true, "cap": 3600 }
+  ]
+}

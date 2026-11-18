@@ -780,6 +780,35 @@ mod tests {
         assert_eq!(cap_secs(Some(0), Some(-5)), 3600, "zero is no value");
     }
 
+    /// The cap is the one of the shared vectors (`kits/conformance/token/lifetime-vectors.json`), which `kits/go/lifetime`
+    /// and so session and exchange are held to: the earliest of the maximum, the issuer's lifetime and the audience's caps
+    /// (the client's, and a resource's), whatever the end of a chain or a proof says. signer sees one cap of the audience,
+    /// so the shorter of the client's and the resource's is the one it is given.
+    ///
+    /// verifies: REQ-TOKEN-037, REQ-TOKEN-049
+    #[test]
+    fn the_cap_is_the_one_of_the_shared_vectors() {
+        const VECTORS: &str = include_str!("../../../kits/conformance/token/lifetime-vectors.json");
+        let v: serde_json::Value = serde_json::from_str(VECTORS).unwrap();
+        assert_eq!(v["maximum"].as_i64(), Some(HARD_CAP_SECS));
+        let cases = v["expiry"].as_array().unwrap();
+        assert!(!cases.is_empty());
+        for c in cases {
+            let secs = |k: &str| c.get(k).and_then(serde_json::Value::as_i64);
+            let audience = [secs("client_ttl_cap"), secs("resource_ttl_cap")]
+                .into_iter()
+                .flatten()
+                .filter(|s| *s > 0)
+                .min();
+            assert_eq!(
+                Some(cap_secs(secs("issuer"), audience)),
+                secs("cap"),
+                "{}",
+                c["name"]
+            );
+        }
+    }
+
     #[test]
     fn the_lifetime_stays_inside_the_cap_and_the_window_stays_at_now() {
         let c = |iat, exp| Shaped {

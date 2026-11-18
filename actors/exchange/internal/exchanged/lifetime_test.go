@@ -24,7 +24,10 @@ func TestTheLifetimeOfAnExchangeIsNeverLongerThanTheSubjectTokenOrAnyCap(t *test
 
 		// The longest it may be: the earliest of the issuer's, the client's cap, the built-in hour and the end of the
 		// subject token, in whole seconds.
-		limit := min(issuer, hardCap)
+		limit := hardCap
+		if issuer > 0 {
+			limit = min(issuer, hardCap) // an issuer's lifetime of zero is not set (kits/go/lifetime)
+		}
 		if clientCap > 0 {
 			limit = min(limit, clientCap)
 		}

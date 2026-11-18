@@ -769,3 +769,46 @@ requirements:
     tests: [actors/signer/tests/sign.rs]
     verification:
       - {kind: integration-test, ref: "ID and access tokens for a client with a dot, a slash and no delimiter: the right names sign; another delimiter, the colon, a short or long name, a wildcard and a repeat are refused at claims.groups"}
+  - id: REQ-TOKEN-049
+    area: TOKEN
+    statement: "A token MUST live for the shortest of the built-in maximum of 1 hour, the issuer's lifetime for its type and the cap of its audience's client, never past the end of its session chain or of the exchanged proof, and the ID token and the access token of one audience MUST each follow that rule with their own issuer lifetime."
+    rationale: "Each audience gets the lifetime its own client allows, so a relying party that tuned its refresh to a short cap keeps it, and no limit can lengthen a token (ADR 0020; v1: the lifetime of the deployment narrowed by the client's ttl_cap)."
+    level: MUST
+    source: v1-parity
+    status: done
+    milestone: first-version
+    runtimes: all
+    standards: []
+    issues: [776, 786, 1817]
+    tests: [kits/go/lifetime/lifetime_test.go, actors/session/internal/sessiond/token_ttlcap_test.go, actors/exchange/internal/exchanged/lifetime_test.go, actors/signer/src/claims.rs]
+    verification:
+      - {kind: test-vectors, ref: "kits/conformance/token/lifetime-vectors.json, expiry: the issuer's lifetime, a client's cap, the maximum, the end of a chain and of a proof, whole seconds late in a second; session and exchange take their exp from kits/go/lifetime, and signer holds exp minus iat to the cap of the same vectors"}
+      - {kind: integration-test, ref: "four clients with caps of 5 minutes, 2 minutes, 30 minutes and none: the ID token, the access token and expires_in of a sign-in and of a refresh follow each client's cap, and the chain is as long for all four"}
+  - id: REQ-TOKEN-050
+    area: TOKEN
+    statement: "sluis config check MUST refuse a TokenLifetime in which a token lifetime is above 1 hour, the absolute session limit is above 24 hours, the idle limit is above the absolute limit or a token lifetime is above the absolute limit, and MUST name the field."
+    rationale: "A file that session would cut to its maximum at run time is a file that does not say what it means; the check says so when the configuration loads (ADR 0018, ADR 0020; v1: the absolute limit is at least the token lifetime)."
+    level: MUST
+    source: v1-parity
+    status: done
+    milestone: first-version
+    runtimes: all
+    standards: []
+    issues: [786, 1817]
+    tests: [actors/store/tests/validate.rs]
+    verification:
+      - {kind: integration-test, ref: "an ID token of 61 minutes, a session of 25 hours, an idle limit above the session, an idle limit of 25 hours, and tokens longer than the session are each refused with the path of the field; the maxima themselves and tokens as long as the session are accepted"}
+  - id: REQ-TOKEN-051
+    area: TOKEN
+    statement: "A token for a resource MUST live no longer than the shorter of the ttl_cap of the client that asked and the ttl_cap of the resource."
+    rationale: "The client and the resource each said not longer than this, and honouring the longer would answer neither (v1: the shorter of the client's and the resource's caps wins)."
+    level: MUST
+    source: v1-parity
+    status: planned
+    milestone: v1-parity
+    runtimes: all
+    standards:
+      - {id: ST-08, section: "2", depth: Full}
+    issues: [791]
+    verification:
+      - {kind: test-vectors, ref: "kits/conformance/token/lifetime-vectors.json, expiry: the resource_ttl_cap vectors, once a client declares a resource"}
