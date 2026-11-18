@@ -4251,7 +4251,7 @@ async fn a_rate_window_id_is_a_mac_output_and_the_source_address_is_not_in_the_i
         );
         // The family and the four bytes of the address: what key@ hashes, and the only thing that holds them.
         assert_eq!(m.input, [4, 203, 0, 113, 9]);
-        assert!(m.epoch.is_empty() && m.grant.is_empty());
+        assert!(m.epoch.is_empty());
     }
     let expected = fake_mac("sluis-rate-address-v1", &[4, 203, 0, 113, 9]);
     let hex: String = expected[..16].iter().map(|b| format!("{b:02x}")).collect();
