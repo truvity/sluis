@@ -9,7 +9,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: pki-ssh-db
     runtimes: ["bare-metal", "serverless", "kubernetes"]
     standards:
       - {id: ST-62, section: "5280", depth: Full}
@@ -24,7 +24,7 @@ requirements:
     source: standard
     status: partial
     gap: external-suite-not-run
-    milestone: first-version
+    milestone: pki-ssh-db
     runtimes: all
     standards:
       - {id: ST-62, section: "4.1.2.2", depth: Full}
@@ -41,7 +41,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: pki-ssh-db
     runtimes: all
     standards:
       - {id: ST-62, section: "4", depth: Full}
@@ -58,7 +58,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: pki-ssh-db
     runtimes: all
     standards:
       - {id: ST-62, section: "4", depth: Full}
@@ -221,7 +221,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: pki-ssh-db
     runtimes: all
     standards:
       - {id: ST-62, section: "5", depth: Full}
@@ -252,7 +252,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: pki-ssh-db
     runtimes: all
     standards:
       - {id: ST-63, section: "1", depth: Full}
@@ -392,7 +392,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: pki-ssh-db
     runtimes: all
     standards: []
     issues: [1066, 1071]
@@ -406,7 +406,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: pki-ssh-db
     runtimes: all
     standards: []
     issues: [1066, 1069]
@@ -421,7 +421,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: pki-ssh-db
     runtimes: all
     standards: []
     issues: [1066]
@@ -435,7 +435,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: pki-ssh-db
     runtimes: all
     standards: []
     issues: [1066, 1070]
@@ -451,7 +451,7 @@ requirements:
     # Owner decision 2026-11-07: the warning of `sluis key status` is the first-version half; the metric and the alert rule left for REQ-PKI-054.
     # The status stays planned until the change that adds `sluis key status` (#1631) is on main.
     status: planned
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [867, 1068]
@@ -465,7 +465,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: pki-ssh-db
     runtimes: all
     standards: []
     issues: [1068]
@@ -478,7 +478,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: pki-ssh-db
     runtimes: all
     standards: []
     issues: [1066]
@@ -506,7 +506,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: first-version
+    milestone: core
     gap: smoke-not-in-ci
     runtimes: all
     standards:
@@ -522,7 +522,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [869, 914]
@@ -535,7 +535,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: pki-ssh-db
     runtimes: all
     standards:
       - {id: ST-62, section: "4.2.1.9", depth: Partial}
@@ -551,7 +551,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: NC-10, section: "PIV", depth: Partial}
@@ -566,7 +566,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: NC-10, section: "PIV", depth: Partial}
@@ -580,7 +580,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: pki-ssh-db
     runtimes: all
     standards: []
     issues: [914, 1066]
@@ -593,7 +593,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: pki-ssh-db
     runtimes: all
     standards: []
     issues: [914, 1066]
@@ -606,7 +606,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: first-version
+    milestone: core
     gap: partly-built
     runtimes: all
     standards: []
@@ -621,7 +621,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal", "kubernetes"]
     standards:
       - {id: NC-10, section: "PIV", depth: Partial}
@@ -635,7 +635,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: pki-ssh-db
     runtimes: all
     standards:
       - {id: ST-109, section: "2", depth: Partial}
@@ -649,7 +649,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: pki-ssh-db
     runtimes: all
     standards:
       - {id: ST-62, section: "4.2.1.10", depth: Partial}
@@ -664,7 +664,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: pki-ssh-db
     runtimes: all
     standards:
       - {id: ST-62, section: "4.2.1.10", depth: Partial}
@@ -680,7 +680,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: pki-ssh-db
     runtimes: all
     standards:
       - {id: ST-62, section: "4.2.1.10", depth: Partial}
@@ -696,7 +696,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: pki-ssh-db
     runtimes: all
     standards:
       - {id: ST-62, section: "4.1.2.5", depth: Partial}
@@ -710,7 +710,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: pki-ssh-db
     runtimes: all
     standards:
       - {id: ST-62, section: "5", depth: Partial}
@@ -724,7 +724,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: pki-ssh-db
     runtimes: all
     standards:
       - {id: ST-62, section: "5.1.2.5", depth: Partial}
@@ -738,7 +738,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: pki-ssh-db
     runtimes: all
     standards: []
     issues: [1066]
@@ -752,7 +752,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: pki-ssh-db
     runtimes: all
     standards: []
     issues: [1066]
@@ -769,7 +769,7 @@ requirements:
     split_from: REQ-PKI-055
     status: partial
     gap: smoke-not-in-ci
-    milestone: first-version
+    milestone: pki-ssh-db
     runtimes: all
     standards: []
     issues: [1066]
@@ -782,7 +782,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: first-version
+    milestone: pki-ssh-db
     runtimes: all
     standards: []
     issues: [1066, 1067]
@@ -795,7 +795,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: pki-ssh-db
     issues: [1368]
     runtimes: all
     standards: []
@@ -809,7 +809,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: pki-ssh-db
     issues: [1368]
     runtimes: all
     standards: []
@@ -823,7 +823,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [1812]
@@ -837,7 +837,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [1812]
@@ -851,7 +851,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     issues: [1812]

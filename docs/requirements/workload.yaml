@@ -9,7 +9,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: partial
-    milestone: v1-parity
+    milestone: parity
     gap: partly-built
     runtimes: all
     standards:
@@ -26,7 +26,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: partial
-    milestone: v1-parity
+    milestone: parity
     gap: partly-built
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -41,7 +41,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-46, section: "1", depth: Full}
@@ -56,7 +56,7 @@ requirements:
     level: SHOULD
     source: design-decision
     status: partial
-    milestone: v1-parity
+    milestone: parity
     gap: partly-built
     runtimes: ["bare-metal", "kubernetes"]
     standards:
@@ -75,7 +75,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: pki-ssh-db
     runtimes: all
     standards: []
     issues: [1222]
@@ -88,7 +88,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: pki-ssh-db
     runtimes: all
     standards: []
     issues: [1222]
@@ -103,7 +103,7 @@ requirements:
     level: MUST
     source: security-review
     status: partial
-    milestone: v1-parity
+    milestone: parity
     gap: partly-built
     runtimes: all
     standards: []
@@ -121,7 +121,7 @@ requirements:
     source: v1-parity
     status: partial
     gap: partly-built
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-107, section: "2", depth: Partial}

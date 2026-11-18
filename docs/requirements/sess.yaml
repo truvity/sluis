@@ -9,7 +9,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "6", depth: Full}
@@ -26,7 +26,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "6", depth: Full}
@@ -45,7 +45,7 @@ requirements:
     source: v1-parity
     # Maintainer decisions A2 and H2, R1 C and R2 B of 2026-11-18 (#1639): any old token of a chain is recognised, by its tag; tokens of the form before are refused as unknown.
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "6", depth: Full}
@@ -61,7 +61,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "6", depth: Full}
@@ -80,7 +80,7 @@ requirements:
     # TestRefreshLimits proves both: past the idle limit, and past the absolute limit however often the token was used, the token is refused
     # (invalid_grant) and the chain is gone.
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "6", depth: Full}
@@ -96,7 +96,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "6", depth: Full}
@@ -111,7 +111,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "6", depth: Full}
@@ -127,7 +127,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-01, section: "6", depth: Full}
@@ -142,7 +142,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "6", depth: Full}
@@ -158,7 +158,7 @@ requirements:
     source: v1-parity
     status: partial
     gap: partly-built
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Full}
@@ -176,7 +176,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-28, section: "2", depth: Full}
@@ -192,7 +192,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-31, section: "2.4", depth: Full}
@@ -207,7 +207,7 @@ requirements:
     source: v1-parity
     status: partial
     gap: no-proving-test
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
@@ -223,7 +223,7 @@ requirements:
     source: v1-parity
     status: partial
     gap: no-proving-test
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
@@ -237,7 +237,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
@@ -252,7 +252,7 @@ requirements:
     source: v1-parity
     status: partial
     gap: partly-built
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: NC-05, section: "6265bis", depth: Full}
@@ -268,7 +268,7 @@ requirements:
     source: v1-parity
     status: partial
     gap: partly-built
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: NC-05, section: "6265bis", depth: Full}
@@ -282,7 +282,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-30, section: "2", depth: Full}
@@ -299,7 +299,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-30, section: "2", depth: Full}
@@ -315,7 +315,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-31, section: "2.4", depth: Full}
@@ -331,7 +331,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-31, section: "2.5", depth: Partial}
@@ -346,7 +346,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-31, section: "2.5", depth: Partial}
@@ -360,7 +360,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-31, section: "2.4", depth: Full}
@@ -391,7 +391,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-25, section: "auth", depth: Partial}
@@ -407,7 +407,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-25, section: "auth", depth: Partial}
@@ -422,7 +422,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
@@ -437,7 +437,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
@@ -452,7 +452,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "4.4", depth: Partial}
@@ -466,7 +466,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
@@ -481,7 +481,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
@@ -495,7 +495,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
@@ -509,7 +509,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
@@ -523,7 +523,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
@@ -537,7 +537,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
@@ -551,7 +551,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
@@ -565,7 +565,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
@@ -579,7 +579,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [793, 916]
@@ -592,7 +592,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: ciam-upstream
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [916]
@@ -605,7 +605,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: ciam-upstream
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [916]
@@ -618,7 +618,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-31, section: "2.6", depth: Full}
@@ -632,7 +632,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [916, 1717]
@@ -645,7 +645,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [916]
@@ -658,7 +658,7 @@ requirements:
     level: MUST
     source: standard
     status: planned
-    milestone: v1-parity
+    milestone: backlog
     runtimes: all
     standards:
       - {id: ST-31, section: "2.8", depth: Partial}
@@ -672,7 +672,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: ciam-upstream
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [916]
@@ -686,7 +686,7 @@ requirements:
     source: design-decision
     status: partial
     gap: smoke-not-in-ci
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-01, section: "4.1", depth: Partial}
@@ -703,7 +703,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [session]
     standards: []
@@ -719,7 +719,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [session]
     standards: []
@@ -747,7 +747,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [session]
     standards: []
@@ -762,7 +762,7 @@ requirements:
     source: design-decision
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [session]
     standards: []
@@ -776,7 +776,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [session]
     standards: []
@@ -790,7 +790,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [session]
     standards: []
@@ -804,7 +804,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     features: ["design"]
@@ -817,7 +817,7 @@ requirements:
     level: MUST
     source: security-review
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards: []
     features: ["design"]
@@ -843,9 +843,89 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards: []
     issues: [793, 832, 1625]
     verification:
       - {kind: integration-test, ref: "an operator ends a person's browser sign-in; the next authorization request from that browser is answered with the sign-in page, not a code"}
+  - id: REQ-SESS-058
+    area: SESS
+    statement: "A browser MUST be able to hold sessions of several tenants at once, one identity per tenant."
+    rationale: "A person who works for several vendors keeps one identity per tenant and no subject is shared across tenants (ADR 0020, the amendment of 2026-11-18, decision SB5 B)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: all
+    standards: []
+    issues: [1894]
+    verification:
+      - {kind: integration-test, ref: "one browser signs in to two tenants and both sessions stay valid"}
+  - id: REQ-SESS-059
+    area: SESS
+    statement: "Signing out of the session of one tenant MUST leave the sessions of the other tenants of the browser valid."
+    rationale: "Switching and logging out of one vendor must not sign the person out of another (ADR 0020, the amendment of 2026-11-18)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: all
+    standards: []
+    issues: [1894]
+    verification:
+      - {kind: integration-test, ref: "logout of one of two sessions leaves the other valid"}
+  - id: REQ-SESS-060
+    area: SESS
+    statement: "The sign-in page MUST show an account picker when the browser holds sessions of more than one tenant."
+    rationale: "The person chooses which identity the client gets (ADR 0020, the amendment of 2026-11-18)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: all
+    standards: []
+    issues: [1894]
+    verification:
+      - {kind: integration-test, ref: "with two sessions the sign-in page lists both, and with one session it asks nothing more than before"}
+  - id: REQ-SESS-061
+    area: SESS
+    statement: "The authorization endpoint MUST honour prompt=select_account by showing the account picker."
+    rationale: "OpenID Connect gives the client a way to ask for a choice among sessions (OIDC Core, section 3.1.2.1)."
+    level: MUST
+    source: standard
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.2.1", depth: Partial}
+    issues: [1894]
+    verification:
+      - {kind: integration-test, ref: "a request with prompt=select_account shows the picker though a session is valid"}
+  - id: REQ-SESS-062
+    area: SESS
+    statement: "The authorization endpoint MUST honour login_hint by choosing the session of the identity that the hint names."
+    rationale: "A client that knows which tenant a person works for can skip the picker (ADR 0020, the amendment of 2026-11-18)."
+    level: MUST
+    source: standard
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-28, section: "3.1.2.1", depth: Partial}
+    issues: [1894]
+    verification:
+      - {kind: integration-test, ref: "a request with the login_hint of the second identity of the browser continues with that session"}
+  - id: REQ-SESS-063
+    area: SESS
+    statement: "A token MUST NOT carry data of another tenant's session."
+    rationale: "Each vendor sees only its own subject and can disable it on its own (ADR 0020, the amendment of 2026-11-18)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: all
+    standards: []
+    issues: [1894]
+    verification:
+      - {kind: integration-test, ref: "a token issued for the first tenant of a browser that holds two sessions carries no claim, subject or group of the second"}
