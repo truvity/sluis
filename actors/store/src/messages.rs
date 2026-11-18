@@ -67,12 +67,26 @@ fn key_revocation_ok(tenant: &str, id: &str, bytes: &[u8]) -> bool {
     tenant_ok && want.is_some_and(|w| w == id)
 }
 
+/// The largest level of a bucket, in thousandths of a token: the release's largest limit (`sluis_store::ratebound::LIMIT_MAX`).
+const RATE_WINDOW_MAX: u64 = 100_000 * 1000;
+
+/// A `RateWindow` item is valid when its message decodes and its level is no more than the release's largest bucket. The id
+/// is `<limit>/<subject>`: a store id, which the address check already holds to its form.
+fn rate_window_ok(_tenant: &str, _id: &str, bytes: &[u8]) -> bool {
+    use sluis_proto::sluis::entry::v2alpha1::RateWindow;
+    <RateWindow as buffa::Message>::decode_from_slice(bytes)
+        .is_ok_and(|m| m.milli_tokens <= RATE_WINDOW_MAX && m.at_ms >= 0)
+}
+
 /// The kinds whose Protobuf message is in `sluis-proto`, by segment.
 //
 // planned: every other durable and temp kind that is plain or hashed is passed as bytes today, because
 // `sluis-proto` holds no message for it yet (its writer's contract adds it).
 type Check = fn(&str, &str, &[u8]) -> bool;
-const MAPPED: &[(&str, Check)] = &[("key-revocation", key_revocation_ok)];
+const MAPPED: &[(&str, Check)] = &[
+    ("key-revocation", key_revocation_ok),
+    ("rate-window", rate_window_ok),
+];
 
 /// Whether the bytes are the kind's message (and, for a kind that has rules of its own, a valid one for the tenant and the id). None
 /// when the contracts have no message for the kind yet: the bytes are then passed on as they are.

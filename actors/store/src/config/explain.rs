@@ -127,6 +127,16 @@ pub const FIELDS: &[(&str, &str, Treatment)] = &[
     ("SignInMethods", "passkey_acr", Show),
     ("SignInMethods", "registration_client", Show),
     ("SignInMethods", "upstream_recheck", Duration),
+    ("RateBound", "token_client.limit", Show),
+    ("RateBound", "token_client.window", Duration),
+    ("RateBound", "token_address.limit", Show),
+    ("RateBound", "token_address.window", Duration),
+    ("RateBound", "authorize_client.limit", Show),
+    ("RateBound", "authorize_client.window", Duration),
+    ("RateBound", "authorize_address.limit", Show),
+    ("RateBound", "authorize_address.window", Duration),
+    ("RateBound", "recovery_address.limit", Show),
+    ("RateBound", "recovery_address.window", Duration),
     // The payload of these two is not a mapping of items. store@ does not interpret either (policy does), so each is
     // one setting, identified by the digest of the payload that `sha384sum` of the reviewed file gives.
     ("Policy", "cedar", Digest),
@@ -705,6 +715,7 @@ mod tests {
             ("installation_client", "InstallationClient"),
             ("front_host", "FrontHost"),
             ("sign_in_methods", "SignInMethods"),
+            ("rate_bound", "RateBound"),
         ];
         const READERS: &[&str] = &[
             ".required(\"",
@@ -721,6 +732,8 @@ mod tests {
             "url(&mut o, \"",
             "url(&mut t, \"",
             "named(&mut o, \"",
+            // The closure of `rate_bound` that reads one limit.
+            " limit(\"",
         ];
         let mut out: BTreeMap<&'static str, BTreeSet<String>> = BTreeMap::new();
         let mut current: Option<&'static str> = None;
@@ -761,7 +774,7 @@ mod tests {
             swept >= 40,
             "the sweep found {swept} keys: has payload.rs changed shape?"
         );
-        assert_eq!(keys.len(), 10, "{:?}", keys.keys().collect::<Vec<_>>());
+        assert_eq!(keys.len(), 11, "{:?}", keys.keys().collect::<Vec<_>>());
 
         let readable: Vec<_> = sluis_registry::kinds()
             .iter()

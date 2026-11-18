@@ -121,7 +121,7 @@ fn the_readable_kinds_with_no_schema_are_exactly_the_two_that_are_listed() {
         .iter()
         .filter(|k| payload::readable(k) && sluis_schema::payload_id(k.name).is_some())
         .count();
-    assert_eq!(with, 10);
+    assert_eq!(with, 11);
 }
 
 /// verifies: REQ-DATA-038, REQ-OPS-002, REQ-DATA-044
