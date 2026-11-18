@@ -33,6 +33,16 @@ Principle 6 joins products by a contract with vectors; principle 1 says v1's key
 - **v1 and v2 run in parallel, and relying parties move one at a time.** v2 comes up on its own issuer hosts. Each relying party, such as a cluster API server, a cloud identity provider, a GitOps tool, a console or a CI system, is rewired and switched alone. v1 keeps serving the others until the last has moved, and a move is undone by pointing that relying party back.
 - **v2 never takes over v1's issuer.** v1's keys never move (principle 1), the v2 chain comes from the root custodian, and each boundary has its own issuer host ([0008](/decisions/0008-boundaries-and-tenants/)).
 - **An inventory comes first.** Before the first relying party moves, a list names every relying party of the v1 issuer and every consumer that keys on v1's `sub`, `aud` or `groups` format (REQ-OPS-030). A consumer keyed on the e-mail `sub` is re-keyed to v2's opaque `sub` before it moves.
+- **A subject changes its spelling, and each relying party is re-keyed once.** v2 issues no v1 `sub` ([0020](/decisions/0020-grant-vocabulary-and-token-claims/#the-sub-of-a-token)), so the inventory lists, for each consumer, which of these it reads:
+
+  | Subject | v1 `sub` | v2 `sub` |
+  |---|---|---|
+  | A person | the e-mail address | the person's opaque subject; a consumer that needs a readable name reads the `email` claim of the ID token |
+  | A CI job | `github:<org>/<repo>` | `spiffe://<trust-domain>/ci/github/<org>/<repo>` |
+  | A Kubernetes ServiceAccount | `<cluster>:k8s:<namespace>:<name>`, or `k8s:<namespace>:<name>` with no cluster | `spiffe://<trust-domain>/k8s/<cluster>/ns/<namespace>/sa/<name>`, always with the cluster |
+  | An AWS role | `aws:<account>:role/<path><name>` | none yet: v2 has no proof of an AWS role |
+
+  A trust policy that is rendered from the configuration ([REQ-DEPLOY-014](/requirements/deploy/#REQ-DEPLOY-014)) is rendered again with the new spelling; one that someone wrote by hand is on the inventory.
 - **No state is carried.** What happens to each thing follows its storage class ([0004](/decisions/0004-the-data-model/#storage-classes)): v1's policy, clients and vocabulary are converted by a tool into v2's config documents; what v2 can learn again from its upstreams and its workloads is learned again; durable items such as certificate records are made again for each workload; vendor-issued secrets are connected again as secret-source values or tenant connections; and sessions are not carried, so everyone signs in again.
 - **v1's audit and billing history stays where it is,** as the next section says.
 

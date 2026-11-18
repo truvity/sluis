@@ -96,6 +96,7 @@ func toStrings(v any) []string {
 	return out
 }
 
+// verifies: REQ-SUBJ-071
 func TestSubIsThePairwiseSubjectOfTheTargetTenantNotTheOneOfTheSubjectToken(t *testing.T) {
 	e := newEnv(t, envOptions{})
 	r := e.exchange(request(e.mint(subjectClaims(nil))))
@@ -110,6 +111,10 @@ func TestSubIsThePairwiseSubjectOfTheTargetTenantNotTheOneOfTheSubjectToken(t *t
 	}
 	if claims["sub"] == "pairwise-of-the-sign-in" || claims["sub"] == testPerson.ID {
 		t.Error("sub is the subject of the subject token or the person's own id")
+	}
+	// The form of the sub is one of the forms of the contract (kits/conformance/token/sub-vectors.json, shape).
+	if kind, ok := subject.Classify(claims["sub"].(string)); !ok || kind != subject.KindPairwise {
+		t.Errorf("sub = %v has the form %q, want %q", claims["sub"], kind, subject.KindPairwise)
 	}
 	macs := e.key.pairwise()
 	if len(macs) != 1 || macs[0].GetTenant() != testTenant || string(macs[0].GetGrant()) != "sealed-grant" {
