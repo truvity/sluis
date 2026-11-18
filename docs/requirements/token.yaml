@@ -782,8 +782,8 @@ requirements:
     issues: [776, 786, 1817]
     tests: [kits/go/lifetime/lifetime_test.go, actors/session/internal/sessiond/token_ttlcap_test.go, actors/exchange/internal/exchanged/lifetime_test.go, actors/signer/src/claims.rs]
     verification:
-      - {kind: test-vectors, ref: "kits/conformance/token/lifetime-vectors.json, expiry: the issuer's lifetime, a client's cap, the maximum, the end of a chain and of a proof, whole seconds late in a second; session and exchange take their exp from kits/go/lifetime, and signer holds exp minus iat to the cap of the same vectors"}
-      - {kind: integration-test, ref: "four clients with caps of 5 minutes, 2 minutes, 30 minutes and none: the ID token, the access token and expires_in of a sign-in and of a refresh follow each client's cap, and the chain is as long for all four"}
+      - {kind: test-vectors, ref: "kits/conformance/token/lifetime-vectors.json, expiry: issuer, client cap, maximum, chain and proof ends; session and exchange use kits/go/lifetime, signer holds exp minus iat to the same cap"}
+      - {kind: integration-test, ref: "four clients with caps of 5 minutes, 2 minutes, 30 minutes and none: ID token, access token and expires_in follow each cap at sign-in and refresh; the chain is as long for all"}
   - id: REQ-TOKEN-050
     area: TOKEN
     statement: "sluis config check MUST refuse a TokenLifetime in which a token lifetime is above 1 hour, the absolute session limit is above 24 hours, the idle limit is above the absolute limit or a token lifetime is above the absolute limit, and MUST name the field."
@@ -797,7 +797,7 @@ requirements:
     issues: [786, 1817]
     tests: [actors/store/tests/validate.rs]
     verification:
-      - {kind: integration-test, ref: "an ID token of 61 minutes, a session of 25 hours, an idle limit above the session, an idle limit of 25 hours, and tokens longer than the session are each refused with the path of the field; the maxima themselves and tokens as long as the session are accepted"}
+      - {kind: integration-test, ref: "an ID token of 61 minutes, a session of 25 hours, an idle limit or a token above the session are refused with the field path; the maxima and tokens as long as the session are accepted"}
   - id: REQ-TOKEN-051
     area: TOKEN
     statement: "A token for a resource MUST live no longer than the shorter of the ttl_cap of the client that asked and the ttl_cap of the resource."
