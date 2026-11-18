@@ -27,8 +27,8 @@ Facts about the engines, checked on the dates given. rqlite authorises per endpo
 |---|---|---|---|
 | Config source | config | Read-only | `file` (a directory, a mounted ConfigMap or a Lambda layer), `appconfig` (an AWS AppConfig profile) |
 | Secret source | secret | Read-only | A systemd credential (boards and local), AWS SSM |
-| Durable | durable | Read-write | `rqlite` (boards and local), `dynamodb` (AWS) |
-| Temp | temp | Read-write | `rqlite`, `dynamodb` |
+| Durable | durable | Read-write | `rqlite` (boards and local), `dynamodb` (AWS), `postgres` (Kubernetes) |
+| Temp | temp | Read-write | `rqlite`, `dynamodb`, `postgres` |
 
 The durable and temp ports may sit on one engine; they are two ports because the classes differ in backup and in TTL. The bootstrap file names one destination per port ([The bootstrap file](/decisions/0005-the-store/#the-bootstrap-file)).
 
@@ -125,12 +125,13 @@ trait Kind {
 
 | Engine | Where | Notes |
 |---|---|---|
-| **DynamoDB** | AWS: serverless and Kubernetes | A table per engine, reachable by store@'s role only; DynamoDB TTL; needs no node or disk |
+| **DynamoDB** | AWS: serverless | A table per engine, reachable by store@'s role only; DynamoDB TTL; needs no node or disk |
+| **PostgreSQL** | Kubernetes, through CloudNativePG | One cluster per installation, with the store and the audit index in separate databases and roles ([amendment of 2026-11-18](/decisions/0005-the-store/#amendment-of-2026-11-18-kubernetes-stores-in-postgresql-through-cloudnativepg)) |
 | **rqlite** | Boards, and the local installation with one node | Replicated SQLite on Raft; data on eMMC; temp data is replicated too, so any board serves any request |
 | **In-memory** | Tests only | Passes the conformance suite |
 
 - **An engine serves a boundary at L3 or above.** A boundary below L3 is served under its address prefix by its parent's engine ([0008](/decisions/0008-boundaries-and-tenants/#the-ladder)).
-- **Kubernetes uses DynamoDB only** ([0011](/decisions/0011-runtimes-and-installations/#kubernetes)). A PostgreSQL engine is not in 2.0; PostgreSQL may be the audit index, which is not the store's business ([0028](/decisions/0028-audit-pieces/)). Kubernetes in 2.0 means Kubernetes on AWS ([0011](/decisions/0011-runtimes-and-installations/#kubernetes)); the direction for a cluster without AWS is PostgreSQL via CNPG, tracked by [issue #1238](https://github.com/truvity/sluis/issues/1238).
+- **Kubernetes uses PostgreSQL through CloudNativePG** since the amendment of 2026-11-18 below; before it, Kubernetes used DynamoDB only ([0011](/decisions/0011-runtimes-and-installations/#kubernetes)).
 - **rqlite runs beside sluis as its own service,** one cluster of 1, 3 or 5 nodes per engine; an even number adds a node without adding fault tolerance, and 3 or more survive a failure. The engine is a platform piece, not an actor of any family ([0002](/decisions/0002-families-of-actors/#platform-pieces)).
 - **Raft is the only port a board opens to another board,** with mutual TLS and a certificate per cluster, so a node of one cluster cannot join another. Who issues the certificates is a follow-up ([#1584](https://github.com/truvity/sluis/issues/1584)): ritueel issues no leaf certificate, and `ca` cannot issue them before the store it needs is up. The firewall admits the Raft port from the cluster's other nodes only ([0003](/decisions/0003-units-transports-and-fusion/#calls-between-nodes)).
 - **How the driver reaches rqlite.** rqlite's client API listens on the loopback address only, and the driver is its only client. The driver's unit has `IPAddressDeny=any`, `IPAddressAllow` for that address, and `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`, plus a client certificate. It moves to a Unix socket if rqlite adds a socket listener. The rqlite unit is sandboxed by systemd so that it can write only its own data directory, which contains `ATTACH`.
@@ -213,6 +214,15 @@ trait Kind {
 - **Secret kinds are not backed up.** IaC owns them, so a restore does not carry them.
 - **Tightening this on AWS is a follow-up,** not a part of this decision: the actor would open at key@ a value that the store fetched without decrypting it ([#1182](https://github.com/truvity/sluis/issues/1182)).
 
+### Amendment of 2026-11-18: Kubernetes stores in PostgreSQL through CloudNativePG
+
+2026-11-18 (maintainer decision K2 B; the plan is on the [roadmap](/roadmap/#the-maintainers-decisions-of-2026-11-18)). The store engine of the Kubernetes installation is PostgreSQL through CloudNativePG, not DynamoDB.
+
+- **A `postgres` driver of the durable and temp ports is part of the core.** It implements the four calls of the item contract above over PostgreSQL: `Get`, `Query`, `Transact` and `TailLog`. `TailLog`, the change log read from a sequence, is the part of the driver to get right, because [watch and the resume point](/decisions/0005-the-store/#watch-and-the-resume-point) and every exporter and reader depend on it; the driver passes the same conformance suite as the others.
+- **One CloudNativePG cluster holds the store and the audit index,** as separate databases with separate roles, so the credential of one does not open the other ([0028](/decisions/0028-audit-pieces/#postgresql-row-level-security)). The index stays the `postgres` index in the `cnpg` mode.
+- **Keys do not change.** `aws-kms` stays the key driver on Kubernetes, so the tested installation still needs AWS KMS for its keys. A key driver for a cluster without AWS is later and is not part of the core.
+- **Kubernetes in 2.0 is therefore not EKS-only for the store.** This takes the direction of [issue #1238](https://github.com/truvity/sluis/issues/1238) into the core. Serverless keeps DynamoDB, and the boards and the local installation keep rqlite.
+
 ## Consequences
 
 - A compromised work actor can write only the kinds its rules allow and read only what they list, checked by the store, and it holds no engine credential. The cost is a hop: every data call goes through store@, and a sealed value also goes through key@. On Lambda the hop is an invoke ([0003](/decisions/0003-units-transports-and-fusion/)).
@@ -240,7 +250,8 @@ trait Kind {
 - **A cache with asynchronous replication.** An acknowledged write can be lost on failover, signing everyone out and reviving rotated tokens.
 - **Kubernetes objects as the store.** Session-rate writes load the API server, items have no lifetime, and it fits one runtime.
 - **DynamoDB everywhere.** Every installation, the local one and the boards included, would need an AWS account; a local emulator is not the engine.
-- **PostgreSQL as an engine in 2.0.** Nothing in the store needs a relational engine; it needs a pool on serverless and replication on the boards, and Kubernetes on AWS has DynamoDB. The later direction for a cluster without AWS is PostgreSQL via CNPG as the store engine, tracked by [issue #1238](https://github.com/truvity/sluis/issues/1238); its key source is decided when it has a consumer.
+- **PostgreSQL as an engine in 2.0.** Nothing in the store needs a relational engine; it needs a pool on serverless and replication on the boards, and Kubernetes on AWS has DynamoDB. Taken for Kubernetes on 2026-11-18, see the amendment above; serverless and the boards keep their engines.
+- **DynamoDB as the engine of Kubernetes (amendment of 2026-11-18).** It kept the Kubernetes installation tied to AWS for its store. The maintainer's decision K2 B replaced it with PostgreSQL through CloudNativePG.
 - **The Kubernetes Lease as the lease on Kubernetes.** It needs RBAC for leases, the stores the holder writes do not check its token, and it serves one runtime.
 - **A DynamoDB transaction for every update of a hot item.** It measured 91 to 149 updates a second on 2026-11-02, against about 1,000 for a conditional update.
 - **Several config sources composed by path ownership, or a later source that overrides an earlier one.** A document in a service could override a reviewed file with no trace in git, and the effective value would depend on the order of a list; one signed document per kind, loaded as a snapshot, has no order.
@@ -265,3 +276,4 @@ trait Kind {
 - The config loader, the `file` and `appconfig` drivers, the check and the signed-document vectors: [#1157](https://github.com/truvity/sluis/issues/1157).
 - Reloading the snapshot of a running store on every runtime: [#977](https://github.com/truvity/sluis/issues/977).
 - Who issues the certificate of the Raft port: [#1584](https://github.com/truvity/sluis/issues/1584).
+- The `postgres` driver, with the design of `TailLog` and the conformance run on it: [#1238](https://github.com/truvity/sluis/issues/1238).
