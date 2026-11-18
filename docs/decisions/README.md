@@ -53,7 +53,7 @@ On 2026-11-03 the records were renumbered a second time, without any change of c
 
 ## Index
 
-Records are grouped by the layer of the product they belong to: the core, then the CIAM and quota layers, which the re-plan of 2026-11-12 cancelled ([roadmap](../roadmap.md)). Each record's `Layer` line says which.
+Records are grouped by the layer of the product they belong to: the core, then the CIAM and quota layers, which the re-plan of 2026-11-12 cancelled ([roadmap](../roadmap.md)). Each record's `Layer` line says which. Two records of the CIAM layer, [0036](0036-volumetric-abuse.md) and [0038](0038-fapi-2-profile.md), are core again since 2026-11-18 and sit in the core table.
 
 ### Core
 
@@ -89,13 +89,15 @@ Records are grouped by the layer of the product they belong to: the core, then t
 | [0028](0028-audit-pieces.md) | Audit is four pieces joined by a transport, search is an index fed from the log, and an audit installation has its own front | Accepted |
 | [0029](0029-the-audit-log.md) | The audit log is a tiled log in a blob, sealed by its one writer, with pseudonyms, lifecycle tiers and per-tenant keys | Accepted; amended by 0046 |
 | [0030](0030-audit-records-and-the-usage-stream.md) | Audit records are OCSF events with one `unmapped.sluis` object, and usage is a separate stream from the same call | Accepted; amended by 0046 |
+| [0036](0036-volumetric-abuse.md) | Volumetric abuse is stopped at the edge, and sluis bounds what one connection, client or source can cost with a token bucket kept as a temp kind | Accepted; amended by 0044 |
+| [0038](0038-fapi-2-profile.md) | FAPI 2.0 is a profile a client declares, with PAR, DPoP, private-key client authentication and its own signing algorithm, and sender constraint is declared per audience | Accepted; amended by 0044 |
 | [0041](0041-a-compromised-key-is-revoked-then-replaced.md) | A compromised key is revoked, then replaced: it leaves at once, its replacement signs at once, and only a person declares | Accepted |
 | [0042](0042-sluis-syncs-company-issued-openpgp-keys-to-staff-github-accounts.md) | sluis syncs company-issued OpenPGP keys to staff GitHub accounts | Accepted |
 | [0043](0043-a-person-binds-their-own-keys-to-their-identity-in-sluis.md) | A person binds their own keys to their identity in sluis: sluis checks the proof and the card attestation on the server, records a binding, and certifies, lists and syncs only card-born keys | Accepted; amended by 0044 |
 | [0044](0044-sluis-v2-is-a-core-building-blocks-and-add-ons.md) | sluis v2 is a core, building blocks and add-ons, and the first working version is the core | Accepted |
 | [0045](0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product.md) | Customers sign in through the upstream identity provider, realms follow boundaries, and the sluis token carries customer, organisation and product | Accepted |
 | [0046](0046-usage-records-are-never-dropped-and-balances-live-in-the-product.md) | Usage records are a class that is never dropped, and plans and balances live in the product | Accepted |
-| [0047](0047-kv-is-an-add-on-of-stores-that-no-tenant-owns.md) | KV is an add-on of stores that no tenant owns: policy decides by path, each store has its own data key, and External Secrets reads it through a Vault KV v2 subset | Accepted |
+| [0047](0047-kv-is-an-add-on-of-stores-that-no-tenant-owns.md) | KV is a building block of stores that no tenant owns: policy decides by path, each store has its own data key, and External Secrets reads it through a Vault KV v2 subset | Accepted |
 
 ### CIAM module (cancelled on 2026-11-12, see [0045](0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product.md))
 
@@ -106,9 +108,7 @@ Records are grouped by the layer of the product they belong to: the core, then t
 | [0033](0033-customer-connections.md) | An installation federates to a fixed set of upstreams that its operator declares, and a customer installation sees exactly one | Superseded by 0045 |
 | [0034](0034-end-users-and-upstream-signals.md) | An end user is a person with five states, erased by deleting its records, and upstream signals end sessions or suspend and erase | Superseded by 0045 |
 | [0035](0035-customer-pages.md) | Customer pages are few, branded per client and login domain, and localised per request | Superseded by 0045 |
-| [0036](0036-volumetric-abuse.md) | Volumetric abuse is stopped at the edge, and sluis bounds what one connection, client or source can cost with a token bucket kept as a temp kind | Accepted |
 | [0037](0037-capacity-is-measured-before-it-is-promised.md) | Capacity is measured before it is promised: a dated spike of the signing path, the hops to store@ and key@, the engines and the audit writer, and tokens stay signed in place meanwhile | Accepted |
-| [0038](0038-fapi-2-profile.md) | FAPI 2.0 is a profile a client declares, with PAR, DPoP, private-key client authentication and its own signing algorithm, and sender constraint is declared per audience | Superseded by 0045 |
 
 ### Quota module (balance cancelled on 2026-11-12, see [0046](0046-usage-records-are-never-dropped-and-balances-live-in-the-product.md))
 

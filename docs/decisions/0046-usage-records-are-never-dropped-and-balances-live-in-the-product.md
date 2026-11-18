@@ -33,6 +33,10 @@ The maintainer's update of 2026-11-12 is that audit serves the product too, and 
 - **sluis holds no plan, price, money or balance.** The allowance, its modes, the push and the write-off of [0039](/decisions/0039-quota-allowance/) are not built. The product keeps its plans and balances and builds its billing from the usage log, as [0030](/decisions/0030-audit-records-and-the-usage-stream/#the-usage-stream) says.
 - **The meters of [0040](/decisions/0040-meters-and-usage-evidence/) stand:** a meter has a name, a unit and a kind, and only declared outcomes become usage evidence.
 
+### Amendment of 2026-11-18: the usage stream and the limit check are built right after the core
+
+2026-11-18 (maintainer decisions Order, Placement and Quota; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv)). Quota, as this record shapes it, is built in its own phase, right after the core and before the re-plan: the usage stream (records that are never dropped, with an idempotency key) and the limit check on the request path. The record stands as written. Plans, prices and balances stay in the product, and the allowance and balance engine of [0039](/decisions/0039-quota-allowance/) stays superseded. "P2" below is the phase [Customer identity and quota](/roadmap/#customer-identity-and-quota).
+
 ## Consequences
 
 - A full spool now stops some operations that it used to let through: the ones that produce usage. This is the price of exactly-once counting, and the operator sees an error, not a silent gap.

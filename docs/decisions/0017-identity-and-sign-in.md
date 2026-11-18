@@ -142,7 +142,7 @@ sluis claims a conformance plan only when it passes, and discovery says only wha
 - **Front-channel logout is not supported.** Back-channel logout, with RP-Initiated Logout, is the logout path; discovery does not advertise front-channel logout, and a registration that names a `frontchannel_logout_uri` is refused by the configuration check.
 - **CIBA is Later, in poll mode only, and only when a real consumer exists, after the parity milestone.** The person would approve with a passkey on the approving device; a notification tap alone is not an approval. Until then discovery does not advertise CIBA and its endpoint is not served.
 - **Device login (RFC 8628) is postponed** ([#855](https://github.com/truvity/sluis/issues/855)); the standards register lists it as planned.
-- **FAPI 2.0 comes after the parity milestone,** in the customer-identity milestone ([0038](/decisions/0038-fapi-2-profile/)).
+- **FAPI 2.0 is a profile that a client declares, built in the core phase** (maintainer decision H1 of 2026-11-18, [0038](/decisions/0038-fapi-2-profile/#amendment-of-2026-11-18-the-profile-is-revived-for-the-core-issuer)); it replaces "after the parity milestone, in the customer-identity milestone".
 
 ### Break-glass recovery
 
@@ -232,5 +232,5 @@ Maintainer decision D1 B, 2026-11-12 ([0045](/decisions/0045-customers-sign-in-u
 - The recovery sign-in, built in the parity milestone: [#795](https://github.com/truvity/sluis/issues/795).
 - The generic OpenID Connect upstream for the first working version: [#1106](https://github.com/truvity/sluis/issues/1106); directory sync and subjects before the first sign-in: [#805](https://github.com/truvity/sluis/issues/805).
 - End-user subject lifecycle: [0034](/decisions/0034-end-users-and-upstream-signals/), [#1717](https://github.com/truvity/sluis/issues/1717).
-- FAPI 2 profile, in the customer-identity milestone after parity: [0038](/decisions/0038-fapi-2-profile/), [#912](https://github.com/truvity/sluis/issues/912) and [#929](https://github.com/truvity/sluis/issues/929).
+- FAPI 2 profile, in the core phase (decision H1 of 2026-11-18): [0038](/decisions/0038-fapi-2-profile/), [#912](https://github.com/truvity/sluis/issues/912) and [#929](https://github.com/truvity/sluis/issues/929).
 - Device login: [#855](https://github.com/truvity/sluis/issues/855).

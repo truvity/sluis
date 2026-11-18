@@ -7,7 +7,7 @@ Proposal: [issue #1014](https://github.com/truvity/sluis/issues/1014).
 
 ## Context
 
-sluis holds secrets because it has to: a vendor-issued app key, a bot token, a generated client secret. It is a secrets engine for static secrets only, through the KV add-on of [0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/), and for nothing else ([Data and secrets](/concepts/data/)). Some of what it holds must still leave it, because something outside sluis needs it with its own identity: a cluster that needs a client secret, a relying party that needs the key set, a host that needs the revocation list.
+sluis holds secrets because it has to: a vendor-issued app key, a bot token, a generated client secret. It is a secrets engine for static secrets only, through the KV building block of [0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/), and for nothing else ([Data and secrets](/concepts/data/)). Some of what it holds must still leave it, because something outside sluis needs it with its own identity: a cluster that needs a client secret, a relying party that needs the key set, a host that needs the revocation list.
 
 Three rules from the data model bound the design.
 
@@ -128,6 +128,10 @@ A driver for a store of record or a Kubernetes Secret implements `Put`, `Delete`
 - **A daily scheduled run** does what the daily reconcile does everywhere: it rebuilds the documents and removes what is gone, so a missed wake-up or an edit made at a destination is corrected within a day.
 
 This is the Lambda trigger that the part "Publishing public material" above left to the installation. A revoked key still leaves the key set at once ([REQ-EXPORT-020](/requirements/export/#REQ-EXPORT-020)): the stream wakes the exporter on the change of `KeyRevocation`, and the daily run is the safety net, not the path. The conformance suite and the other destination drivers stay with [#1714](https://github.com/truvity/sluis/issues/1714), and so does the choice of which items the stream's filter lets through.
+
+### Amendment of 2026-11-18: KV replaces the store of record for consumers
+
+2026-11-18 (maintainer decision A4 A; [0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/#amendment-of-2026-11-18-kv-is-a-building-block-built-in-the-core-phase)). KV is a building block of the core phase, built before the Lambda and Kubernetes shapes. A consumer, External Secrets among them, reads KV through the Vault KV v2 subset, so the **store of record** destination of "Destinations" above is not the path for consumers and is not built for them. A board installation needs no cloud for its consumers. The store-of-record text of the Context and the amendment of 2026-11-12 above are read that way. Secret sources stay read-only, written by infrastructure code for what sluis needs to start (principle 17 stands), and exporter@ still publishes public material only.
 
 ## Consequences
 

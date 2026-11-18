@@ -1,4 +1,4 @@
-# 0047 — KV is an add-on of stores that no tenant owns: policy decides by path, each store has its own data key, and External Secrets reads it through a Vault KV v2 subset
+# 0047 — KV is a building block of stores that no tenant owns: policy decides by path, each store has its own data key, and External Secrets reads it through a Vault KV v2 subset
 
 **Status:** Accepted
 **Date:** 2026-11-12
@@ -22,17 +22,17 @@ The maintainer's answers fix the shape:
 | K5 A | Staff may read values, with step-up on the stores or subtrees that policy names. |
 | K6 A | The v1 platform goes from OpenBao to SSM now, as planned. At its cutover ESO switches to sluis KV, per app, with a rollback. |
 
-This record is the design of the KV add-on. The platform that uses it first, and the cutover steps, are the maintainer's runbook and are not in the repository.
+This record is the design of the KV building block. The platform that uses it first, and the cutover steps, are the maintainer's runbook and are not in the repository.
 
 ## Decision
 
-### What the add-on is
+### What the building block is
 
-- **KV is an add-on of the P3 phase** ([0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#the-shape)), built on the blocks store, key, policy and audit. One new work actor, `kv`, holds no credential at rest ([principle 16](/principles/#16-few-credential-holders)). No actor of the core depends on it.
+- **KV is a building block of the core phase** ([0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#the-shape), amendment of 2026-11-18 below), built on the blocks store, key, policy and audit. One new work actor, `kv`, holds no credential at rest ([principle 16](/principles/#16-few-credential-holders)). No actor of the core needs it to start or to issue a token.
 - **A KV store is what Vault calls a mount.** It is named, boundary-wide and declared in signed config as the kind `KvStore`. It is not store@, the data block. The name is 1 to 32 characters of `a-z`, `0-9`, `-` and `_`, with no `/`.
 - **A secret is a path in a store,** at most 16 segments of `A-Za-z0-9._-` and 512 bytes, case-sensitive. A **version** is an immutable JSON object of string keys, numbered from 1 for each path.
 - **The semantics of Vault KV v2 are kept for what static secrets need.** A write creates version n+1. A write may carry `cas`: `0` means "only if absent" and `n` means "only if the current version is n". A store or a path may require `cas`. Versions beyond `max_versions` (default 10, at most 100) are pruned by the write that exceeds it. A soft delete keeps the sealed value and sets `deletion_time`, an undelete restores it, a destroy removes the sealed value for good, and deleting the metadata destroys the whole secret. A soft-deleted value is destroyed after `soft_delete_retention` (default 30 days), because a store that can be erased needs the bound. Metadata is `created_time`, `updated_time`, `current_version`, `oldest_version`, `max_versions`, `cas_required`, `delete_version_after`, a `custom_metadata` map of strings and a table of the state of each version.
-- **Not in the add-on:** dynamic secrets, leases, transit, response wrapping, namespaces and Vault's own ACL policies. The road not taken in [0009](/decisions/0009-export/#roads-not-taken) stays true; static KV is built here and nothing more ([REQ-KV-025](/requirements/kv/#REQ-KV-025)).
+- **Not in the building block:** dynamic secrets, leases, transit, response wrapping, namespaces and Vault's own ACL policies. The road not taken in [0009](/decisions/0009-export/#roads-not-taken) stays true; static KV is built here and nothing more ([REQ-KV-025](/requirements/kv/#REQ-KV-025)).
 - **No key material is a KV secret.** An authority key, a wrapping key and a data key stay out of every kind ([REQ-DATA-094](/requirements/data/#REQ-DATA-094)).
 
 ### Stores are boundary-wide, and a path is a hierarchy for policy (K3)
@@ -64,7 +64,7 @@ A namespaced `SecretStore` with a `serviceAccountRef` per app lets policy tell a
 
 ### Storage and encryption
 
-- **Three kinds,** added to the registry in the add-on's first change ([0004](/decisions/0004-the-data-model/#kinds)): `KvStore` (config, boundary, plain), `KvSecret` (the metadata of one path) and `KvVersion` (the value of one version), both durable, at the boundary scope with tenant `-`, sealed, written by `kv` alone, authoritative and backed up. One item per version makes a destroy the delete of one row.
+- **Three kinds,** added to the registry in the first change of the building block ([0004](/decisions/0004-the-data-model/#kinds)): `KvStore` (config, boundary, plain), `KvSecret` (the metadata of one path) and `KvVersion` (the value of one version), both durable, at the boundary scope with tenant `-`, sealed, written by `kv` alone, authoritative and backed up. One item per version makes a destroy the delete of one row.
 - **The addresses are keyed hashes.** A path has capitals and slashes, which an address part does not, so the id of a `KvSecret` is `<store>.<h>`, with `h` the base32 of `Mac(mac, "sluis-kv-path-v1" || store || 0x00 || path)`, and a `KvVersion` adds `.<n>`. The path itself is inside the sealed envelope and is checked on open.
 - **A list reads an index of hashed ancestors.** `KvSecret` declares an index `by_ancestor`; the writer adds one entry per ancestor folder, each a keyed hash of the store and the folder. An index never holds a path in the clear.
 - **A write is one transaction:** the condition on the version of the metadata, the new version, the updated metadata and the delete of the pruned versions. A condition that fails is retried by `kv` unless the caller sent `cas`, and then it is the Vault error. Reads are linearizable.
@@ -73,7 +73,7 @@ A namespaced `SecretStore` with a `serviceAccountRef` per app lets policy tell a
 - **A rewrap job re-seals live versions under the newest generation** of a store's key, so that an old generation can be retired. It is idempotent and resumable, a command of `kv`, and an automatic pass after a key event.
 - **Erasing a store deletes its items and its wraps.** A backup holds ciphertext only, and the wraps age out of the archive with its retention, so a deleted store is unreadable everywhere.
 - **A tenant's exit does not erase what its identities wrote into a store.** Their access ends by policy, and the entries stay until a store admin removes them. This is the price of K3 and it is stated in the threat model.
-- **The first limits are** 256 KiB for a value, 512 bytes and 16 segments for a path, 64 pairs of custom metadata, 10,000 secrets for a store and 100 versions for a secret. They are initial limits from the design and are measured on a board before the add-on ships ([principle 9](/principles/#9-measure-before-deciding-and-date-the-measurement)); the values pass through Raft, which is why the cap on a value is small.
+- **The first limits are** 256 KiB for a value, 512 bytes and 16 segments for a path, 64 pairs of custom metadata, 10,000 secrets for a store and 100 versions for a secret. They are initial limits from the design and are measured on a board before the building block ships ([principle 9](/principles/#9-measure-before-deciding-and-date-the-measurement)); the values pass through Raft, which is why the cap on a value is small.
 
 ### Audit (K2 A)
 
@@ -131,17 +131,26 @@ A namespaced `SecretStore` with a `serviceAccountRef` per app lets policy tell a
 
 The requirement rows are [REQ-KV-001](/requirements/kv/#REQ-KV-001) to [REQ-KV-038](/requirements/kv/#REQ-KV-038); [REQ-DATA-096](/requirements/data/#REQ-DATA-096) and the exporter rows for the retired kind are withdrawn in favour of them.
 
+### Amendment of 2026-11-18: KV is a building block built in the core phase
+
+2026-11-18 (maintainer decision A4 A; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv)). KV is a building block, not an add-on, and it is built in the core phase: after the core features and before the Lambda and Kubernetes shapes ([The core is done when](/roadmap/#the-core-is-done-when)). It stands beside store, key, policy, and audit with usage and limits. This replaces "an add-on of the P3 phase" above, and the "add-on" of the text that follows reads "building block".
+
+- **It replaces the store-of-record export path for consumers.** External Secrets reads KV through the Vault KV v2 subset (K1 A), so a board installation needs no cloud parameter store for its consumers ([0009](/decisions/0009-export/#amendment-of-2026-11-18-kv-replaces-the-store-of-record-for-consumers)).
+- **Secret sources stay read-only and are written by infrastructure code** for what sluis needs to start ([principle 17](/principles/#17-where-a-thing-is-written-decides-its-class)); the start-up secrets stay out of KV, as above.
+- **The slice of workload exchange is core work.** The `k8s-sa-token` verifier and the declared tenant of a workload in `ExchangeTrust` are built with KV, in the core phase, and not in Parity ([0022](/decisions/0022-workload-identity-and-host-enrolment/)).
+- **The cutover of an app to KV** (the maintainer's runbook, not in the repository) follows the build and is not part of the core's definition of done.
+
 ## Consequences
 
-- An operator can run the secrets of a platform on sluis alone, with an audit record of every read, and ESO needs no store of record besides sluis. The price is a new add-on that holds the most valuable data sluis stores, so the add-on is a target for an attacker: it has a store key per store, two independent checks, and a blocking audit fact.
+- An operator can run the secrets of a platform on sluis alone, with an audit record of every read, and ESO needs no store of record besides sluis. The price is a new building block that holds the most valuable data sluis stores, so it is a target for an attacker: it has a store key per store, two independent checks, and a blocking audit fact.
 - A success that cannot be recorded fails. A full spool on one board stops that board's `kv`, which is the same trade as token issuance ([REQ-AUDIT-015](/requirements/audit/#REQ-AUDIT-015)).
 - Shared stores break the tenant boundary on purpose (K3). The consequences are accepted and stated: no erasure of a tenant's entries by its exit, and audit records that sit in the caller's tenant, so only the operator sees all of a store.
-- The add-on needs a slice of the core's identity work first: the verifier for foreign tokens in `exchange` (today it verifies a trusted-issuer proof and then refuses it) and the declared tenant in `ExchangeTrust` are pulled forward from parity, and the same slice serves the other workload consumers of the platform's parity list.
+- KV needs a slice of the core's identity work first: the verifier for foreign tokens in `exchange` (today it verifies a trusted-issuer proof and then refuses it) and the declared tenant in `ExchangeTrust` are pulled forward from parity into the core phase, and the same slice serves the other workload consumers of the platform's parity list.
 - The policy schema is no longer fixed: version 2 adds the KV types. The re-plan puts a general schema extension in P4; KV pulls the first piece forward.
 - key@ gains a store scope for data keys, and the grant gains a field. That is the largest change to the blocks.
 - The word "store" now means both store@ and a KV store. The glossary names "KV store", and "vault" appears only in the wire paths of the compatibility front.
 - A later ESO release can add calls the facade does not answer. The ESO job in CI runs again on each bump of the chart, which is the guard.
-- The size of the whole add-on is large (the design guesses 6 to 10 weeks of one maintainer with agents); the guess is not a measurement.
+- The size of the whole building block is large (the design guesses 6 to 10 weeks of one maintainer with agents); the guess is not a measurement.
 
 ## Roads not taken
 
@@ -162,6 +171,6 @@ The requirement rows are [REQ-KV-001](/requirements/kv/#REQ-KV-001) to [REQ-KV-0
 
 ## Follow-ups
 
-- The add-on, in the order of its design: the registry rows and the schema; `kv` on the local installation; the store scope of key@ and the `stores` field of the grant; the facade at Level 1 and its differential suite; `sluis kv`; the slice of workload exchange; the ESO job; the managed prefix of `exchange`; a measurement on three boards (latency, a list of 10,000 secrets, a value of 256 KiB, a full spool); and the cutover step of each app ([#798](https://github.com/truvity/sluis/issues/798), [#1714](https://github.com/truvity/sluis/issues/1714)). The maintainer's script opens the issues of the pieces.
+- The building block, in the order of its design: the registry rows and the schema; `kv` on the local installation; the store scope of key@ and the `stores` field of the grant; the facade at Level 1 and its differential suite; `sluis kv`; the slice of workload exchange; the ESO job; the managed prefix of `exchange`; a measurement on three boards (latency, a list of 10,000 secrets, a value of 256 KiB, a full spool); and the cutover step of each app ([#798](https://github.com/truvity/sluis/issues/798), [#1714](https://github.com/truvity/sluis/issues/1714)). The maintainer's script opens the issues of the pieces.
 - The registry change that retires `ClientSecretExport` and moves [REQ-EXPORT-008](/requirements/export/#REQ-EXPORT-008) to six kinds goes with the managed prefix of `exchange` ([#798](https://github.com/truvity/sluis/issues/798)).
 - Level 2 of the facade, when a consumer needs it ([#798](https://github.com/truvity/sluis/issues/798)).

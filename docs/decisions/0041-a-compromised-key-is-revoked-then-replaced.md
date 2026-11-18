@@ -157,6 +157,10 @@ These decisions are accepted as risks and not as solutions. Each is written in t
 - **An alarm is raised when the key service records a signature or an unwrap by a principal other than `key@`, or more signatures for a key than the audit log records** ([REQ-SEC-035](/requirements/sec/#REQ-SEC-035)). Cards have no sign counter, so a board's detection stays audit-based.
 - **The incident page states, for each kind, the command, the effect, what consumers see and the measured time** ([REQ-OPS-079](/requirements/ops/#REQ-OPS-079), [Incident response](/security/incident-response/)). A compromise drill of the token-signing key runs at least once a year and after a change to the key path ([REQ-OPS-080](/requirements/ops/#REQ-OPS-080)); the recovery sign-in and the backup restore already have drills ([REQ-AUTHN-073](/requirements/authn/#REQ-AUTHN-073), [REQ-OPS-040](/requirements/ops/#REQ-OPS-040)).
 
+### Amendment of 2026-11-18: revoke and replace are built in the core
+
+2026-11-18 (maintainer decision H6; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv)). A compromised key is revoked, then replaced, in the core phase, as core security hardening and part of the core's definition of done ([The core is done when](/roadmap/#the-core-is-done-when)). The flow of this record is built for every key that the core and its shapes hold, the four first-version items of the Follow-ups first. The intermediate and SSH CA procedures belong to the PKI add-on and follow its phase.
+
 ## Consequences
 
 - **A compromised token-signing key stops verifying in about 6 minutes while `exporter@` can read the store (about 11 if the purge fails, longer for the static copy if it cannot), and not after about 1 h 45** (the lead time of 30 minutes, the 65 minutes of retention and 10 minutes of cache, which a healthy rotation would apply). The cost is one refresh per live client in the first minutes, and an unfamiliar-key window on a single-key installation for verifiers that refetch with a throttle.
