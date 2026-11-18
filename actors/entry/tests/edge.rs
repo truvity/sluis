@@ -14,11 +14,18 @@ use connectrpc::{RequestContext, Response, Router, ServiceRequest, ServiceResult
 use entry::{Config, Front, Sockets};
 use serde_json::Value;
 use sluis_kit::{Allow, Identities, ServerConfig, refusal};
-use sluis_proto::sluis::config::v2alpha1::Boundary;
+use sluis_proto::sluis::config::v2alpha1::{Boundary, InstallationClient, RateBound, RateLimit};
+use sluis_proto::sluis::entry::v2alpha1::RateWindow;
 use sluis_proto::sluis::exchange::v2alpha1::{
     ExchangeService, ExchangeServiceExt, TokenExchangeRequest,
 };
 use sluis_proto::sluis::key::v2alpha1::KeyRevocation;
+use sluis_proto::sluis::key::v2alpha1::{
+    KeyService, KeyServiceExt, MacRequest, MacResponse, OpenGrantRequest, OpenGrantResponse,
+    OpenRequest, OpenResponse, PublicKeyRequest, PublicKeyResponse, PutCertificateRequest,
+    PutCertificateResponse, SealGrantRequest, SealGrantResponse, SealRequest, SealResponse,
+    SignRequest, SignResponse, TokenKeyRequest, TokenKeyResponse,
+};
 use sluis_proto::sluis::port::transport::v2alpha1::{
     AckRequest, AckResponse, EmitRequest, EmitResponse, ReceiveRequest, ReceiveResponse,
     TransportService, TransportServiceExt,
@@ -33,7 +40,7 @@ use sluis_proto::sluis::session::v2alpha1::{
 use sluis_proto::sluis::signer::v2alpha1::{SigningKey, SigningRing};
 use sluis_proto::sluis::store::v2alpha1::{
     GetRequest, GetResponse, GetSignedConfigRequest, GetSignedConfigResponse, Item, ListRequest,
-    ListResponse, StoreService, StoreServiceExt, WatchRequest, WatchResponse, WriteRequest,
+    ListResponse, StoreService, StoreServiceExt, Verb, WatchRequest, WatchResponse, WriteRequest,
     WriteResponse,
 };
 use sluis_proto::sluis::r#type::v2alpha1::{Address, Header, HttpReply};
@@ -75,6 +82,35 @@ struct Fake {
     /// The issuer of the `Boundary` that store@ holds; `None` is [`ISSUER`].
     issuer: Mutex<Option<String>>,
     emitted: Mutex<Vec<Value>>,
+    /// The `RateBound` item that store@ holds; `None` is no document (every limit is its default).
+    rate_bound: Mutex<Option<RateBound>>,
+    /// The ids of the `InstallationClient` items; `None` is `sluis-cli`, `app-a` and `app-b`.
+    clients: Mutex<Option<Vec<String>>>,
+    /// The `RateWindow` items: id -> (value as stored, version, ttl of the last write).
+    windows: Mutex<Windows>,
+    /// Every write of a `RateWindow`: (verb, id).
+    window_writes: Mutex<Vec<(String, String)>>,
+    /// Reads of an `RateWindow` that is not there: the refusal store@ audits.
+    window_misses: Mutex<usize>,
+    /// store@ fails every call that touches `RateWindow`.
+    windows_fail: Mutex<bool>,
+    /// key@ fails every call.
+    key_fails: Mutex<bool>,
+    macs: Mutex<Vec<MacRequest>>,
+}
+
+/// The `RateWindow` items: id -> (value, version, ttl).
+type Windows = std::collections::BTreeMap<String, (Vec<u8>, u64, Duration)>;
+
+/// The key of the keyed hash the fake key@ makes: a test value, not a real key.
+const MAC_KEY: &[u8] = b"a test key of the fake key service, 48 bytes long...";
+
+fn fake_mac(label: &str, input: &[u8]) -> Vec<u8> {
+    let key = aws_lc_rs::hmac::Key::new(aws_lc_rs::hmac::HMAC_SHA384, MAC_KEY);
+    let mut msg = u16::try_from(label.len()).unwrap().to_be_bytes().to_vec();
+    msg.extend_from_slice(label.as_bytes());
+    msg.extend_from_slice(input);
+    aws_lc_rs::hmac::sign(&key, &msg).as_ref().to_vec()
 }
 
 impl Fake {
@@ -264,6 +300,32 @@ impl StoreService for FakeStore {
         _: RequestContext,
         r: ServiceRequest<'_, GetRequest>,
     ) -> ServiceResult<GetResponse> {
+        if r.address.kind == "rate-window" {
+            if *self.0.windows_fail.lock().unwrap() {
+                return Err(refusal(ErrorCode::Unavailable, "engine", ""));
+            }
+            let id = r.address.id.to_string();
+            let held = self.0.windows.lock().unwrap().get(&id).cloned();
+            let Some((value, version, _)) = held else {
+                *self.0.window_misses.lock().unwrap() += 1;
+                return Err(refusal(ErrorCode::NotFound, "absent", ""));
+            };
+            return Response::ok(GetResponse {
+                item: Some(Item {
+                    address: Some(Address {
+                        kind: "rate-window".into(),
+                        id,
+                        ..Address::default()
+                    })
+                    .into(),
+                    version,
+                    value,
+                    ..Item::default()
+                })
+                .into(),
+                ..GetResponse::default()
+            });
+        }
         *self.0.store_gets.lock().unwrap() += 1;
         if *self.0.store_fails.lock().unwrap() {
             return Err(refusal(ErrorCode::Unavailable, "engine", ""));
@@ -347,6 +409,56 @@ impl StoreService for FakeStore {
         _: RequestContext,
         r: ServiceRequest<'_, ListRequest>,
     ) -> ServiceResult<ListResponse> {
+        if r.kind == "rate-bound" || r.kind == "installation-client" {
+            if *self.0.store_fails.lock().unwrap() {
+                return Err(refusal(ErrorCode::Unavailable, "engine", ""));
+            }
+            let items = if r.kind == "rate-bound" {
+                self.0
+                    .rate_bound
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .map(|b| Item {
+                        address: Some(Address {
+                            kind: "rate-bound".into(),
+                            id: "default".into(),
+                            ..Address::default()
+                        })
+                        .into(),
+                        version: 1,
+                        value: b.encode_to_vec(),
+                        ..Item::default()
+                    })
+                    .collect()
+            } else {
+                let ids =
+                    self.0.clients.lock().unwrap().clone().unwrap_or_else(|| {
+                        ["sluis-cli", "app-a", "app-b"].map(String::from).to_vec()
+                    });
+                ids.into_iter()
+                    .map(|id| Item {
+                        address: Some(Address {
+                            kind: "installation-client".into(),
+                            id,
+                            ..Address::default()
+                        })
+                        .into(),
+                        version: 1,
+                        value: InstallationClient {
+                            kind: "public".into(),
+                            ..InstallationClient::default()
+                        }
+                        .encode_to_vec(),
+                        ..Item::default()
+                    })
+                    .collect()
+            };
+            return Response::ok(ListResponse {
+                items,
+                ..ListResponse::default()
+            });
+        }
         if r.kind != "key-revocation" {
             return Err(refusal(ErrorCode::Unimplemented, "unsupported", ""));
         }
@@ -386,9 +498,55 @@ impl StoreService for FakeStore {
     async fn write(
         &self,
         _: RequestContext,
-        _: ServiceRequest<'_, WriteRequest>,
+        r: ServiceRequest<'_, WriteRequest>,
     ) -> ServiceResult<WriteResponse> {
-        Err(refusal(ErrorCode::Unimplemented, "unsupported", ""))
+        // Only the buckets of the limiter are written, one operation at a time, and the whole call is atomic.
+        let w = r.to_owned_message();
+        let [op] = w.operations.as_slice() else {
+            return Err(refusal(ErrorCode::Unimplemented, "unsupported", ""));
+        };
+        let a = op.address.as_option().unwrap();
+        if a.kind != "rate-window" {
+            return Err(refusal(ErrorCode::Unimplemented, "unsupported", ""));
+        }
+        if *self.0.windows_fail.lock().unwrap() {
+            return Err(refusal(ErrorCode::Unavailable, "engine", ""));
+        }
+        // A bucket has no tenant: the address says so with the empty tenant on the wire.
+        assert_eq!(a.tenant, "", "a bucket of the core has no tenant");
+        let ttl = op.ttl.as_option().map_or(Duration::ZERO, |d| {
+            Duration::new(u64::try_from(d.seconds).unwrap(), 0)
+        });
+        assert!(
+            !ttl.is_zero() && ttl <= Duration::from_secs(3600),
+            "a bucket is written with a ttl of at most an hour: {ttl:?}"
+        );
+        let mut held = self.0.windows.lock().unwrap();
+        let verb = op.verb.as_known().unwrap();
+        self.0
+            .window_writes
+            .lock()
+            .unwrap()
+            .push((format!("{verb:?}"), a.id.clone()));
+        let version = match (verb, held.get(&a.id)) {
+            (Verb::CREATE, None) => 1,
+            (Verb::CREATE, Some(_)) => {
+                return Err(refusal(ErrorCode::AlreadyExists, "exists", ""));
+            }
+            (Verb::UPDATE, Some((_, v, _))) if *v == op.if_version => v + 1,
+            (Verb::UPDATE, _) => return Err(refusal(ErrorCode::Aborted, "version", "")),
+            _ => return Err(refusal(ErrorCode::Unimplemented, "unsupported", "")),
+        };
+        held.insert(a.id.clone(), (op.value.clone(), version, ttl));
+        Response::ok(WriteResponse {
+            items: vec![Item {
+                address: Some(a.clone()).into(),
+                version,
+                value: op.value.clone(),
+                ..Item::default()
+            }],
+            ..WriteResponse::default()
+        })
     }
     async fn get_signed_config(
         &self,
@@ -433,6 +591,80 @@ impl TransportService for FakeSpool {
         _: RequestContext,
         _: ServiceRequest<'_, AckRequest>,
     ) -> ServiceResult<AckResponse> {
+        Err(refusal(ErrorCode::Unimplemented, "unsupported", ""))
+    }
+}
+
+struct FakeKey(Arc<Fake>);
+impl KeyService for FakeKey {
+    async fn mac(
+        &self,
+        _: RequestContext,
+        r: ServiceRequest<'_, MacRequest>,
+    ) -> ServiceResult<MacResponse> {
+        self.0.macs.lock().unwrap().push(r.to_owned_message());
+        if *self.0.key_fails.lock().unwrap() {
+            return Err(refusal(ErrorCode::Unavailable, "engine", ""));
+        }
+        Response::ok(MacResponse {
+            mac: fake_mac(r.label, r.input),
+            ..MacResponse::default()
+        })
+    }
+    async fn seal(
+        &self,
+        _: RequestContext,
+        _: ServiceRequest<'_, SealRequest>,
+    ) -> ServiceResult<SealResponse> {
+        Err(refusal(ErrorCode::Unimplemented, "unsupported", ""))
+    }
+    async fn open(
+        &self,
+        _: RequestContext,
+        _: ServiceRequest<'_, OpenRequest>,
+    ) -> ServiceResult<OpenResponse> {
+        Err(refusal(ErrorCode::Unimplemented, "unsupported", ""))
+    }
+    async fn seal_grant(
+        &self,
+        _: RequestContext,
+        _: ServiceRequest<'_, SealGrantRequest>,
+    ) -> ServiceResult<SealGrantResponse> {
+        Err(refusal(ErrorCode::Unimplemented, "unsupported", ""))
+    }
+    async fn open_grant(
+        &self,
+        _: RequestContext,
+        _: ServiceRequest<'_, OpenGrantRequest>,
+    ) -> ServiceResult<OpenGrantResponse> {
+        Err(refusal(ErrorCode::Unimplemented, "unsupported", ""))
+    }
+    async fn sign(
+        &self,
+        _: RequestContext,
+        _: ServiceRequest<'_, SignRequest>,
+    ) -> ServiceResult<SignResponse> {
+        Err(refusal(ErrorCode::Unimplemented, "unsupported", ""))
+    }
+    async fn public_key(
+        &self,
+        _: RequestContext,
+        _: ServiceRequest<'_, PublicKeyRequest>,
+    ) -> ServiceResult<PublicKeyResponse> {
+        Err(refusal(ErrorCode::Unimplemented, "unsupported", ""))
+    }
+    async fn put_certificate(
+        &self,
+        _: RequestContext,
+        _: ServiceRequest<'_, PutCertificateRequest>,
+    ) -> ServiceResult<PutCertificateResponse> {
+        Err(refusal(ErrorCode::Unimplemented, "unsupported", ""))
+    }
+    async fn token_key(
+        &self,
+        _: RequestContext,
+        _: ServiceRequest<'_, TokenKeyRequest>,
+    ) -> ServiceResult<TokenKeyResponse> {
         Err(refusal(ErrorCode::Unimplemented, "unsupported", ""))
     }
 }
@@ -512,7 +744,14 @@ async fn up_front(table: Table, front: Front) -> Up {
         store: d.join("store.sock"),
         audit: d.join("emit.sock"),
         reader: d.join("reader.sock"),
+        key: d.join("key.sock"),
     };
+    fake_server(
+        &sockets.key,
+        "key",
+        Arc::new(FakeKey(fake.clone())).register(Router::new()),
+        &mut stop,
+    );
     fake_server(
         &sockets.reader,
         "reader",
@@ -562,6 +801,7 @@ async fn up_front(table: Table, front: Front) -> Up {
         &sockets.exchange,
         &sockets.store,
         &sockets.audit,
+        &sockets.key,
         &socket,
     ] {
         wait_for(s).await;
@@ -3630,4 +3870,611 @@ async fn discovery_lists_rs256_only_while_an_rs256_key_is_active() {
         // The EC key is in every one of them, whatever the RSA key does.
         assert_eq!(set["keys"][0]["kid"], "kid-1", "{case}");
     }
+}
+
+// ---------------------------------------------------------------- the limits (ADR 0036, decision H7)
+
+type Field = buffa::MessageField<RateLimit, buffa::Inline<RateLimit>>;
+
+/// `n` requests in `secs` seconds: a window so long that no bucket refills during a test.
+fn lim(n: u32, secs: i64) -> Field {
+    buffa::MessageField::some(RateLimit {
+        limit: n,
+        window: buffa::MessageField::some(buffa_types::google::protobuf::Duration {
+            seconds: secs,
+            nanos: 0,
+            ..Default::default()
+        }),
+        ..RateLimit::default()
+    })
+}
+
+/// An `up()` whose store@ holds the `RateBound` that `f` makes from the empty document.
+async fn up_with(f: impl FnOnce(&mut RateBound)) -> Up {
+    let up = up().await;
+    let mut b = RateBound::default();
+    f(&mut b);
+    *up.fake.rate_bound.lock().unwrap() = Some(b);
+    up
+}
+
+const XFF: &str = "X-Forwarded-For";
+const A: &str = "203.0.113.9";
+const B: &str = "203.0.113.10";
+
+fn token_body(client: &str) -> String {
+    format!(
+        "grant_type=authorization_code&code=c&redirect_uri=u&code_verifier=v&client_id={client}"
+    )
+}
+
+async fn token_from(up: &Up, addr: &str, client: &str) -> Resp {
+    http(
+        up,
+        "POST",
+        "/token",
+        &[FORM, (XFF, addr)],
+        token_body(client).as_bytes(),
+    )
+    .await
+}
+
+async fn authorize_from(up: &Up, addr: &str, client: &str) -> Resp {
+    let q = AUTHORIZE_Q.replace("client_id=sluis-cli", &format!("client_id={client}"));
+    http(up, "GET", &format!("/authorize?{q}"), &[(XFF, addr)], b"").await
+}
+
+fn statuses(rs: &[Resp]) -> Vec<u16> {
+    rs.iter().map(|r| r.status).collect()
+}
+
+/// The last audit record, and the reason it names.
+fn last_record(up: &Up) -> Value {
+    up.fake.emitted.lock().unwrap().last().unwrap().clone()
+}
+
+/// verifies: REQ-SEC-043, REQ-SEC-024
+///
+/// A flood on `/token` from one address is refused after the limit, with no call to `session` for what is refused, and
+/// another address is not refused for it.
+#[tokio::test]
+async fn a_flood_on_token_from_one_address_is_refused_after_its_limit() {
+    let up = up_with(|b| b.token_address = lim(3, 3600)).await;
+    let mut got = Vec::new();
+    for _ in 0..6 {
+        got.push(token_from(&up, A, "app-a").await);
+    }
+    assert_eq!(statuses(&got), [200, 200, 200, 429, 429, 429]);
+    assert_eq!(up.fake.calls.lock().unwrap().token.len(), 3);
+    // The refusal is 429 with Retry-After.
+    assert_eq!(got[3].h("retry-after"), Some("5"));
+    assert_eq!(got[3].h("content-type"), Some("application/problem+json"));
+    // Another address has its own bucket.
+    assert_eq!(token_from(&up, B, "app-a").await.status, 200);
+    assert_eq!(up.fake.calls.lock().unwrap().token.len(), 4);
+}
+
+/// verifies: REQ-SEC-043
+#[tokio::test]
+async fn a_flood_on_authorize_from_one_address_is_refused_after_its_limit() {
+    let up = up_with(|b| b.authorize_address = lim(2, 3600)).await;
+    let mut got = Vec::new();
+    for _ in 0..4 {
+        got.push(authorize_from(&up, A, "app-a").await);
+    }
+    assert_eq!(statuses(&got), [200, 200, 429, 429]);
+    assert_eq!(up.fake.calls.lock().unwrap().authorize.len(), 2);
+    assert_eq!(authorize_from(&up, B, "app-a").await.status, 200);
+    // A POST is the same endpoint and the same bucket.
+    let r = http(
+        &up,
+        "POST",
+        "/authorize",
+        &[FORM, (XFF, A)],
+        AUTHORIZE_Q.as_bytes(),
+    )
+    .await;
+    assert_eq!(r.status, 429);
+}
+
+/// verifies: REQ-SEC-044
+///
+/// The recovery routes (the two of passkey registration) share one bucket for a source address, and it does not touch the
+/// buckets of `/token` and `/authorize`.
+#[tokio::test]
+async fn a_flood_on_the_recovery_routes_is_refused_after_its_limit() {
+    let up = up_with(|b| b.recovery_address = lim(3, 3600)).await;
+    let register = |addr: &'static str| {
+        let up = &up;
+        async move {
+            http(
+                up,
+                "POST",
+                "/passkeys/register",
+                &[FORM, (XFF, addr)],
+                b"response=%7B%7D",
+            )
+            .await
+        }
+    };
+    let add = |addr: &'static str| {
+        let up = &up;
+        async move { http(up, "GET", "/passkeys/add", &[(XFF, addr)], b"").await }
+    };
+    let got = [
+        add(A).await,
+        register(A).await,
+        add(A).await,
+        register(A).await,
+        add(A).await,
+    ];
+    assert_eq!(statuses(&got), [200, 200, 200, 429, 429]);
+    {
+        let calls = up.fake.calls.lock().unwrap();
+        assert_eq!(
+            (calls.passkey_add.len(), calls.passkey_register.len()),
+            (2, 1)
+        );
+    }
+    assert_eq!(add(B).await.status, 200);
+    // The other endpoints of the same address are untouched.
+    assert_eq!(token_from(&up, A, "app-a").await.status, 200);
+    assert_eq!(authorize_from(&up, A, "app-a").await.status, 200);
+}
+
+/// verifies: REQ-SEC-021, REQ-SEC-024
+///
+/// A client's loop is refused after its limit, and the limit of one client does not refuse another.
+#[tokio::test]
+async fn a_limit_of_one_client_does_not_refuse_another_on_token() {
+    // Each request comes from its own address, so only the client's bucket can refuse.
+    let up = up_with(|b| b.token_client = lim(3, 3600)).await;
+    let mut got = Vec::new();
+    for i in 0..5 {
+        got.push(token_from(&up, &format!("198.51.100.{i}"), "app-a").await);
+    }
+    assert_eq!(statuses(&got), [200, 200, 200, 429, 429]);
+    assert_eq!(got[3].h("retry-after"), Some("5"));
+    // Another client has its own bucket, whatever the first one has spent.
+    for i in 0..3 {
+        let r = token_from(&up, &format!("198.51.100.{}", 100 + i), "app-b").await;
+        assert_eq!(r.status, 200, "app-b, request {i}");
+    }
+    assert_eq!(token_from(&up, "198.51.100.200", "app-b").await.status, 429);
+    assert_eq!(up.fake.calls.lock().unwrap().token.len(), 6);
+    let rec = last_record(&up);
+    assert_eq!(rec["status_code"], "rate_token_client");
+}
+
+/// verifies: REQ-SEC-021
+///
+/// A client that authenticates with a Basic header is the same client as one that names itself in the form.
+#[tokio::test]
+async fn a_client_of_a_basic_header_is_counted_as_the_client_of_a_form() {
+    let up = up_with(|b| b.token_client = lim(2, 3600)).await;
+    // "app-a:secret"
+    let basic = "Basic YXBwLWE6c2VjcmV0";
+    let by_header = |addr: String| {
+        let up = &up;
+        async move {
+            http(
+                up,
+                "POST",
+                "/token",
+                &[FORM, (XFF, &addr), ("Authorization", basic)],
+                b"grant_type=authorization_code&code=c&redirect_uri=u&code_verifier=v",
+            )
+            .await
+        }
+    };
+    assert_eq!(by_header("198.51.100.1".into()).await.status, 200);
+    assert_eq!(token_from(&up, "198.51.100.2", "app-a").await.status, 200);
+    assert_eq!(by_header("198.51.100.3".into()).await.status, 429);
+    assert_eq!(token_from(&up, "198.51.100.4", "app-a").await.status, 429);
+    assert_eq!(token_from(&up, "198.51.100.5", "app-b").await.status, 200);
+}
+
+/// verifies: REQ-SEC-042
+#[tokio::test]
+async fn a_limit_of_one_client_does_not_refuse_another_on_authorize() {
+    let up = up_with(|b| b.authorize_client = lim(2, 3600)).await;
+    let mut got = Vec::new();
+    for i in 0..4 {
+        got.push(authorize_from(&up, &format!("198.51.100.{i}"), "app-a").await);
+    }
+    assert_eq!(statuses(&got), [200, 200, 429, 429]);
+    assert_eq!(
+        authorize_from(&up, "198.51.100.50", "app-b").await.status,
+        200
+    );
+    assert_eq!(
+        authorize_from(&up, "198.51.100.51", "app-b").await.status,
+        200
+    );
+    assert_eq!(
+        authorize_from(&up, "198.51.100.52", "app-b").await.status,
+        429
+    );
+    assert_eq!(up.fake.calls.lock().unwrap().authorize.len(), 4);
+    assert_eq!(last_record(&up)["status_code"], "rate_authorize_client");
+}
+
+/// verifies: REQ-SEC-021, REQ-SEC-042
+///
+/// A request cannot make a bucket by naming a client the installation does not declare: all of them share one, and it is
+/// not the bucket of a client that is declared.
+#[tokio::test]
+async fn clients_the_installation_does_not_declare_share_one_bucket() {
+    let up = up_with(|b| b.token_client = lim(3, 3600)).await;
+    let mut got = Vec::new();
+    for i in 0..5 {
+        got.push(token_from(&up, "198.51.100.1", &format!("made-up-{i}")).await);
+    }
+    assert_eq!(statuses(&got), [200, 200, 200, 429, 429]);
+    // A declared client is unaffected, and nothing was written under the name of an undeclared client.
+    assert_eq!(token_from(&up, "198.51.100.2", "app-a").await.status, 200);
+    let ids: Vec<String> = up.fake.windows.lock().unwrap().keys().cloned().collect();
+    assert!(ids.iter().all(|id| !id.contains("made-up")), "{ids:?}");
+    assert!(ids.contains(&"token-client/other".to_owned()), "{ids:?}");
+    assert!(ids.contains(&"token-client/c/app-a".to_owned()), "{ids:?}");
+}
+
+/// verifies: REQ-SEC-043, REQ-SEC-021
+///
+/// The address is counted before the client: a source past its own bound cannot spend the bucket of a client, so it does not
+/// refuse the client's requests from other addresses.
+#[tokio::test]
+async fn a_source_past_its_bound_does_not_spend_the_bucket_of_a_client() {
+    let up = up_with(|b| {
+        b.token_address = lim(2, 3600);
+        b.token_client = lim(3, 3600);
+    })
+    .await;
+    for _ in 0..10 {
+        let _ = token_from(&up, A, "app-a").await;
+    }
+    // The address was admitted twice, so the client was charged twice, and no more.
+    assert_eq!(up.fake.calls.lock().unwrap().token.len(), 2);
+    assert_eq!(token_from(&up, B, "app-a").await.status, 200);
+    assert_eq!(token_from(&up, "203.0.113.11", "app-a").await.status, 429);
+}
+
+/// verifies: REQ-SEC-045, REQ-SEC-048, REQ-SEC-024
+///
+/// A refusal discloses nothing: the same fixed answer for every limit, whichever one it was and whoever spent it, and no
+/// name of a client, no address and no word of the limit in it. The audit record names the limit, as a denial, and holds no
+/// address and no client.
+#[tokio::test]
+async fn a_refusal_discloses_nothing_and_is_audited_as_a_denial() {
+    let up = up_with(|b| {
+        b.token_address = lim(1, 3600);
+        b.authorize_address = lim(1, 3600);
+        b.recovery_address = lim(1, 3600);
+        b.token_client = lim(1, 3600);
+        b.authorize_client = lim(1, 3600);
+    })
+    .await;
+    // One of each kind of refusal.
+    let _ = token_from(&up, A, "app-a").await;
+    let by_token_address = token_from(&up, A, "app-a").await;
+    let by_token_client = token_from(&up, B, "app-a").await;
+    let _ = authorize_from(&up, A, "app-b").await;
+    let by_authorize_address = authorize_from(&up, A, "app-b").await;
+    let by_authorize_client = authorize_from(&up, B, "app-b").await;
+    let _ = http(&up, "GET", "/passkeys/add", &[(XFF, A)], b"").await;
+    let by_recovery = http(&up, "GET", "/passkeys/add", &[(XFF, A)], b"").await;
+    let all = [
+        &by_token_address,
+        &by_token_client,
+        &by_authorize_address,
+        &by_authorize_client,
+        &by_recovery,
+    ];
+    for r in all {
+        assert_eq!(r.status, 429);
+        assert_eq!(r.body, by_token_address.body, "one body for every limit");
+        assert_eq!(r.h("retry-after"), Some("5"));
+        assert_eq!(r.h("content-type"), Some("application/problem+json"));
+        let text = r.text();
+        for secret in [
+            "app-a",
+            "app-b",
+            "203.0.113",
+            "token",
+            "authorize",
+            "recovery",
+            "address",
+            "client",
+        ] {
+            assert!(!text.contains(secret), "{secret} in {text}");
+        }
+        for (k, v) in &r.headers {
+            for secret in ["app-a", "app-b", "203.0.113"] {
+                assert!(!v.contains(secret) && !k.contains(secret), "{k}: {v}");
+            }
+        }
+    }
+    // The audit records: a failure, with the word of the limit, and nothing the caller sent.
+    let recs = up.fake.emitted.lock().unwrap().clone();
+    let denials: Vec<(&str, &str)> = recs
+        .iter()
+        .filter(|r| {
+            r["status_code"]
+                .as_str()
+                .is_some_and(|c| c.starts_with("rate_"))
+        })
+        .map(|r| {
+            (
+                r["api"]["operation"].as_str().unwrap(),
+                r["status_code"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        denials,
+        [
+            ("token", "rate_token_address"),
+            ("token", "rate_token_client"),
+            ("authorize", "rate_authorize_address"),
+            ("authorize", "rate_authorize_client"),
+            ("passkeys_add", "rate_recovery_address"),
+        ]
+    );
+    for r in recs.iter().filter(|r| {
+        r["status_code"]
+            .as_str()
+            .is_some_and(|c| c.starts_with("rate_"))
+    }) {
+        assert_eq!(r["status_id"], 2, "a denial is a failure");
+        assert_eq!(r["unmapped"]["sluis"]["http_status"], 429);
+        let text = r.to_string();
+        for secret in ["app-a", "app-b", "203.0.113"] {
+            assert!(!text.contains(secret), "{secret} in {text}");
+        }
+    }
+}
+
+/// verifies: REQ-SEC-027
+///
+/// A bucket of a source address is named by a keyed hash made at key@ with the `mac` purpose, and the address is in no id and
+/// no item: not in the clear, not in the bytes key@ was asked to hash with a label of another use.
+#[tokio::test]
+async fn a_rate_window_id_is_a_mac_output_and_the_source_address_is_not_in_the_item() {
+    let up = up_with(|b| b.token_address = lim(5, 3600)).await;
+    assert_eq!(token_from(&up, A, "app-a").await.status, 200);
+    let macs = up.fake.macs.lock().unwrap().clone();
+    assert!(!macs.is_empty());
+    for m in &macs {
+        assert_eq!(
+            (m.purpose.as_str(), m.tenant.as_str(), m.label.as_str()),
+            ("mac", "", "sluis-rate-address-v1")
+        );
+        // The family and the four bytes of the address: what key@ hashes, and the only thing that holds them.
+        assert_eq!(m.input, [4, 203, 0, 113, 9]);
+        assert!(m.epoch.is_empty() && m.grant.is_empty());
+    }
+    let expected = fake_mac("sluis-rate-address-v1", &[4, 203, 0, 113, 9]);
+    let hex: String = expected[..16].iter().map(|b| format!("{b:02x}")).collect();
+    let held = up.fake.windows.lock().unwrap().clone();
+    let id = format!("token-address/{hex}");
+    assert!(held.contains_key(&id), "{id} not in {:?}", held.keys());
+    for (id, (value, _, _)) in &held {
+        assert!(!id.contains("203") && !id.contains("113"), "{id}");
+        assert!(
+            !value.windows(4).any(|w| w == [203, 0, 113, 9]),
+            "the address is in the item of {id}"
+        );
+        let item = RateWindow::decode_from_slice(value).unwrap();
+        if id.starts_with("token-address/") {
+            assert_eq!(item.milli_tokens, 4000, "one of five tokens is taken");
+        }
+    }
+}
+
+/// verifies: REQ-SEC-027
+///
+/// The address of a person is the one the forwarder wrote: what a client sent in front of it is never read, so a request
+/// cannot choose its bucket (or leave one) by writing the header itself. A request that carries no usable address is not
+/// counted against an address, and a peer that is not the forwarder is not served at all, whatever it writes.
+#[tokio::test]
+async fn a_forwarded_address_is_honoured_only_as_the_forwarder_wrote_it() {
+    let up = up_with(|b| b.token_address = lim(2, 3600)).await;
+    // Whatever the client wrote first, the address is the last one: the same bucket.
+    for (i, lead) in ["198.51.100.1", "198.51.100.2", "not an address"]
+        .iter()
+        .enumerate()
+    {
+        let r = http(
+            &up,
+            "POST",
+            "/token",
+            &[FORM, (XFF, &format!("{lead}, {A}"))],
+            token_body("app-a").as_bytes(),
+        )
+        .await;
+        assert_eq!(r.status, [200, 200, 429][i], "request {i}");
+    }
+    // The same address in two fields of the header is the same address.
+    let r = http(
+        &up,
+        "POST",
+        "/token",
+        &[FORM, (XFF, "198.51.100.9"), (XFF, A)],
+        token_body("app-a").as_bytes(),
+    )
+    .await;
+    assert_eq!(r.status, 429);
+    // No address, an unusable one: no bucket of an address, so no refusal of this kind, and nothing written.
+    let before = up.fake.window_writes.lock().unwrap().len();
+    for h in [vec![], vec![(XFF, "unknown")], vec![(XFF, "")]] {
+        let mut headers = vec![FORM];
+        headers.extend(h);
+        for _ in 0..4 {
+            let r = http(
+                &up,
+                "POST",
+                "/token",
+                &headers,
+                token_body("app-a").as_bytes(),
+            )
+            .await;
+            assert_eq!(r.status, 200);
+        }
+    }
+    let after: Vec<(String, String)> = up.fake.window_writes.lock().unwrap()[before..].to_vec();
+    assert!(
+        after.iter().all(|(_, id)| id.starts_with("token-client/")),
+        "{after:?}"
+    );
+    // A peer that is not the forwarder gets nothing, however it spells the header, and makes no bucket.
+    let other = up_as(me_as("session", 0)).await;
+    let mut s = tokio::net::UnixStream::connect(&other.socket)
+        .await
+        .unwrap();
+    let _ = s
+        .write_all(
+            b"POST /token HTTP/1.1\r\nHost: x\r\nConnection: close\r\nX-Forwarded-For: 203.0.113.99\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 0\r\n\r\n",
+        )
+        .await;
+    let mut raw = Vec::new();
+    let _ = tokio::time::timeout(Duration::from_secs(5), s.read_to_end(&mut raw)).await;
+    assert!(
+        raw.is_empty(),
+        "a peer that is not the forwarder got an answer"
+    );
+    assert!(other.fake.windows.lock().unwrap().is_empty());
+    assert!(other.fake.macs.lock().unwrap().is_empty());
+}
+
+/// verifies: REQ-SEC-047
+///
+/// With no `RateBound` document every limit is its default; the document replaces the limits it names and no others.
+#[tokio::test]
+async fn the_limits_are_the_defaults_until_signed_config_names_them() {
+    // No document: the recovery default is 30 requests, and the thirty-first is refused.
+    let up = up().await;
+    for i in 0..30 {
+        let r = http(&up, "GET", "/passkeys/add", &[(XFF, A)], b"").await;
+        assert_eq!(r.status, 200, "request {i}");
+    }
+    assert_eq!(
+        http(&up, "GET", "/passkeys/add", &[(XFF, A)], b"")
+            .await
+            .status,
+        429
+    );
+    // A document that names the recovery limit only: the others stay at their defaults, which a handful of requests does not
+    // reach.
+    let up = up_with(|b| b.recovery_address = lim(2, 3600)).await;
+    let got = [
+        http(&up, "GET", "/passkeys/add", &[(XFF, A)], b"").await,
+        http(&up, "GET", "/passkeys/add", &[(XFF, A)], b"").await,
+        http(&up, "GET", "/passkeys/add", &[(XFF, A)], b"").await,
+    ];
+    assert_eq!(statuses(&got), [200, 200, 429]);
+    for _ in 0..10 {
+        assert_eq!(token_from(&up, A, "app-a").await.status, 200);
+    }
+    // A value past what the release allows never lifts a bound (the loader refuses it; entry holds it anyway).
+    let up = up_with(|b| b.recovery_address = lim(u32::MAX, 86_400)).await;
+    let r = http(&up, "GET", "/passkeys/add", &[(XFF, A)], b"").await;
+    assert_eq!(r.status, 200);
+    let (value, _, ttl) = up
+        .fake
+        .windows
+        .lock()
+        .unwrap()
+        .values()
+        .next()
+        .unwrap()
+        .clone();
+    assert_eq!(
+        ttl,
+        Duration::from_secs(3600),
+        "the window is held to an hour"
+    );
+    let item = RateWindow::decode_from_slice(&value).unwrap();
+    assert_eq!(
+        item.milli_tokens,
+        100_000 * 1000 - 1000,
+        "the limit is held to 100000"
+    );
+}
+
+/// verifies: REQ-SEC-021, REQ-SEC-043
+///
+/// A request refused for an empty bucket writes nothing: the flood past the limit costs a refusal and no stored state, and a
+/// bucket that was not there is created, never read first (a read of an absent item is a refusal store@ audits).
+#[tokio::test]
+async fn a_refused_request_writes_nothing_and_the_first_request_reads_nothing() {
+    let up = up_with(|b| b.token_address = lim(3, 3600)).await;
+    for _ in 0..50 {
+        let _ = token_from(&up, A, "app-a").await;
+    }
+    let writes = up.fake.window_writes.lock().unwrap().clone();
+    let address: Vec<&(String, String)> = writes
+        .iter()
+        .filter(|(_, id)| id.starts_with("token-address/"))
+        .collect();
+    // One create and two updates for three admits, and nothing for the forty-seven refusals.
+    assert_eq!(
+        address.iter().map(|(v, _)| v.as_str()).collect::<Vec<_>>(),
+        ["CREATE", "UPDATE", "UPDATE"]
+    );
+    assert_eq!(*up.fake.window_misses.lock().unwrap(), 0);
+}
+
+/// verifies: REQ-SEC-043, REQ-SEC-021
+///
+/// Requests at the same moment, on the same bucket, are admitted no more than the limit: a write that finds the bucket moved
+/// reads it and takes its token from what it holds.
+#[tokio::test]
+async fn concurrent_requests_on_one_bucket_are_admitted_no_more_than_its_limit() {
+    let up = Arc::new(up_with(|b| b.token_address = lim(5, 3600)).await);
+    let mut tasks = Vec::new();
+    for _ in 0..20 {
+        let up = up.clone();
+        tasks.push(tokio::spawn(async move {
+            token_from(&up, A, "app-a").await.status
+        }));
+    }
+    let mut ok = 0;
+    for t in tasks {
+        if t.await.unwrap() == 200 {
+            ok += 1;
+        }
+    }
+    assert_eq!(ok, 5);
+    assert_eq!(up.fake.calls.lock().unwrap().token.len(), 5);
+}
+
+/// verifies: REQ-SEC-049
+///
+/// A limiter that cannot read or write its bucket does not let the request through unbounded: it is refused with 503, in the
+/// same fixed words as every other 503, and audited with its reason.
+#[tokio::test]
+async fn a_limiter_that_cannot_reach_its_store_or_its_key_fails_closed() {
+    let up = up().await;
+    *up.fake.windows_fail.lock().unwrap() = true;
+    let r = token_from(&up, A, "app-a").await;
+    assert_eq!(r.status, 503);
+    assert_eq!(last_record(&up)["status_code"], "rate_store");
+    assert!(up.fake.calls.lock().unwrap().token.is_empty());
+    *up.fake.windows_fail.lock().unwrap() = false;
+    *up.fake.key_fails.lock().unwrap() = true;
+    let r = token_from(&up, A, "app-a").await;
+    assert_eq!(r.status, 503);
+    assert_eq!(last_record(&up)["status_code"], "rate_key");
+    // Without an address the key is not asked, and the client bucket is all there is.
+    let r = http(
+        &up,
+        "POST",
+        "/token",
+        &[FORM],
+        token_body("app-a").as_bytes(),
+    )
+    .await;
+    assert_eq!(r.status, 200);
+    // The routes that are not limited do not need the limiter at all.
+    assert_eq!(http(&up, "GET", "/jwks", &[], b"").await.status, 200);
 }

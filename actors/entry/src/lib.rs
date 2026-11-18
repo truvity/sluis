@@ -10,13 +10,15 @@
 //! (`--front audit`, ADR 0028) is the same executable with one route, the reader's `Search`.
 //!
 //! `entry` holds no key, no secret and no state beyond a few seconds of public documents, makes no
-//! outbound connection but to the sockets of the actors the call graph allows, and sets no cookie.
+//! outbound connection but to the sockets of the actors the call graph allows, and sets no cookie. The one state it writes is
+//! the token bucket of a limit (ADR 0036, `limit.rs`): a count and a time under a keyed hash, never an address.
 
 mod audit;
 mod discovery;
 mod handler;
 mod headers;
 mod ids;
+mod limit;
 mod pages;
 mod params;
 mod refuse;
