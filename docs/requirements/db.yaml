@@ -9,7 +9,7 @@ requirements:
     level: SHOULD
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: pki-ssh-db
     runtimes: all
     standards:
       - {id: ST-62, section: "5280", depth: Partial}
@@ -23,7 +23,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards:
       - {id: ST-46, section: "1", depth: Partial}
@@ -37,7 +37,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    milestone: v1-parity
+    milestone: pki-ssh-db
     gap: attestation-missing
     runtimes: all
     standards:

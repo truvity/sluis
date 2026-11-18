@@ -714,7 +714,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-14, section: "4", depth: Partial}
@@ -728,7 +728,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-59, section: "1", depth: Partial}

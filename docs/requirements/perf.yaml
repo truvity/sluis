@@ -9,7 +9,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
@@ -23,7 +23,7 @@ requirements:
     level: MUST
     source: stakeholder-ciam
     status: planned
-    milestone: ciam-upstream
+    milestone: backlog
     runtimes: all
     standards:
       - {id: ST-97, section: "1", depth: Partial}
@@ -37,7 +37,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: ciam-upstream
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [1713]
@@ -51,7 +51,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: ciam-upstream
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [1713]
@@ -67,7 +67,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: ["serverless"]
     standards: []
     issues: [1179]
@@ -81,7 +81,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: ["serverless"]
     standards: []
     issues: [1179]
@@ -94,7 +94,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: first-version
+    milestone: core
     runtimes: ["bare-metal"]
     standards: []
     issues: [1180]
