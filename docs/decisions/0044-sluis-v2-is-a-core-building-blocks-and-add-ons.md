@@ -162,6 +162,10 @@ flowchart LR
     BE["Block extraction, not scheduled"]
 ```
 
+### Amendment of 2026-11-18: extracting the blocks is no longer a road not taken
+
+The road "Extract the blocks now" under Roads not taken was rejected because nothing outside sluis consumed the blocks. That changed: session needs the key and item ports, and ritueel later the key port. The ports and their drivers move to [atoom](https://github.com/truvity/atoom), a separate repository that sluis, session and ritueel consume ([its plan](https://github.com/truvity/atoom/blob/master/docs/plan.md)). The first step moved the common types, `Refusal` and `IndexEntry`; sluis pins atoom by commit until its first release (`third_party/atoom`, `just atoom-sync`). The rest of this record is unchanged: store, policy and the actors stay in sluis, and "Block extraction" of the [roadmap](/roadmap/#block-extraction) now points at atoom's plan. It is not a phase of its own, and the rule of no new coupling of domain types into a block stays.
+
 ## Consequences
 
 - The first version is smaller and has no Cloudflare dependency at run time. A revoked key leaves the key set that the directory driver publishes; the confirmation through an edge comes with the Cloudflare add-on.

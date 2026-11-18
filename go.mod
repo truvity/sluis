@@ -13,6 +13,7 @@ require (
 	github.com/gowebpki/jcs v1.0.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/transparency-dev/formats v0.1.1
+	github.com/truvity/atoom/common v0.0.0-20261118222836-075ccc8fca5b
 	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/mod v0.42.0
 	google.golang.org/protobuf v1.36.12

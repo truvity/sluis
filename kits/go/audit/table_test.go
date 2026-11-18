@@ -13,7 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/truvity/sluis/v2/kits/go/refusal"
+	"github.com/truvity/atoom/common/refusal"
 )
 
 // actionCases reads the example record of every action.

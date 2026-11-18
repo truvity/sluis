@@ -16,6 +16,7 @@ use connectrpc::{
     ConnectError, RequestContext, Response, ServiceRequest, ServiceResult, ServiceStream,
 };
 use sluis_kit::{Peer, refusal};
+use sluis_proto::atoom::common::v1alpha1::IndexEntry;
 use sluis_proto::sluis::config::v2alpha1 as pb;
 use sluis_proto::sluis::port::item::v2alpha1::{
     Condition, Delete, DriverItem, Put, QueryRequest, TransactRequest, condition::Expect,
@@ -25,7 +26,7 @@ use sluis_proto::sluis::store::v2alpha1::{
     ListRequest, ListResponse, StoreService, Verb, WatchRequest, WatchResponse, WriteRequest,
     WriteResponse,
 };
-use sluis_proto::sluis::r#type::v2alpha1::{Address, IndexEntry};
+use sluis_proto::sluis::r#type::v2alpha1::Address;
 use sluis_registry::{Class, Kind, Scope};
 
 use crate::address::{self, valid_part};

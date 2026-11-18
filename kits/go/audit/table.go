@@ -9,7 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/truvity/sluis/v2/kits/go/refusal"
+	"github.com/truvity/atoom/common/refusal"
 )
 
 // An Activity is one OCSF activity that an action may have; Name is activity_name, empty when the record carries none.

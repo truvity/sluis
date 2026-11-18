@@ -177,7 +177,7 @@ After parity (decision 1). The add-on is the replacement of OpenBao.
 
 ### Block extraction
 
-A runtime registry for store, a schema extension for policy and a key library, so that a product can reuse a block. Until then no new coupling of domain types into a block. Not scheduled.
+A runtime registry for store, a schema extension for policy and a key library, so that a product can reuse a block. Until then no new coupling of domain types into a block. Not scheduled in this plan; the ports and drivers are extracted to [atoom](https://github.com/truvity/atoom) on its [own plan](https://github.com/truvity/atoom/blob/master/docs/plan.md), starting with the common types.
 
 ## Cancelled
 

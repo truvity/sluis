@@ -332,7 +332,7 @@ async fn the_sweeper_frees_expired_items_and_trims_the_log_but_never_a_lease() {
         value: b"v".to_vec(),
         expires_at: expires.map(sluis_conformance::rules::ms_to_ts).into(),
         indexes: if index {
-            vec![sluis_proto::sluis::r#type::v2alpha1::IndexEntry {
+            vec![sluis_proto::atoom::common::v1alpha1::IndexEntry {
                 name: "n".into(),
                 value: b"v".to_vec(),
                 ..Default::default()

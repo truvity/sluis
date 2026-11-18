@@ -14,9 +14,9 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/truvity/atoom/common/refusal"
 	conformancev2alpha1 "github.com/truvity/sluis/v2/kits/conformance/kit/gen/go/sluis/conformance/v2alpha1"
 	"github.com/truvity/sluis/v2/kits/conformance/kit/gen/go/sluis/conformance/v2alpha1/conformancev2alpha1connect"
-	"github.com/truvity/sluis/v2/kits/go/refusal"
 	"github.com/truvity/sluis/v2/kits/go/rpc"
 )
 

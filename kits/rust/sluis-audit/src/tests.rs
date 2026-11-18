@@ -210,20 +210,7 @@ fn canonical_matches_the_jcs_vectors() {
 
 /// The reason and the field path of a refusal.
 pub(crate) fn refusal_of(e: &connectrpc::ConnectError) -> (String, String) {
-    use base64::Engine as _;
-    use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD};
-    use buffa::Message as _;
-    let d = e
-        .details
-        .iter()
-        .find(|d| d.type_url.ends_with("sluis.type.v2alpha1.Refusal"))
-        .expect("a Refusal detail");
-    let raw = d.value.as_deref().unwrap();
-    let bytes = STANDARD_NO_PAD
-        .decode(raw)
-        .or_else(|_| STANDARD.decode(raw))
-        .unwrap();
-    let r = sluis_proto::sluis::r#type::v2alpha1::Refusal::decode_from_slice(&bytes).unwrap();
+    let r = atoom_common::refusal::detail(e).expect("a Refusal detail");
     (r.reason, r.field_path)
 }
 

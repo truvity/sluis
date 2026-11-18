@@ -12,9 +12,9 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/truvity/atoom/common/refusal"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
-	"github.com/truvity/sluis/v2/kits/go/refusal"
 )
 
 // fakeKey answers PublicKey the way key@ does: the id of the key it signs with for a purpose it holds, a refusal otherwise.

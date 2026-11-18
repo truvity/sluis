@@ -6,7 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/truvity/sluis/v2/kits/go/refusal"
+	"github.com/truvity/atoom/common/refusal"
 )
 
 // The limits of an address (docs/reference/store-api.md, "Address encoding").

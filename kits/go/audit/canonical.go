@@ -11,7 +11,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/gowebpki/jcs"
 
-	"github.com/truvity/sluis/v2/kits/go/refusal"
+	"github.com/truvity/atoom/common/refusal"
 )
 
 // maxSafeInt is 2^53-1, the largest integer a record may carry (0030 "Canonical rules"; RFC 8785 section 3.2.2.3

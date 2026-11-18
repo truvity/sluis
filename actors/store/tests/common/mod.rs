@@ -15,6 +15,7 @@ use buffa_types::google::protobuf::Timestamp;
 use connectrpc::error::ErrorCode;
 use connectrpc::{ConnectError, RequestContext, Response, Router, ServiceRequest, ServiceResult};
 use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal, refusal_reason};
+use sluis_proto::atoom::common::v1alpha1::IndexEntry;
 use sluis_proto::sluis::key::v2alpha1::{
     KeyService, KeyServiceExt as _, MacRequest, MacResponse, OpenGrantRequest, OpenGrantResponse,
     OpenRequest, OpenResponse, PublicKeyRequest, PublicKeyResponse, SealGrantRequest,
@@ -29,7 +30,7 @@ use sluis_proto::sluis::store::v2alpha1::{
     ListResponse, Operation, StoreServiceClient, StoreServiceExt as _, Verb, WatchRequest,
     WatchResponse, WriteRequest, WriteResponse,
 };
-use sluis_proto::sluis::r#type::v2alpha1::{Address, Grant, IndexEntry};
+use sluis_proto::sluis::r#type::v2alpha1::{Address, Grant};
 use store::audit::{AuditEvent, AuditSink};
 use store::config::ConfigSnapshot;
 use store::engine::{EngineError, ItemEngine, LogRows};
@@ -1035,7 +1036,7 @@ pub fn refusal_path(e: &ConnectError) -> String {
                 .decode(raw)
                 .or_else(|_| base64::engine::general_purpose::STANDARD.decode(raw))
                 .ok()?;
-            sluis_proto::sluis::r#type::v2alpha1::Refusal::decode_from_slice(&bytes)
+            sluis_proto::atoom::common::v1alpha1::Refusal::decode_from_slice(&bytes)
                 .ok()
                 .map(|r| r.field_path)
         })

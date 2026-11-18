@@ -9,9 +9,9 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/truvity/atoom/common/refusal"
 	sessionv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/session/v2alpha1"
 	typev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/type/v2alpha1"
-	"github.com/truvity/sluis/v2/kits/go/refusal"
 	"github.com/truvity/sluis/v2/kits/go/store"
 )
 

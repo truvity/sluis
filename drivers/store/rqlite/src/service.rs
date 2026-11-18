@@ -17,11 +17,11 @@ use connectrpc::{
 use serde_json::Value;
 use sluis_conformance::rules::{self, now_ms};
 use sluis_kit::refusal;
+use sluis_proto::atoom::common::v1alpha1::IndexEntry;
 use sluis_proto::sluis::port::item::v2alpha1::{
     DriverItem, ItemGetRequest, ItemGetResponse, ItemService, ItemServiceExt, QueryRequest,
     QueryResponse, TailLogRequest, TailLogResponse, TransactRequest, TransactResponse,
 };
-use sluis_proto::sluis::r#type::v2alpha1::IndexEntry;
 
 use crate::client::{Level, NOT_NULL_FAILED, Outcome, Rq, first_failure, rows, unhex};
 use crate::sql::{Ns, SCHEMA_VERSION};

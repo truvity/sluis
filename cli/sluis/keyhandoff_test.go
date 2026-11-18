@@ -29,10 +29,10 @@ import (
 
 	"connectrpc.com/connect"
 
+	krefusal "github.com/truvity/atoom/common/refusal"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/handoff"
-	krefusal "github.com/truvity/sluis/v2/kits/go/refusal"
 )
 
 // fakeHandoff is key@'s hand-off side: it holds one software key, signs a CertificationRequestInfo only after the same

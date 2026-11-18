@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package sluis.store.v2alpha1;
 
+import "atoom/common/v1alpha1/common.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "sluis/type/v2alpha1/type.proto";
@@ -22,7 +23,7 @@ message Item {
   uint64 version = 2;                                     // 1 at create, plus 1 at each change; set by store@
   bytes value = 3;                                        // the kind's Protobuf message; for a sealed kind, the envelope
   google.protobuf.Timestamp expires_at = 4;               // set by store@ when the kind has a TTL
-  repeated sluis.type.v2alpha1.IndexEntry indexes = 5;    // the declared indexes, computed by the writer
+  repeated atoom.common.v1alpha1.IndexEntry indexes = 5;    // the declared indexes, computed by the writer
 }
 
 // Consistency is the read guarantee a Get or a List asks for. Left unset it differs: a Get is linearizable, a List is not
@@ -118,7 +119,7 @@ message Operation {
   bytes value = 3;                                        // the kind's Protobuf message; for a sealed kind, the envelope
   uint64 if_version = 4;                                  // UPDATE: the version read; DELETE: optional
   google.protobuf.Duration ttl = 5;                       // optional: shorter than the kind's maximum; absent, the kind's default
-  repeated sluis.type.v2alpha1.IndexEntry indexes = 6;    // the declared indexes, computed by the writer
+  repeated atoom.common.v1alpha1.IndexEntry indexes = 6;    // the declared indexes, computed by the writer
 }
 
 // WriteResponse carries the items as written.

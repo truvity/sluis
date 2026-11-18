@@ -21,10 +21,11 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	commonv1alpha1 "github.com/truvity/atoom/common/gen/atoom/common/v1alpha1"
+	"github.com/truvity/atoom/common/refusal"
 	storev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1/storev2alpha1connect"
 	typev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/type/v2alpha1"
-	"github.com/truvity/sluis/v2/kits/go/refusal"
 	"github.com/truvity/sluis/v2/kits/go/registry"
 	"github.com/truvity/sluis/v2/kits/go/signedconfig"
 )
@@ -284,7 +285,7 @@ type WriteOption func(*writeOpts)
 type writeOpts struct {
 	grant   []byte
 	ttl     time.Duration
-	indexes []*typev2alpha1.IndexEntry
+	indexes []*commonv1alpha1.IndexEntry
 }
 
 // WithGrant attaches the sealed grant of policy that a write to a tenant-scoped address needs
@@ -297,12 +298,12 @@ func WithTTL(d time.Duration) WriteOption { return func(o *writeOpts) { o.ttl = 
 // WithIndex adds an entry of a declared index of the kind; the writer computes its value.
 func WithIndex(name string, value []byte) WriteOption {
 	return func(o *writeOpts) {
-		o.indexes = append(o.indexes, &typev2alpha1.IndexEntry{Name: name, Value: value})
+		o.indexes = append(o.indexes, &commonv1alpha1.IndexEntry{Name: name, Value: value})
 	}
 }
 
 // operation builds one operation of a write.
-func (c *Client[T]) operation(op string, verb storev2alpha1.Verb, tenant, id string, v T, hasValue bool, ifVersion uint64, o *writeOpts, indexes []*typev2alpha1.IndexEntry) (*storev2alpha1.Operation, error) {
+func (c *Client[T]) operation(op string, verb storev2alpha1.Verb, tenant, id string, v T, hasValue bool, ifVersion uint64, o *writeOpts, indexes []*commonv1alpha1.IndexEntry) (*storev2alpha1.Operation, error) {
 	addr, err := c.address(tenant, id)
 	if err != nil {
 		return nil, describe(op, err)
@@ -381,9 +382,9 @@ func (c *Client[T]) CreateAll(ctx context.Context, items []NewItem[T], opts ...W
 	o := applyWriteOptions(opts)
 	ops := make([]*storev2alpha1.Operation, 0, len(items))
 	for _, it := range items {
-		idx := make([]*typev2alpha1.IndexEntry, 0, len(it.Indexes))
+		idx := make([]*commonv1alpha1.IndexEntry, 0, len(it.Indexes))
 		for _, e := range it.Indexes {
-			idx = append(idx, &typev2alpha1.IndexEntry{Name: e.Name, Value: e.Value})
+			idx = append(idx, &commonv1alpha1.IndexEntry{Name: e.Name, Value: e.Value})
 		}
 		op, err := c.operation("create", storev2alpha1.Verb_CREATE, it.Tenant, it.ID, it.Value, true, 0, o, idx)
 		if err != nil {

@@ -20,13 +20,13 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/truvity/atoom/common/refusal"
 	"github.com/truvity/sluis/v2/drivers/key/yubikey-piv/internal/card"
 	"github.com/truvity/sluis/v2/drivers/key/yubikey-piv/internal/card/cardtest"
 	"github.com/truvity/sluis/v2/drivers/key/yubikey-piv/internal/driver"
 	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1/keystorev2alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/cli"
-	"github.com/truvity/sluis/v2/kits/go/refusal"
 	"github.com/truvity/sluis/v2/kits/go/rpc"
 )
 

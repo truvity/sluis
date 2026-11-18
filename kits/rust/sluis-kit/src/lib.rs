@@ -4,7 +4,7 @@
 //!   connection and refuses a caller outside the call graph before the message is decoded.
 //! - [`dial`] returns a Connect client over a Unix socket (h2c). The deadline left and the
 //!   correlation id of the call being served travel on every call made from its handler.
-//! - [`refusal`] builds an error with the `sluis.type.v2alpha1.Refusal` detail.
+//! - [`refusal`] builds an error with the `atoom.common.v1alpha1.Refusal` detail.
 //! - [`cli::main`] is the one command shape: `serve | check | version | conformance`.
 //!
 //! The Protobuf runtime is buffa, the one `connectrpc` 0.9 generates for (PLAN.md D-23).
@@ -13,15 +13,14 @@ mod client;
 mod correlation_impl;
 mod identity;
 mod peercred;
-mod refusal_impl;
 mod server;
 
 pub mod backoff;
 pub mod cli;
 
+pub use atoom_common::refusal::{new as refusal, reason as refusal_reason};
 pub use client::{Client, Transport, dial};
 pub use identity::Peer;
-pub use refusal_impl::{refusal, refusal_reason};
 pub use server::{Allow, ServerConfig, serve};
 
 #[cfg(feature = "test-identities")]

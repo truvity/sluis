@@ -12,7 +12,6 @@ use sluis_proto::sluis::port::item::v2alpha1::{
     DriverItem, ItemGetRequest, ItemServiceClient, QueryRequest, QueryResponse, TailLogRequest,
     TailLogResponse, TransactRequest, TransactResponse,
 };
-use sluis_proto::sluis::r#type::v2alpha1::Refusal;
 
 /// Why an engine call did not give an answer.
 #[derive(Debug, PartialEq, Eq)]
@@ -90,24 +89,9 @@ impl DriverEngine {
 }
 
 /// The field path of the `Refusal` detail of an error, if it has one. The kit exposes the reason
-/// only (`refusal_reason`); the same decoding gives the path.
+/// only (`refusal_reason`); atoom's `refusal::detail` gives the whole detail.
 fn field_path(err: &connectrpc::ConnectError) -> Option<String> {
-    use base64::Engine as _;
-    use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD};
-    use buffa::Message as _;
-    err.details.iter().find_map(|d| {
-        if d.type_url.rsplit('/').next()? != "sluis.type.v2alpha1.Refusal" {
-            return None;
-        }
-        let raw = d.value.as_deref()?;
-        let bytes = STANDARD_NO_PAD
-            .decode(raw)
-            .or_else(|_| STANDARD.decode(raw))
-            .ok()?;
-        Refusal::decode_from_slice(&bytes)
-            .ok()
-            .map(|r| r.field_path)
-    })
+    atoom_common::refusal::detail(err).map(|r| r.field_path)
 }
 
 /// The index in a `conditions[N]` field path.

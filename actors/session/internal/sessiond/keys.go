@@ -8,10 +8,10 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/truvity/atoom/common/refusal"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
 	typev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/type/v2alpha1"
-	"github.com/truvity/sluis/v2/kits/go/refusal"
 )
 
 // errNotOurs says an envelope did not open: a forged, altered, expired-key or foreign cookie or sealed value. key@

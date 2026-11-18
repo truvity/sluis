@@ -13,18 +13,6 @@ message Address {
   string id = 3;      // one or more parts, separated by "/"
 }
 
-// IndexEntry is one declared index of an item, computed by the writer.
-message IndexEntry {
-  string name = 1;   // the declared index
-  bytes value = 2;   // the value to match under that index
-}
-
-// Refusal is the detail of every Connect error inside sluis (contracts.md "Errors").
-message Refusal {
-  string reason = 1;      // from a closed list; never a value
-  string field_path = 2;  // the path of the field at fault; never its value
-}
-
 // Header is one HTTP header of an HttpReply.
 message Header {
   string name = 1;   // the header name

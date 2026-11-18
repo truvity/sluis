@@ -17,7 +17,8 @@ Every major component of sluis is a ConnectRPC contract, written in Protobuf und
   | An actor | `sluis.<actor>.v2alpha1` | `sluis.exchange.v2alpha1.ExchangeService`, `sluis.store.v2alpha1.StoreService` |
   | A port, served by its drivers | `sluis.port.<port>.v2alpha1` | `sluis.port.item.v2alpha1.ItemService`, `sluis.port.source.v2alpha1.SourceService` |
   | The integration contracts | `sluis.integration.v2alpha1` | `IntegrationService`, `UpstreamService`, `FactsSourceService` |
-  | Types shared by several packages | `sluis.type.v2alpha1` | `Refusal`, `PageRequest` |
+  | Types shared by several packages | `sluis.type.v2alpha1` | `Address`, `Grant`, `HttpReply` |
+  | Types shared with atoom's ports and drivers, which atoom owns | `atoom.common.v1alpha1` | `Refusal`, `IndexEntry` ([atoom](https://github.com/truvity/atoom/tree/master/common), vendored under `third_party/atoom`) |
 
 - **A hyphen in an actor's name becomes an underscore:** `sluis.ssh_ca.v2alpha1`.
 - **Files live at the package's path:** `proto/sluis/exchange/v2alpha1/exchange.proto`. The Go and Rust code is generated from them and is not committed under `proto/`.
@@ -70,7 +71,7 @@ A request that carries both `authorization` and `client_secret` is refused with 
 
 ### Connect codes
 
-A Connect error has a code and, inside sluis, a `sluis.type.v2alpha1.Refusal` detail with a reason from a closed list. The codes sluis uses, with the HTTP status of the Connect protocol:
+A Connect error has a code and, inside sluis, an `atoom.common.v1alpha1.Refusal` detail with a reason from a closed list. The codes sluis uses, with the HTTP status of the Connect protocol:
 
 | Code | HTTP | When |
 |---|---|---|
@@ -148,4 +149,4 @@ These endpoints answer in the error format of their standard, as clients impleme
 
 ## Open items
 
-None on this page: what it fixes follows from 0002, 0004, 0046, v1's uniform refusals ([#796](https://github.com/truvity/sluis/issues/796)) and the standards. The list of `Refusal` reasons is written with the first contract that needs one, in `proto/sluis/type/`.
+None on this page: what it fixes follows from 0002, 0004, 0046, v1's uniform refusals ([#796](https://github.com/truvity/sluis/issues/796)) and the standards. The list of `Refusal` reasons is written with the first contract that needs one. The message itself is atoom's (`atoom.common.v1alpha1`).

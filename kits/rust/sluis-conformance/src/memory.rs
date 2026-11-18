@@ -17,11 +17,11 @@ use connectrpc::{
     ConnectError, RequestContext, Response, Router, ServiceRequest, ServiceResult, ServiceStream,
 };
 use sluis_kit::{Allow, Identities, ServerConfig, refusal};
+use sluis_proto::atoom::common::v1alpha1::IndexEntry;
 use sluis_proto::sluis::port::item::v2alpha1::{
     DriverItem, ItemGetRequest, ItemGetResponse, ItemService, ItemServiceExt, QueryRequest,
     QueryResponse, TailLogRequest, TailLogResponse, TransactRequest, TransactResponse,
 };
-use sluis_proto::sluis::r#type::v2alpha1::IndexEntry;
 
 use crate::rules::{self, Expected, now_ms};
 

@@ -3,8 +3,8 @@ syntax = "proto3";
 
 package sluis.port.item.v2alpha1;
 
+import "atoom/common/v1alpha1/common.proto";
 import "google/protobuf/timestamp.proto";
-import "sluis/type/v2alpha1/type.proto";
 
 // ItemService is served by the rqlite and dynamodb drivers.
 service ItemService {
@@ -20,7 +20,7 @@ message DriverItem {
   uint64 version = 2;                                     // set by the driver: 1 at creation, plus 1 at each change
   bytes value = 3;                                        // the bytes store@ gave
   google.protobuf.Timestamp expires_at = 4;               // set by store@, never by the engine
-  repeated sluis.type.v2alpha1.IndexEntry indexes = 5;    // the declared indexes
+  repeated atoom.common.v1alpha1.IndexEntry indexes = 5;    // the declared indexes
 }
 
 // ItemGetRequest reads one item by key.
@@ -77,7 +77,7 @@ message Put {
   bytes key = 1;                                          // the key
   bytes value = 2;                                        // the bytes to keep
   google.protobuf.Timestamp expires_at = 3;               // set by store@, never by the engine
-  repeated sluis.type.v2alpha1.IndexEntry indexes = 4;    // the declared indexes
+  repeated atoom.common.v1alpha1.IndexEntry indexes = 4;    // the declared indexes
   bool log = 5;                                           // also write a change-log row in the same transaction
 }
 

@@ -18,12 +18,12 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/truvity/atoom/common/refusal"
 	integrationv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/integration/v2alpha1"
 	policyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/policy/v2alpha1"
 	sessionv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/session/v2alpha1"
 	storev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1"
 	typev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/type/v2alpha1"
-	"github.com/truvity/sluis/v2/kits/go/refusal"
 )
 
 // started runs authorize and returns what the browser would bring back from the upstream.

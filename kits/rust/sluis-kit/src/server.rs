@@ -22,7 +22,7 @@ use tower::Service;
 use crate::correlation_impl::{CorrelationId, INHERITED, Inherited, from_headers};
 use crate::identity::{Identities, Peer};
 use crate::peercred::{self, ConnPeer};
-use crate::refusal_impl::refusal;
+use atoom_common::refusal::new as refusal;
 
 /// Who may call this server.
 #[derive(Clone, Debug)]

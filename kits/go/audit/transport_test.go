@@ -13,9 +13,9 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/truvity/atoom/common/refusal"
 	transportv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
-	"github.com/truvity/sluis/v2/kits/go/refusal"
 	"github.com/truvity/sluis/v2/kits/go/rpc"
 )
 
