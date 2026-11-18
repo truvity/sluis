@@ -16,7 +16,7 @@ On 2026-11-18 the maintainer re-planned again (decision 1 below). The frame is: 
 
 ## The maintainer's decisions of 2026-11-18
 
-These decisions are quoted with the codes the maintainer gave them. The phases below, the [Core table](#the-core-is-done-when) and the amendments to ADR [0006](/decisions/0006-keys-and-sealing/#amendment-of-2026-11-18-the-token-certificate-is-optional-and-off-in-the-core), [0009](/decisions/0009-export/#amendment-of-2026-11-18-the-exporter-on-lambda-is-woken-by-the-stream-of-the-table), [0011](/decisions/0011-runtimes-and-installations/#amendment-of-2026-11-18-the-core-comes-first-and-the-mixed-shape-is-designed-in-it), [0028](/decisions/0028-audit-pieces/#amendment-of-2026-11-18-the-index-of-a-lambda-installation-runs-beside-it-on-kubernetes) and [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-core-comes-first-and-the-token-certificate-is-off) follow from them.
+These decisions are quoted with the codes the maintainer gave them. The phases below, the [Core table](#the-core-is-done-when) and the amendments to ADR [0006](/decisions/0006-keys-and-sealing/#amendment-of-2026-11-18-the-token-certificate-is-optional-and-off-in-the-core), [0009](/decisions/0009-export/#amendment-of-2026-11-18-the-exporter-on-lambda-is-woken-by-the-stream-of-the-table), [0011](/decisions/0011-runtimes-and-installations/#amendment-of-2026-11-18-the-core-comes-first) and [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-core-comes-first-and-the-token-certificate-is-off) follow from them.
 
 | Code | Decision |
 |---|---|
@@ -25,10 +25,10 @@ These decisions are quoted with the codes the maintainer gave them. The phases b
 | C2 (yes) | The core includes the parts of v1's contract that live in the core: group strings and per-audience narrowing of the groups claim, `sub` formats, per-audience lifetimes, RS256 per audience where a relying party needs it, confidential and public clients with PKCE, and logout (`end_session`, RP-initiated). |
 | V5 (yes) | `v2.0.0-alpha.2` is cut when the core features are done, before the shapes. |
 | X1 A | The token certificate is optional per installation and off in the core. The built `ca` v0 code stays; the key set carries no `x5c` until the PKI add-on and a ritueel root exist. The core needs no intermediate and no test certifier, and the boards need no slot 9c in the core. The PKI phase starts when the ritueel release candidate (software root) exists and a cloud root is adopted. |
-| L1 A | The audit index of a Lambda installation: the indexer and the reader run on a Kubernetes cluster beside it, on the `postgres` index in the `cnpg` mode (the mixed shape). There is no DynamoDB index driver. The `aurora` mode stays documented for an AWS-only installation. |
+| L1 B | The audit index of a Lambda installation stays inside the Lambda shape: `postgres` in the `aurora` mode, as [ADR 0028](/decisions/0028-audit-pieces/#provisioning-modes) and [Serverless](/runtimes/serverless/#data-and-audit) document it. This supersedes the earlier L1 A of the same day, which put the index on a Kubernetes cluster beside the installation. |
 | L2 | The exporter on Lambda is woken by DynamoDB Streams on the store's table when an exportable item changes, plus a daily scheduled run that rebuilds the documents and removes what is gone. |
 | K1 | The Kubernetes audit transport stays `nats-jetstream`, as documented. |
-| 9 | The mixed shape ([ADR 0011](/decisions/0011-runtimes-and-installations/), D9 of 2026-11-12, [#926](https://github.com/truvity/sluis/issues/926)) is designed in the core phase. Its first use is the audit search pieces beside a Lambda installation (L1). |
+| Mixed shape | The mixed shape ([ADR 0011](/decisions/0011-runtimes-and-installations/), D9 of 2026-11-12, [#926](https://github.com/truvity/sluis/issues/926)) is not part of the core and stays open. It is for the PKI, SSH and database phase. |
 | V6 A | The switch rule, recorded here only as the plan for the platform installation: see [The switch](#the-switch). |
 
 ## What runs today
@@ -81,7 +81,7 @@ The core is the first working version, completed and polished on every installat
 
 1. **Re-baseline the trackers.** The board gets a "Core" milestone, and the issues and requirement rows that belong to the core move into it. The rows of today's First working version are the starting set ([Where the work is tracked](#where-the-work-is-tracked)). No other step starts on a stale board.
 2. **Finish the core features,** including the parts of v1's contract that live in the core (decision C2). Then cut `v2.0.0-alpha.2` (decision V5), before the shapes.
-3. **Bring up the shapes:** local development, the three boards, Lambda and Kubernetes. The mixed shape is designed in this step (decision 9); its first use is the audit search pieces beside a Lambda installation (decision L1 A). The order inside this step is open.
+3. **Bring up the shapes:** local development, the three boards, Lambda and Kubernetes. The order inside this step is open.
 4. **Close release management** on every shape: one release with one version for everything, and upgrade and rollback proven on each shape.
 
 #### The core is done when
@@ -93,7 +93,7 @@ Decision C1 (agree), 2026-11-18. The core is done when every part below is done.
 | **Core features** | Every requirement row of the first version is done (on 2026-11-18, of 681 rows, 494 are done, 138 partial and 49 planned), plus the parts of v1's contract that live in the core (decision C2): group strings and per-audience narrowing of the groups claim, `sub` formats, per-audience lifetimes, RS256 per audience where a relying party needs it, confidential and public clients with PKCE, and logout (`end_session`, RP-initiated). |
 | **Local development** | One command brings up a full local install, from source and from released images. The smoke tests pass on it. A contributor guide says how. |
 | **Boards** | Gate [#1584](https://github.com/truvity/sluis/issues/1584) is closed: mutual TLS on Raft, flood handling and a firewall that fails closed. The rebuild and lost-board rehearsals pass. `cloudflared` is deployed by the scripts. The YubiKey driver is packaged. The boards need no slot 9c in the core (decision X1 A). |
-| **Lambda** | The drivers `dynamodb`, `aws-kms`, `ssm`, `appconfig`, `s3-compatible` and `sqs` exist, with one extension per holder. The Lambda runtime exists: one zip per executable, with the Web Adapter in front of `entry`. A Lambda installation runs with test clients only, with the same smoke tests as local. Its audit index runs on a Kubernetes cluster beside it (decision L1 A), and its exporter is woken by DynamoDB Streams (decision L2). |
+| **Lambda** | The drivers `dynamodb`, `aws-kms`, `ssm`, `appconfig`, `s3-compatible` and `sqs` exist, with one extension per holder. The Lambda runtime exists: one zip per executable, with the Web Adapter in front of `entry`. A Lambda installation runs with test clients only, with the same smoke tests as local. Its audit index is the `postgres` index in the `aurora` mode (decision L1 B), and its exporter is woken by DynamoDB Streams (decision L2). Proposed, awaiting the maintainer (not decided; an agent's proposal): Aurora Serverless v2 with auto-pause, the indexer (one instance) and the reader connecting directly with IAM authentication without RDS Proxy at first, and RDS Proxy added if reader concurrency grows ([Serverless](/runtimes/serverless/#data-and-audit)). |
 | **Kubernetes (EKS)** | The Helm chart ([#844](https://github.com/truvity/sluis/issues/844), [#876](https://github.com/truvity/sluis/issues/876)) reuses the AWS drivers, with the `nats-jetstream` transport (decision K1) and the `postgres` index in the `cnpg` mode. It installs on a test cluster, with the same smoke tests. |
 | **Release management** | One release carries the packages, the images, the chart and the Lambda zips, all at one version. A release candidate is built before each tag. Upgrade and rollback are tested on every shape. The CHANGELOG is kept. |
 | **Trackers** | Re-baselined first, with a Core milestone. |
@@ -133,7 +133,7 @@ Before the first relying party moves, the cutover inventory lists every relying 
 
 After parity (decision 1). The add-on is the replacement of OpenBao.
 
-- **The add-on.** Leaf profiles and the revocation list ([#913](https://github.com/truvity/sluis/issues/913)); `ssh-ca`, which turns a sluis token into a short-lived SSH user certificate and issues host certificates, under the SSH CA that ritueel lists ([#925](https://github.com/truvity/sluis/issues/925), [0023](/decisions/0023-certificate-authorities/#ssh)); PostgreSQL client certificates for CloudNativePG ([#926](https://github.com/truvity/sluis/issues/926)); and the KV add-on, with its slice of workload exchange ([0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/), [#798](https://github.com/truvity/sluis/issues/798)). The token certificate and the `x5c` chain come on with it (decision X1 A).
+- **The add-on.** Leaf profiles and the revocation list ([#913](https://github.com/truvity/sluis/issues/913)); `ssh-ca`, which turns a sluis token into a short-lived SSH user certificate and issues host certificates, under the SSH CA that ritueel lists ([#925](https://github.com/truvity/sluis/issues/925), [0023](/decisions/0023-certificate-authorities/#ssh)); PostgreSQL client certificates for CloudNativePG ([#926](https://github.com/truvity/sluis/issues/926), which also holds the open design of the mixed shape); and the KV add-on, with its slice of workload exchange ([0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/), [#798](https://github.com/truvity/sluis/issues/798)). The token certificate and the `x5c` chain come on with it (decision X1 A).
 - **Entry conditions** (decision X1 A): the ritueel release candidate with a software root exists, and a cloud root is adopted. Until ritueel has the SSH CA key list, the add-on runs on the harness's test root.
 - **The v1 secrets store** is retired in waves: PKI and SSH go to the add-on, and External Secrets switches from the parameter store to sluis KV app by app, with a rollback ([0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/)).
 
@@ -157,10 +157,10 @@ The tested [installations](/runtimes/) are all part of the core. Their order ins
 
 1. **local,** from source and from released images, with a contributor guide.
 2. **The three boards,** with the hardware base they need and gate [#1584](https://github.com/truvity/sluis/issues/1584) closed ([Bare metal](/runtimes/bare-metal/)).
-3. **Lambda,** with test clients only. Its audit index is not on Aurora by default: the indexer and the reader run on a Kubernetes cluster beside it (decision L1 A, [Serverless](/runtimes/serverless/#data-and-audit)).
+3. **Lambda,** with test clients only. Its audit index is `postgres` in the `aurora` mode (decision L1 B, [Serverless](/runtimes/serverless/#data-and-audit)).
 4. **Kubernetes on EKS,** from one Helm chart.
 
-A mixed shape, where some sluis parts run on Kubernetes beside another installation, is designed in the core phase, and its first use is the audit search pieces beside a Lambda installation (decision 9; [ADR 0011](/decisions/0011-runtimes-and-installations/#delivery-order), [#926](https://github.com/truvity/sluis/issues/926)).
+A mixed shape, where some sluis parts run on Kubernetes beside another installation, is allowed and is not part of the core: its design stays open for the PKI, SSH and database phase ([ADR 0011](/decisions/0011-runtimes-and-installations/#delivery-order), [#926](https://github.com/truvity/sluis/issues/926)).
 
 EC2 is a possible bare-metal installation, not a delivery target, and not tested. Other installations are possible and untested. The order is reviewed when each installation ships, and ADR 0011 records any change.
 
