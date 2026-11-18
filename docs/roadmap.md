@@ -1,6 +1,6 @@
 ---
 title: Roadmap
-description: Where sluis v2 is going. A core, building blocks and add-ons, delivered as Core, a re-plan, Parity, a switch and the PKI, SSH and database add-on, and how installations are built.
+description: Where sluis v2 is going: the core first, a re-plan, then parity, the switch and the PKI, SSH and database add-on.
 status: page
 ---
 
