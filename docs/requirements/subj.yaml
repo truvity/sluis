@@ -1002,7 +1002,7 @@ requirements:
       - {kind: integration-test, ref: "the sub of a sign-in's two tokens and of an exchanged token has a form of the contract, though the upstream names an address"}
   - id: REQ-SUBJ-072
     area: SUBJ
-    statement: "The sub of every token that sluis gives a person, by sign-in, refresh or exchange, MUST be the person's own subject, the same for every client and at every tenant."
+    statement: "The sub of every token that sluis gives a person, by sign-in, refresh or exchange, MUST be the person's own subject, the same for every client and derived from nothing about the client or the tenant."
     rationale: "Staff who work across vendors must be one person in every vendor's apps, audit and access review, and vendors are kept apart by grants and by separate installations, not by obfuscating the subject (ADR 0019, ADR 0020, decision SB1 A)."
     level: MUST
     source: design-decision

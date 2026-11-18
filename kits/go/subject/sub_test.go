@@ -82,7 +82,7 @@ func reason(t *testing.T, err error) string {
 	return ""
 }
 
-// verifies: REQ-SUBJ-071
+// verifies: REQ-SUBJ-071, REQ-SUBJ-073
 func TestClassifyMatchesTheVectors(t *testing.T) {
 	for _, v := range loadSubVectors(t).Shape {
 		kind, ok := subject.Classify(v.Sub)
