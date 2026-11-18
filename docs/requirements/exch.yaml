@@ -10,7 +10,7 @@ requirements:
     source: v1-parity
     status: partial
     gap: partly-built
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-07, section: "2", depth: Full}
@@ -26,7 +26,7 @@ requirements:
     level: MUST
     source: security-review
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-07, section: "2.1", depth: Partial}
@@ -42,7 +42,7 @@ requirements:
     level: MUST
     source: security-review
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-07, section: "2.1", depth: Partial}
@@ -57,7 +57,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-07, section: "2.2.2", depth: Full}
@@ -74,7 +74,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-07, section: "2.2.2", depth: Full}
@@ -90,7 +90,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-07, section: "2.2", depth: Full}
@@ -105,7 +105,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-07, section: "2.2", depth: Full}
@@ -120,7 +120,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-07, section: "2", depth: Full}
@@ -137,7 +137,7 @@ requirements:
     source: v1-parity
     status: partial
     gap: partly-built
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-07, section: "2", depth: Full}
@@ -152,7 +152,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-07, section: "2.1", depth: Full}
@@ -169,7 +169,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-07, section: "2.1", depth: Full}
@@ -186,7 +186,7 @@ requirements:
     source: v1-parity
     status: partial
     gap: no-proving-test
-    milestone: v1-parity
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-07, section: "2.2.2", depth: Partial}
@@ -200,7 +200,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [1011]
@@ -213,7 +213,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [1011]
@@ -226,7 +226,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [1011]
@@ -241,7 +241,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     issues: [1214]
@@ -254,7 +254,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     actors: [store]
     standards: []
@@ -268,7 +268,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [exchange]
     standards: [{id: ST-07, section: "2.1", depth: Partial}]
@@ -283,7 +283,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [exchange]
     standards: [{id: ST-01, section: "5.2", depth: Partial}]
@@ -298,7 +298,7 @@ requirements:
     level: MUST
     source: design-decision
     status: done
-    milestone: first-version
+    milestone: core
     runtimes: all
     actors: [exchange]
     standards: []
@@ -329,7 +329,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     features: ["parity"]
@@ -342,7 +342,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     features: ["parity"]
@@ -355,7 +355,7 @@ requirements:
     level: MUST
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     features: ["parity"]
@@ -368,7 +368,7 @@ requirements:
     level: SHOULD
     source: v1-parity
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     features: ["parity"]
@@ -381,7 +381,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: parity
     runtimes: all
     standards: []
     features: ["parity"]
@@ -394,9 +394,35 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: v1-parity
+    milestone: customer-identity
     runtimes: all
     standards: []
-    issues: [782, 961]
+    issues: [782, 961, 1840, 1841]
     verification:
       - {kind: integration-test, ref: "a token of another realm's issuer is refused with a closed reason and an audit fact"}
+  - id: REQ-EXCH-028
+    area: EXCH
+    statement: "`sluis config check` MUST refuse an installation that declares more than one ExchangeTrust realm."
+    rationale: "One installation serves one boundary and trusts one realm, so a regulated boundary never sees a person or a claim of another realm (ADR 0045)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: customer-identity
+    runtimes: all
+    standards: []
+    issues: [1840]
+    verification:
+      - {kind: integration-test, ref: "a configuration with two ExchangeTrust realms is refused and one with a single realm is accepted"}
+  - id: REQ-EXCH-029
+    area: EXCH
+    statement: "exchange MUST NOT take the customer, the organisation or the product of a token from a parameter of the request."
+    rationale: "The three claims come from the claims of the upstream token through the mapping of the installation, and never from the caller (ADR 0045)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: customer-identity
+    runtimes: all
+    standards: []
+    issues: [1842]
+    verification:
+      - {kind: integration-test, ref: "a request that names customer, org or product as a parameter gets a token with the values of the mapping, or is refused"}
