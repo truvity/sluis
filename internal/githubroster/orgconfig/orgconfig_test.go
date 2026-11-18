@@ -84,6 +84,12 @@ func TestSessionPolicyLimitsTheRoleToTheDocumentAndTheSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// STS allows an underscore in an external id.
+	c.Read.ExternalID = "ext_123-ABC"
+	if err := c.Validate(); err != nil {
+		t.Fatalf("an external id with an underscore: %v", err)
+	}
+
 	policy, err := c.SessionPolicy()
 	if err != nil {
 		t.Fatal(err)
@@ -93,6 +99,7 @@ func TestSessionPolicyLimitsTheRoleToTheDocumentAndTheSecrets(t *testing.T) {
 		`"Action":"ssm:GetParameter"`,
 		":ssm:eu-west-1:111122223333:parameter/example/doc",
 		":ssm:eu-west-1:111122223333:parameter/example/credentials/*",
+		`"kms:ViaService":"ssm.eu-west-1.amazonaws.com"`,
 	} {
 		if !strings.Contains(policy, want) {
 			t.Errorf("policy %s lacks %q", policy, want)

@@ -170,6 +170,10 @@ func foldedRecord(m status.Managed) status.Managed {
 		out.Variables = append(out.Variables, tenant.FoldName(n))
 	}
 
+	// foo and FOO are one name to GitHub and must not queue two removals.
+	slices.Sort(out.Variables)
+	out.Variables = slices.Compact(out.Variables)
+
 	if m.Secrets != nil {
 		out.Secrets = make(map[string]int64, len(m.Secrets))
 		for n, v := range m.Secrets {
@@ -677,19 +681,47 @@ type removal struct {
 	forget     func()
 }
 
+// documentOwned counts the recorded names the document owns and GitHub still
+// holds: what a removal could take. The installation's variables are always
+// wanted, and a name GitHub no longer holds is nothing to remove, so neither
+// is in the count that the mass-removal guard weighs.
+func (r *run) documentOwned() int {
+	n := 0
+
+	for _, name := range r.in.Previous.Variables {
+		if _, exists := r.vars[name]; exists && !r.in.Desired.Platform[name] {
+			n++
+		}
+	}
+
+	for name := range r.in.Previous.Secrets {
+		if _, exists := r.secs[name]; exists {
+			n++
+		}
+	}
+
+	for _, name := range r.in.Previous.SecurityConfigurations {
+		if _, exists := r.cfgs[name]; exists {
+			n++
+		}
+	}
+
+	return n
+}
+
 // removals deletes what the controller wrote and the document no longer
 // names. Nothing else is ever deleted. A recorded name that is not a name
 // GitHub accepts, or is one the platform owns and the installation does not
 // set, is not trusted: the record is storage, and storage can be wrong.
-// A pass that would remove more than half of what the controller wrote, and
-// at least two names, removes none and says so: a document that lost its
+// A pass that would remove more than half of the names the document owns, and
+// at least two, removes none and says so: a document that lost its
 // lines is more likely than an organisation that meant to drop most of them.
 func (r *run) removals(ctx context.Context) {
 	d := r.in.Desired
 
 	var due []removal
 
-	total := len(r.in.Previous.Variables) + len(r.in.Previous.Secrets) + len(r.in.Previous.SecurityConfigurations)
+	total := r.documentOwned()
 
 	for _, name := range r.in.Previous.Variables {
 		if _, wanted := d.Variables[name]; wanted {
@@ -768,7 +800,7 @@ func (r *run) removals(ctx context.Context) {
 	if len(due) >= 2 && len(due)*2 > total {
 		for _, d := range due {
 			r.record(d.kind, d.name, status.SettingDelete, status.SettingHeld,
-				fmt.Sprintf("removal held: %d of the %d names the controller wrote would be removed at once; "+
+				fmt.Sprintf("removal held: %d of the %d names the document owns would be removed at once; "+
 					"restore the document, or remove them on GitHub", len(due), total))
 		}
 
