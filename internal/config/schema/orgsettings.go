@@ -15,9 +15,10 @@ func orgSettingsSchema() m {
 		"additionalProperties": obj("One organisation's settings.", m{
 			"mode": enum("`report` computes and reports what differs and changes nothing; `enforce` applies it. The organisation's document has no key for this, so the installation can always hold an organisation to `report`.", "report", "report", "enforce"),
 			"read": obj("Where the organisation's document is and as whom the controller reads it.", m{
-				"roleArn":   m{"type": "string", "pattern": `^arn:[a-z-]+:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,512}$`, "description": "The role the controller assumes in the organisation's own AWS account. It can read the document and the secrets' parameters and nothing else, and it trusts only the controller's role."},
-				"region":    m{"type": "string", "pattern": `^[a-z]{2}(-[a-z]+)+-[0-9]$`, "description": "The region of that account's parameter store."},
-				"parameter": m{"type": "string", "pattern": `^/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$`, "description": "The name of the parameter that holds the document: the `org` section of a company fragment (docs/reference/sluis/policy-fragment.md)."},
+				"roleArn":    m{"type": "string", "pattern": `^arn:[a-z-]+:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,512}$`, "description": "The role the controller assumes in the organisation's own AWS account. It can read the document and the secrets' parameters and nothing else, and it trusts only the controller's role."},
+				"region":     m{"type": "string", "pattern": `^[a-z]{2}(-[a-z]+)+-[0-9]$`, "description": "The region of that account's parameter store."},
+				"parameter":  m{"type": "string", "pattern": `^/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$`, "description": "The name of the parameter that holds the document: the `org` section of a company fragment (docs/reference/sluis/policy-fragment.md). It must not be under `secretPrefix`."},
+				"externalId": m{"type": "string", "pattern": `^[A-Za-z0-9+=,.@:/-]{2,1000}$`, "description": "Optional. Passed to STS as the ExternalId of the assumption, so that the organisation's trust policy can require `sts:ExternalId`. The role is also assumed with a session policy that limits it to the document and the secrets' parameters."},
 			}, "roleArn", "region", "parameter"),
 			"platformVariables": list("path.Match patterns of the variable names the platform owns: `CI_RUNNER_LABEL_*`. The organisation's document may not declare one; its value is set under `variables`.", m{"type": "string", "minLength": 1}),
 			"platformValued":    list("Variable names whose value the platform sets and whose visibility and repositories the organisation chooses: the document may declare them with no value.", m{"type": "string", "pattern": name}),

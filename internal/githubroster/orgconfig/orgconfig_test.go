@@ -48,14 +48,19 @@ func TestValidate(t *testing.T) {
 		change func(*orgconfig.Config)
 		want   string
 	}{
-		"a mode":              {func(c *orgconfig.Config) { c.Mode = "apply" }, "mode"},
-		"a role":              {func(c *orgconfig.Config) { c.Read.RoleARN = "role" }, "roleArn"},
-		"a region":            {func(c *orgconfig.Config) { c.Read.Region = "europe" }, "region"},
-		"a parameter":         {func(c *orgconfig.Config) { c.Read.Parameter = "doc" }, "parameter"},
-		"a pattern":           {func(c *orgconfig.Config) { c.PlatformVariables = []string{"[a"} }, "platform_variables"},
-		"a prefix":            {func(c *orgconfig.Config) { c.SecretPrefix = "/example/secrets" }, "secret_prefix"},
-		"an unowned variable": {func(c *orgconfig.Config) { c.Variables["MINE"] = orgconfig.Variable{Value: "x"} }, "MINE"},
-		"a variable no value": {func(c *orgconfig.Config) { c.Variables["CI_X"] = orgconfig.Variable{} }, "no value"},
+		"a mode":                             {func(c *orgconfig.Config) { c.Mode = "apply" }, "mode"},
+		"a role":                             {func(c *orgconfig.Config) { c.Read.RoleARN = "role" }, "roleArn"},
+		"a region":                           {func(c *orgconfig.Config) { c.Read.Region = "europe" }, "region"},
+		"a parameter":                        {func(c *orgconfig.Config) { c.Read.Parameter = "doc" }, "parameter"},
+		"a pattern":                          {func(c *orgconfig.Config) { c.PlatformVariables = []string{"[a"} }, "platform_variables"},
+		"a prefix":                           {func(c *orgconfig.Config) { c.SecretPrefix = "/example/secrets" }, "secret_prefix"},
+		"an unowned variable":                {func(c *orgconfig.Config) { c.Variables["MINE"] = orgconfig.Variable{Value: "x"} }, "MINE"},
+		"a variable no value":                {func(c *orgconfig.Config) { c.Variables["CI_X"] = orgconfig.Variable{} }, "no value"},
+		"a document under the secret prefix": {func(c *orgconfig.Config) { c.Read.Parameter = "/example/credentials/doc" }, "under secretPrefix"},
+		"an external id":                     {func(c *orgconfig.Config) { c.Read.ExternalID = "x" }, "externalId"},
+		"two variables GitHub reads as one": {func(c *orgconfig.Config) {
+			c.Variables["ci_x"] = orgconfig.Variable{Value: "y"}
+		}, "one name"},
 		"selected no repos": {func(c *orgconfig.Config) {
 			c.Variables["CI_X"] = orgconfig.Variable{Value: "x", Visibility: "selected"}
 		}, "no repository"},
@@ -66,5 +71,36 @@ func TestValidate(t *testing.T) {
 		if err := c.Validate(); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: err = %v, want one naming %q", name, err, tc.want)
 		}
+	}
+}
+
+func TestSessionPolicyLimitsTheRoleToTheDocumentAndTheSecrets(t *testing.T) {
+	t.Parallel()
+
+	c := valid()
+	c.Read.ExternalID = "ext-123"
+
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+
+	policy, err := c.SessionPolicy()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []string{
+		`"Action":"ssm:GetParameter"`,
+		":ssm:eu-west-1:111122223333:parameter/example/doc",
+		":ssm:eu-west-1:111122223333:parameter/example/credentials/*",
+	} {
+		if !strings.Contains(policy, want) {
+			t.Errorf("policy %s lacks %q", policy, want)
+		}
+	}
+
+	// Case is not the platform's to guess: a name written in lower case is the platform's too.
+	if !c.Ceiling().PlatformOwns("ci_anything") || !c.Ceiling().ValueOnly("issuer") {
+		t.Error("the ceiling must read names without regard to case")
 	}
 }

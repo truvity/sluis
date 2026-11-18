@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 
 	"golang.org/x/crypto/nacl/box"
 )
@@ -124,7 +125,15 @@ func (o *Org) SetVariable(name string, v Variable) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	o.settings.Variables[name] = &v
+	o.settings.Variables[strings.ToUpper(name)] = &v
+}
+
+// RemoveVariable removes a variable, as an operator would on GitHub.
+func (o *Org) RemoveVariable(name string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	delete(o.settings.Variables, strings.ToUpper(name))
 }
 
 // Variable is a variable, or nil.
@@ -132,7 +141,7 @@ func (o *Org) Variable(name string) *Variable {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	if v := o.settings.Variables[name]; v != nil {
+	if v := o.settings.Variables[strings.ToUpper(name)]; v != nil {
 		c := *v
 
 		return &c
@@ -146,7 +155,7 @@ func (o *Org) SetSecret(name, visibility string) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	o.settings.Secrets[name] = &Secret{Visibility: visibility}
+	o.settings.Secrets[strings.ToUpper(name)] = &Secret{Visibility: visibility}
 }
 
 // Secret is a secret, or nil.
@@ -154,7 +163,7 @@ func (o *Org) Secret(name string) *Secret {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	if s := o.settings.Secrets[name]; s != nil {
+	if s := o.settings.Secrets[strings.ToUpper(name)]; s != nil {
 		c := *s
 
 		return &c
@@ -169,7 +178,7 @@ func (o *Org) OpenSecret(name string) (string, error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	s := o.settings.Secrets[name]
+	s := o.settings.Secrets[strings.ToUpper(name)]
 	if s == nil || s.Sealed == "" {
 		return "", errors.New("no such secret, or never written")
 	}
@@ -369,6 +378,8 @@ func (o *Org) createVariable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	body.Name = strings.ToUpper(body.Name)
+
 	if _, exists := o.settings.Variables[body.Name]; exists {
 		writeJSON(w, http.StatusConflict, map[string]string{"message": "Variable already exists"})
 
@@ -397,7 +408,7 @@ func (o *Org) updateVariable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := r.PathValue("name")
+	name := strings.ToUpper(r.PathValue("name"))
 
 	v, exists := o.settings.Variables[name]
 	if !exists {
@@ -435,7 +446,7 @@ func (o *Org) deleteVariable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := r.PathValue("name")
+	name := strings.ToUpper(r.PathValue("name"))
 	if _, exists := o.settings.Variables[name]; !exists {
 		notFound(w)
 
@@ -458,7 +469,7 @@ func (o *Org) variableRepos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	v, exists := o.settings.Variables[r.PathValue("name")]
+	v, exists := o.settings.Variables[strings.ToUpper(r.PathValue("name"))]
 	if !exists {
 		notFound(w)
 
@@ -506,7 +517,7 @@ func (o *Org) putSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := r.PathValue("name")
+	name := strings.ToUpper(r.PathValue("name"))
 
 	var body struct {
 		Encrypted  string  `json:"encrypted_value"`
@@ -554,7 +565,7 @@ func (o *Org) deleteSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := r.PathValue("name")
+	name := strings.ToUpper(r.PathValue("name"))
 	if _, exists := o.settings.Secrets[name]; !exists {
 		notFound(w)
 
@@ -577,7 +588,7 @@ func (o *Org) secretRepos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s, exists := o.settings.Secrets[r.PathValue("name")]
+	s, exists := o.settings.Secrets[strings.ToUpper(r.PathValue("name"))]
 	if !exists {
 		notFound(w)
 

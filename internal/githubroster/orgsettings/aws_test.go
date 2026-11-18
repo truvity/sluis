@@ -25,10 +25,12 @@ const (
 
 // fakeSTS trusts only the roles it is told to let the controller assume.
 type fakeSTS struct {
-	mu      sync.Mutex
-	trusted map[string]bool
-	calls   []string
-	session []string
+	mu          sync.Mutex
+	trusted     map[string]bool
+	externalIDs map[string]string
+	calls       []string
+	session     []string
+	inputs      []*sts.AssumeRoleInput
 }
 
 func (f *fakeSTS) AssumeRole(_ context.Context, in *sts.AssumeRoleInput, _ ...func(*sts.Options)) (*sts.AssumeRoleOutput, error) {
@@ -38,6 +40,12 @@ func (f *fakeSTS) AssumeRole(_ context.Context, in *sts.AssumeRoleInput, _ ...fu
 	role := aws.ToString(in.RoleArn)
 	f.calls = append(f.calls, role)
 	f.session = append(f.session, aws.ToString(in.RoleSessionName))
+	f.inputs = append(f.inputs, in)
+
+	// A role whose trust policy asks for an external id refuses an assumption without it.
+	if want := f.externalIDs[role]; want != "" && aws.ToString(in.ExternalId) != want {
+		return nil, errors.New("AccessDenied: the external id does not match")
+	}
 
 	if !f.trusted[role] {
 		return nil, errors.New("AccessDenied: the role does not trust the controller")
@@ -54,6 +62,8 @@ func (f *fakeSTS) AssumeRole(_ context.Context, in *sts.AssumeRoleInput, _ ...fu
 type account struct {
 	role       string
 	parameters map[string]string
+	// plain are the parameters that are a String and not a SecureString.
+	plain map[string]bool
 }
 
 type ssmFake struct {
@@ -80,7 +90,12 @@ func (s *ssmFake) GetParameter(ctx context.Context, in *awsssm.GetParameterInput
 		return nil, errors.New("ParameterNotFound")
 	}
 
-	return &awsssm.GetParameterOutput{Parameter: &types.Parameter{Name: in.Name, Value: aws.String(value), Version: 3}}, nil
+	kind := types.ParameterTypeSecureString
+	if s.account.plain[aws.ToString(in.Name)] {
+		kind = types.ParameterTypeString
+	}
+
+	return &awsssm.GetParameterOutput{Parameter: &types.Parameter{Name: in.Name, Value: aws.String(value), Version: 3, Type: kind}}, nil
 }
 
 func TestTheDocumentIsReadAsTheOrganisationsRoleInItsOwnAccount(t *testing.T) {
@@ -95,8 +110,8 @@ func TestTheDocumentIsReadAsTheOrganisationsRoleInItsOwnAccount(t *testing.T) {
 		regions []string
 	)
 
-	reader := orgsettings.NewAWSReaderWith(map[string]orgconfig.Read{
-		"globex": {RoleARN: globexRole, Region: "eu-west-1", Parameter: "/globex/doc"},
+	reader := orgsettings.NewAWSReaderWith(map[string]orgconfig.Config{
+		"globex": {Read: orgconfig.Read{RoleARN: globexRole, Region: "eu-west-1", Parameter: "/globex/doc"}, SecretPrefix: "/globex/credentials/"},
 	}, assume, func(creds aws.CredentialsProvider, region string) orgsettings.ParametersAPI {
 		regions = append(regions, region)
 
@@ -141,8 +156,8 @@ func TestTheDocumentIsReadAsTheOrganisationsRoleInItsOwnAccount(t *testing.T) {
 	}
 
 	// Another account's parameters are not readable with this role.
-	other := orgsettings.NewAWSReaderWith(map[string]orgconfig.Read{
-		"globex": {RoleARN: globexRole, Region: "eu-west-1", Parameter: "/acme/doc"},
+	other := orgsettings.NewAWSReaderWith(map[string]orgconfig.Config{
+		"globex": {Read: orgconfig.Read{RoleARN: globexRole, Region: "eu-west-1", Parameter: "/acme/doc"}},
 	}, assume, func(creds aws.CredentialsProvider, region string) orgsettings.ParametersAPI {
 		return &ssmFake{creds: creds, region: region, account: acme, decrypt: &decrypt}
 	})
@@ -161,8 +176,8 @@ func TestARoleThatDoesNotTrustTheControllerIsAnError(t *testing.T) {
 
 	var decrypt []bool
 
-	reader := orgsettings.NewAWSReaderWith(map[string]orgconfig.Read{
-		"globex": {RoleARN: globexRole, Region: "eu-west-1", Parameter: "/globex/doc"},
+	reader := orgsettings.NewAWSReaderWith(map[string]orgconfig.Config{
+		"globex": {Read: orgconfig.Read{RoleARN: globexRole, Region: "eu-west-1", Parameter: "/globex/doc"}, SecretPrefix: "/globex/credentials/"},
 	}, assume, func(creds aws.CredentialsProvider, region string) orgsettings.ParametersAPI {
 		return &ssmFake{creds: creds, region: region, account: account, decrypt: &decrypt}
 	})
@@ -172,5 +187,91 @@ func TestARoleThatDoesNotTrustTheControllerIsAnError(t *testing.T) {
 	_, err := src.Document(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "does not trust the controller") || !strings.Contains(err.Error(), globexRole) {
 		t.Fatalf("error = %v, want the refusal naming the role", err)
+	}
+}
+
+func TestTheRoleIsAssumedWithTheExternalIDAndASessionPolicy(t *testing.T) {
+	t.Parallel()
+
+	assume := &fakeSTS{trusted: map[string]bool{globexRole: true}, externalIDs: map[string]string{globexRole: "ext-123"}}
+	account := &account{role: globexRole, parameters: map[string]string{"/globex/doc": "org: {}\n"}}
+
+	var decrypt []bool
+
+	build := func(external string) *orgsettings.AWSReader {
+		return orgsettings.NewAWSReaderWith(map[string]orgconfig.Config{
+			"globex": {
+				Read:         orgconfig.Read{RoleARN: globexRole, Region: "eu-west-1", Parameter: "/globex/doc", ExternalID: external},
+				SecretPrefix: "/globex/credentials/",
+			},
+		}, assume, func(creds aws.CredentialsProvider, region string) orgsettings.ParametersAPI {
+			return &ssmFake{creds: creds, region: region, account: account, decrypt: &decrypt}
+		})
+	}
+
+	// Without the external id the role's trust policy refuses.
+	src, _ := build("").For("globex")
+	if _, err := src.Document(context.Background()); err == nil || !strings.Contains(err.Error(), "external id") {
+		t.Fatalf("an assumption without the external id: %v", err)
+	}
+
+	src, _ = build("ext-123").For("globex")
+	if _, err := src.Document(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	in := assume.inputs[len(assume.inputs)-1]
+	if aws.ToString(in.ExternalId) != "ext-123" {
+		t.Errorf("external id = %q", aws.ToString(in.ExternalId))
+	}
+
+	// The session policy limits the role to the document and the secrets'
+	// parameters, in the role's own account and partition.
+	policy := aws.ToString(in.Policy)
+	for _, want := range []string{
+		"ssm:GetParameter",
+		":ssm:eu-west-1:111122223333:parameter/globex/doc",
+		":ssm:eu-west-1:111122223333:parameter/globex/credentials/*",
+	} {
+		if !strings.Contains(policy, want) {
+			t.Errorf("session policy %s lacks %q", policy, want)
+		}
+	}
+
+	if strings.Contains(policy, `"ssm:*"`) || strings.Contains(policy, "parameter/*") {
+		t.Errorf("session policy is too wide: %s", policy)
+	}
+}
+
+func TestASecretsParameterMustBeASecureString(t *testing.T) {
+	t.Parallel()
+
+	assume := &fakeSTS{trusted: map[string]bool{globexRole: true}}
+	account := &account{
+		role: globexRole, parameters: map[string]string{"/globex/doc": "org: {}\n", "/globex/credentials/plain": "v"},
+		plain: map[string]bool{"/globex/credentials/plain": true, "/globex/doc": true},
+	}
+
+	var decrypt []bool
+
+	reader := orgsettings.NewAWSReaderWith(map[string]orgconfig.Config{
+		"globex": {Read: orgconfig.Read{RoleARN: globexRole, Region: "eu-west-1", Parameter: "/globex/doc"}, SecretPrefix: "/globex/credentials/"},
+	}, assume, func(creds aws.CredentialsProvider, region string) orgsettings.ParametersAPI {
+		return &ssmFake{creds: creds, region: region, account: account, decrypt: &decrypt}
+	})
+
+	src, _ := reader.For("globex")
+
+	// The document may be a String.
+	if _, err := src.Document(context.Background()); err != nil {
+		t.Fatalf("the document as a String: %v", err)
+	}
+
+	if _, err := src.Version(context.Background(), "/globex/credentials/plain"); err == nil || !strings.Contains(err.Error(), "SecureString") {
+		t.Errorf("a String secret was read: %v", err)
+	}
+
+	if _, _, err := src.Value(context.Background(), "/globex/credentials/plain"); err == nil {
+		t.Error("a String secret's value was read")
 	}
 }

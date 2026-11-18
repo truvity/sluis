@@ -162,7 +162,7 @@ func (c OrgCeiling) Validate() error {
 	}
 
 	for _, n := range c.PlatformValued {
-		if !actionsName.MatchString(n) {
+		if !ValidActionsName(n) {
 			errs = append(errs, fmt.Errorf("org.platform_valued: %q is not a variable name", n))
 		}
 	}
@@ -174,15 +174,31 @@ func (c OrgCeiling) Validate() error {
 	return errors.Join(errs...)
 }
 
+// FoldName is the name as GitHub keeps it: GitHub reads the names of Actions
+// variables and secrets without regard to case and stores them in upper case.
+// Every comparison of a name in this package and in the controller is made on
+// the folded name, so `ci_runner_label_x` is the platform's `CI_RUNNER_LABEL_*`.
+func FoldName(name string) string { return strings.ToUpper(name) }
+
+// ValidActionsName reports whether a name is one GitHub accepts for an Actions
+// variable or secret: letters, digits and underscores, not starting with a
+// digit or `GITHUB_`.
+func ValidActionsName(name string) bool {
+	return actionsName.MatchString(name) && !strings.HasPrefix(FoldName(name), "GITHUB_")
+}
+
 // PlatformOwns reports whether the platform owns the variable name, in whole
-// or in its value. Whether the name is [OrgCeiling.ValueOnly] says which.
+// or in its value, whatever the case it is written in. Whether the name is
+// [OrgCeiling.ValueOnly] says which.
 func (c OrgCeiling) PlatformOwns(name string) bool {
-	if slices.Contains(c.PlatformValued, name) {
+	if c.ValueOnly(name) {
 		return true
 	}
 
+	folded := FoldName(name)
+
 	for _, p := range c.PlatformVariables {
-		if ok, err := path.Match(p, name); err == nil && ok {
+		if ok, err := path.Match(FoldName(p), folded); err == nil && ok {
 			return true
 		}
 	}
@@ -191,7 +207,11 @@ func (c OrgCeiling) PlatformOwns(name string) bool {
 }
 
 // ValueOnly reports whether the platform owns only the value of the name.
-func (c OrgCeiling) ValueOnly(name string) bool { return slices.Contains(c.PlatformValued, name) }
+func (c OrgCeiling) ValueOnly(name string) bool {
+	folded := FoldName(name)
+
+	return slices.ContainsFunc(c.PlatformValued, func(n string) bool { return FoldName(n) == folded })
+}
 
 // IsEmpty reports whether the section declares nothing.
 func (s OrgSection) IsEmpty() bool {
@@ -216,6 +236,9 @@ func CheckOrg(o Owner, s OrgSection) []Violation {
 
 // orgSection checks the org section of a fragment.
 func (c *checker) orgSection(s OrgSection) {
+	c.foldedCollisions("org.variables", sortedKeys(s.Variables))
+	c.foldedCollisions("org.secrets", sortedKeys(s.Secrets))
+
 	for _, name := range sortedKeys(s.Variables) {
 		c.orgVariable(key("org.variables", name), name, s.Variables[name])
 	}
@@ -229,6 +252,20 @@ func (c *checker) orgSection(s OrgSection) {
 	}
 
 	c.attachmentOverlap(s.SecurityConfigurations)
+}
+
+// foldedCollisions refuses two names that GitHub reads as one.
+func (c *checker) foldedCollisions(kind string, names []string) {
+	seen := map[string]struct{}{}
+
+	for _, name := range names {
+		folded := FoldName(name)
+		if _, taken := seen[folded]; taken {
+			c.add(OwnerOrg, key(kind, name), "the name is the same as another, which GitHub reads without regard to case")
+		}
+
+		seen[folded] = struct{}{}
+	}
 }
 
 // attachmentOverlap refuses two configurations that are attached to the same
@@ -245,14 +282,16 @@ func (c *checker) attachmentOverlap(configs map[string]SecurityConfiguration) {
 		switch a.Scope {
 		case ScopeAll:
 			if all != "" {
-				c.add(OwnerOrg, p, "configurations %q and %q are both attached to every repository", all, name)
+				c.add(OwnerOrg, p, "two configurations are both attached to every repository")
 			}
 
 			all = name
 		case ScopeSelected:
 			for _, repo := range a.Repositories {
+				repo = strings.ToLower(repo)
+
 				if other, taken := holder[repo]; taken && other != name {
-					c.add(OwnerOrg, p, "configurations %q and %q are both attached to repository %q", other, name, repo)
+					c.add(OwnerOrg, p, "two configurations are both attached to one repository")
 				}
 
 				holder[repo] = name
@@ -267,7 +306,7 @@ func (c *checker) attachmentOverlap(configs map[string]SecurityConfiguration) {
 	for _, name := range sortedKeys(configs) {
 		if name != all && configs[name].Attach.Scope == ScopeSelected {
 			c.add(OwnerOrg, key("org.security_configurations", name)+".attach",
-				"configurations %q and %q overlap: %q is attached to every repository", all, name, all)
+				"a configuration attached to every repository overlaps this one")
 		}
 	}
 }
@@ -276,16 +315,16 @@ func (c *checker) orgVariable(p, name string, v OrgVariable) {
 	org := c.ceiling.Org
 
 	switch {
-	case !actionsName.MatchString(name) || strings.HasPrefix(strings.ToUpper(name), "GITHUB_"):
-		c.add(OwnerOrg, p, "%q is not a name GitHub accepts for a variable: letters, digits and underscores, not starting with a digit or GITHUB_", name)
+	case !ValidActionsName(name):
+		c.add(OwnerOrg, p, "not a name GitHub accepts for a variable: letters, digits and underscores, not starting with a digit or GITHUB_")
 
 		return
 	case org.ValueOnly(name):
 		if v.Value != "" {
-			c.add(OwnerOrgPlatform, p, "%q is a platform variable: its value is the installation's, and the document sets the visibility only", name)
+			c.add(OwnerOrgPlatform, p, "a platform variable: its value is the installation's, and the document sets the visibility only")
 		}
 	case org.PlatformOwns(name):
-		c.add(OwnerOrgPlatform, p, "%q is a platform variable: the installation sets it and the document may not declare it", name)
+		c.add(OwnerOrgPlatform, p, "a platform variable: the installation sets it and the document may not declare it")
 
 		return
 	case v.Value == "":
@@ -308,8 +347,8 @@ func (c *checker) orgVariable(p, name string, v OrgVariable) {
 
 func (c *checker) orgSecret(p, name string, s OrgSecret) {
 	switch {
-	case !actionsName.MatchString(name) || strings.HasPrefix(strings.ToUpper(name), "GITHUB_"):
-		c.add(OwnerOrg, p, "%q is not a name GitHub accepts for a secret: letters, digits and underscores, not starting with a digit or GITHUB_", name)
+	case !ValidActionsName(name):
+		c.add(OwnerOrg, p, "not a name GitHub accepts for a secret: letters, digits and underscores, not starting with a digit or GITHUB_")
 
 		return
 	case c.ceiling.Org.SecretPrefix == "":
@@ -317,9 +356,9 @@ func (c *checker) orgSecret(p, name string, s OrgSecret) {
 
 		return
 	case !parameterName.MatchString(s.Parameter) || strings.Contains(s.Parameter, ".."):
-		c.add(OwnerOrg, p+".parameter", "%q is not a parameter name", s.Parameter)
+		c.add(OwnerOrg, p+".parameter", "not a parameter name")
 	case !strings.HasPrefix(s.Parameter, c.ceiling.Org.SecretPrefix):
-		c.add(OwnerOrg, p+".parameter", "%q is outside the prefix %q the ceiling allows", s.Parameter, c.ceiling.Org.SecretPrefix)
+		c.add(OwnerOrg, p+".parameter", "outside the prefix the ceiling allows (%s)", c.ceiling.Org.SecretPrefix)
 	}
 
 	c.visibility(p, s.Visibility, s.Repositories)
@@ -339,7 +378,7 @@ func (c *checker) visibility(p, visibility string, repositories []string) {
 
 		c.repositories(p+".repositories", repositories)
 	default:
-		c.add(OwnerOrg, p+".visibility", "%q is not all, private or selected", visibility)
+		c.add(OwnerOrg, p+".visibility", "not all, private or selected")
 	}
 }
 
@@ -347,21 +386,23 @@ func (c *checker) repositories(p string, names []string) {
 	seen := map[string]struct{}{}
 
 	for i, name := range names {
-		switch _, dup := seen[name]; {
+		folded := strings.ToLower(name)
+
+		switch _, dup := seen[folded]; {
 		case !repositoryName.MatchString(name):
-			c.add(OwnerOrg, fmt.Sprintf("%s[%d]", p, i), "%q is not a repository name of the organisation", name)
+			c.add(OwnerOrg, fmt.Sprintf("%s[%d]", p, i), "not a repository name of the organisation")
 		case dup:
-			c.add(OwnerOrg, fmt.Sprintf("%s[%d]", p, i), "%q is named twice", name)
+			c.add(OwnerOrg, fmt.Sprintf("%s[%d]", p, i), "named twice, which GitHub reads without regard to case")
 		}
 
-		seen[name] = struct{}{}
+		seen[folded] = struct{}{}
 	}
 }
 
 func (c *checker) securityConfiguration(p, name string, s SecurityConfiguration) {
 	switch {
 	case strings.TrimSpace(name) != name || name == "" || len(name) > maxConfigName:
-		c.add(OwnerOrg, p, "%q is not a configuration name: 1 to %d characters, no space at either end", name, maxConfigName)
+		c.add(OwnerOrg, p, "not a configuration name: 1 to %d characters, no space at either end", maxConfigName)
 	case len(s.Description) > maxDescription:
 		c.add(OwnerOrg, p+".description", "the description is longer than %d characters", maxDescription)
 	}
@@ -376,9 +417,9 @@ func (c *checker) securityConfiguration(p, name string, s SecurityConfiguration)
 
 		switch {
 		case !known:
-			c.add(OwnerOrg, key(p+".settings", setting), "%q is not a setting GitHub's code security configurations have", setting)
+			c.add(OwnerOrg, key(p+".settings", setting), "not a setting GitHub's code security configurations have")
 		case !slices.Contains(allowed, s.Settings[setting]):
-			c.add(OwnerOrg, key(p+".settings", setting), "%q is not one of %s", s.Settings[setting], strings.Join(allowed, ", "))
+			c.add(OwnerOrg, key(p+".settings", setting), "the value is not one of %s", strings.Join(allowed, ", "))
 		}
 	}
 
@@ -394,6 +435,6 @@ func (c *checker) securityConfiguration(p, name string, s SecurityConfiguration)
 
 		c.repositories(p+".attach.repositories", s.Attach.Repositories)
 	default:
-		c.add(OwnerOrg, p+".attach.scope", "%q is not all or selected", s.Attach.Scope)
+		c.add(OwnerOrg, p+".attach.scope", "not all or selected")
 	}
 }
