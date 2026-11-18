@@ -246,3 +246,30 @@ message SignInMethods {
   // client the installation declares, or one that does not sign people in (a public or a confidential client does).
   string registration_client = 3 [(buf.validate.field).required = true, (buf.validate.field).string.pattern = "^[a-z0-9._-]{1,128}$"];
 }
+
+// RateBound is the kind RateBound (0036 "Inside sluis", the limits of `entry`); id "default". Each field is one limit of the
+// token buckets that `entry` keeps in the temp kind RateWindow: a count of requests that a bucket admits in a burst and refills
+// in one window. A field that is absent keeps the built-in default, and a value above the maximum built into the release is
+// refused by the loader, so the document tightens or loosens within what the release allows and never past it. The document
+// is optional: with none, every limit is its default. These are protective bounds against cost and are not quota.
+message RateBound {
+  // `/token` per client: a client is its id, in the form or in the Basic header; a client the installation does not declare
+  // shares one bucket.
+  RateLimit token_client = 1;
+  // `/token` per source address.
+  RateLimit token_address = 2;
+  // `/authorize` per client, as for `/token`.
+  RateLimit authorize_client = 3;
+  // `/authorize` per source address.
+  RateLimit authorize_address = 4;
+  // The recovery routes (`/passkeys/add` and `/passkeys/register`) per source address. These routes name no client.
+  RateLimit recovery_address = 5;
+}
+
+// RateLimit is one limit: `limit` requests in `window`. A bucket holds at most `limit` tokens, and refills at `limit` tokens in
+// one `window`. The loader holds the limit between 1 and 100000 and the window between 1 second and 1 hour (the longest a
+// RateWindow item lives).
+message RateLimit {
+  uint32 limit = 1 [(buf.validate.field).required = true];                  // the requests a bucket admits in a burst, and in each window
+  google.protobuf.Duration window = 2 [(buf.validate.field).required = true]; // the time in which a bucket that is empty fills again
+}

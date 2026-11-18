@@ -1566,6 +1566,148 @@ func (x *SignInMethods) GetRegistrationClient() string {
 	return ""
 }
 
+// RateBound is the kind RateBound (0036 "Inside sluis", the limits of `entry`); id "default". Each field is one limit of the
+// token buckets that `entry` keeps in the temp kind RateWindow: a count of requests that a bucket admits in a burst and refills
+// in one window. A field that is absent keeps the built-in default, and a value above the maximum built into the release is
+// refused by the loader, so the document tightens or loosens within what the release allows and never past it. The document
+// is optional: with none, every limit is its default. These are protective bounds against cost and are not quota.
+type RateBound struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// `/token` per client: a client is its id, in the form or in the Basic header; a client the installation does not declare
+	// shares one bucket.
+	TokenClient *RateLimit `protobuf:"bytes,1,opt,name=token_client,json=tokenClient,proto3" json:"token_client,omitempty"`
+	// `/token` per source address.
+	TokenAddress *RateLimit `protobuf:"bytes,2,opt,name=token_address,json=tokenAddress,proto3" json:"token_address,omitempty"`
+	// `/authorize` per client, as for `/token`.
+	AuthorizeClient *RateLimit `protobuf:"bytes,3,opt,name=authorize_client,json=authorizeClient,proto3" json:"authorize_client,omitempty"`
+	// `/authorize` per source address.
+	AuthorizeAddress *RateLimit `protobuf:"bytes,4,opt,name=authorize_address,json=authorizeAddress,proto3" json:"authorize_address,omitempty"`
+	// The recovery routes (`/passkeys/add` and `/passkeys/register`) per source address. These routes name no client.
+	RecoveryAddress *RateLimit `protobuf:"bytes,5,opt,name=recovery_address,json=recoveryAddress,proto3" json:"recovery_address,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *RateBound) Reset() {
+	*x = RateBound{}
+	mi := &file_sluis_config_v2alpha1_config_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RateBound) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RateBound) ProtoMessage() {}
+
+func (x *RateBound) ProtoReflect() protoreflect.Message {
+	mi := &file_sluis_config_v2alpha1_config_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RateBound.ProtoReflect.Descriptor instead.
+func (*RateBound) Descriptor() ([]byte, []int) {
+	return file_sluis_config_v2alpha1_config_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *RateBound) GetTokenClient() *RateLimit {
+	if x != nil {
+		return x.TokenClient
+	}
+	return nil
+}
+
+func (x *RateBound) GetTokenAddress() *RateLimit {
+	if x != nil {
+		return x.TokenAddress
+	}
+	return nil
+}
+
+func (x *RateBound) GetAuthorizeClient() *RateLimit {
+	if x != nil {
+		return x.AuthorizeClient
+	}
+	return nil
+}
+
+func (x *RateBound) GetAuthorizeAddress() *RateLimit {
+	if x != nil {
+		return x.AuthorizeAddress
+	}
+	return nil
+}
+
+func (x *RateBound) GetRecoveryAddress() *RateLimit {
+	if x != nil {
+		return x.RecoveryAddress
+	}
+	return nil
+}
+
+// RateLimit is one limit: `limit` requests in `window`. A bucket holds at most `limit` tokens, and refills at `limit` tokens in
+// one `window`. The loader holds the limit between 1 and 100000 and the window between 1 second and 1 hour (the longest a
+// RateWindow item lives).
+type RateLimit struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Limit         uint32                 `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`  // the requests a bucket admits in a burst, and in each window
+	Window        *durationpb.Duration   `protobuf:"bytes,2,opt,name=window,proto3" json:"window,omitempty"` // the time in which a bucket that is empty fills again
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RateLimit) Reset() {
+	*x = RateLimit{}
+	mi := &file_sluis_config_v2alpha1_config_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RateLimit) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RateLimit) ProtoMessage() {}
+
+func (x *RateLimit) ProtoReflect() protoreflect.Message {
+	mi := &file_sluis_config_v2alpha1_config_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RateLimit.ProtoReflect.Descriptor instead.
+func (*RateLimit) Descriptor() ([]byte, []int) {
+	return file_sluis_config_v2alpha1_config_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *RateLimit) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *RateLimit) GetWindow() *durationpb.Duration {
+	if x != nil {
+		return x.Window
+	}
+	return nil
+}
+
 var File_sluis_config_v2alpha1_config_proto protoreflect.FileDescriptor
 
 const file_sluis_config_v2alpha1_config_proto_rawDesc = "" +
@@ -1684,7 +1826,16 @@ const file_sluis_config_v2alpha1_config_proto_rawDesc = "" +
 	"\vpasskey_acr\x18\x01 \x01(\tB\x1e\xbaH\x1b\xc8\x01\x01r\x162\x14^[!#-\\[\\]-~]{1,256}$R\n" +
 	"passkeyAcr\x12D\n" +
 	"\x10upstream_recheck\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x0fupstreamRecheck\x12O\n" +
-	"\x13registration_client\x18\x03 \x01(\tB\x1e\xbaH\x1b\xc8\x01\x01r\x162\x14^[a-z0-9._-]{1,128}$R\x12registrationClientB\xe7\x01\n" +
+	"\x13registration_client\x18\x03 \x01(\tB\x1e\xbaH\x1b\xc8\x01\x01r\x162\x14^[a-z0-9._-]{1,128}$R\x12registrationClient\"\x80\x03\n" +
+	"\tRateBound\x12C\n" +
+	"\ftoken_client\x18\x01 \x01(\v2 .sluis.config.v2alpha1.RateLimitR\vtokenClient\x12E\n" +
+	"\rtoken_address\x18\x02 \x01(\v2 .sluis.config.v2alpha1.RateLimitR\ftokenAddress\x12K\n" +
+	"\x10authorize_client\x18\x03 \x01(\v2 .sluis.config.v2alpha1.RateLimitR\x0fauthorizeClient\x12M\n" +
+	"\x11authorize_address\x18\x04 \x01(\v2 .sluis.config.v2alpha1.RateLimitR\x10authorizeAddress\x12K\n" +
+	"\x10recovery_address\x18\x05 \x01(\v2 .sluis.config.v2alpha1.RateLimitR\x0frecoveryAddress\"d\n" +
+	"\tRateLimit\x12\x1c\n" +
+	"\x05limit\x18\x01 \x01(\rB\x06\xbaH\x03\xc8\x01\x01R\x05limit\x129\n" +
+	"\x06window\x18\x02 \x01(\v2\x19.google.protobuf.DurationB\x06\xbaH\x03\xc8\x01\x01R\x06windowB\xe7\x01\n" +
 	"\x19com.sluis.config.v2alpha1B\vConfigProtoP\x01ZGgithub.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1;configv2alpha1\xa2\x02\x03SCX\xaa\x02\x15Sluis.Config.V2alpha1\xca\x02\x15Sluis\\Config\\V2alpha1\xe2\x02!Sluis\\Config\\V2alpha1\\GPBMetadata\xea\x02\x17Sluis::Config::V2alpha1b\x06proto3"
 
 var (
@@ -1699,7 +1850,7 @@ func file_sluis_config_v2alpha1_config_proto_rawDescGZIP() []byte {
 	return file_sluis_config_v2alpha1_config_proto_rawDescData
 }
 
-var file_sluis_config_v2alpha1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_sluis_config_v2alpha1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_sluis_config_v2alpha1_config_proto_goTypes = []any{
 	(*Boundary)(nil),                 // 0: sluis.config.v2alpha1.Boundary
 	(*KeyPlan)(nil),                  // 1: sluis.config.v2alpha1.KeyPlan
@@ -1723,29 +1874,37 @@ var file_sluis_config_v2alpha1_config_proto_goTypes = []any{
 	(*ExportedDocument)(nil),         // 19: sluis.config.v2alpha1.ExportedDocument
 	(*FrontHost)(nil),                // 20: sluis.config.v2alpha1.FrontHost
 	(*SignInMethods)(nil),            // 21: sluis.config.v2alpha1.SignInMethods
-	(*durationpb.Duration)(nil),      // 22: google.protobuf.Duration
+	(*RateBound)(nil),                // 22: sluis.config.v2alpha1.RateBound
+	(*RateLimit)(nil),                // 23: sluis.config.v2alpha1.RateLimit
+	(*durationpb.Duration)(nil),      // 24: google.protobuf.Duration
 }
 var file_sluis_config_v2alpha1_config_proto_depIdxs = []int32{
 	4,  // 0: sluis.config.v2alpha1.KeyPlan.purposes:type_name -> sluis.config.v2alpha1.KeyPurposePlan
-	22, // 1: sluis.config.v2alpha1.KeyPlan.cache_ttl:type_name -> google.protobuf.Duration
+	24, // 1: sluis.config.v2alpha1.KeyPlan.cache_ttl:type_name -> google.protobuf.Duration
 	2,  // 2: sluis.config.v2alpha1.KeyPlan.slot_map:type_name -> sluis.config.v2alpha1.NodeSlotMap
 	3,  // 3: sluis.config.v2alpha1.NodeSlotMap.slots:type_name -> sluis.config.v2alpha1.SlotKey
-	22, // 4: sluis.config.v2alpha1.TokenLifetime.id_token:type_name -> google.protobuf.Duration
-	22, // 5: sluis.config.v2alpha1.TokenLifetime.access_token:type_name -> google.protobuf.Duration
-	22, // 6: sluis.config.v2alpha1.TokenLifetime.human_session_absolute:type_name -> google.protobuf.Duration
-	22, // 7: sluis.config.v2alpha1.TokenLifetime.refresh_idle:type_name -> google.protobuf.Duration
-	22, // 8: sluis.config.v2alpha1.InstallationClient.ttl_cap:type_name -> google.protobuf.Duration
+	24, // 4: sluis.config.v2alpha1.TokenLifetime.id_token:type_name -> google.protobuf.Duration
+	24, // 5: sluis.config.v2alpha1.TokenLifetime.access_token:type_name -> google.protobuf.Duration
+	24, // 6: sluis.config.v2alpha1.TokenLifetime.human_session_absolute:type_name -> google.protobuf.Duration
+	24, // 7: sluis.config.v2alpha1.TokenLifetime.refresh_idle:type_name -> google.protobuf.Duration
+	24, // 8: sluis.config.v2alpha1.InstallationClient.ttl_cap:type_name -> google.protobuf.Duration
 	13, // 9: sluis.config.v2alpha1.ExchangeTrust.issuers:type_name -> sluis.config.v2alpha1.TrustedIssuer
 	15, // 10: sluis.config.v2alpha1.AuditLog.logs:type_name -> sluis.config.v2alpha1.LogDecl
 	17, // 11: sluis.config.v2alpha1.AuditCatalogue.schemas:type_name -> sluis.config.v2alpha1.AuditSchema
 	19, // 12: sluis.config.v2alpha1.ExportDestination.documents:type_name -> sluis.config.v2alpha1.ExportedDocument
-	22, // 13: sluis.config.v2alpha1.ExportedDocument.max_age:type_name -> google.protobuf.Duration
-	22, // 14: sluis.config.v2alpha1.SignInMethods.upstream_recheck:type_name -> google.protobuf.Duration
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	24, // 13: sluis.config.v2alpha1.ExportedDocument.max_age:type_name -> google.protobuf.Duration
+	24, // 14: sluis.config.v2alpha1.SignInMethods.upstream_recheck:type_name -> google.protobuf.Duration
+	23, // 15: sluis.config.v2alpha1.RateBound.token_client:type_name -> sluis.config.v2alpha1.RateLimit
+	23, // 16: sluis.config.v2alpha1.RateBound.token_address:type_name -> sluis.config.v2alpha1.RateLimit
+	23, // 17: sluis.config.v2alpha1.RateBound.authorize_client:type_name -> sluis.config.v2alpha1.RateLimit
+	23, // 18: sluis.config.v2alpha1.RateBound.authorize_address:type_name -> sluis.config.v2alpha1.RateLimit
+	23, // 19: sluis.config.v2alpha1.RateBound.recovery_address:type_name -> sluis.config.v2alpha1.RateLimit
+	24, // 20: sluis.config.v2alpha1.RateLimit.window:type_name -> google.protobuf.Duration
+	21, // [21:21] is the sub-list for method output_type
+	21, // [21:21] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_sluis_config_v2alpha1_config_proto_init() }
@@ -1759,7 +1918,7 @@ func file_sluis_config_v2alpha1_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sluis_config_v2alpha1_config_proto_rawDesc), len(file_sluis_config_v2alpha1_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   22,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

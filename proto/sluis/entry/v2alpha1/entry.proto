@@ -1,0 +1,17 @@
+// The kind RateWindow, written by entry (0036 "Inside sluis").
+syntax = "proto3";
+
+package sluis.entry.v2alpha1;
+
+// RateWindow is the temp kind RateWindow (0036 "Inside sluis"): the token bucket of one limit, kept by `entry`. The id is
+// `<limit>/<subject>`: the limit is a word of the closed list of `entry` (`token-address`, `token-client`, and so on), and the
+// subject is a client id, or the keyed hash of a source address that key@'s `Mac` makes over the boundary's `mac` key (never
+// the address). The tenant is `-`: the clients of the core belong to no tenant. A bucket holds counts and a time, no name of a
+// person. It lives as long as it takes to fill again, so an absent bucket is a full one and a restore starts every bucket full.
+message RateWindow {
+  // The tokens in the bucket at `at_ms`, in thousandths of a token, so that a slow refill loses nothing to rounding.
+  uint64 milli_tokens = 1;
+  // The time of the last admit, in milliseconds since the Unix epoch. The refill since then is added before the next one is
+  // taken.
+  int64 at_ms = 2;
+}

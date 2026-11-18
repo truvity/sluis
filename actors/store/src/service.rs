@@ -39,6 +39,12 @@ use crate::watch::{self, ConfigWatch, LogWatch, Slots};
 
 /// A write batch holds at most this many operations (store-api.md "Write").
 pub const BATCH_MAX: usize = 64;
+/// The config kinds that a boundary may leave undeclared, whose reader then has the built-in default of what they hold: a
+/// listing of one that the boundary does not declare is empty, where any other config kind with no document is unavailable.
+/// A `Get` of the same kind is a refusal that is audited, so a reader of these lists. `RateBound` is the limits of `entry`
+/// (ADR 0036): without a document every limit is its default.
+const OPTIONAL_CONFIG: [&str; 1] = ["RateBound"];
+
 /// The default and the largest page of a `List` (the driver's page is at most 500).
 const PAGE_DEFAULT: i32 = 100;
 const PAGE_MAX: i32 = 500;
@@ -270,7 +276,8 @@ impl<E: ItemEngine, G: GrantOpener, A: AuditSink> Service<E, G, A> {
                 // The boundary's own wraps are a `DataKeyWrap` at no tenant (kinds.yaml, notes), and so is a
                 // revocation of a boundary's key, purpose or recipient (ADR 0041): only a data key generation of a
                 // tenant has a tenant.
-                if !matches!(kind.name, "DataKeyWrap" | "KeyRevocation") {
+                // A bucket of a source address has the tenant `-` too: it is no tenant's (ADR 0036, "Inside sluis").
+                if !matches!(kind.name, "DataKeyWrap" | "KeyRevocation" | "RateWindow") {
                     return Err(bad(kind));
                 }
             }
@@ -686,10 +693,15 @@ impl<E: ItemEngine, G: GrantOpener, A: AuditSink> Service<E, G, A> {
 
         match kind.class {
             Class::Config => {
-                self.config
-                    .version(kind.segment)
-                    .ok_or_else(|| blame(engine_down()))?;
-                let version = self.config.version(kind.segment).unwrap_or(0);
+                // A kind with no loaded document is unavailable, not empty: a reader that fails closed on it must not
+                // read an absent document as an empty one. The kinds of [`OPTIONAL_CONFIG`] are the exception: an
+                // installation that does not declare one has none, and the listing says so.
+                let Some(version) = self.config.version(kind.segment) else {
+                    if OPTIONAL_CONFIG.contains(&kind.name) {
+                        return Ok(ListResponse::default());
+                    }
+                    return Err(blame(engine_down()));
+                };
                 // Sorted by id; the token is the last id of the previous page.
                 let after = String::from_utf8(inner).map_err(|_| {
                     blame(refuse(ErrorCode::InvalidArgument, "schema", "page_token"))
@@ -884,9 +896,12 @@ impl<E: ItemEngine, G: GrantOpener, A: AuditSink> Service<E, G, A> {
 
         // 2. The grant, for every operation on a tenant-scoped address, except key@'s own writes
         // of `DataKeyWrap`: key@ is the other check there (ADR 0005 "Rules").
+        // The bucket of a limit of `entry` that is no tenant's is the other: a request that has not signed in holds no
+        // grant, and the bucket holds a count and no name (ADR 0036). A bucket of a tenant's own client needs one.
         let needs_grant = |t: &Target| {
             t.kind.scope == Scope::BoundaryTenant
                 && !(caller == "key" && matches!(t.kind.name, "DataKeyWrap" | "KeyRevocation"))
+                && !(caller == "entry" && t.kind.name == "RateWindow" && t.tenant.is_empty())
         };
         if planned.iter().any(|p| needs_grant(&p.2)) {
             let denied = |t: &Target, verb: &'static str| {

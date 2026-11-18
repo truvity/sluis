@@ -361,7 +361,7 @@ PKI roles: which leaf profiles ca and ssh-ca issue for whom.
 
 ### `RateBound`
 
-Protective rate bounds per connection, client and source address. Not quota.
+The limits of entry's token buckets (ADR 0036): per client and per source address on /token and /authorize, per source address on the recovery routes, each a count and a window. One optional document: a limit it names replaces the built-in default, one it leaves out keeps it, and the loader refuses a count above 100000 or a window above an hour. Not quota.
 
 - **Class:** config; scope boundary; plain; profile Fixed; module core; serves the work family.
 - **Writer:** `IaC`.
@@ -1040,7 +1040,7 @@ Seen jti of presented assertions and DPoP proofs, per verifying actor (id &lt;ac
 
 ### `RateWindow`
 
-Protective token buckets per connection, client and source address (not quota); counts only. The id of a source-address bucket is a keyed hash (key@ Mac, boundary `mac` key) with tenant `-`, never the address. On boards each window write is a Raft commit.
+The token bucket of one limit of entry (ADR 0036; not quota): a count of thousandths of a token and a time, no name. The id is &lt;limit>/&lt;subject>; a client bucket names the client, and the id of a source-address bucket is a keyed hash (key@ Mac, boundary `mac` key), never the address. The tenant is `-`. On boards each window write is a Raft commit.
 
 - **Class:** temp; scope boundary+tenant; plain; profile none; module core; serves the work family.
 - **Writer:** [`entry`](/reference/actors/#entry).
