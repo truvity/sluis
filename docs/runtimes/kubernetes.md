@@ -1,12 +1,12 @@
 ---
 title: Kubernetes
-description: "The kubernetes runtime runs sluis on EKS with AWS KMS: a pod and service account per actor, sidecar drivers, a NetworkPolicy per callee, cells, one chart."
+description: "The kubernetes runtime runs sluis on PostgreSQL and AWS KMS: a pod and service account per actor, sidecar drivers, a NetworkPolicy per callee, cells, one chart."
 status: target
 sidebar:
   order: 4
 ---
 
-On the kubernetes runtime the kubelet supervises sluis, and each actor and each holder is a pod with its own service account. Calls between pods are in-cluster gRPC, authenticated by a projected service-account token with one audience per callee. The tested installation is [kubernetes](/runtimes/#kubernetes): Amazon EKS with AWS KMS keys, DynamoDB, the NATS JetStream audit transport and S3 blobs, installed from one Helm chart. It is the customer installation on Amazon EKS, which is the customer-identity installation, and the reference installation of the `nats-jetstream` driver ([0011](/decisions/0011-runtimes-and-installations/#kubernetes)). Which drivers fit Kubernetes is on [Runtimes](/runtimes/#which-drivers-fit-which-runtime).
+On the kubernetes runtime the kubelet supervises sluis, and each actor and each holder is a pod with its own service account. Calls between pods are in-cluster gRPC, authenticated by a projected service-account token with one audience per callee. The tested installation is [kubernetes](/runtimes/#kubernetes): Amazon EKS with AWS KMS keys, a PostgreSQL store through CloudNativePG, the NATS JetStream audit transport and S3 blobs, installed from one Helm chart. It is the customer installation on Amazon EKS, which is the customer-identity installation, and the reference installation of the `nats-jetstream` driver ([0011](/decisions/0011-runtimes-and-installations/#kubernetes)). Which drivers fit Kubernetes is on [Runtimes](/runtimes/#which-drivers-fit-which-runtime).
 
 **sluis writes no Kubernetes object,** except an exported Secret that exporter@ writes when an installation chooses the direct path ([0009](/decisions/0009-export/#destinations)). Cluster tools such as cert-manager, trust-manager and External Secrets stay its clients and pull what sluis serves and exports.
 
@@ -29,12 +29,12 @@ flowchart LR
   subgraph kpod["key@ pod"]
     key["key@"] --> kdrv["KMS sidecar"]
   end
-  sdrv --> aws["DynamoDB, S3, SSM"]
+  sdrv --> aws["CloudNativePG, S3, SSM"]
   kdrv --> kms["AWS KMS"]
   work -. "audit facts" .-> nats["NATS JetStream"]
 ```
 
-The edge relay is the only container that a gateway reaches. It forwards to `entry`'s Unix socket, and `entry` calls the work actors over gRPC. Every work actor calls store@ for its data and key@ for its keys. The audit facts leave through the transport for a separate audit installation.
+The edge relay is the only container that the cluster's gateway reaches. It forwards to `entry`'s Unix socket, and `entry` calls the work actors over gRPC. Every work actor calls store@ for its data and key@ for its keys. The audit facts leave through the transport for a separate audit installation.
 
 ## What runs where
 
@@ -65,7 +65,7 @@ The call graph of the actor registry is enforced in the pod's code and again by 
 
 - **AWS KMS only,** with the layout of every AWS installation ([0006](/decisions/0006-keys-and-sealing/#keys-per-boundary-on-aws)). The key policy of every key names key@'s role alone, so no other pod and no node reaches KMS. No card runs on Kubernetes: the key policy is the access list.
 - **No software key in production.** Only the `kubernetes-dev` preset allows the `software` driver, on the terms of the local installation, for the smoke test on kind. A cluster with no key mode that the floor allows refuses to start ([0006](/decisions/0006-keys-and-sealing/#floors-in-code)).
-- **Kubernetes in 2.0 means Kubernetes on AWS (EKS).** A cluster without AWS is not in 2.0, because it would need a second key mode and a second store engine. The direction for later, when it has a consumer, is PostgreSQL via CNPG as the store engine; the key source is decided then. [Issue #1238](https://github.com/truvity/sluis/issues/1238) tracks it ([0011](/decisions/0011-runtimes-and-installations/#kubernetes)).
+- **The store no longer ties Kubernetes to AWS, the keys still do.** The store engine is PostgreSQL through CloudNativePG (maintainer decision K2 B of 2026-11-18, [0005](/decisions/0005-the-store/#amendment-of-2026-11-18-kubernetes-stores-in-postgresql-through-cloudnativepg)), but the tested installation keeps `aws-kms` for its keys, so it still needs AWS KMS. A key driver for a cluster without AWS is later and is not in the core ([0011](/decisions/0011-runtimes-and-installations/#kubernetes)).
 
 ## Identity
 
@@ -76,8 +76,8 @@ The call graph of the actor registry is enforced in the pod's code and again by 
 
 ## Data and leases
 
-- **DynamoDB only,** behind store@'s driver ([0005](/decisions/0005-the-store/#engines)): conditional writes, and a table per engine reachable by store@'s role only. A work actor reaches no table; it calls store@, whose rules say which actor may write which kind.
-- **A lease is a temp kind** with a fencing token ([0005](/decisions/0005-the-store/#leases)). There is no Kubernetes Lease and no PostgreSQL or rqlite engine on Kubernetes.
+- **PostgreSQL through CloudNativePG,** behind store@'s `postgres` driver ([0005](/decisions/0005-the-store/#engines)): `Get`, `Query`, `Transact` and `TailLog`, with conditional writes. One CloudNativePG cluster holds the store and the audit index as separate databases and separate roles, and the role of the store's database is reachable by store@'s driver only. A work actor reaches no database; it calls store@, whose rules say which actor may write which kind. The driver is built in the core ([#1238](https://github.com/truvity/sluis/issues/1238)).
+- **A lease is a temp kind** with a fencing token ([0005](/decisions/0005-the-store/#leases)). There is no Kubernetes Lease and no rqlite or DynamoDB engine on Kubernetes.
 - An actor that must run once at a time, such as the audit writer, is fenced by the write-once rule on its blob, and a background job takes a lease; neither needs a Kubernetes object.
 
 ## Audit
@@ -85,15 +85,23 @@ The call graph of the actor registry is enforced in the pod's code and again by 
 - **The audit side may be a separate audit installation** from the same chart's `audit-install` preset: the foundation with the audit module only, with the writer, the indexer, the reader and an optional witness, behind its own front ([0028](/decisions/0028-audit-pieces/#the-audit-front)): a slim `entry` on its own host with its own edge relay or `cloudflared` and its own gateway route.
 - **Transport:** NATS JetStream. NATS accounts and permission templates on scoped signing keys let each producer publish only its own project's subjects ([0028](/decisions/0028-audit-pieces/#nats-jetstream)); the NATS credentials use the Ed25519 named exception ([0006](/decisions/0006-keys-and-sealing/#named-exceptions)). SQS and `direct` are supported but not the default; `direct` falls back to a local spool when the writer is down, which needs a per-pod volume. A request never waits for the writer or the index.
 - **One writer at a time,** and every batch is created only if absent, so a second writer cannot fork the log ([0029](/decisions/0029-the-audit-log/#the-write-once-fence)). The writer signs checkpoints with the log key in KMS, through key@.
-- **Index:** `postgres` in the `cnpg` mode, a CloudNativePG cluster in the same Kubernetes cluster; a database someone else runs is the `external` mode, a connection string only ([0028](/decisions/0028-audit-pieces/#provisioning-modes)). The reader can run in any pod that reaches the database.
+- **Index:** `postgres` in the `cnpg` mode, the same CloudNativePG cluster as the store, in a database and a role of its own; a database someone else runs is the `external` mode, a connection string only ([0028](/decisions/0028-audit-pieces/#provisioning-modes)). The reader can run in any pod that reaches the database.
 - **Witness:** optional (`peer` or `external`). `sluis config check` warns when there is none.
 
 ## Edge
 
 A gateway cannot route to a Unix socket in another pod, and the kubelet's HTTP and TCP probes connect to the pod address, so a container in the pod bridges to `entry`, in one of two modes:
 
-- **Edge relay, the default.** A key-less container listens on the pod address and forwards to `entry`'s Unix socket in a shared volume. A Service targets its port, so any Gateway API implementation or Ingress controller can route to it. It is written in Rust, like `entry` ([0012](/decisions/0012-the-language-follows-the-executable/)).
-- **`cloudflared`, supported.** A sidecar connects out to the Cloudflare edge and forwards to `entry`'s socket, and the pod accepts no inbound connection at all.
+- **Edge relay, the default.** A key-less container listens on the pod address and forwards to `entry`'s Unix socket in a shared volume. A Service targets its port, so the cluster's gateway or Ingress controller routes to it with an HTTPRoute or an Ingress. It is written in Rust, like `entry` ([0012](/decisions/0012-the-language-follows-the-executable/)).
+- **`cloudflared` in `entry`'s pod, an optional value.** A sidecar connects out to the Cloudflare edge and forwards to `entry`'s socket, and the pod accepts no inbound connection at all. It is for a cluster that has no Cloudflare tunnel of its own. This option is **proposed, awaiting the maintainer**, and not decided.
+
+### Behind the Cloudflare edge
+
+Maintainer decisions E1, E2 A and E3 of 2026-11-18 ([0011](/decisions/0011-runtimes-and-installations/#amendment-of-2026-11-18-the-core-comes-first)):
+
+- **Every production shape sits behind the Cloudflare edge.** On Kubernetes it is the cluster's own Cloudflare tunnel and gateway, routed to the edge relay of `entry`. That is the chart's default.
+- **Shared edge rules.** The key set and the discovery document are cacheable, with a cache time below the key pre-publish time. `/token` and the recovery paths are rate limited. WAF rules cover the MCP and agent connectors.
+- **The split of work (E2 A).** The chart does sluis's side: the relay and its route, and the optional `cloudflared` sidecar. The Cloudflare records, rules and rate limits are documented and applied by the installation's own infrastructure code. sluis holds no Cloudflare credential in the core.
 
 `entry` stays socket-only, with no TCP listener, and is probed with an `exec` probe ([0003](/decisions/0003-units-transports-and-fusion/#listeners)). The relay holds no key.
 
@@ -119,7 +127,7 @@ From the registries the chart renders one ServiceAccount per pod kind with the a
 
 - **A smoke test on kind** installs the chart with the `kubernetes-dev` preset under the `restricted` level, with no cloud credentials. It confirms that `SO_PEERCRED` identifies the peer across the containers of one pod, then checks the socket reachability and NetworkPolicy deny matrices, the edge, the probes, a rolling upgrade, and that the render holds no RBAC objects.
 - **The customer installation on EKS runs the full conformance set:** OpenID Connect, FAPI 2.0 and the customer-identity plans, in addition to local on pull requests and Lambda nightly ([Conformance](/standards/conformance/#how-the-tests-run-in-ci), [0038](/decisions/0038-fapi-2-profile/)).
-- **Integration tests on a development EKS cluster** cover the cluster's issuer at AWS, the key policies and the IAM conditions on the table and the queue. They run on a short-lived runner inside the VPC against the cluster's private API endpoint; the cluster has no public endpoint ([#891](https://github.com/truvity/sluis/issues/891)).
+- **Integration tests on a development EKS cluster** cover the cluster's issuer at AWS, the key policies and the IAM conditions on the bucket and the queue. They run on a short-lived runner inside the VPC against the cluster's private API endpoint; the cluster has no public endpoint ([#891](https://github.com/truvity/sluis/issues/891)).
 
 ## Limits and residual risk
 
