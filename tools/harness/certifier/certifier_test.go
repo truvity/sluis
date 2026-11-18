@@ -347,6 +347,9 @@ func TestRitueelRequestVectors(t *testing.T) {
 		t.Fatalf("the root list pins %d roots, want 2", len(roots))
 	}
 	anchors := vectorAnchors(t)
+	// One fixed time for the root and the certification: a root made at time.Now() is not yet valid at a fixed past
+	// certification time, so the test failed once the calendar passed that time.
+	at := time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
 	ran := 0
 	for _, v := range m.Requests {
 		if v.Type != handoff.TypeX509 {
@@ -356,7 +359,7 @@ func TestRitueelRequestVectors(t *testing.T) {
 			// A root for the vectors' names, and the vectors' attestation.
 			base := t.TempDir()
 			requests, answers := filepath.Join(base, "requests"), filepath.Join(base, "answers")
-			r, _, err := initRoot(filepath.Join(base, "root"), time.Now(), []string{"example.org"})
+			r, _, err := initRoot(filepath.Join(base, "root"), at, []string{"example.org"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -380,7 +383,7 @@ func TestRitueelRequestVectors(t *testing.T) {
 			if store != handoff.StoreSoftware || v.Config == "production" {
 				pol.Attestation = anchors
 			}
-			outs, err := r.Certify(requests, answers, time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC), pol)
+			outs, err := r.Certify(requests, answers, at, pol)
 			if err != nil {
 				t.Fatalf("certify: %v", err)
 			}
