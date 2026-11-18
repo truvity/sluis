@@ -68,6 +68,10 @@ const SCHEMAS: &[(&str, &str)] = &[
         "sign-in-methods/v1/sign-in-methods.schema.json",
         include_str!("../../../../schema/sign-in-methods/v1/sign-in-methods.schema.json"),
     ),
+    (
+        "rate-bound/v1/rate-bound.schema.json",
+        include_str!("../../../../schema/rate-bound/v1/rate-bound.schema.json"),
+    ),
 ];
 
 /// The identifier of the schema of the payload of a signed config document of the kind, if the kind has one: the kind name
