@@ -52,13 +52,7 @@ const PAGE_MAX: i32 = 500;
 const PAGE_TOKEN_TTL: Duration = Duration::from_secs(300);
 const PAGE_TOKEN_VERSION: u8 = 1;
 /// The purposes of a `DataKeyWrap` id, by whether the wrap has a tenant (kinds.yaml: `purposes`).
-const WRAP_PURPOSES_TENANT: &[&str] = &[
-    "data",
-    "pseudonym",
-    "evidence",
-    "chain",
-    "credential",
-];
+const WRAP_PURPOSES_TENANT: &[&str] = &["data", "pseudonym", "evidence", "chain", "credential"];
 const WRAP_PURPOSES_BOUNDARY: &[&str] = &["grant", "cookie", "mac", "data"];
 
 /// The clock of the store. Production passes `SystemTime::now`.
