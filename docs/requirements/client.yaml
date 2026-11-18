@@ -174,15 +174,15 @@ requirements:
     rationale: "A closed model prevents contradictory configuration."
     level: MUST
     source: v1-parity
-    status: partial
-    gap: partly-built
+    status: done
     milestone: first-version
     runtimes: all
     standards:
       - {id: ST-01, section: "2.1", depth: Full}
-    issues: [789]
+    issues: [789, 1819]
+    tests: [actors/store/tests/config.rs]
     verification:
-      - {kind: integration-test, ref: "profile contradiction tests"}
+      - {kind: test-vectors, ref: "client-vectors.json (kits/conformance/token), config: each declaration that mixes what a kind fixes (a secret, a profile, a PKCE setting) is refused at the field, in the loader's words, with no value"}
   - id: REQ-CLIENT-006
     area: CLIENT
     statement: "A revoked or deleted client MUST receive invalid_client on its next request."
@@ -735,3 +735,34 @@ requirements:
     tests: [actors/store/tests/config.rs, actors/store/tests/validate.rs]
     verification:
       - {kind: integration-test, ref: "a list of declared things loads; a grant name, a wildcard, an empty entry, a repeat, the v1 word all, a thing nobody wrote, a scope and a role in its place are each refused at the entry with no value"}
+  - id: REQ-CLIENT-050
+    area: CLIENT
+    split_from: REQ-CLIENT-005
+    statement: "The loader MUST refuse a client whose requires is empty or left out."
+    rationale: "An empty list admits nobody, so a client that nobody can sign in to is a slip that should stop the load and not wait for the first request (ADR 0021)."
+    level: MUST
+    source: v1-parity
+    status: done
+    milestone: first-version
+    runtimes: all
+    standards: []
+    issues: [789, 1819]
+    tests: [actors/store/tests/config.rs]
+    verification:
+      - {kind: test-vectors, ref: "client-vectors.json (kits/conformance/token), config: requires left out, empty and null are each refused at the field with no value"}
+  - id: REQ-CLIENT-051
+    area: CLIENT
+    split_from: REQ-CLIENT-005
+    statement: "The loader MUST accept a profile only for a public client, and only the words browser and native."
+    rationale: "The profile decides which redirects a public client may register, so a word outside the closed set, or a profile on a client whose kind already fixes it, is a contradiction (ADR 0021)."
+    level: MUST
+    source: v1-parity
+    status: done
+    milestone: first-version
+    runtimes: all
+    standards:
+      - {id: ST-04, section: "7.3", depth: Partial}
+    issues: [789, 1819]
+    tests: [actors/store/tests/config.rs]
+    verification:
+      - {kind: test-vectors, ref: "client-vectors.json (kits/conformance/token), config: browser, native and none load for a public client; another word or spelling, and any profile on another kind, are refused at the field"}

@@ -13,7 +13,6 @@ sluis-cli:
 example-app:
   kind: confidential
   redirects: ["https://app.local.test/callback"]
-  profile: web
   # Where the client's secret is in the secret source: the credential `client-example-app`, which `just local-up`
   # makes (ADR 0005, "Secret sources"). The document never holds the secret.
   secret: client-example-app
@@ -30,7 +29,7 @@ oidf-suite:
     - https://localhost.emobix.co.uk:8443/test/a/sluis-formpost/callback
     - https://localhost.emobix.co.uk:8443/test/a/sluis-basic-pages/callback
     - https://localhost.emobix.co.uk:8443/test/a/sluis-formpost-pages/callback
-  profile: web
+  profile: browser
   requires: ["dev:example-app:user"]
 oidf-suite-2:
   kind: public
@@ -40,5 +39,5 @@ oidf-suite-2:
     - https://localhost.emobix.co.uk:8443/test/a/sluis-formpost/callback
     - https://localhost.emobix.co.uk:8443/test/a/sluis-basic-pages/callback
     - https://localhost.emobix.co.uk:8443/test/a/sluis-formpost-pages/callback
-  profile: web
+  profile: browser
   requires: ["dev:example-app:user"]

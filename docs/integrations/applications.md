@@ -66,6 +66,7 @@ Names and keys are [illustrative](/integrations/#examples-are-illustrative).
 clients:
   gitops-ui:
     kind: confidential
+    secret: client-gitops-ui   # the name of the credential in the secret source; the file never holds the value
     redirects: [https://deploy.example.org/auth/callback]
     requires: [platform-admin, platform-viewer]
     signing_alg: ES384

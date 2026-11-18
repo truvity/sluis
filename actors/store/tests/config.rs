@@ -383,11 +383,7 @@ async fn only_a_public_native_clients_loopback_redirect_passes_the_https_floor()
         ("a public client with no profile", "  kind: public\n"),
         (
             "a confidential client",
-            "  kind: confidential\n  profile: web\n",
-        ),
-        (
-            "a confidential client that says native",
-            "  kind: confidential\n  profile: native\n",
+            "  kind: confidential\n  secret: client-probe\n",
         ),
         ("an exchange client", "  kind: exchange\n"),
     ];
@@ -482,8 +478,14 @@ fn the_algorithm_of_a_clients_id_tokens_is_what_the_shared_vectors_accept() {
     let client = |ty: &str, v: Option<&serde_json::Value>| {
         // A JSON value is a YAML flow scalar or sequence, with the same escapes.
         let line = v.map_or(String::new(), |v| format!("  signing_alg: {v}\n"));
+        // A confidential client names its secret (REQ-CLIENT-020).
+        let secret = if ty == "confidential" {
+            "  secret: client-app\n"
+        } else {
+            ""
+        };
         format!(
-            "app:\n  kind: {ty}\n  redirects: [\"https://app.example.com/cb\"]\n  requires: [\"dev:app:user\"]\n{line}"
+            "app:\n  kind: {ty}\n  redirects: [\"https://app.example.com/cb\"]\n  requires: [\"dev:app:user\"]\n{secret}{line}"
         )
     };
     let alg = |ty: &str, v: Option<&serde_json::Value>| {
@@ -529,6 +531,53 @@ fn the_algorithm_of_a_clients_id_tokens_is_what_the_shared_vectors_accept() {
     }
 }
 
+/// A client declares what it is, and the loader holds the declaration to the model of ADR 0021: a kind from the closed set, the
+/// profile of a public client (browser or native) and of nobody else, the secret that a confidential client proves itself with
+/// and a public client has none of, the way a code is bound to the client (PKCE with S256, or the nonce for a confidential
+/// client that says so, and nothing for an exchange client), something that a person must satisfy, and no address for a flow
+/// that sluis does not serve. The cases are the shared vectors (`kits/conformance/token/client-vectors.json`, "config"): each
+/// accepted client loads, and each refused one is refused at the field the vector names, in its words, with no value.
+///
+/// verifies: REQ-CLIENT-020, REQ-CLIENT-050, REQ-CLIENT-051, REQ-AUTHN-062
+#[test]
+fn a_client_is_held_to_the_model_by_the_shared_vectors() {
+    let vectors: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../kits/conformance/token/client-vectors.json"
+    ))
+    .unwrap();
+    let (accepted, not_accepted) = (
+        vectors["config"]["accepted"].as_array().unwrap(),
+        vectors["config"]["refused"].as_array().unwrap(),
+    );
+    assert!(accepted.len() >= 9 && not_accepted.len() >= 20);
+    // A JSON object is a YAML flow mapping, with the same escapes.
+    let document = |client: &serde_json::Value| format!("app: {client}\n");
+    for a in accepted {
+        let items = payload::decode(
+            kind("InstallationClient"),
+            document(&a["client"]).as_bytes(),
+        )
+        .unwrap_or_else(|e| panic!("{a}: {e}"));
+        let c = pb::InstallationClient::decode_from_slice(&items[0].1).unwrap();
+        assert_eq!(c.kind, a["client"]["kind"].as_str().unwrap(), "{a}");
+        assert_eq!(c.pkce, a["client"]["pkce"].as_str().unwrap_or(""), "{a}");
+        assert_eq!(
+            c.profile,
+            a["client"]["profile"].as_str().unwrap_or(""),
+            "{a}"
+        );
+    }
+    for r in not_accepted {
+        let e = refused("InstallationClient", &document(&r["client"]));
+        assert_eq!(e, r["error"].as_str().unwrap(), "{r}");
+        for v in r["client"].as_object().unwrap().values() {
+            if let Some(v) = v.as_str().filter(|v| v.contains("example.org")) {
+                assert!(!e.contains(v), "a value was printed: {e}");
+            }
+        }
+    }
+}
+
 /// A client's `groups_delimiter` replaces each `:` of a grant name in the groups of its tokens, for a verifier that splits a
 /// group on `:`. The loader takes the delimiters of the shared vectors (`kits/conformance/token/groups-vectors.json`: one to
 /// eight printable ASCII characters outside a grant name's alphabet, the separator, a quote and a comma) and refuses the
@@ -546,8 +595,13 @@ fn the_delimiter_of_a_clients_groups_is_what_the_shared_vectors_accept() {
     assert!(accepted.len() > 10 && not_accepted.len() > 10);
     let client = |ty: &str, delimiter: &serde_json::Value| {
         // A JSON string is a YAML double-quoted scalar, with the same escapes.
+        let secret = if ty == "confidential" {
+            "  secret: client-app\n"
+        } else {
+            ""
+        };
         format!(
-            "app:\n  kind: {ty}\n  redirects: [\"https://app.example.com/cb\"]\n  requires: [\"dev:app:user\"]\n  groups_delimiter: {delimiter}\n"
+            "app:\n  kind: {ty}\n  redirects: [\"https://app.example.com/cb\"]\n  requires: [\"dev:app:user\"]\n{secret}  groups_delimiter: {delimiter}\n"
         )
     };
     let delimiter_of = |ty: &str, d: &serde_json::Value| {
@@ -589,7 +643,7 @@ fn the_delimiter_of_a_clients_groups_is_what_the_shared_vectors_accept() {
 fn the_groups_override_of_a_client_is_a_list_of_thing_names() {
     let client = |line: &str| {
         format!(
-            "app:\n  kind: confidential\n  redirects: [\"https://app.example.com/cb\"]\n  requires: [\"dev:app:user\"]\n{line}"
+            "app:\n  kind: confidential\n  secret: client-app\n  redirects: [\"https://app.example.com/cb\"]\n  requires: [\"dev:app:user\"]\n{line}"
         )
     };
     let things = |line: &str| {
@@ -665,14 +719,16 @@ fn only_a_confidential_client_that_names_its_secret_can_take_the_nonce_in_place_
         pkce(&client("confidential", "client-app", "  pkce: nonce\n")),
         "nonce"
     );
-    // The default is always allowed, for every kind.
-    for ty in ["public", "exchange"] {
-        assert_eq!(
-            pkce(&client(ty, "", "  pkce: required\n")),
-            "required",
-            "{ty}"
-        );
-    }
+    // The default is allowed for a public client; an exchange client is given no code, so it has nothing to bind.
+    assert_eq!(
+        pkce(&client("public", "", "  pkce: required\n")),
+        "required"
+    );
+    let e = refused(
+        "InstallationClient",
+        &client("exchange", "", "  pkce: required\n"),
+    );
+    assert_eq!(e, "app.pkce: an exchange client is given no code to bind");
     // `nonce` is a confidential client's alone.
     for ty in ["public", "exchange"] {
         let e = refused("InstallationClient", &client(ty, "", "  pkce: nonce\n"));
@@ -714,7 +770,13 @@ fn a_client_is_of_exactly_one_type_from_the_closed_set() {
     };
     // Each type of the set is read, and is the one type of its client.
     for ty in ["public", "confidential", "exchange"] {
-        assert_eq!(decoded(&format!("  kind: {ty}\n")).kind, ty);
+        // A confidential client names its secret (REQ-CLIENT-020).
+        let secret = if ty == "confidential" {
+            "  secret: client-app\n"
+        } else {
+            ""
+        };
+        assert_eq!(decoded(&format!("  kind: {ty}\n{secret}")).kind, ty);
     }
     // Anything outside the set is refused by the place of `kind`, and its value is never shown: another name, another
     // spelling, a type of another model, an empty value, a number, none at all.
@@ -2105,7 +2167,8 @@ fn a_wildcard_or_a_malformed_name_in_a_clients_requires_is_refused_with_its_path
         payload::decode(kind("InstallationClient"), client(requires).as_bytes()).is_ok()
     };
     assert!(ok("[\"dev:app:user\", \"acme:billing:admin\"]"));
-    assert!(ok("[]"));
+    // An empty list admits nobody, which is a slip and not a client (REQ-CLIENT-050).
+    assert!(!ok("[]"));
     for (bad, want) in [
         (
             "[\"dev:app:user\", \"*:app:user\"]",
