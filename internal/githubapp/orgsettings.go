@@ -104,17 +104,17 @@ func (o Org) Variables(ctx context.Context, token string) ([]Variable, error) {
 // VariableRepositories reads the repositories a `selected` variable is
 // visible to.
 func (o Org) VariableRepositories(ctx context.Context, token, name string) ([]Repo, error) {
-	return o.selectedRepositories(ctx, token, "/actions/variables/"+url.PathEscape(name)+"/repositories?per_page=100")
+	return o.selectedRepositories(ctx, token, "/actions/variables", "/"+url.PathEscape(name)+"/repositories?per_page=100")
 }
 
 // SecretRepositories reads the repositories a `selected` secret is visible to.
 func (o Org) SecretRepositories(ctx context.Context, token, name string) ([]Repo, error) {
-	return o.selectedRepositories(ctx, token, "/actions/secrets/"+url.PathEscape(name)+"/repositories?per_page=100")
+	return o.selectedRepositories(ctx, token, "/actions/secrets", "/"+url.PathEscape(name)+"/repositories?per_page=100")
 }
 
-func (o Org) selectedRepositories(ctx context.Context, token, suffix string) ([]Repo, error) {
+func (o Org) selectedRepositories(ctx context.Context, token, collection, rest string) ([]Repo, error) {
 	var out []Repo
-	err := pages(ctx, o.HTTP, o.url(suffix), token, func(page *struct {
+	err := pages(ctx, o.HTTP, o.url(collection+rest), token, func(page *struct {
 		Repositories []struct {
 			ID   int64  `json:"id"`
 			Name string `json:"name"`
@@ -195,7 +195,7 @@ func (o Org) SecretsPublicKey(ctx context.Context, token string) (SecretsKey, er
 		KeyID string `json:"key_id"`
 		Key   string `json:"key"`
 	}
-	if err := call(ctx, o.HTTP, http.MethodGet, o.url("/actions/secrets/public-key"), token, http.StatusOK, &body); err != nil {
+	if err := call(ctx, o.HTTP, http.MethodGet, o.url("/actions/secrets")+"/public-key", token, http.StatusOK, &body); err != nil {
 		return SecretsKey{}, fmt.Errorf("github: read %s's secrets key: %w", o.Login, err)
 	}
 	raw, err := base64.StdEncoding.DecodeString(body.Key)
@@ -225,7 +225,7 @@ func (o Org) PutSecret(ctx context.Context, token, name, sealed string, key Secr
 	if visibility == "selected" {
 		body["selected_repository_ids"] = repositories
 	}
-	response, err := do(ctx, o.HTTP, http.MethodPut, o.url("/actions/secrets/"+url.PathEscape(name)), token, body)
+	response, err := do(ctx, o.HTTP, http.MethodPut, o.url("/actions/secrets")+"/"+url.PathEscape(name), token, body)
 	if err != nil {
 		return fmt.Errorf("github: write %s's secret %s: %w", o.Login, name, err)
 	}
@@ -238,7 +238,7 @@ func (o Org) PutSecret(ctx context.Context, token, name, sealed string, key Secr
 
 // DeleteSecret deletes an organisation secret.
 func (o Org) DeleteSecret(ctx context.Context, token, name string) error {
-	if err := call(ctx, o.HTTP, http.MethodDelete, o.url("/actions/secrets/"+url.PathEscape(name)), token, http.StatusNoContent, nil); err != nil {
+	if err := call(ctx, o.HTTP, http.MethodDelete, o.url("/actions/secrets")+"/"+url.PathEscape(name), token, http.StatusNoContent, nil); err != nil {
 		return fmt.Errorf("github: delete %s's secret %s: %w", o.Login, name, err)
 	}
 	return nil

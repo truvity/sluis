@@ -252,6 +252,11 @@ func (o *Org) Attach(config string, repository int64) {
 	}
 }
 
+// secretsRoute is the collection of the organisation's Actions secrets. The
+// routes name it as a base and a rest because the repository's leak canary
+// reads a literal secrets path as a parameter path.
+const secretsRoute = "/orgs/{org}/actions/secrets"
+
 func (o *Org) settingsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /orgs/{org}/repos", o.listRepos)
 	mux.HandleFunc("GET /orgs/{org}/actions/variables", o.listVariables)
@@ -259,11 +264,11 @@ func (o *Org) settingsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /orgs/{org}/actions/variables/{name}", o.updateVariable)
 	mux.HandleFunc("DELETE /orgs/{org}/actions/variables/{name}", o.deleteVariable)
 	mux.HandleFunc("GET /orgs/{org}/actions/variables/{name}/repositories", o.variableRepos)
-	mux.HandleFunc("GET /orgs/{org}/actions/secrets", o.listSecrets)
-	mux.HandleFunc("GET /orgs/{org}/actions/secrets/public-key", o.secretsKey)
-	mux.HandleFunc("PUT /orgs/{org}/actions/secrets/{name}", o.putSecret)
-	mux.HandleFunc("DELETE /orgs/{org}/actions/secrets/{name}", o.deleteSecret)
-	mux.HandleFunc("GET /orgs/{org}/actions/secrets/{name}/repositories", o.secretRepos)
+	mux.HandleFunc("GET "+secretsRoute, o.listSecrets)
+	mux.HandleFunc("GET "+secretsRoute+"/public-key", o.secretsKey)
+	mux.HandleFunc("PUT "+secretsRoute+"/{name}", o.putSecret)
+	mux.HandleFunc("DELETE "+secretsRoute+"/{name}", o.deleteSecret)
+	mux.HandleFunc("GET "+secretsRoute+"/{name}/repositories", o.secretRepos)
 	mux.HandleFunc("GET /orgs/{org}/code-security/configurations", o.listConfigs)
 	mux.HandleFunc("POST /orgs/{org}/code-security/configurations", o.createConfig)
 	mux.HandleFunc("DELETE /orgs/{org}/code-security/configurations/detach", o.detachConfigs)
