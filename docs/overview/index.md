@@ -36,12 +36,12 @@ The part that holds a key is small and parses no internet input, and the part th
 
 ## What it leaves out
 
-- **It is not a general secrets engine.** It keeps the secrets it generates or receives as sealed or hashed data, reads the secrets an operator gives it from a secret source, and publishes a small typed set of public values. Its KV add-on keeps versioned static secrets for others, readable by External Secrets, but it has no transit engine, lease system or dynamic secrets. Use a secrets manager for those ([Data](/concepts/data/), [ADR 0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/)).
+- **It is not a general secrets engine.** It keeps the secrets it generates or receives as sealed or hashed data, reads the secrets an operator gives it from a secret source, and publishes a small typed set of public values. Its KV building block keeps versioned static secrets for others, readable by External Secrets, but it has no transit engine, lease system or dynamic secrets. Use a secrets manager for those ([Data](/concepts/data/), [ADR 0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/)).
 - **It has no users of its own and holds no roots.** It writes no Kubernetes object, except a Secret that exporter@ writes when an installation chooses the direct path. Roots belong to the sister product [ritueel](https://ritueel.id). The reasons are in [what sluis is, and is not](/principles/#what-sluis-is-and-is-not).
 
 ## v1 and v2
 
-v1 is the sluis that runs today, a set of AWS Lambda functions on the `master` branch. v2 is a rewrite on `main` that shares no history with v1. v2 first reaches parity with v1 (the [features page](/features/) lists what that means); after parity it adds FAPI 2.0, and later CIBA, once a real consumer exists, in poll mode with a passkey on the approving device ([#980](https://github.com/truvity/sluis/issues/980)). The two lines coexist until the maintainer's own deployments run v2 ([ADR 0001](/decisions/0001-v1-and-v2-lines/)). The order of delivery is on the [roadmap](/roadmap/); the v1 documentation is at [/v1/](/v1/).
+v1 is the sluis that runs today, a set of AWS Lambda functions on the `master` branch. v2 is a rewrite on `main` that shares no history with v1. v2 builds its core first, with security hardening that includes FAPI 2.0 as a profile that a client declares; customer identity and quota come next, and then parity with v1 (the [features page](/features/) lists what that means). CIBA comes later, once a real consumer exists, in poll mode with a passkey on the approving device ([#980](https://github.com/truvity/sluis/issues/980)). The two lines coexist until the maintainer's own deployments run v2 ([ADR 0001](/decisions/0001-v1-and-v2-lines/)). The order of delivery is on the [roadmap](/roadmap/); the v1 documentation is at [/v1/](/v1/).
 
 ## Map of the documentation
 

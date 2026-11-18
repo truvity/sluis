@@ -1,8 +1,7 @@
 # 0036 — Volumetric abuse is stopped at the edge, and sluis bounds what one connection, client or source can cost with a token bucket kept as a temp kind
 
-**Status:** Accepted
-**Layer:** CIAM module
-**Date:** 2026-11-02
+**Status:** Accepted; amended by 0044
+**Date:** 2026-11-18
 
 Proposal: [issue #916](https://github.com/truvity/sluis/issues/916).
 
@@ -35,6 +34,10 @@ The quota actor admits work with a strict count and an audited balance ([0039](/
 
 The [threat model](/security/threat-model/#availability-and-abuse) lists the threats T-27 to T-32: a sign-in flood, exhaustion of pending state, a noisy or slow tenant provider, sluis used to amplify requests to a provider, a dependency outage, and exhaustion of the key service's request quota. Each has a control from this record or from [0037](/decisions/0037-capacity-is-measured-before-it-is-promised/), a residual and a test.
 
+### Amendment of 2026-11-18: the limits are built in the core
+
+2026-11-18 (maintainer decision H7; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv)). The limiter of this record, the `RateWindow` bucket that `entry` keeps, is part of the core's security hardening: rate and abuse limits in `entry` on `/token`, `/authorize` and the recovery paths are built in the core phase, and the record is core, so its `Layer` line is gone. The edge stays the first line of defence ([Edge](/runtimes/kubernetes/#edge), decision E1 of 2026-11-18). Where the text says "connection" ([0033](/decisions/0033-customer-connections/), superseded), it reads the installation's upstream sign-in; where it names quota ([0039](/decisions/0039-quota-allowance/), superseded), nothing is built, and the limiter stays sluis's own.
+
 ## Consequences
 
 - A flood is absorbed outside sluis; what gets through is bounded per connection, client and source, so one tenant's burst or provider outage costs that tenant.
@@ -56,5 +59,5 @@ The [threat model](/security/threat-model/#availability-and-abuse) lists the thr
 
 ## Follow-ups
 
-- The limiter, the bounds and the breakers in the generic OIDC upstream: [#916](https://github.com/truvity/sluis/issues/916).
+- The limiter, the bounds and the breakers in the generic OIDC upstream, built in the core phase: [#916](https://github.com/truvity/sluis/issues/916).
 - Rate limits on the credential endpoints: [#796](https://github.com/truvity/sluis/issues/796).

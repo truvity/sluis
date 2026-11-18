@@ -52,6 +52,10 @@ The maintainer's decisions:
 | [0020](/decisions/0020-grant-vocabulary-and-token-claims/) | Amended: the claim set gains `customer`, `org` and `product`. |
 | [0017](/decisions/0017-identity-and-sign-in/) | Amended: staff and operators only. |
 
+### Amendment of 2026-11-18: the exchange is built right after the core
+
+2026-11-18 (maintainer decisions Order, Placement and Customer identity; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv)). The customer identity of this record is built in its own phase, right after the core and before the re-plan, with the scope "Keycloak exchange + claims": the exchange of a token of the trusted boundary realm (Keycloak) for a sluis token that carries customer, org and product, with `ExchangeTrust` declaring the realm. This record stands as written. [0031](/decisions/0031-ciam-is-a-broker/), [0033](/decisions/0033-customer-connections/), [0034](/decisions/0034-end-users-and-upstream-signals/) and [0035](/decisions/0035-customer-pages/) stay superseded. The row for [0038](/decisions/0038-fapi-2-profile/) of the table above is read for the customer-facing use only: the profile is revived for the core issuer ([0038](/decisions/0038-fapi-2-profile/#amendment-of-2026-11-18-the-profile-is-revived-for-the-core-issuer), decision H1). "P2" below is the phase [Customer identity and quota](/roadmap/#customer-identity-and-quota).
+
 ## Consequences
 
 - sluis has one sign-in surface to defend and test, for staff, and no second identity layer for customers.

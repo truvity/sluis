@@ -1,12 +1,11 @@
 # 0038 — FAPI 2.0 is a profile a client declares, with PAR, DPoP, private-key client authentication and its own signing algorithm, and sender constraint is declared per audience
 
-**Status:** Superseded by 0045
-**Layer:** CIAM module
-**Date:** 2026-11-12
+**Status:** Accepted; amended by 0044
+**Date:** 2026-11-18
 
 Proposal: [issue #1025](https://github.com/truvity/sluis/issues/1025).
 
-> Superseded on 2026-11-12 by [0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/): the customer-facing FAPI 2.0 profile is the upstream's, and sluis serves no customer sign-in (D1 B, D7 A, 2026-11-12).
+> Superseded on 2026-11-12 by [0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/) for customer-facing use: the customer-facing FAPI 2.0 profile is the upstream's, and sluis serves no customer sign-in (D1 B, D7 A, 2026-11-12). Revived on 2026-11-18 for the core issuer (decisions A2 and H1, [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv)): see the amendment below.
 
 ## Context
 
@@ -40,6 +39,16 @@ sluis claims a FAPI 2.0 plan only when it passes ([Conformance](/standards/confo
 ### The roadmap and the board
 
 The FAPI 2.0 Security Profile is in the customer-identity milestone: its done-when names the profile for clients that declare it, [#912](https://github.com/truvity/sluis/issues/912) and [#929](https://github.com/truvity/sluis/issues/929) stay in that milestone, and the roadmap's "Later" list does not carry FAPI.
+
+### Amendment of 2026-11-18: the profile is revived for the core issuer
+
+2026-11-18 (maintainer decisions A2 and H1; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv)). [0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/) superseded this record on 2026-11-12 for customer-facing use, and that stands: sluis hosts no customer sign-in, and a customer's own profile is the upstream's. The profile itself is revived as core security hardening, "to get things done properly even in the first milestone", and is built in the core phase.
+
+- **The decision above stands as written,** for the core issuer and for any relying party that declares the profile: binding declared per audience (none, DPoP or mutual TLS), PAR, PKCE with S256, private-key client authentication, DPoP with the server-provided nonce, a signing algorithm per client, and `iss` in the response. The words "customer-identity installation" in the Context read "installation".
+- **The profile is a choice of the client.** A relying party that cannot do PAR or DPoP is not required to; the default clients keep ES384 and bearer tokens.
+- **The OpenID Foundation FAPI 2.0 conformance suite runs in CI beside the Basic suite** ([Conformance](/standards/conformance/)), against the local installation first.
+- **The roadmap and the board:** the profile is in the core phase, not in the customer-identity milestone, and [#912](https://github.com/truvity/sluis/issues/912) and [#929](https://github.com/truvity/sluis/issues/929) move with it. This replaces the section "The roadmap and the board" above.
+- **The requirement rows** that the cancellation withdrew ([REQ-CLIENT-035](/requirements/client/#REQ-CLIENT-035) to [REQ-CLIENT-040](/requirements/client/#REQ-CLIENT-040), [REQ-TOKEN-040](/requirements/token/#REQ-TOKEN-040) and [REQ-TOKEN-041](/requirements/token/#REQ-TOKEN-041)) come back in the pull request that builds the profile, not in this one.
 
 ## Consequences
 
