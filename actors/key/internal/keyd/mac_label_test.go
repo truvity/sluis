@@ -12,11 +12,11 @@ import (
 	"github.com/truvity/sluis/v2/kits/go/registry"
 )
 
-// The label of the refresh-token successor is session's alone. The input of that Mac is in the session chain, which
+// The label of the refresh-token tag is session's alone. The input of that Mac is in the session chain, which
 // other actors may read, so every actor that holds the rule to call Mac with the boundary key must still be refused
 // this label, and keep every other.
 func TestMacRefusesTheRefreshSuccessorLabelToEveryActorButSession(t *testing.T) {
-	const label = "sluis-refresh-successor-v1"
+	const label = "sluis-refresh-tag-v1"
 	e := newTestEnv(t, "development")
 	n := e.startedNode(nodeOpts{})
 	mac := func(actor, label string) error {
@@ -29,7 +29,7 @@ func TestMacRefusesTheRefreshSuccessorLabelToEveryActorButSession(t *testing.T) 
 		t.Fatalf("session: %v", err)
 	}
 	// The reservation is by prefix: a new version or a rename in session stays reserved.
-	if err := mac("session", "sluis-refresh-successor-v2"); err != nil {
+	if err := mac("session", "sluis-refresh-tag-v2"); err != nil {
 		t.Fatalf("session, another version: %v", err)
 	}
 	// The test must reach the label check for the other actors: each holds the rule for Mac on the boundary key.
@@ -41,7 +41,7 @@ func TestMacRefusesTheRefreshSuccessorLabelToEveryActorButSession(t *testing.T) 
 		others++
 		t.Run(actor, func(t *testing.T) {
 			wantRefusal(t, mac(actor, label), connect.CodePermissionDenied, "rule")
-			wantRefusal(t, mac(actor, "sluis-refresh-successor-v2"), connect.CodePermissionDenied, "rule")
+			wantRefusal(t, mac(actor, "sluis-refresh-tag-v2"), connect.CodePermissionDenied, "rule")
 			wantRefusal(t, mac(actor, "sluis-refresh-anything"), connect.CodePermissionDenied, "rule")
 			if err := mac(actor, "link-id"); err != nil {
 				t.Fatalf("another label: %v", err)

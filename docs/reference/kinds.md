@@ -969,7 +969,7 @@ With its PKCE challenge; spent by a conditional update, so it works once.
 
 ### `SessionChain`
 
-Interactive or agent chain: the hash of the current refresh token and its spent markers, class, client, sid, times, freshness per boundary, and the agent's consent (recorded on the chain). Listed and revocable by the person.
+Interactive or agent chain: the hash of the current refresh token and its generation, class, client, sid, times, freshness per boundary, and the agent's consent (recorded on the chain). Listed and revocable by the person.
 
 - **Class:** temp; scope boundary+tenant; hashed; profile none; module core; serves the work family. Holds personal data.
 - **Writer:** [`session`](/reference/actors/#session).

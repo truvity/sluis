@@ -39,12 +39,11 @@ requirements:
   - id: REQ-SESS-014
     area: SESS
     split_from: REQ-SESS-001
-    statement: "A presentation of a refresh token that the chain spent in its last 16 rotations, after the grace window, MUST end the whole token chain."
-    rationale: "Reuse indicates theft, and a token older than the last 16 rotations is refused as unknown while the chain lives, because the chain keeps the hashes of those 16 only (maxSpent)."
+    statement: "A presentation of a refresh token that the chain spent, in any earlier rotation, after the grace window, MUST end the whole token chain; a token whose tag is not the one the chain's tag key makes ends nothing."
+    rationale: "Reuse indicates theft, and a thief who holds an old token must be caught however many rotations ago it was spent. The chain holds a generation and the hash of the current token, no list of spent ones, so it does not grow; a token carries its generation and a tag that only session can make (ADR 0018, 'Session chains')."
     level: MUST
     source: v1-parity
-    # Owner decision 2026-11-07: the statement is the last 16 rotations, as the code is; recognising any old token of a chain is the issue below.
-    # The older token is refused (invalid_grant) and the chain lives: TestRefreshTokenOlderThanTheSpentMarkersIsRefusedAndTheChainLives.
+    # Maintainer decisions A2 and H2, R1 C and R2 B of 2026-11-18 (#1639): any old token of a chain is recognised, by its tag; tokens of the form before are refused as unknown.
     status: done
     milestone: first-version
     runtimes: all
@@ -52,9 +51,9 @@ requirements:
       - {id: ST-01, section: "6", depth: Full}
       - {id: ST-14, section: "4.14", depth: Full}
     issues: [777, 1639]
-    tests: [actors/session/internal/sessiond/refresh_grace_test.go]
+    tests: [actors/session/internal/sessiond/refresh_grace_test.go, actors/session/internal/sessiond/refresh_test.go]
     verification:
-      - {kind: integration-test, ref: "reuse-detection chain-end test"}
+      - {kind: integration-test, ref: "reuse-detection chain-end test, any generation"}
   - id: REQ-SESS-002
     area: SESS
     statement: "A refresh token MUST be bound to the client session."
@@ -699,7 +698,7 @@ requirements:
   # ---- session chains (decision 0018)
   - id: REQ-SESS-044
     area: SESS
-    statement: "A session MUST be a SessionChain, a temp kind that holds the hash of the current refresh token and its spent markers."
+    statement: "A session MUST be a SessionChain, a temp kind that holds the hash of the current refresh token and its generation, and no list of the tokens it replaced."
     rationale: "A copy of the store must not yield a usable refresh token, and a lost temp class costs only a sign-in (ADR 0018)."
     level: MUST
     source: design-decision

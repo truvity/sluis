@@ -143,6 +143,7 @@ message UpstreamPin {
 // the clear, because it is personal.
 message SignInFacts {
   repeated string accounts = 1;  // "<upstream>/<subject claim value>" for each linked account
+  bytes refresh_salt = 2;        // only in the copy a SessionChain holds: 256 random bits that the tag of each refresh token of the chain is made over (0018 "Session chains"); an AuthCode's copy has none
 }
 
 // AuthCode is the kind AuthCode (0018): the id is the hash of the code the client holds, so the item can be compared
@@ -173,7 +174,8 @@ message SessionChain {
   string class = 3;                                // "human"; fixed when the chain is made, never changed (0018 "The classes")
   string scope = 4;                                // the scopes granted, which a refresh may narrow and never widen
   bytes refresh_hash = 5;                          // SHA-384 of the current refresh token's secret
-  repeated bytes spent_hashes = 6;                 // SHA-384 of the secrets already rotated away (the spent markers)
+  reserved 6;                                      // spent_hashes: a list of the secrets already rotated away, capped at 16. A token of any older generation is recognised by its tag now, and the chain does not grow with its rotations (0018 "Session chains")
+  reserved "spent_hashes";
   google.protobuf.Timestamp started_at = 7;        // the moment sluis accepted the sign-in; the absolute limit counts from here
   google.protobuf.Timestamp ends_at = 8;           // started_at plus the absolute limit, as it was when the chain began
   google.protobuf.Timestamp refreshed_at = 9;      // the last refresh; the idle limit counts from here
@@ -185,6 +187,7 @@ message SessionChain {
   // Field 15 was a second copy of the facts under a boundary chain key; there is one copy now (0006, "Data keys").
   reserved 15;
   reserved "sealed_chain_facts";
+  uint64 generation = 16;                          // how many times the chain has rotated: the generation of the current refresh token, which is the first at 0. A token of a lower generation, with a valid tag, is a reuse
 }
 
 // StaffPasskey is the kind StaffPasskey (0017 "Passkeys", "The passkey class"): a person's passkey on the shared sign-in

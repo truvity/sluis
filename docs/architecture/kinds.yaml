@@ -1259,7 +1259,7 @@ kinds:
     backed_up: no
     ttl: {default: "human chain 24h absolute; agent chain 14d idle and 30d absolute", max: "90d (agent chain, built-in maximum)"}
     indexes: [by_subject, by_client]
-    notes: "Interactive or agent chain: the hash of the current refresh token and its spent markers, class, client, sid, times, freshness per boundary, and the agent's consent (recorded on the chain). Listed and revocable by the person."
+    notes: "Interactive or agent chain: the hash of the current refresh token and its generation, class, client, sid, times, freshness per boundary, and the agent's consent (recorded on the chain). Listed and revocable by the person."
 
   - name: WebAuthnChallenge
     serves: work

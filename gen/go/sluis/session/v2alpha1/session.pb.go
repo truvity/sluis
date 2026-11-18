@@ -974,7 +974,8 @@ func (x *UpstreamPin) GetSubjectClaim() string {
 // the clear, because it is personal.
 type SignInFacts struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Accounts      []string               `protobuf:"bytes,1,rep,name=accounts,proto3" json:"accounts,omitempty"` // "<upstream>/<subject claim value>" for each linked account
+	Accounts      []string               `protobuf:"bytes,1,rep,name=accounts,proto3" json:"accounts,omitempty"`                          // "<upstream>/<subject claim value>" for each linked account
+	RefreshSalt   []byte                 `protobuf:"bytes,2,opt,name=refresh_salt,json=refreshSalt,proto3" json:"refresh_salt,omitempty"` // only in the copy a SessionChain holds: 256 random bits that the tag of each refresh token of the chain is made over (0018 "Session chains"); an AuthCode's copy has none
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1012,6 +1013,13 @@ func (*SignInFacts) Descriptor() ([]byte, []int) {
 func (x *SignInFacts) GetAccounts() []string {
 	if x != nil {
 		return x.Accounts
+	}
+	return nil
+}
+
+func (x *SignInFacts) GetRefreshSalt() []byte {
+	if x != nil {
+		return x.RefreshSalt
 	}
 	return nil
 }
@@ -1176,7 +1184,6 @@ type SessionChain struct {
 	Class         string                 `protobuf:"bytes,3,opt,name=class,proto3" json:"class,omitempty"`                                 // "human"; fixed when the chain is made, never changed (0018 "The classes")
 	Scope         string                 `protobuf:"bytes,4,opt,name=scope,proto3" json:"scope,omitempty"`                                 // the scopes granted, which a refresh may narrow and never widen
 	RefreshHash   []byte                 `protobuf:"bytes,5,opt,name=refresh_hash,json=refreshHash,proto3" json:"refresh_hash,omitempty"`  // SHA-384 of the current refresh token's secret
-	SpentHashes   [][]byte               `protobuf:"bytes,6,rep,name=spent_hashes,json=spentHashes,proto3" json:"spent_hashes,omitempty"`  // SHA-384 of the secrets already rotated away (the spent markers)
 	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`        // the moment sluis accepted the sign-in; the absolute limit counts from here
 	EndsAt        *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=ends_at,json=endsAt,proto3" json:"ends_at,omitempty"`                 // started_at plus the absolute limit, as it was when the chain began
 	RefreshedAt   *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=refreshed_at,json=refreshedAt,proto3" json:"refreshed_at,omitempty"`  // the last refresh; the idle limit counts from here
@@ -1185,6 +1192,7 @@ type SessionChain struct {
 	Amr           []string               `protobuf:"bytes,12,rep,name=amr,proto3" json:"amr,omitempty"`                                    // the upstream's amr
 	AmrPresent    bool                   `protobuf:"varint,13,opt,name=amr_present,json=amrPresent,proto3" json:"amr_present,omitempty"`   // true when the upstream said anything about amr
 	SealedFacts   []byte                 `protobuf:"bytes,14,opt,name=sealed_facts,json=sealedFacts,proto3" json:"sealed_facts,omitempty"` // SignInFacts, sealed with the tenant's chain key: session opens it at a refresh, exchange opens it for a token exchange
+	Generation    uint64                 `protobuf:"varint,16,opt,name=generation,proto3" json:"generation,omitempty"`                     // how many times the chain has rotated: the generation of the current refresh token, which is the first at 0. A token of a lower generation, with a valid tag, is a reuse
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1254,13 +1262,6 @@ func (x *SessionChain) GetRefreshHash() []byte {
 	return nil
 }
 
-func (x *SessionChain) GetSpentHashes() [][]byte {
-	if x != nil {
-		return x.SpentHashes
-	}
-	return nil
-}
-
 func (x *SessionChain) GetStartedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.StartedAt
@@ -1315,6 +1316,13 @@ func (x *SessionChain) GetSealedFacts() []byte {
 		return x.SealedFacts
 	}
 	return nil
+}
+
+func (x *SessionChain) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
 }
 
 // StaffPasskey is the kind StaffPasskey (0017 "Passkeys", "The passkey class"): a person's passkey on the shared sign-in
@@ -1775,9 +1783,10 @@ const file_sluis_session_v2alpha1_session_proto_rawDesc = "" +
 	"\rsubject_claim\x18\x03 \x01(\tR\fsubjectClaim\"J\n" +
 	"\vUpstreamPin\x12\x16\n" +
 	"\x06issuer\x18\x01 \x01(\tR\x06issuer\x12#\n" +
-	"\rsubject_claim\x18\x02 \x01(\tR\fsubjectClaim\")\n" +
+	"\rsubject_claim\x18\x02 \x01(\tR\fsubjectClaim\"L\n" +
 	"\vSignInFacts\x12\x1a\n" +
-	"\baccounts\x18\x01 \x03(\tR\baccounts\"\xe1\x03\n" +
+	"\baccounts\x18\x01 \x03(\tR\baccounts\x12!\n" +
+	"\frefresh_salt\x18\x02 \x01(\fR\vrefreshSalt\"\xe1\x03\n" +
 	"\bAuthCode\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12!\n" +
 	"\fredirect_uri\x18\x02 \x01(\tR\vredirectUri\x12\x14\n" +
@@ -1796,14 +1805,13 @@ const file_sluis_session_v2alpha1_session_proto_rawDesc = "" +
 	"\x05spent\x18\r \x01(\bR\x05spent\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x0e \x01(\tR\tsessionIdB\x06\n" +
-	"\x04_acr\"\xae\x04\n" +
+	"\x04_acr\"\xbf\x04\n" +
 	"\fSessionChain\x12\x18\n" +
 	"\asubject\x18\x01 \x01(\tR\asubject\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12\x14\n" +
 	"\x05class\x18\x03 \x01(\tR\x05class\x12\x14\n" +
 	"\x05scope\x18\x04 \x01(\tR\x05scope\x12!\n" +
-	"\frefresh_hash\x18\x05 \x01(\fR\vrefreshHash\x12!\n" +
-	"\fspent_hashes\x18\x06 \x03(\fR\vspentHashes\x129\n" +
+	"\frefresh_hash\x18\x05 \x01(\fR\vrefreshHash\x129\n" +
 	"\n" +
 	"started_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x123\n" +
 	"\aends_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x06endsAt\x12=\n" +
@@ -1814,8 +1822,11 @@ const file_sluis_session_v2alpha1_session_proto_rawDesc = "" +
 	"\x03amr\x18\f \x03(\tR\x03amr\x12\x1f\n" +
 	"\vamr_present\x18\r \x01(\bR\n" +
 	"amrPresent\x12!\n" +
-	"\fsealed_facts\x18\x0e \x01(\fR\vsealedFactsB\x06\n" +
-	"\x04_acrJ\x04\b\x0f\x10\x10R\x12sealed_chain_facts\"\xdf\x05\n" +
+	"\fsealed_facts\x18\x0e \x01(\fR\vsealedFacts\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x10 \x01(\x04R\n" +
+	"generationB\x06\n" +
+	"\x04_acrJ\x04\b\x06\x10\aJ\x04\b\x0f\x10\x10R\fspent_hashesR\x12sealed_chain_facts\"\xdf\x05\n" +
 	"\fStaffPasskey\x12\x18\n" +
 	"\asubject\x18\x01 \x01(\tR\asubject\x12#\n" +
 	"\rcredential_id\x18\x02 \x01(\fR\fcredentialId\x12\x1d\n" +
