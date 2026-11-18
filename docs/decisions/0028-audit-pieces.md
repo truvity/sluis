@@ -77,7 +77,7 @@ The log itself, its projects and buckets, sealing, witnesses, lock modes, encryp
   | `postgres` | any runtime, by provisioning mode | the rules of [PostgreSQL row-level security](/decisions/0028-audit-pieces/#postgresql-row-level-security) |
 
 - **`rqlite` is the index of the boards.** Full-text search on rqlite was tested on 2026-10-30 with rqlite 10.6.6 (SQLite 3.53.4), on one node and on a three-node cluster, with the arm64 image under emulation; rqlite itself was measured on a board on 2026-10-31 ([Bare metal](/runtimes/bare-metal/)). The index cluster is audit's own and not the store's engine. Reads go at `none` with a small freshness bound, and at `weak` where a caller must read its own write; writes are batched in one transaction per request. FTS5 on the boards' own hardware and eMMC is not measured yet; if it fails there, the boards fall back to `sqlite` on the indexer's node with the reader beside it, and no new decision is needed.
-- **The default index of each tested installation:** local `sqlite`; boards `rqlite`; lambda `postgres` in the `aurora` mode; kubernetes `postgres` in the `cnpg` mode.
+- **The default index of each tested installation:** local `sqlite`; boards `rqlite`; lambda `postgres` in the `cnpg` mode on a Kubernetes cluster beside it (amendment of 2026-11-18 below); kubernetes `postgres` in the `cnpg` mode.
 - **`sluis audit search` on the CLI builds a local `sqlite` index from the log,** for a small installation or an auditor with read access to a project's bucket.
 
 ### PostgreSQL row-level security
@@ -138,6 +138,14 @@ The log itself, its projects and buckets, sealing, witnesses, lock modes, encryp
 - **The audit console is a static bundle of its own,** built from the same source tree on the same release train as the sluis console, served same-origin with the audit `entry`, with only audit pages and a tighter content security policy. Reads go straight to the reader. Writes, such as an index rebuild, go through the audit `console` actor, which checks the operator's delegation and routes each write to the actor that owns it ([0002](/decisions/0002-families-of-actors/#the-console)); the reader stays read-only. The console offers search with facets, records with their proofs and verification status, exports, and the health of each project's logs: the age of the latest checkpoint, the witness cosignatures and the index lag. Who sees what follows the bindings of [Access](/decisions/0028-audit-pieces/#access).
 - **Without the front, `sluis audit verify` and `sluis audit read` work from a project's bucket alone,** with read-only cloud credentials and no `entry`, reader or sign-in. A record decrypts only for a caller that key@ lets open under the tenant's `evidence` key; verification needs no key at all. Auditors and incident responders are never locked out by the front or the issuer.
 
+### Amendment of 2026-11-18: the index of a Lambda installation runs beside it on Kubernetes
+
+2026-11-18 (maintainer decision L1 A, the first use of the mixed shape of [0011](/decisions/0011-runtimes-and-installations/#amendment-of-2026-11-18-the-core-comes-first-and-the-mixed-shape-is-designed-in-it)). The audit index of a Lambda installation is `postgres` in the `cnpg` mode, and its indexer and reader run on a Kubernetes cluster beside the installation. The audit writer, the queue and the blob stay on Lambda and S3 as before; the pieces on the cluster follow the checkpoints in the bucket and reach AWS the way any pod of the Kubernetes installation does ([Kubernetes](/runtimes/kubernetes/#identity)).
+
+- **There is no DynamoDB index driver.** The Lambda installation does not get an index of its own on its own engine.
+- **The `aurora` mode stays,** documented for an AWS-only installation, that is, one with no Kubernetes cluster beside it. It is a choice of that installation, with the cost described under Consequences, and not the default of the tested Lambda installation.
+- **The default of the tested Lambda installation is therefore the `cnpg` mode,** and the rest of "Provisioning modes" above is unchanged: `rds`, `aurora`, `cnpg` and `external` are still the modes of the one `postgres` driver.
+
 ## Consequences
 
 - One audit per boundary keeps every project's evidence under the boundary's keys and policy, and a product that emits in two boundaries has a project in each. A reviewer of a boundary reads one place, and nothing crosses boundaries.
@@ -148,7 +156,7 @@ The log itself, its projects and buckets, sealing, witnesses, lock modes, encryp
 - A search index can be added to a running log and dropped, because everything it holds comes from the log. A rebuild costs time, not data, and needs twice the index's storage. The index lags the log by the seal interval plus the indexer's pass, a few seconds.
 - Word search without stemming finds names, ids and codes the same everywhere, but "login" does not find "logged". A newly marked field covers old records only after a rebuild.
 - The index holds readable copies of what the log holds sealed per tenant, and the indexer can open every tenant's records; a tenant's exit has to reach the index, which the purge does.
-- Every lambda installation pays for an Aurora database and an RDS Proxy, and its indexer and reader run in the VPC. The `rqlite` index costs one more small cluster per boundary on the boards, with reads that may lag the leader by tens of milliseconds.
+- A lambda installation that chooses the `aurora` mode pays for an Aurora database and an RDS Proxy, and its indexer and reader run in the VPC; the default lambda installation needs a Kubernetes cluster beside it instead (amendment of 2026-11-18). The `rqlite` index costs one more small cluster per boundary on the boards, with reads that may lag the leader by tens of milliseconds.
 - One policy language serves sluis and audit, in both shapes, and reads are accountable: a read costs a policy call and adds a record to the log.
 - Audit alone runs the foundation's three units besides the audit pieces, `policy`, `exchange` for the tenant push and the front's `entry`: on AWS a few small functions and one table, on boards a few more systemd units, on Kubernetes a few more pods. The product makes one more call, the tenant push, and its issuer must put a tenant claim in its tokens.
 - An installation that runs both modules runs two edge listeners and needs two hosts; on a board that is a second tunnel route, a second certificate name and a second `entry` instance. Each environment gains a host in DNS, certificates and every passkey verifier's allow-list.
@@ -173,6 +181,7 @@ The log itself, its projects and buckets, sealing, witnesses, lock modes, encryp
 - **A lease for the indexer.** It would make an audit piece write through the store for a guarantee that idempotent indexing already gives.
 - **A scan driver `none` that reads the log for every query.** No consumer: the CLI builds a local `sqlite` index instead, and every tested installation has an index.
 - **A search engine of its own (OpenSearch or a log store), or the RDS Data API.** A heavy service to run and secure on boards for a volume SQLite FTS5 and Postgres cover; the Data API is Aurora only, needs a secret per role and is a second SQL path to test.
+- **A DynamoDB index driver for the Lambda installation.** Not built, by the maintainer's decision L1 A of 2026-11-18: the index of a Lambda installation is the `postgres` index of the `cnpg` mode on a cluster beside it.
 - **PostgreSQL isolation through session variables.** A caller that can run SQL can set the variable, and a pooled connection can carry another caller's setting.
 - **A remote plugin call from the sluis console instead of an audit `entry`, or the reader facing the edge itself.** The actor holding the index credential would parse internet input, and an audit would be unreadable without a sluis console.
 - **One `entry` for both contract sets when both modules run.** One listener fewer, but that `entry` parses both contract sets and the audit front would differ between the shapes.

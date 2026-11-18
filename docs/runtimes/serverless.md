@@ -10,6 +10,8 @@ Serverless is the runtime where the platform runs a function per event: no long-
 
 sluis runs as one Lambda function per [actor](/concepts/families/) and per holder: the unit of [0003](/decisions/0003-units-transports-and-fusion/#units) is a function with its own IAM role, and a hop between two units is a Lambda invoke.
 
+The Lambda installation is part of the core ([The core is done when](/roadmap/#the-core-is-done-when)). It has the drivers `dynamodb`, `aws-kms`, `ssm`, `appconfig`, `s3-compatible` and `sqs`, one extension per holder, and one zip per executable with the Web Adapter in front of `entry`. It runs with test clients only, and the smoke tests are the ones of the local installation.
+
 ## Topology
 
 ### Step 1: the request path
@@ -36,11 +38,11 @@ The Lambda Web Adapter connects to the `entry` process on `127.0.0.1:8080` insid
 flowchart LR
   actors["Actors"] -. "transport" .-> q["SQS queue"]
   q --> writer["writer"] --> blob["Blob store"]
-  blob -. "follows checkpoints" .-> indexer["indexer"] --> idx[("postgres<br/>on Aurora")]
+  blob -. "follows checkpoints" .-> indexer["indexer<br/>on Kubernetes"] --> idx[("postgres<br/>cnpg")]
   idx --> reader["reader"]
 ```
 
-The indexer follows the log's checkpoints in the bucket and writes the `postgres` index on Aurora, and the reader serves queries from it behind the audit front's own `entry` ([0028](/decisions/0028-audit-pieces/)).
+The indexer and the reader run on a Kubernetes cluster beside the installation, the first use of the mixed shape ([0011](/decisions/0011-runtimes-and-installations/#amendment-of-2026-11-18-the-core-comes-first-and-the-mixed-shape-is-designed-in-it)). The indexer follows the log's checkpoints in the bucket and writes the `postgres` index in the `cnpg` mode, and the reader serves queries from it behind the audit front's own `entry` ([0028](/decisions/0028-audit-pieces/#amendment-of-2026-11-18-the-index-of-a-lambda-installation-runs-beside-it-on-kubernetes)).
 
 ## What runs where
 
@@ -75,7 +77,8 @@ A function that linked store@ and its drivers into a work actor's process would 
 - **Engine:** DynamoDB, behind store@'s extension. Only store@'s role reaches the table; a work actor never does. Each engine has its own table. An engine serves a boundary at L3 or above, and a boundary below L3 is served under its address prefix by its parent's engine ([0005](/decisions/0005-the-store/#engines)); at L4 the table is in the boundary's own account. Every sealed value is ciphertext before it reaches the table, because store@ never seals or opens ([0005](/decisions/0005-the-store/)).
 - **Audit transport:** an SQS queue, because a function's local disk does not outlive its sandbox. The writer consumes the queue, seals batches and writes them to the blob store (S3, create-if-absent), and signs checkpoints with the log key in KMS, through key@. Each project has its own queue, and its policy names only the project's sender roles, so a product cannot write into another project's log ([0028](/decisions/0028-audit-pieces/#transport)). The `direct` transport falls back to a local spool when the writer is down, so it needs a disk and is not available on serverless.
 - **Witness:** optional (`peer` or `external`). `sluis config check` warns when there is none. A compliance lock on the S3 bucket prevents overwriting objects, but not a split view.
-- **Index:** the default index of the lambda installation is `postgres` in the `aurora` mode ([0028](/decisions/0028-audit-pieces/#provisioning-modes)). The indexer and the reader reach it through RDS Proxy with IAM authentication, so short-lived functions do not exhaust its connections, and they run in the VPC. The `rds` and `external` modes are the other choices. The index is a rebuildable cache; the chain in the bucket is the record.
+- **Index:** the index of the lambda installation is `postgres` in the `cnpg` mode, on a Kubernetes cluster beside the installation, where the indexer and the reader run ([0028](/decisions/0028-audit-pieces/#amendment-of-2026-11-18-the-index-of-a-lambda-installation-runs-beside-it-on-kubernetes), maintainer decision L1 A of 2026-11-18). There is no DynamoDB index driver. The `aurora` mode stays documented for an installation that has only AWS: there the indexer and the reader run as functions in the VPC and reach Aurora through RDS Proxy with IAM authentication, so short-lived functions do not exhaust its connections. The `rds` and `external` modes are other choices of the `postgres` driver. The index is a rebuildable cache; the chain in the bucket is the record.
+- **Exporter:** DynamoDB Streams on the store's table wake exporter@ when an exportable item changes, and a daily scheduled run rebuilds the documents and removes what is gone ([0009](/decisions/0009-export/#amendment-of-2026-11-18-the-exporter-on-lambda-is-woken-by-the-stream-of-the-table), maintainer decision L2).
 
 ## Identity and edge
 
@@ -93,4 +96,4 @@ A function that linked store@ and its drivers into a work actor's process would 
 - Outside a VPC, egress is unrestricted. In a VPC, egress rules work by IP, not by name, so a per-function allow-list by host name needs a proxy or firewall.
 - One zip and one IAM role per actor and per holder raise the number of artifacts and resources to keep in step; the generator derives them all from the registries.
 - The vendored adapter is part of the supply chain. It is pinned to a version and rebuilt into sluis's layer with the rest of the release.
-- Search over the audit trail puts an Aurora database, an RDS Proxy and a VPC path under the reader: every lambda installation pays for them by default ([0028](/decisions/0028-audit-pieces/)).
+- Search over the audit trail needs a Kubernetes cluster beside the installation, with a CloudNativePG database, an indexer and a reader on it. An installation that has only AWS chooses the `aurora` mode instead and pays for an Aurora database, an RDS Proxy and a VPC path under the reader ([0028](/decisions/0028-audit-pieces/)).

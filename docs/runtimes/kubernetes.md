@@ -10,6 +10,8 @@ On the kubernetes runtime the kubelet supervises sluis, and each actor and each 
 
 **sluis writes no Kubernetes object,** except an exported Secret that exporter@ writes when an installation chooses the direct path ([0009](/decisions/0009-export/#destinations)). Cluster tools such as cert-manager, trust-manager and External Secrets stay its clients and pull what sluis serves and exports.
 
+The Kubernetes installation is part of the core ([The core is done when](/roadmap/#the-core-is-done-when)). The chart reuses the AWS drivers, the audit transport is `nats-jetstream` (maintainer decision K1 of 2026-11-18) and the audit index is `postgres` in the `cnpg` mode. It installs on a test cluster and passes the same smoke tests as the local installation.
+
 ## Topology
 
 ```mermaid
@@ -84,6 +86,7 @@ The call graph of the actor registry is enforced in the pod's code and again by 
 - **Transport:** NATS JetStream. NATS accounts and permission templates on scoped signing keys let each producer publish only its own project's subjects ([0028](/decisions/0028-audit-pieces/#nats-jetstream)); the NATS credentials use the Ed25519 named exception ([0006](/decisions/0006-keys-and-sealing/#named-exceptions)). SQS and `direct` are supported but not the default; `direct` falls back to a local spool when the writer is down, which needs a per-pod volume. A request never waits for the writer or the index.
 - **One writer at a time,** and every batch is created only if absent, so a second writer cannot fork the log ([0029](/decisions/0029-the-audit-log/#the-write-once-fence)). The writer signs checkpoints with the log key in KMS, through key@.
 - **Index:** `postgres` in the `cnpg` mode, a CloudNativePG cluster in the same Kubernetes cluster; a database someone else runs is the `external` mode, a connection string only ([0028](/decisions/0028-audit-pieces/#provisioning-modes)). The reader can run in any pod that reaches the database.
+- **A cluster can also hold the audit search of a Lambda installation** beside it: the indexer and the reader of that installation run here, on the same `cnpg` index, and follow its log in S3. This is the first use of the mixed shape (maintainer decision L1 A of 2026-11-18; [0028](/decisions/0028-audit-pieces/#amendment-of-2026-11-18-the-index-of-a-lambda-installation-runs-beside-it-on-kubernetes), [0011](/decisions/0011-runtimes-and-installations/#amendment-of-2026-11-18-the-core-comes-first-and-the-mixed-shape-is-designed-in-it)).
 - **Witness:** optional (`peer` or `external`). `sluis config check` warns when there is none.
 
 ## Edge
