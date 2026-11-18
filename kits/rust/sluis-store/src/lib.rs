@@ -22,6 +22,8 @@ use sluis_proto::sluis::store::v2alpha1::{
 use sluis_proto::sluis::r#type::v2alpha1::{Address, IndexEntry};
 use sluis_registry::Scope;
 
+pub mod ratebound;
+pub mod ratewindow;
 pub mod revocation;
 pub mod watch;
 

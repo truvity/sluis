@@ -5216,6 +5216,280 @@
      "want": null
     }
    ]
+  },
+  {
+   "schema": "rate-bound/v1/rate-bound.schema.json",
+   "kind": "RateBound",
+   "base": {
+    "default": {
+     "token_client": {
+      "limit": 600,
+      "window": "1m"
+     },
+     "token_address": {
+      "limit": 120,
+      "window": "1m"
+     },
+     "authorize_client": {
+      "limit": 600,
+      "window": "1m"
+     },
+     "authorize_address": {
+      "limit": 120,
+      "window": "1m"
+     },
+     "recovery_address": {
+      "limit": 10,
+      "window": "1m"
+     }
+    }
+   },
+   "cases": [
+    {
+     "name": "a full document, as the base",
+     "ops": [],
+     "want": null
+    },
+    {
+     "name": "no limit named, every default kept",
+     "ops": [
+      {
+       "op": "replace",
+       "value": {
+        "default": {}
+       }
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "one limit named",
+     "ops": [
+      {
+       "op": "replace",
+       "value": {
+        "default": {
+         "recovery_address": {
+          "limit": 5,
+          "window": "15m"
+         }
+        }
+       }
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a window of an hour",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/default/token_client/window",
+       "value": "1h"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a limit of 100000",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/default/token_client/limit",
+       "value": 100000
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a limit of 0 is a form the schema allows and the loader refuses",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/default/token_client/limit",
+       "value": 0
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a limit above the maximum is a form the schema allows and the loader refuses",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/default/token_client/limit",
+       "value": 100001
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a window of 2 hours is a form the schema allows and the loader refuses",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/default/token_client/window",
+       "value": "2h"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a window of 0 seconds is a form the schema allows and the loader refuses",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/default/token_client/window",
+       "value": "0s"
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "limit missing",
+     "ops": [
+      {
+       "op": "remove",
+       "path": "/default/token_address/limit"
+      }
+     ],
+     "want": "default.token_address.limit: required"
+    },
+    {
+     "name": "window missing",
+     "ops": [
+      {
+       "op": "remove",
+       "path": "/default/authorize_client/window"
+      }
+     ],
+     "want": "default.authorize_client.window: required"
+    },
+    {
+     "name": "limit as a string",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/default/token_client/limit",
+       "value": "600"
+      }
+     ],
+     "want": "default.token_client.limit: must be an integer"
+    },
+    {
+     "name": "limit negative",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/default/token_client/limit",
+       "value": -1
+      }
+     ],
+     "want": "default.token_client.limit: too low"
+    },
+    {
+     "name": "limit past 32 bits",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/default/token_client/limit",
+       "value": 4294967296
+      }
+     ],
+     "want": "default.token_client.limit: too high"
+    },
+    {
+     "name": "limit fractional",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/default/token_client/limit",
+       "value": 1.5
+      }
+     ],
+     "want": "default.token_client.limit: must be an integer"
+    },
+    {
+     "name": "window as a bare number",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/default/token_client/window",
+       "value": 60
+      }
+     ],
+     "want": "default.token_client.window: must be a string"
+    },
+    {
+     "name": "window with two units",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/default/token_client/window",
+       "value": "1m30s"
+      }
+     ],
+     "want": "default.token_client.window: not in the form the schema requires"
+    },
+    {
+     "name": "window with no unit",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/default/token_client/window",
+       "value": "60"
+      }
+     ],
+     "want": "default.token_client.window: not in the form the schema requires"
+    },
+    {
+     "name": "an unknown limit",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/default/token_everyone",
+       "value": {
+        "limit": 1,
+        "window": "1m"
+       }
+      }
+     ],
+     "want": "default.<key>: unknown key"
+    },
+    {
+     "name": "an unknown key of a limit",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/default/token_client/burst",
+       "value": 5
+      }
+     ],
+     "want": "default.token_client.<key>: unknown key"
+    },
+    {
+     "name": "a limit that is not a mapping",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/default/token_client",
+       "value": 5
+      }
+     ],
+     "want": "default.token_client: must be a mapping"
+    },
+    {
+     "name": "a second item",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/other",
+       "value": {}
+      }
+     ],
+     "want": "<key>: unknown key"
+    }
+   ]
   }
  ]
 }
