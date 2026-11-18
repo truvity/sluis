@@ -37,6 +37,12 @@ categories:
 
 terms:
   # ---------------------------------------------------------------- structure
+  - term: sluis
+    definition: "The name of the project. Dutch for a sluice or canal lock (plural *sluizen*): a vessel passes between two water levels only through a chamber someone controls. Pronounced /slœy̯s/, roughly \"slouse\", with the Dutch *ui* sound of *huis*. [Hear it](https://commons.wikimedia.org/wiki/File:Nl-sluis.ogg) · [Wiktionary](https://en.wiktionary.org/wiki/sluis)"
+    category: structure
+    see: ["/overview/"]
+    notes: "Written in lower case, also at the start of a sentence."
+
   - term: core
     definition: "The layer of sluis v2 that every installation needs: `entry`, `session`, `exchange` and `signer`. The console is in the core layer and is built in the Parity phase; `ca` is built and off by default. The core installs and runs without any add-on."
     category: structure
