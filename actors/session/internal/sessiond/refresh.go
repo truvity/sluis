@@ -3,6 +3,8 @@ package sessiond
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"log/slog"
 	"strings"
@@ -16,15 +18,12 @@ import (
 	"github.com/truvity/sluis/v2/kits/go/store"
 )
 
-// maxSpent is how many spent markers a chain keeps. A refresh token spent longer ago than that is still refused (it
-// is not the current one); it is just no longer recognised as a reuse that ends the chain.
-const maxSpent = 16
-
 // refreshGrant exchanges a refresh token for a new pair of tokens and a new refresh token (RFC 6749 section 6).
 //
-// The refresh token is "<sid>.<secret>"; the chain is found by the sid and the secret is compared by its hash. Every
-// refresh rotates the token. Presenting a spent one ends the chain at once (0018 "Session chains", REQ-SESS-001), with
-// one exception: the token the last rotation replaced is answered again, with the same successor, for 30 seconds, so
+// The refresh token is "<sid>.<secret>"; the chain is found by the sid and the secret is compared by its hash. The
+// secret holds a generation and a tag (refreshSecret). Every refresh rotates the token, to the next generation.
+// Presenting a spent one, of any older generation, ends the chain at once (0018 "Session chains", REQ-SESS-001,
+// REQ-SESS-014), with one exception: the token the last rotation replaced is answered again, with the same successor, for 30 seconds, so
 // that a retry or a racing replica does not sign a person out (REQ-SESS-013, refresh_grace.go).
 // The idle limit counts from the last refresh and the absolute limit from the sign-in, and neither is reset by the
 // other (0018 "Human sessions"). Policy decides again at every refresh, with the person's state, so a held person or
@@ -35,7 +34,7 @@ func (s *Service) refreshGrant(ctx context.Context, r *sessionv2alpha1.TokenRequ
 		return done, err
 	}
 	clientSubj := clientSubject(tc.tenant, tc.client.GetId())
-	sid, secret, ok := splitRefresh(r.GetRefreshToken())
+	sid, secret, generation, ok := splitRefresh(r.GetRefreshToken())
 	if !ok {
 		return s.refuse(ctx, tc, clientSubj, nil, reasonRefresh, errInvalidGrant()), nil
 	}
@@ -61,13 +60,14 @@ func (s *Service) refreshGrant(ctx context.Context, r *sessionv2alpha1.TokenRequ
 		}
 	}
 
-	// Which token is this? The current one rotates. A spent one is a reuse, unless it is the one the last rotation
-	// replaced and that was moments ago (the grace window, below); a reuse ends the chain once policy has given a
-	// grant to delete with. Any other is not a token of this chain, and nothing is decided for it.
+	// Which token is this? The current one rotates, and the hash says so with no call to key@. One of a generation
+	// below the chain's is a reuse if its tag is the one key@ makes for that generation, unless it is the one the last
+	// rotation replaced and that was moments ago (the grace window, below); a reuse ends the chain once policy has
+	// given a grant to delete with. Any other is not a token of this chain, and nothing is decided for it: a
+	// generation at or above the chain's that is not the current token, or a tag that is not the one made, is a guess.
 	h := secretHash(secret)
 	current := hashEqual(h, chain.GetRefreshHash())
-	spent := !current && hashIn(h, chain.GetSpentHashes())
-	if !current && !spent {
+	if !current && generation >= chain.GetGeneration() {
 		return s.refuse(ctx, tc, person, nil, reasonRefresh, errInvalidGrant()), nil
 	}
 
@@ -77,6 +77,23 @@ func (s *Service) refreshGrant(ctx context.Context, r *sessionv2alpha1.TokenRequ
 			return s.refuse(ctx, tc, person, nil, reasonRefresh, errInvalidGrant()), nil
 		}
 		return nil, unavailable("key", err)
+	}
+	// A chain with no salt is one made before refresh tokens carried a tag: its tokens are of the old form and are not
+	// known now (the alpha testers sign in again).
+	salt := facts.GetRefreshSalt()
+	if len(salt) != refreshSaltLen {
+		return s.refuse(ctx, tc, person, nil, reasonRefresh, errInvalidGrant()), nil
+	}
+	spent := false
+	if !current {
+		want, err := s.keys.refreshSecret(ctx, tc.tenant, sid, generation, salt)
+		if err != nil {
+			return nil, unavailable("key", err)
+		}
+		if !equal(want, secret) {
+			return s.refuse(ctx, tc, person, nil, reasonRefresh, errInvalidGrant()), nil
+		}
+		spent = true
 	}
 	assure := assuranceFrom(chain.GetAuthTime(), chain.Acr, chain.GetAmr(), chain.GetAmrPresent())
 	state, err := s.stateOf(ctx, tc.tenant, chain.GetSubject())
@@ -94,22 +111,32 @@ func (s *Service) refreshGrant(ctx context.Context, r *sessionv2alpha1.TokenRequ
 		return s.refuse(ctx, tc, person, &v, deniedReason(state, v), deniedError(v)), nil
 	}
 
-	// The token this presentation is answered with is a function of the one presented, so a twin of this request, on
-	// this replica or another, is answered with the same one (REQ-SESS-013).
-	next, err := s.keys.refreshSuccessor(ctx, tc.tenant, sid, h)
-	if err != nil {
-		return nil, unavailable("key", err)
-	}
-
 	// A spent token is answered again, with the same successor and with no write, only when it is the one the chain's
-	// last rotation replaced and the rotation was within the grace window. Every other spent token, and that one
-	// later, is a theft or a replay: the chain ends and its refresh tokens end with it (REQ-SESS-014).
-	replay := spent && isSuccessor(chain, next) && inGrace(tc.now, chain.GetRefreshedAt())
+	// last rotation replaced (the generation before the chain's) and the rotation was within the grace window. Every
+	// other spent token, and that one later, is a theft or a replay: the chain ends and its refresh tokens end with it
+	// (REQ-SESS-014).
+	replay := spent && generation+1 == chain.GetGeneration() && inGrace(tc.now, chain.GetRefreshedAt())
 	if spent && !replay {
 		if err := s.deleteChain(ctx, tc, sid, v.grant, reasonReuse); err != nil {
 			return nil, err
 		}
 		return s.refuse(ctx, tc, person, &v, reasonReuse, errInvalidGrant()), nil
+	}
+
+	// The token this presentation is answered with is a function of the chain and a generation, so a twin of this
+	// request, on this replica or another, is answered with the same one (REQ-SESS-013): the next generation for the
+	// current token, and the chain's own for the one it replaced.
+	answer := chain.GetGeneration() + 1
+	if replay {
+		answer = chain.GetGeneration()
+	}
+	next, err := s.keys.refreshSecret(ctx, tc.tenant, sid, answer, salt)
+	if err != nil {
+		return nil, unavailable("key", err)
+	}
+	if replay && !isSuccessor(chain, next) {
+		// The chain's token is not the one of its generation: it is not a chain this build made.
+		return s.refuse(ctx, tc, person, &v, reasonRefresh, errInvalidGrant()), nil
 	}
 
 	ends := chain.GetEndsAt().AsTime()
@@ -125,12 +152,9 @@ func (s *Service) refreshGrant(ctx context.Context, r *sessionv2alpha1.TokenRequ
 	}
 
 	if !replay {
-		spentNow := append(append([][]byte(nil), chain.GetSpentHashes()...), chain.GetRefreshHash())
-		if len(spentNow) > maxSpent {
-			spentNow = spentNow[len(spentNow)-maxSpent:]
-		}
+		// The chain does not grow: the hash and the generation move on, and nothing is kept of the token that was replaced.
 		rotated := proto.Clone(chain).(*sessionv2alpha1.SessionChain)
-		rotated.SpentHashes, rotated.RefreshHash, rotated.RefreshedAt = spentNow, secretHash(next), timestamppb.New(tc.now)
+		rotated.Generation, rotated.RefreshHash, rotated.RefreshedAt = chain.GetGeneration()+1, secretHash(next), timestamppb.New(tc.now)
 		// The chain keeps its absolute end: every write passes what is left of it as the lifetime, so a rotation never
 		// extends the session (0018: "an absolute limit from the start of the session, never reset by use").
 		_, err := s.chains.Update(ctx, tc.tenant, sid, rotated, it.Version, store.WithGrant(v.grant), store.WithTTL(ends.Sub(tc.now)))
@@ -166,13 +190,18 @@ func (s *Service) refreshGrant(ctx context.Context, r *sessionv2alpha1.TokenRequ
 	return tokenOK(out)
 }
 
-// splitRefresh reads "<sid>.<secret>": a 26-character session id and the 43-character secret.
-func splitRefresh(t string) (sid, secret string, ok bool) {
+// splitRefresh reads "<sid>.<secret>": a 26-character session id and the 43-character secret, whose first 8 bytes are
+// the generation of the token (refreshSecret). It reads the generation and does not check the tag.
+func splitRefresh(t string) (sid, secret string, generation uint64, ok bool) {
 	sid, secret, ok = strings.Cut(t, ".")
 	if !ok || len(sid) != cookieIDLen || len(secret) != 43 || store.ValidateID(sid) != nil || !vschar(secret, 43, false) {
-		return "", "", false
+		return "", "", 0, false
 	}
-	return sid, secret, true
+	b, err := base64.RawURLEncoding.DecodeString(secret)
+	if err != nil || len(b) != 8+refreshTagLen {
+		return "", "", 0, false
+	}
+	return sid, secret, binary.BigEndian.Uint64(b), true
 }
 
 // narrowScope returns the requested scopes if every one was granted, in the order they were granted.
@@ -198,15 +227,6 @@ func narrowScope(granted string, want []string) (string, bool) {
 }
 
 func hashEqual(a, b []byte) bool { return subtle.ConstantTimeCompare(a, b) == 1 }
-
-// hashIn reports whether h is one of the hashes, comparing every one in constant time.
-func hashIn(h []byte, list [][]byte) bool {
-	found := 0
-	for _, x := range list {
-		found |= subtle.ConstantTimeCompare(h, x)
-	}
-	return found == 1
-}
 
 // deleteChain ends a chain at once, under the grant of the decision in hand, and records the end once. Many
 // presentations of one spent token can arrive together: each deletes at the version it read, only one succeeds, and

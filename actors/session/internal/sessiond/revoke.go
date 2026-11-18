@@ -59,11 +59,11 @@ func (s *Service) Revoke(ctx context.Context, req *connect.Request[sessionv2alph
 	if strings.Count(tok, ".") == 2 {
 		return s.refuse(ctx, tc, clientSubj, nil, reasonTokenType, errUnsupportedTokenType()), nil
 	}
-	sid, secret, ok := splitRefresh(tok)
+	sid, secret, generation, ok := splitRefresh(tok)
 	if !ok {
 		return revoked(), nil
 	}
-	return s.revokeRefresh(ctx, tc, sid, secret)
+	return s.revokeRefresh(ctx, tc, sid, secret, generation)
 }
 
 // revoked is the answer to a revocation that is accepted, and to every one that is not refused.
@@ -75,7 +75,7 @@ func revoked() *connect.Response[typev2alpha1.HttpReply] {
 // chain that is not there is not an error: whoever ended it already has, and the answer is the same. Reading a chain that is
 // not there is a refusal that store@ audits (ADR 0005), once for each such request; session writes no record of its own for
 // it, because it refused nothing.
-func (s *Service) revokeRefresh(ctx context.Context, tc *tokenCtx, sid, secret string) (*connect.Response[typev2alpha1.HttpReply], error) {
+func (s *Service) revokeRefresh(ctx context.Context, tc *tokenCtx, sid, secret string, generation uint64) (*connect.Response[typev2alpha1.HttpReply], error) {
 	it, err := s.chains.Get(ctx, tc.tenant, sid)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
@@ -86,16 +86,13 @@ func (s *Service) revokeRefresh(ctx context.Context, tc *tokenCtx, sid, secret s
 	chain := it.Value
 	h := secretHash(secret)
 	// Another client's chain, and a token that is not one the chain issued, are not this caller's to end. The class of the
-	// chain does not matter: a client ends any chain of its own that it holds a token of.
-	var endedBy string
-	switch {
-	case !equal(chain.GetClientId(), tc.client.GetId()):
+	// chain does not matter: a client ends any chain of its own that it holds a token of. A token of an older generation
+	// is one the chain issued when its tag is the one key@ makes for that generation (refreshSecret); any other is a guess.
+	if !equal(chain.GetClientId(), tc.client.GetId()) {
 		return revoked(), nil
-	case hashEqual(h, chain.GetRefreshHash()):
-		endedBy = "current"
-	case hashIn(h, chain.GetSpentHashes()):
-		endedBy = "spent"
-	default:
+	}
+	current := hashEqual(h, chain.GetRefreshHash())
+	if !current && generation >= chain.GetGeneration() {
 		return revoked(), nil
 	}
 	person := personSubject(tc.tenant, chain.GetSubject())
@@ -106,6 +103,21 @@ func (s *Service) revokeRefresh(ctx context.Context, tc *tokenCtx, sid, secret s
 			return revoked(), nil
 		}
 		return nil, unavailable("key", err)
+	}
+	endedBy := "current"
+	if !current {
+		salt := facts.GetRefreshSalt()
+		if len(salt) != refreshSaltLen {
+			return revoked(), nil
+		}
+		want, err := s.keys.refreshSecret(ctx, tc.tenant, sid, generation, salt)
+		if err != nil {
+			return nil, unavailable("key", err)
+		}
+		if !equal(want, secret) {
+			return revoked(), nil
+		}
+		endedBy = "spent"
 	}
 	state, err := s.stateOf(ctx, tc.tenant, chain.GetSubject())
 	if err != nil {
