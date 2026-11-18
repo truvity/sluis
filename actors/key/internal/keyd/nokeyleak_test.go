@@ -260,11 +260,7 @@ func exercise(t *testing.T, n *node) *exercised {
 	}
 	mustMac := func(name, actor, purpose, tenant, epoch string) {
 		t.Helper()
-		var grant []byte
-		if purpose == "pairwise" {
-			grant = n.grant(actor, []string{tenant}, []string{"mac"}, time.Minute)
-		}
-		res, err := n.client(actor).Mac(ctx, connect.NewRequest(&keyv2alpha1.MacRequest{Purpose: purpose, Tenant: tenant, Label: name, Input: []byte("input of " + name), Epoch: epoch, Grant: grant}))
+		res, err := n.client(actor).Mac(ctx, connect.NewRequest(&keyv2alpha1.MacRequest{Purpose: purpose, Tenant: tenant, Label: name, Input: []byte("input of " + name), Epoch: epoch}))
 		if err != nil {
 			t.Fatalf("Mac %s: %v", name, err)
 		}
@@ -295,7 +291,6 @@ func exercise(t *testing.T, n *node) *exercised {
 	mustSeal("boundary-data", "exchange", "data", "person", "", nil)
 	mustOpen("boundary-data", "exchange", "data", "person", "", nil)
 	mustMac("mac", "session", "mac", "", "")
-	mustMac("pairwise", "session", "pairwise", "acme", "")
 	mustMac("pseudonym", "reader", "pseudonym", "acme", "202611")
 
 	_, kid := publicKey(t, n, "signer", "token-signing")
@@ -399,7 +394,7 @@ func trafficBytes(s *spyDriver) []byte {
 	return bytes.Join(s.traffic, nil)
 }
 
-// verifies: REQ-KEYS-032, REQ-SUBJ-008
+// verifies: REQ-KEYS-032
 // The data key of a purpose exists, in the clear, only in the memory of key@: scanned for in every form it could be
 // written in, it is in none of the places key@ writes or speaks to. The scan looks at the store (every item of every
 // kind, indexes included, and the signed documents), at the audit facts, at the log, at every response of the whole
@@ -428,7 +423,7 @@ func TestNoDataKeyIsWrittenOrSaidOutsideItsWrap(t *testing.T) {
 
 	keys := recoverKeys(t, e, a)
 	want := []keyRef{
-		{"acme", "data", 1}, {"acme", "evidence", 1}, {"acme", "chain", 1}, {"acme", "credential", 1}, {"acme", "pairwise", 1}, {"acme", "pseudonym", 202611},
+		{"acme", "data", 1}, {"acme", "evidence", 1}, {"acme", "chain", 1}, {"acme", "credential", 1}, {"acme", "pseudonym", 202611},
 		{"", "grant", 1}, {"", "cookie", 1}, {"", "mac", 1}, {"", "data", 1},
 	}
 	for _, ref := range want {

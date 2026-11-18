@@ -96,29 +96,24 @@ func toStrings(v any) []string {
 	return out
 }
 
-// verifies: REQ-SUBJ-071
-func TestSubIsThePairwiseSubjectOfTheTargetTenantNotTheOneOfTheSubjectToken(t *testing.T) {
+// The sub of the new token is the person's own subject, the one the sign-in's tokens carry (ADR 0019, ADR 0020), never the
+// sub of the subject token and never a hash of anything. Exchange makes no call to key@ for it.
+//
+// verifies: REQ-SUBJ-071, REQ-SUBJ-072
+func TestSubIsThePersonsOwnSubjectNotTheOneOfTheSubjectToken(t *testing.T) {
 	e := newEnv(t, envOptions{})
 	r := e.exchange(request(e.mint(subjectClaims(nil))))
 	claims, _ := claimsOf(t, body(t, r)["access_token"].(string))
 
-	// ADR 0034: Mac(the tenant's pairwise key, length-prefixed sector, the person's id), truncated to 256 bits and
-	// written as base64url without padding. The sector is the tenant's until Tenant items exist (D-4).
-	input := subject.PairwiseInput(testTenant, testPerson.ID)
-	want := base64.RawURLEncoding.EncodeToString(macOf("pairwise", testTenant, "pairwise", input)[:32])
-	if claims["sub"] != want {
-		t.Errorf("sub = %v, want %s", claims["sub"], want)
+	if claims["sub"] != testPerson.ID {
+		t.Errorf("sub = %v, want the person's own subject %s", claims["sub"], testPerson.ID)
 	}
-	if claims["sub"] == "pairwise-of-the-sign-in" || claims["sub"] == testPerson.ID {
-		t.Error("sub is the subject of the subject token or the person's own id")
+	if claims["sub"] == "subject-of-the-sign-in" {
+		t.Error("sub is the subject of the subject token")
 	}
 	// The form of the sub is one of the forms of the contract (kits/conformance/token/sub-vectors.json, shape).
-	if kind, ok := subject.Classify(claims["sub"].(string)); !ok || kind != subject.KindPairwise {
-		t.Errorf("sub = %v has the form %q, want %q", claims["sub"], kind, subject.KindPairwise)
-	}
-	macs := e.key.pairwise()
-	if len(macs) != 1 || macs[0].GetTenant() != testTenant || string(macs[0].GetGrant()) != "sealed-grant" {
-		t.Errorf("pairwise Mac requests = %v", macs)
+	if kind, ok := subject.Classify(claims["sub"].(string)); !ok || kind != subject.KindPerson {
+		t.Errorf("sub = %v has the form %q, want %q", claims["sub"], kind, subject.KindPerson)
 	}
 }
 
@@ -330,7 +325,7 @@ func TestEveryExchangeAndEveryRefusalIsAudited(t *testing.T) {
 	// No record holds a token, the person's id, or the subject of any token.
 	for _, r := range e.transport.records(t) {
 		raw, _ := json.Marshal(r)
-		for _, secret := range []string{subject, testPerson.ID, "workforce/u-1001", "pairwise-of-the-sign-in"} {
+		for _, secret := range []string{subject, testPerson.ID, "workforce/u-1001", "subject-of-the-sign-in"} {
 			if strings.Contains(string(raw), secret) {
 				t.Fatalf("a record carries %q", secret)
 			}
@@ -451,8 +446,8 @@ func TestASubjectTokenThatIsNotAcceptableIsInvalidRequest(t *testing.T) {
 			}
 		})
 	}
-	if n := len(e.policy.requests()) + len(e.signer.requests()) + len(e.key.pairwise()); n != 0 {
-		t.Errorf("a refused subject token reached policy, signer or key@ %d times", n)
+	if n := len(e.policy.requests()) + len(e.signer.requests()); n != 0 {
+		t.Errorf("a refused subject token reached policy or the signer %d times", n)
 	}
 }
 
@@ -509,7 +504,7 @@ func TestThePersonOfTheTokenIsLookedUpAndAnEndedSessionIsRefused(t *testing.T) {
 	}
 	// The directory sees the verified claims, not the token.
 	s := e.dir.seen[0]
-	if s.Kind != exchanged.KindOwn || s.SID != "sid-1" || s.ClientID != "sluis-cli" || s.Subject != "pairwise-of-the-sign-in" {
+	if s.Kind != exchanged.KindOwn || s.SID != "sid-1" || s.ClientID != "sluis-cli" || s.Subject != "subject-of-the-sign-in" {
 		t.Errorf("directory saw %+v", s)
 	}
 	if n := len(e.policy.requests()); n != 0 {
@@ -551,7 +546,6 @@ func TestADependencyThatDoesNotAnswerIsAnOutageAndNoTokenIsIssued(t *testing.T) 
 			}
 		}, "unavailable_policy"},
 		{"signer", func(e *env) { e.signer.fail = true }, "unavailable_signer"},
-		{"key@", func(e *env) { e.key.fail = true }, "unavailable_key"},
 		{"directory", func(e *env) { e.dir.err = context.DeadlineExceeded }, "unavailable_directory"},
 	}
 	for _, c := range cases {
@@ -1031,8 +1025,8 @@ func TestREQ_EXCH_019_EveryFailureOfClientAuthenticationIsTheOneInvalidClient(t 
 		})
 	}
 	// Nothing past the client check ran: not the directory, policy, key@ or the signer.
-	if n := len(e.policy.requests()) + len(e.signer.requests()) + len(e.key.pairwise()); n != 0 {
-		t.Errorf("a refused client reached policy, signer or key@ %d times", n)
+	if n := len(e.policy.requests()) + len(e.signer.requests()); n != 0 {
+		t.Errorf("a refused client reached policy or the signer %d times", n)
 	}
 	// No reply and no record holds the secret.
 	for _, text := range recordsText(t, e) {

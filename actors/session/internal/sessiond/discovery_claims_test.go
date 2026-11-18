@@ -150,26 +150,25 @@ func TestDiscoveryAdvertisesTheIssuerParameterBecauseEveryRedirectCarriesIt(t *t
 	}
 }
 
-// The document lists the subject types of the ID tokens that session issues. A person's subject at a tenant is the
-// pairwise one (ADR 0034: a keyed hash of the sector and the person); the public one, the person's own id, is for a sector
-// declared public, and the first version has no Tenant item to declare it. So the list is pairwise and no more.
+// The document lists the subject types of the ID tokens that session issues. A person's subject is the person's own id,
+// the same for every client: the `public` type of OpenID Connect Core section 8. The pairwise type is not listed
+// (decision SB1 A: v2 issues no pairwise subject).
 //
 // verifies: REQ-AUTHN-006
-func TestDiscoveryListsPairwiseBecauseThatIsTheSubjectSessionIssues(t *testing.T) {
+func TestDiscoveryListsPublicBecauseThatIsTheSubjectSessionIssues(t *testing.T) {
 	types := listed(t, goldenDiscovery(t), "subject_types_supported")
 	e := newEnv(t, nil)
 	b, _ := e.redeemed()
 	_, id := tokenClaims(t, b["id_token"].(string))
 	person := e.store.ids("person", testTenant)[0]
-	sub, _ := id["sub"].(string)
-	if sub == "" || sub == person {
-		t.Fatalf("sub = %q, person %q: not pairwise", sub, person)
+	if sub, _ := id["sub"].(string); sub != person {
+		t.Fatalf("sub = %q, person %q: not the person's own", sub, person)
 	}
-	if !slices.Contains(types, "pairwise") {
-		t.Errorf("subject_types_supported = %v, and sub is pairwise", types)
+	if !slices.Contains(types, "public") {
+		t.Errorf("subject_types_supported = %v, and sub is public", types)
 	}
-	if slices.Contains(types, "public") {
-		t.Errorf("subject_types_supported = %v lists public, and no tenant can declare it yet", types)
+	if slices.Contains(types, "pairwise") {
+		t.Errorf("subject_types_supported = %v lists pairwise, and v2 issues none", types)
 	}
 }
 

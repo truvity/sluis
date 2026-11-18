@@ -12,8 +12,6 @@ import (
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	exchangev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/exchange/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/exchange/v2alpha1/exchangev2alpha1connect"
-	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
 	policyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/policy/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/policy/v2alpha1/policyv2alpha1connect"
 	signerv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/signer/v2alpha1"
@@ -24,7 +22,6 @@ import (
 	"github.com/truvity/sluis/v2/kits/go/refusal"
 	"github.com/truvity/sluis/v2/kits/go/rpc"
 	"github.com/truvity/sluis/v2/kits/go/store"
-	"github.com/truvity/sluis/v2/kits/go/subject"
 )
 
 // Actor is the registry name of this actor.
@@ -44,9 +41,7 @@ type Options struct {
 	Directory Directory
 	Policy    policyv2alpha1connect.PolicyServiceClient
 	Signer    signerv2alpha1connect.SignerServiceClient
-	// Keys is the client of key@ for this actor: the pairwise subject is a Mac under the tenant's key.
-	Keys  keyv2alpha1connect.KeyServiceClient
-	Audit *audit.Emitter
+	Audit     *audit.Emitter
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
 }
@@ -62,8 +57,8 @@ type Service struct {
 
 // New returns the service.
 func New(o Options) (*Service, error) {
-	if o.Boundary == "" || o.Config == nil || o.Directory == nil || o.Policy == nil || o.Signer == nil || o.Keys == nil || o.Audit == nil {
-		return nil, errors.New("exchanged: Boundary, Config, Directory, Policy, Signer, Keys and Audit are required")
+	if o.Boundary == "" || o.Config == nil || o.Directory == nil || o.Policy == nil || o.Signer == nil || o.Audit == nil {
+		return nil, errors.New("exchanged: Boundary, Config, Directory, Policy, Signer and Audit are required")
 	}
 	now := o.Now
 	if now == nil {
@@ -247,10 +242,9 @@ func (s *Service) run(ctx context.Context, r *exchangev2alpha1.TokenExchangeRequ
 		// Only a client's ttl_cap of under a second gets here; it is the audience's refusal.
 		return nil, invalidTarget(reasonLifetime)
 	}
-	sub, err := s.subjectOf(ctx, tenant, person.ID, verdict.GetSealedGrant())
-	if err != nil {
-		return nil, err
-	}
+	// The sub is the person's own subject (ADR 0019, "Assigning a subject"), the one the sign-in's tokens carry: an
+	// exchanged token never carries the sub of the token it was made from, but it is the same person's.
+	sub := person.ID
 	jti, err := newJTI()
 	if err != nil {
 		return nil, err
@@ -360,8 +354,6 @@ func (s *Service) decide(ctx context.Context, t Tenant, audience string, require
 		// The client that asks, authenticated or the public client's own: policy decides whether the person's and
 		// the requester's facts together allow the credential (ADR 0007, ADR 0022).
 		Requester: &policyv2alpha1.ClientFacts{Id: requester.GetId(), Requires: requester.GetRequires(), Kind: requester.GetKind()},
-		// The grant lets exchange ask key@ for the pairwise Mac.
-		GrantKeyOps: []string{"mac"},
 	}))
 	if err != nil {
 		path, _ := refusal.FieldPath(err)
@@ -370,26 +362,6 @@ func (s *Service) decide(ctx context.Context, t Tenant, audience string, require
 		return nil, unavailable("policy", err)
 	}
 	return res.Msg, nil
-}
-
-// subjectOf is the `sub` of the new token: the subject of the target tenant's sector (ADR 0034, REQ-SUBJ-067), a Mac
-// under the tenant's pairwise key, made at key@. An exchanged token never carries the subject of the token it was
-// made from.
-//
-// planned: a tenant that declares the sector `public` gets the person's own id; that comes with the Tenant item
-// (#1216), since until then every sector is pairwise (decision D-4).
-func (s *Service) subjectOf(ctx context.Context, t Tenant, personID string, sealedGrant []byte) (string, error) {
-	res, err := s.opts.Keys.Mac(ctx, connect.NewRequest(&keyv2alpha1.MacRequest{
-		Purpose: "pairwise", Tenant: t.ID, Label: pairwiseLabel, Input: subject.PairwiseInput(t.Sector, personID), Grant: sealedGrant,
-	}))
-	if err != nil {
-		slog.Error("exchange: key@ did not make the subject", "code", connect.CodeOf(err).String())
-		return "", unavailable("key", err)
-	}
-	if len(res.Msg.GetMac()) < subBytes {
-		return "", unavailable("key", errors.New("short mac"))
-	}
-	return pairwiseSub(res.Msg.GetMac()), nil
 }
 
 // checker is a Directory that can say whether it is bound to the kinds it reads.

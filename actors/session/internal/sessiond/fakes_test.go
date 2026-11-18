@@ -517,7 +517,7 @@ type fakeKey struct {
 }
 
 // makes says whether the call may have the tenant's key of the purpose: it exists, or the grant names the tenant and the
-// operation. key@ makes a tenant's first chain or pairwise key only under such a grant, and uses one that exists by rule.
+// operation. key@ makes a tenant's first chain key only under such a grant, and uses one that exists by rule.
 func (f *fakeKey) makes(purpose, tenant, op string, grant []byte) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -668,13 +668,9 @@ func (f *fakeKey) Mac(_ context.Context, req *connect.Request[keyv2alpha1.MacReq
 		if m.GetTenant() != "" {
 			return nil, refusal.New(connect.CodeInvalidArgument, "tenant", "tenant")
 		}
-	case "pseudonym", "pairwise":
+	case "pseudonym":
 		if m.GetTenant() == "" {
 			return nil, refusal.New(connect.CodeInvalidArgument, "tenant", "tenant")
-		}
-		// The tenant's first pairwise key is made under a grant that names the tenant and the operation (REQ-KEYS-260).
-		if m.GetPurpose() == "pairwise" && !f.makes("pairwise", m.GetTenant(), "mac", m.GetGrant()) {
-			return nil, refusal.New(connect.CodePermissionDenied, "grant", "grant")
 		}
 	default:
 		return nil, refusal.New(connect.CodePermissionDenied, "rule", "purpose")

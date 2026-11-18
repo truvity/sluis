@@ -16,7 +16,7 @@
 #   algorithms    the algorithms in use; the FIPS-approved set is the default, a named exception says why
 #   purposes      the keys that live in a key store: `kind` signing | key-agreement | wrapping
 #   slot_plan     the default card slot map, version 2, for the boards
-#   data_keys     the data keys, which key generates in software and wraps: six per tenant and four per boundary
+#   data_keys     the data keys, which key generates in software and wraps: five per tenant and four per boundary
 #   wrapping      how a data key is wrapped on AWS and on a board
 #
 # Fields of a purpose:
@@ -57,7 +57,7 @@ algorithms:
   HMAC-SHA384:
     family: mac
     status: default
-    note: "The keyed hash behind key's Mac: pairwise subjects, pseudonyms and link ids."
+    note: "The keyed hash behind key's Mac: pseudonyms, link ids and the hashed index entries of sealed kinds."
   PS256:
     family: signature
     status: exception
@@ -323,11 +323,6 @@ data_keys:
       users: [every work actor, reader, product-emitter]
       erased: "tenant exit"
       notes: "Keyed hashes, rolled by epoch: audit pseudonyms. A product's emitter is a declared external caller (actors.yaml)."
-    pairwise:
-      ops: [mac]
-      users: [session, exchange]
-      erased: "tenant exit"
-      notes: "The key behind a pairwise subject: sub = Mac(the tenant's pairwise key, the person's stable id). One per tenant, never rotated, used for nothing else. It is re-wrapped, not replaced, when the tenant moves."
     evidence:
       ops: [seal, open]
       users: [writer, indexer, reader]

@@ -27,18 +27,15 @@ type keys struct {
 const (
 	labelUpstreamLink = "sluis-upstream-link-v2" // v2: the input is (issuer, value), without the claim name
 	labelUpstreamPin  = "sluis-upstream-pin-v1"
-	labelPairwise     = "pairwise"
 )
 
-// mac is a keyed hash with HMAC-SHA384 at key@. purpose is "mac" (the boundary's key, tenant "") or "pairwise" (a
-// tenant's).
-//
-// grant is the sealed grant of the decision the call follows. key@ looks at it only to make a tenant's first pairwise key,
-// which it makes under a grant that names the tenant and the operation mac; a key that exists is used without one.
-func (k keys) mac(ctx context.Context, purpose, tenant, label string, input, grant []byte) ([]byte, error) {
-	res, err := k.c.Mac(ctx, connect.NewRequest(&keyv2alpha1.MacRequest{Purpose: purpose, Tenant: tenant, Label: label, Input: input, Grant: grant}))
+// mac is a keyed hash with HMAC-SHA384 at key@ over the boundary's mac key (purpose "mac", tenant ""). session has no
+// other use of Mac: a person's subject is made of no key (ADR 0019, "Assigning a subject"), so there is no tenant key
+// to Mac under and no grant to carry.
+func (k keys) mac(ctx context.Context, label string, input []byte) ([]byte, error) {
+	res, err := k.c.Mac(ctx, connect.NewRequest(&keyv2alpha1.MacRequest{Purpose: "mac", Label: label, Input: input}))
 	if err != nil {
-		return nil, fmt.Errorf("key mac %s: %w", purpose, err)
+		return nil, fmt.Errorf("key mac: %w", err)
 	}
 	if len(res.Msg.GetMac()) < 32 {
 		return nil, refusal.New(connect.CodeInternal, "mac", "mac")
@@ -51,7 +48,7 @@ func (k keys) mac(ctx context.Context, purpose, tenant, label string, input, gra
 // make a second link for one account: the UpstreamPin refuses it (REQ-SUBJ-041). The id holds no personal data, and
 // session never holds the key. It is 256 bits in lower-case base32, 52 characters.
 func (k keys) linkID(ctx context.Context, issuer, value string) (string, error) {
-	m, err := k.mac(ctx, "mac", "", labelUpstreamLink, lengthPrefixed(issuer, value), nil)
+	m, err := k.mac(ctx, labelUpstreamLink, lengthPrefixed(issuer, value))
 	if err != nil {
 		return "", err
 	}
@@ -61,7 +58,7 @@ func (k keys) linkID(ctx context.Context, issuer, value string) (string, error) 
 // pinID is the id of an UpstreamPin: a keyed hash of the issuer over the boundary's mac key, under a label of its own
 // (0019 "The records").
 func (k keys) pinID(ctx context.Context, issuer string) (string, error) {
-	m, err := k.mac(ctx, "mac", "", labelUpstreamPin, lengthPrefixed(issuer), nil)
+	m, err := k.mac(ctx, labelUpstreamPin, lengthPrefixed(issuer))
 	if err != nil {
 		return "", err
 	}

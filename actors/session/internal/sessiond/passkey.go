@@ -178,7 +178,7 @@ func mustSegment(kind string) string {
 // is not secret, and the hash is not for secrecy: the id of an item may not carry what an authenticator chose, and this
 // is a valid address however the authenticator chose it (credential ids are base64url and can begin with - or _).
 func (k keys) passkeyID(ctx context.Context, credentialID []byte) (string, error) {
-	m, err := k.mac(ctx, "mac", "", labelPasskey, credentialID, nil)
+	m, err := k.mac(ctx, labelPasskey, credentialID)
 	if err != nil {
 		return "", err
 	}
@@ -187,7 +187,7 @@ func (k keys) passkeyID(ctx context.Context, credentialID []byte) (string, error
 
 // subjectIndex is the by_subject index value of a person's passkeys: a keyed hash, so that the index holds no subject.
 func (k keys) subjectIndex(ctx context.Context, subject string) ([]byte, error) {
-	m, err := k.mac(ctx, "mac", "", labelPasskeySubject, []byte(subject), nil)
+	m, err := k.mac(ctx, labelPasskeySubject, []byte(subject))
 	if err != nil {
 		return nil, err
 	}

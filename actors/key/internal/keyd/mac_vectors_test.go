@@ -59,7 +59,7 @@ func TestMacHMACIsRFC4231(t *testing.T) {
 //	key = hashlib.sha384(b"sluis mac vector key: " + key_name).digest()[:32]
 //	mac = hmac.new(key, struct.pack(">H", len(label)) + label + input, hashlib.sha384).hexdigest()
 //
-// key_name is the case's own field (boundary-mac, acme-pseudonym-202611, acme-pseudonym-202612, acme-pairwise), not
+// key_name is the case's own field (boundary-mac, acme-pseudonym-202611, acme-pseudonym-202612), not
 // its name; the test checks that each key is made from it, so the file can be rebuilt from this note.
 //
 // The epoch of a pseudonym is not in the input: it names the generation of the key, so a case whose key sits under
@@ -197,7 +197,7 @@ func TestPseudonymIsMacUnderTheTenantKeyOfItsEpoch(t *testing.T) {
 		}
 		seen[string(p)] = name
 	}
-	// The pseudonym key is not the key of mac or pairwise: the same label and input under purpose mac is another value.
+	// The pseudonym key is not the key of mac: the same label and input under purpose mac is another value.
 	res, err := n.client("session").Mac(ctx, connect.NewRequest(&keyv2alpha1.MacRequest{Purpose: "mac", Label: label, Input: input}))
 	if err != nil {
 		t.Fatal(err)

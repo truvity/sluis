@@ -164,10 +164,9 @@ pub(crate) fn discovery(b: &Boundary, rs256: bool) -> Option<Vec<u8>> {
             "refresh_token",
             "urn:ietf:params:oauth:grant-type:token-exchange",
         ],
-        // `sub` is the tenant's pairwise subject (ADR 0034): a keyed hash of the sector and the person, and the person's
-        // own id only for a sector declared public, which the first version has no way to declare. So "public" is not
-        // served, and the list says only what is.
-        "subject_types_supported": ["pairwise"],
+        // `sub` is the person's own subject, the same for every client (ADR 0019, ADR 0020): the `public` subject type of
+        // OpenID Connect Core section 8. v2 issues no pairwise subject (decision SB1 A), so the list says only `public`.
+        "subject_types_supported": ["public"],
         "id_token_signing_alg_values_supported": if rs256 { json!(["ES384", "RS256"]) } else { json!(["ES384"]) },
         "code_challenge_methods_supported": ["S256"],
         // The union over the grants of /token (RFC 8414 has no list per grant): `none` for sign-in and
@@ -545,7 +544,7 @@ mod tests {
         // The other two claims that are not about a route: `session`'s tests (`discovery_claims_test.go`) read the same
         // golden file and hold the redirect's `iss` and the subject type to it.
         assert_eq!(got["authorization_response_iss_parameter_supported"], true);
-        assert_eq!(got["subject_types_supported"], json!(["pairwise"]));
+        assert_eq!(got["subject_types_supported"], json!(["public"]));
     }
 
     /// `acr_values_supported` is the Boundary's list, in its order, and the field is absent when the boundary lists none, so
