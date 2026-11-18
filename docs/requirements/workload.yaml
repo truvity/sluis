@@ -113,3 +113,20 @@ requirements:
     tests:
       - actors/policy/tests/workload_guard.rs
       - actors/exchange/internal/exchanged/trusted_test.go
+  - id: REQ-WORKLOAD-008
+    area: WORKLOAD
+    statement: "The sub of a token for a CI job or a Kubernetes ServiceAccount MUST be the SPIFFE ID that kits/go/subject makes of the verified claims of its proof."
+    rationale: "A cloud trust policy or a cluster pins sub to one workload, so one proof must give one spelling, the same account on two clusters must be two subjects, and the run (ref, event, environment) must never be part of who the subject is (ADR 0022; v1: `github:<org>/<repo>`, `<cluster>:k8s:<namespace>:<name>`)."
+    level: MUST
+    source: v1-parity
+    status: partial
+    gap: partly-built
+    milestone: v1-parity
+    runtimes: all
+    standards:
+      - {id: ST-107, section: "2", depth: Partial}
+    issues: [961, 1816]
+    tests:
+      - kits/go/subject/sub_test.go
+    verification:
+      - {kind: test-vectors, ref: "kits/conformance/token/sub-vectors.json, ci_job and service_account: the ID, the case kept, the cluster always named, a part outside the SPIFFE limits refused"}
