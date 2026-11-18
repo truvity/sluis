@@ -1,0 +1,1 @@
+Moved from Parity to Core: features. Maintainer decision A2/H5 of 2026-11-18: passkey sign-in tiers and step-up are core (#795, #885). Enforcement is off by default; the maintainer decided on 2026-11-06 that enforcement comes later.

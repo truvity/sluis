@@ -1,0 +1,1 @@
+Re-opened and moved from Backlog to Core: features. It was closed as not planned with the CIAM work on 2026-11-12. Maintainer decision A2/H1 of 2026-11-18: the OIDF FAPI 2.0 conformance suite runs in CI for the per-client FAPI 2.0 profile of #912. The Security Profile plan gates the milestone; the Message Signing plan stays in scope only for the variants that the profile adopts.

@@ -1,0 +1,1 @@
+Moved from Parity to Core: features. Maintainer decision A2/H6 of 2026-11-18: a compromised key is revoked then replaced (ADR 0041): key revoke (#1362), the rotation drill (this issue) and the compromise procedure for the token-signing key (#1361, #1363). The non-core parts (#1364 to #1367 and the CA and SSH CA parts) stay where they are.

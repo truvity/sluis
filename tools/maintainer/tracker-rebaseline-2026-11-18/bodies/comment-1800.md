@@ -1,0 +1,1 @@
+Maintainer decision A1 A of 2026-11-18: the Cloudflare, AWS and GitHub clients and minters become a named shared layer ("Shared building-block layer: Cloudflare, AWS and GitHub clients and minters", Core: features). This driver reuses the shared Cloudflare client. This issue stays in Backlog.

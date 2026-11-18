@@ -57,3 +57,12 @@
 56	Quota	type:feature,area:core,actor:quota	The limit check on the request path: a counter per customer, organisation and product	bodies/new-56.md
 57	Quota	type:feature,area:core,actor:quota	Limits: the configuration kind, the period and the counter shape, measured before enforcement	bodies/new-57.md
 58	Quota	type:chore,area:conformance,actor:quota	Usage and limits smoke on the local installation	bodies/new-58.md
+59	Core: features	type:feature,area:core	Shared building-block layer: Cloudflare, AWS and GitHub clients and minters	bodies/new-59.md
+60	Core: kv	type:feature,area:core,actor:key-holder	KV stores: the store model, the three kinds and a data key per store	bodies/new-60.md
+61	Core: kv	type:feature,area:core,actor:policy	KV policy by path: schema version 2, nodes, groups and the KV actions	bodies/new-61.md
+62	Core: kv	type:feature,area:core,actor:writer	KV audit: one blocking record per access, denial best effort	bodies/new-62.md
+63	Core: kv	type:feature,area:core,area:service	KV facade: the Vault KV v2 subset that External Secrets reads, sluis kv and the ESO job	bodies/new-63.md
+64	Core: kv	type:feature,area:core,actor:exchange	Workload exchange slice for KV: Kubernetes ServiceAccount tokens (k8s-sa-token)	bodies/new-64.md
+65	Core: kv	type:feature,area:core,area:driver	KV on each shape's store engine, measured on three boards	bodies/new-65.md
+66	Core: kv	type:feature,area:core,actor:exchange	Retire ClientSecretExport: generated client secrets go to KV under a managed prefix	bodies/new-66.md
+67	Core: features	type:feature,area:core,actor:entry	Rate and abuse limits in entry: per client and per address on /token, /authorize and recovery	bodies/new-67.md

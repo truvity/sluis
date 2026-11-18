@@ -1,0 +1,1 @@
+Moved from Parity to Core: features. Maintainer decision A2/H3 of 2026-11-18: logout is a core security feature: RP-initiated logout (#779), back-channel logout (this issue) and ending a browser sign-in so that silent re-admission stops (#1625).

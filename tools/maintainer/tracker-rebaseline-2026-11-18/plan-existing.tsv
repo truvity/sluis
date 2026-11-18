@@ -1,4 +1,4 @@
-# number<TAB>milestone<TAB>action (keep|done|notplanned)<TAB>expected title ('-' = not checked)<TAB>comment body file ('-' = none)
+# number<TAB>milestone<TAB>action (keep|reopen|done|notplanned)<TAB>expected title ('-' = not checked)<TAB>comment body file ('-' = none; a keep or reopen row with a body also gets that comment)
 774	Core: features	keep	Parity: OIDC discovery, key set and caller grants	-
 775	Core: features	keep	Parity: Authorization endpoint and PKCE	-
 776	Core: features	keep	Parity: Token endpoint and ID/access tokens	-
@@ -89,14 +89,14 @@
 1223	Core: release	keep	Implement driver packages and mixed hosts (v2)	-
 1706	Core: release	keep	audit-compat: validate the example records of the last release as the tag holds them	-
 1715	Core: release	keep	Compatibility per artifact: what a patch, a minor and a major release may change	-
-780	Parity	keep	Parity: Back-channel logout	-
+780	Core: features	keep	Parity: Back-channel logout	bodies/comment-780.md
 783	Parity	keep	Parity: CI identity tokens as a proof	-
 784	Parity	keep	Parity: Workload proofs: Kubernetes ServiceAccount and AWS role tokens	-
 790	Parity	keep	Parity: Generated client secrets and rotation	-
 791	Parity	keep	Parity: Resources (RFC 8707)	-
 792	Parity	keep	Parity: Client ID Metadata Documents	-
 794	Parity	keep	Parity: Agent-class sessions and consent	-
-795	Parity	keep	Parity: Recovery sign-in	-
+795	Core: features	keep	Parity: Recovery sign-in	bodies/comment-795.md
 801	Parity	keep	Parity: Platform scheduler and lease	-
 804	Parity	keep	Parity: State migration between storages	-
 805	Parity	keep	Parity: Google Workspace directory	-
@@ -123,8 +123,8 @@
 828	Parity	keep	Parity: sluisctl token, exchange and github-token	-
 829	Parity	keep	Parity: sluisctl Cloudflare, OpenBao and database wrappers	-
 830	Parity	keep	Parity: Go and TypeScript client libraries	-
-831	Parity	keep	Parity: Console: read model and roles	-
-832	Parity	keep	Parity: Console: connect and manage actions	-
+831	Parity	keep	Parity: Console: read model and roles	bodies/comment-console.md
+832	Parity	keep	Parity: Console: connect and manage actions	bodies/comment-console.md
 833	Parity	keep	Parity: Audit recording and the Audit page	-
 834	Parity	keep	Parity: Backup module	-
 835	Parity	keep	Parity: Restore	-
@@ -147,7 +147,7 @@
 931	Parity	keep	Conformance pipeline, full set: nightly runs on the lambda installation, certification package and archived results	-
 950	Parity	keep	Isolation test vectors per independent check, with the other checks switched off	-
 955	Parity	keep	Peer witness driver	-
-960	Parity	keep	The console actor: the operator API (backend for the console)	-
+960	Parity	keep	The console actor: the operator API (backend for the console)	bodies/comment-console.md
 963	Parity	keep	Federation: boundary installations joined by declared trust	-
 965	Parity	keep	Verifier drivers for workload and host proofs	-
 974	Parity	keep	NATS credentials from sluis: auth callout and user-JWT minter	-
@@ -162,7 +162,7 @@
 1214	Parity	keep	Implement adapters without held credentials, and minters that record nothing (v2)	-
 1216	Parity	keep	Implement boundaries on the ladder: wrapping keys, promotion and engines (v2)	-
 1218	Parity	keep	Implement the audit-only installation (v2)	-
-1219	Parity	keep	Implement console routing, switches and log-level overrides (v2)	-
+1219	Parity	keep	Implement console routing, switches and log-level overrides (v2)	bodies/comment-console.md
 1220	Parity	keep	Implement reconciler targets and the pause switch (v2)	-
 1330	Parity	keep	kits/go/store: take the sealed-store helper from session	-
 1331	Parity	keep	registry: give entry the edge to the reader, for the audit front	-
@@ -170,7 +170,7 @@
 1333	Parity	keep	contracts: write the reader's contract and its route at the audit front	-
 1334	Parity	keep	audit: Get, Facets, Export and the tail of the reader, and the merge of the logs of a project	-
 1335	Parity	keep	obs: record each fetch of the key set by user-agent product and AS number, at the edge	-
-1336	Parity	keep	ops: a rotation drill in staging that lists the verifiers that fail	-
+1336	Core: features	keep	ops: a rotation drill in staging that lists the verifiers that fail	bodies/comment-1336.md
 1364	Parity	keep	backup: a restore re-applies key revocations	-
 1365	Parity	keep	keys: remove a lost board at once, refuse its PIN release, and a PIN change command	-
 1366	Parity	keep	keys: a compromised data key ends its generation, with a re-seal job	-
@@ -179,10 +179,10 @@
 1371	Parity	keep	Decision: revisit the accepted risk of a compromised mac key after measuring a migration	-
 1372	Parity	keep	keys: replace an AWS wrapping key, wrap for the recovery recipient on AWS, and revisit the evidence key	-
 1454	Parity	keep	exporter@: the bucket driver, the edge purge for the boards and the confirmation of a revocation	-
-1624	Parity	keep	Console host: a hostname, a certificate and a passkey allow-list entry of its own	-
-1714	Parity	keep	exporter@ after its first version: the other destinations, the other exportable kinds, the Lambda trigger and the conformance suite	-
+1624	Parity	keep	Console host: a hostname, a certificate and a passkey allow-list entry of its own	bodies/comment-console.md
+1714	Parity	keep	exporter@ after its first version: the other destinations, the other exportable kinds, the Lambda trigger and the conformance suite	bodies/comment-1714.md
 1737	Parity	keep	Parity: key@ deletes an exited tenant's evidence wrap when its retention ends	-
-798	PKI/SSH/DB	keep	Parity: Secrets and typed export through store@ and exporter@	-
+798	Core: kv	keep	Parity: Secrets and typed export through store@ and exporter@	bodies/comment-798.md
 913	PKI/SSH/DB	keep	The ca actor: the X.509 certificate authority	-
 925	PKI/SSH/DB	keep	SSH user and host certificates from the ssh-ca actor, with principals from the sluis-host service	-
 926	PKI/SSH/DB	keep	Database access: short-lived client certificates for self-run PostgreSQL and CloudNativePG	-
@@ -232,10 +232,13 @@
 1373	Backlog	keep	Decision: revisit the accepted risk of a compromised pairwise key, and the chain compromise rule	-
 1450	Backlog	keep	sluis config explain: the --live layers and the built-in layer of the documents	-
 1626	Backlog	keep	Access explorer and saved filters for the console, after parity	-
-1639	Backlog	keep	Refresh tokens: recognise any old token of a chain without storing every spent hash	-
+1639	Core: features	keep	Refresh tokens: recognise any old token of a chain without storing every spent hash	bodies/comment-1639.md
 1713	Backlog	keep	Capacity spike, the rest of the path: signing from the pods, the hops to store@ and key@, the engines, the audit writer and the end to end rate	-
 1718	Backlog	keep	-	-
 1719	Backlog	keep	-	-
 1786	Backlog	keep	-	-
 927	-	notplanned	CIAM backlog: customer sign-in features not yet scheduled	bodies/close-927.md
 1062	-	notplanned	Mass session revocation: paginated, asynchronous and idempotent	bodies/close-1062.md
+912	Core: features	reopen	FAPI 2.0 security profile: PAR, DPoP and private_key_jwt client authentication	bodies/comment-912.md
+929	Core: features	reopen	FAPI 2.0 conformance: Security Profile and Message Signing OP plans	bodies/comment-929.md
+1800	Backlog	keep	Cloudflare credential driver (cloud-cloudflare), split from #954	bodies/comment-1800.md

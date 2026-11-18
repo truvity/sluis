@@ -3,8 +3,10 @@
 # Dry run by default, --apply writes. Idempotent: a second run changes nothing.
 #
 #   1. milestones: rename v2.0-alpha to Parity, create the rest (milestones.tsv)
-#   2. existing issues: set the milestone, close the five Done ones with an evidence comment,
-#      close the two CIAM leftovers as not planned with a reason comment (plan-existing.tsv)
+#   2. existing issues: set the milestone, comment where the plan has a comment file, re-open the
+#      issues that the 2026-11-18 decisions bring back (FAPI), close the five Done ones with an
+#      evidence comment, close the two CIAM leftovers as not planned with a reason comment
+#      (plan-existing.tsv)
 #   3. new issues: create each one that no issue of that exact title has (plan-new.tsv, bodies/)
 #   4. links: replace {{ref:n}} in the new bodies by the GitHub number of the issue n
 #
@@ -142,6 +144,7 @@ while IFS=$'\t' read -r num ms action exptitle body; do
   if [ "$state" = "closed" ]; then
     case "$action" in
       keep) echo "skip   #$num is already closed"; bump already_closed; continue ;;
+      reopen) ;;
       *) echo "note   #$num is already closed; the comment and the milestone are still checked"; bump already_closed ;;
     esac
   fi
@@ -152,10 +155,24 @@ while IFS=$'\t' read -r num ms action exptitle body; do
   fi
   case "$action" in
     keep)
+      if [ "$body" != "-" ]; then comment_once "$num" "$HERE/$body"; fi
       if [ -n "$target" ] && [ "$curms" = "$target" ]; then bump ms_already; continue; fi
       bump ms_move
       if ! $APPLY; then echo "move   #$num -> $ms"; continue; fi
       patch_issue "$num" "milestone $ms" -F "milestone=$target"
+      ;;
+    reopen)
+      # An issue that was closed with the CIAM work comes back: open it, set its milestone, then comment.
+      if [ "$state" = "closed" ]; then
+        bump reopen
+        if ! $APPLY; then echo "reopen #$num, milestone $ms"
+        else patch_issue "$num" "reopened, milestone $ms" -f state=open -f state_reason=reopened -F "milestone=$target"; fi
+      elif [ -n "$target" ] && [ "$curms" = "$target" ]; then bump ms_already
+      else
+        bump ms_move
+        if ! $APPLY; then echo "move   #$num -> $ms"; else patch_issue "$num" "milestone $ms" -F "milestone=$target"; fi
+      fi
+      if [ "$body" != "-" ]; then comment_once "$num" "$HERE/$body"; fi
       ;;
     done)
       comment_once "$num" "$HERE/$body"
@@ -247,6 +264,7 @@ if $APPLY; then echo "SUMMARY (done)"; v="did"; else echo "SUMMARY (dry run: not
 cat <<EOF
   milestones: create ${N[ms_create]:-0}, rename ${N[ms_rename]:-0}, already there ${N[ms_present]:-0}
   existing issues: milestone set on ${N[ms_move]:-0}, already right ${N[ms_already]:-0}
+  re-opened: ${N[reopen]:-0}
   closed as completed: ${N[close_done]:-0}; closed as not planned: ${N[close_notplanned]:-0}; found closed already (not closed again): ${N[already_closed]:-0}
   comments: ${v} ${N[comment]:-0}, already present ${N[comment_present]:-0}
   new issues: create ${N[new_create]:-0}, already exist ${N[new_present]:-0}
