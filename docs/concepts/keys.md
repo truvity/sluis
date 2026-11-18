@@ -43,7 +43,7 @@ sequenceDiagram
 - **The value is sealed under the data key of its address's boundary, tenant and purpose,** with AES-256-GCM and the full address as authenticated data. A value copied to another row, kind, tenant or boundary does not open.
 - **key@ checks three things on every Seal and Open:** the caller's identity, by the transport; the caller's rule for the purpose and operation, generated from the actor registry; and, for a tenant's `data` and `evidence` keys, the grant, which must be sealed for the address's tenant, name the operation and not be expired. The tenant's `chain` key is checked by rule alone, with no grant, because `policy` needs the facts it seals in order to decide.
 - **Opens are batched,** so a request that needs a session cookie and a person's records pays one hop. On Lambda the hop was measured with the whole sign-in, which stays inside its budget ([0037](/decisions/0037-capacity-is-measured-before-it-is-promised/#the-warm-sign-in-on-lambda)).
-- **Mac** makes a keyed hash with HMAC-SHA384 over a data key: link ids and the hashed index entries of sealed kinds under the boundary's `mac` key, audit pseudonyms under a tenant's `pseudonym` key, and pairwise subjects under a tenant's `pairwise` key. There is no extra KMS key for hashing.
+- **Mac** makes a keyed hash with HMAC-SHA384 over a data key: link ids and the hashed index entries of sealed kinds under the boundary's `mac` key, and audit pseudonyms under a tenant's `pseudonym` key. There is no extra KMS key for hashing.
 
 ## Data keys
 
@@ -53,7 +53,6 @@ A data key is a software AES-256 key. key@ makes it, keeps it only wrapped, and 
 |---|---|---|
 | `data` | One per tenant | Personal and operational data of the tenant |
 | `pseudonym` | One per tenant, rolled by epoch | Keyed hashes of the tenant: audit pseudonyms |
-| `pairwise` | One per tenant, never rotated | Pairwise subjects of the tenant |
 | `evidence` | One per tenant | Audit and usage evidence of the tenant |
 | `chain` | One per tenant | Facts of a session chain that `session` seals and opens and `exchange` opens |
 | `grant` | One per boundary | Sealed grants |

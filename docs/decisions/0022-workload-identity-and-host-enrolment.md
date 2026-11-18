@@ -45,6 +45,7 @@ SPIFFE is the published standard for workload identity: the ID format, the trust
   | A Kubernetes ServiceAccount | `spiffe://<trust-domain>/k8s/<cluster>/ns/<namespace>/sa/<sa>` |
   | A sluis actor | `spiffe://<trust-domain>/sluis/<actor>`, for example `spiffe://prod.example.com/sluis/ca` |
   | A CI job | `spiffe://<trust-domain>/ci/github/<org>/<repo>` |
+  | An AWS role (parity phase; nothing in the core) | `spiffe://<trust-domain>/aws/<account>/role/<path>/<name>` |
 
 - **An actor has one ID form.** The instance (a node or a unit) is a separate attribute: a DNS name in the X.509-SVID's subject alternative names, a claim in the JWT-SVID.
 - **JWT-SVIDs come from the boundary's issuer:** `iss` is its URL, `sub` the SPIFFE ID ([0017](/decisions/0017-identity-and-sign-in/#subjects)).
@@ -119,4 +120,4 @@ A host enrols with the same mechanism and receives a host X.509-SVID from `ca` u
 
 ## Follow-ups
 
-None.
+- **A proof kind for an AWS-role caller** is built in the parity phase, with the spelling in the table above (maintainer decision SB4 A, 2026-11-18). Nothing in the core issues it; v1's `aws:<account>:role/<path><name>` spelling is not reproduced ([0015](/decisions/0015-evolution-and-compatibility/#cutover-from-v1)). The proof and its checks are decided at the parity re-plan ([roadmap](/roadmap/)).
