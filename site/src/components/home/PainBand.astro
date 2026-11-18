@@ -2,7 +2,7 @@
 // The first screen of the home page: the three pains side by side, so a reader sees theirs
 // before anything else. Each column links to the full section below it. The third shows the
 // chain in miniature. The mission follows (pages.md: the pain, then the mission, then the
-// answers), then the call to action, with the honest status: v1 runs today, v2 is designed.
+// answers), then the call to action, with the honest status: v1 runs today, the v2 core is being built.
 import Mark from './Mark.astro';
 import { band, fragmented, ceremonies } from './data';
 
@@ -51,5 +51,5 @@ const heavy = ceremonies.filter((c) => c.band);
   <a class="btn btn-primary" href="/overview/">Start here</a>
   <a class="btn" href="/runtimes/local/">Read about the local installation</a>
   <a class="btn btn-quiet" href="https://github.com/truvity/sluis">View on GitHub</a>
-  <p>v2 is designed, not built; what runs today is sluis v1, documented at <a href="/v1/">/v1/</a>. <a href="#where-it-stands">Where v2 stands</a>.</p>
+  <p>What runs in production today is sluis v1, documented at <a href="/v1/">/v1/</a>. The v2 core is being built and its first alpha is published; the rest is designed. <a href="#where-it-stands">Where v2 stands</a>.</p>
 </div>

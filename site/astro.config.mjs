@@ -181,7 +181,7 @@ export default defineConfig({
     starlight({
       title: 'sluis',
       description:
-        'sluis is a pluggable identity and access broker for people, robots and external systems. Open source, designed in the open.',
+        'sluis is a pluggable identity and access broker for people, robots and external systems. Open source, built in the open.',
       favicon: '/favicon.svg',
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/truvity/sluis' },
@@ -274,7 +274,7 @@ export default defineConfig({
         starlightLlmsTxt({
           projectName: 'sluis',
           description:
-            'sluis is a pluggable identity and access broker for people, robots and external systems. v2 is being designed in the open; v1 documentation is at /v1/. Each page starts with its status: target state, partly built, page complete (a page about the project itself) or shipped.',
+            'sluis is a pluggable identity and access broker for people, robots and external systems. v2 is being built in the open (its core is published as an alpha); v1 documentation is at /v1/. Each page starts with its status: target state, partly built, page complete (a page about the project itself) or shipped.',
           // Keep the Proposed asides (notes) in llms-small.txt as well.
           minify: { note: false },
         }),
