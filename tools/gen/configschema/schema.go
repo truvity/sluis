@@ -61,6 +61,7 @@ var roots = []root{
 	payload("InstallationClient", "installation-client", "The payload of a signed InstallationClient document", "keyed"),
 	payload("FrontHost", "front-host", "The payload of a signed FrontHost document", "keyed"),
 	payload("SignInMethods", "sign-in-methods", "The payload of a signed SignInMethods document", "single"),
+	payload("RateBound", "rate-bound", "The payload of a signed RateBound document", "single"),
 }
 
 const idBase = "https://sluis.id/schema/"
