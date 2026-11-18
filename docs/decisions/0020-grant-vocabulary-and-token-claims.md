@@ -99,6 +99,7 @@ Maintainer decisions D1 B and D3, 2026-11-12 ([0045](/decisions/0045-customers-s
 - **Free-form claims merged from groups in the first working version.** Every merge is a way for configuration to widen a token; the fixed set lets the claims be tested as a whole.
 - **A check of the declared names against each delimiter, as v1 makes.** v1 let a name hold any character but `:`, so no delimiter was safe in itself and the load tried every declared name. A v2 name holds letters, digits, `-` and `_`, so a delimiter outside them is safe whatever is declared, and the check cannot fail.
 - **Every held grant name in every token.** A relying party would read names meant for other systems, and tokens would grow with the person's rights.
+- **The v1 override word `groups: all`, and the override of a `rung:` or `emp:` family.** Maintainer decision G1 A, 2026-11-18: not carried into v2. A client lists the things it reads in `groups`, v2 issues no `rung:` or `emp:` names, and narrowing is always on. A client that needs every held grant name lists every thing; the load still refuses `groups: all`, which is not a list of things, so a v1 file is not read in a new meaning.
 - **A report mode before narrowing is enforced, as in v1.** v2 has no installation to migrate; the report mode only delays the rule.
 - **Role inheritance across scopes.** `all:x:admin` reaching every environment is the surprise the explicit ladder avoids.
 - **Wildcards in `requires`, in token claims or in the role position.** A wildcard there would admit or grant by pattern where the rule should name the thing.
@@ -111,5 +112,4 @@ Maintainer decisions D1 B and D3, 2026-11-12 ([0045](/decisions/0045-customers-s
 ## Follow-ups
 
 - Claim fragments and lifetimes by group: [#786](https://github.com/truvity/sluis/issues/786).
-- The v1 override word `groups: all`, and the override of a `rung:` or `emp:` family, are not built; v2 names no such family, and whether to carry everything for one client waits for the maintainer ([#1815](https://github.com/truvity/sluis/issues/1815)).
 - DPoP and mutual-TLS binding: [#912](https://github.com/truvity/sluis/issues/912).
