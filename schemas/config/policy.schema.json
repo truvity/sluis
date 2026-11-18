@@ -839,7 +839,9 @@
                     "properties": {
                       "externalId": {
                         "description": "Optional. Passed to STS as the ExternalId of the assumption, so that the organisation's trust policy can require `sts:ExternalId`. The role is also assumed with a session policy that limits it to the document and the secrets' parameters.",
-                        "pattern": "^[A-Za-z0-9+=,.@:/-]{2,1000}$",
+                        "maxLength": 1224,
+                        "minLength": 2,
+                        "pattern": "^[\\w+=,.@:/-]+$",
                         "type": "string"
                       },
                       "parameter": {

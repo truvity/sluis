@@ -500,16 +500,30 @@ func TestRemovalTouchesOnlyManagedNames(t *testing.T) {
 		t.Error("the controller wrote a variable and a secret, the document dropped them, and they are still there")
 	}
 
-	// Then the configuration and another variable: two of the four now.
+	// Then the configuration, and then the other variable, one at a time:
+	// each is under half of what the document owns.
 	r.account.SetDocument(`
 org:
   variables:
+    GLOBEX_HOSTS: {value: "a.example,b.example", visibility: selected, repositories: [shop, web]}
     ACCESS_ROSTER_ISSUER: {visibility: selected, repositories: [shop]}
 `)
 	r.pass()
 
-	if r.github.Variable("GLOBEX_HOSTS") != nil || r.github.Configuration("baseline") != nil {
-		t.Error("the variable and the configuration the controller wrote are still there")
+	if r.github.Configuration("baseline") != nil {
+		t.Error("the configuration the controller wrote is still there")
+	}
+
+	r.account.SetDocument(`
+org:
+  variables:
+    ACCESS_ROSTER_ISSUER: {visibility: selected, repositories: [shop]}
+    GLOBEX_KEPT: {value: k, visibility: all}
+`)
+	r.pass()
+
+	if r.github.Variable("GLOBEX_HOSTS") != nil {
+		t.Error("the variable the controller wrote is still there")
 	}
 
 	// A platform variable is the installation's and stays.
@@ -999,5 +1013,53 @@ org:
 
 	if after := r.github.Did()[before:]; len(after) != 0 {
 		t.Errorf("a settled organisation was written to again: %v", after)
+	}
+}
+
+// The guard weighs what the document owns. The installation's variables are
+// always wanted and so are not in the count: four platform names beside four
+// of the document's, with the document dropping all four, remove nothing.
+func TestThePlatformVariablesDoNotDiluteTheMassRemovalGuard(t *testing.T) {
+	cfg := settingsConfig(orgconfig.ModeEnforce)
+	cfg.PlatformVariables = []string{"CI_RUNNER_LABEL_*"}
+
+	for _, name := range []string{"CI_RUNNER_LABEL_A", "CI_RUNNER_LABEL_B", "CI_RUNNER_LABEL_C"} {
+		cfg.Variables[name] = orgconfig.Variable{Value: "v"}
+	}
+
+	r := newSettingsRig(t, cfg, `
+org:
+  variables:
+    GLOBEX_ONE: {value: 1, visibility: all}
+    GLOBEX_TWO: {value: 2, visibility: all}
+    GLOBEX_THREE: {value: 3, visibility: all}
+    GLOBEX_FOUR: {value: 4, visibility: all}
+`)
+	r.pass()
+
+	// Four platform names (the three above and the issuer) and four of the document's.
+	if got := r.settings(t).Managed.Variables; len(got) != 9 {
+		t.Fatalf("managed = %v, want the document's four and the installation's five", got)
+	}
+
+	before := len(r.github.Did())
+
+	r.account.SetDocument("org:\n  variables:\n    GLOBEX_KEPT: {value: k, visibility: all}\n")
+	r.pass()
+
+	if after := r.github.Did()[before:]; len(after) != 1 || !strings.Contains(after[0], "GLOBEX_KEPT") {
+		t.Fatalf("a mass removal was carried out because the platform names diluted the count: %v", after)
+	}
+
+	held := 0
+
+	for _, c := range r.settings(t).Changes {
+		if c.State == status.SettingHeld && strings.HasPrefix(c.Reason, "removal held") {
+			held++
+		}
+	}
+
+	if held != 4 {
+		t.Errorf("changes = %+v, want four removals held", r.settings(t).Changes)
 	}
 }

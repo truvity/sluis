@@ -86,7 +86,7 @@ var (
 	roleARN       = regexp.MustCompile(`^arn:[a-z-]+:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,512}$`)
 	regionName    = regexp.MustCompile(`^[a-z]{2}(-[a-z]+)+-[0-9]$`)
 	parameterName = regexp.MustCompile(`^/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$`)
-	externalID    = regexp.MustCompile(`^[A-Za-z0-9+=,.@:/-]{2,1000}$`)
+	externalID    = regexp.MustCompile(`^[\w+=,.@:/-]+$`)
 )
 
 // SessionPolicy is the inline session policy the controller assumes the read
@@ -115,7 +115,10 @@ func (c Config) SessionPolicy() (string, error) {
 		"Statement": []map[string]any{
 			{"Effect": "Allow", "Action": "ssm:GetParameter", "Resource": resources},
 			// The role's own policy says which key.
-			{"Effect": "Allow", "Action": "kms:Decrypt", "Resource": "*"},
+			{
+				"Effect": "Allow", "Action": "kms:Decrypt", "Resource": "*",
+				"Condition": map[string]any{"StringEquals": map[string]string{"kms:ViaService": "ssm." + c.Read.Region + ".amazonaws.com"}},
+			},
 		},
 	}
 
@@ -159,8 +162,8 @@ func (c Config) Validate() error {
 		errs = append(errs, fmt.Errorf("read.parameter %q is not a parameter name", c.Read.Parameter))
 	}
 
-	if c.Read.ExternalID != "" && !externalID.MatchString(c.Read.ExternalID) {
-		errs = append(errs, errors.New("read.externalId is not an STS external id (2 to 1000 letters, digits and +=,.@:/-)"))
+	if x := c.Read.ExternalID; x != "" && (len(x) < 2 || len(x) > 1224 || !externalID.MatchString(x)) {
+		errs = append(errs, errors.New("read.externalId is not an STS external id (2 to 1224 of letters, digits, underscore and +=,.@:/-)"))
 	}
 
 	// The document is read with the same role as the secrets' parameters; a

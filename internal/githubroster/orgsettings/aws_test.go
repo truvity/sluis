@@ -238,6 +238,10 @@ func TestTheRoleIsAssumedWithTheExternalIDAndASessionPolicy(t *testing.T) {
 		}
 	}
 
+	if !strings.Contains(policy, `"kms:ViaService":"ssm.eu-west-1.amazonaws.com"`) {
+		t.Errorf("the kms:Decrypt statement is not limited to SSM in the region: %s", policy)
+	}
+
 	if strings.Contains(policy, `"ssm:*"`) || strings.Contains(policy, "parameter/*") {
 		t.Errorf("session policy is too wide: %s", policy)
 	}

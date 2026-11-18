@@ -78,8 +78,8 @@ and that GitHub Apps stay as they are.
    secret's value cannot be compared, so an existing secret the controller did not write is always a conflict. The one
    exception is the installation's own variables, which the controller always writes from the installation's
    configuration. A recorded name is not trusted: one that is not a name GitHub accepts, or that the platform owns
-   and the installation does not set, is not removed. A pass that would remove more than half of the recorded names,
-   and at least two, removes none: it reports and audits `removal held`. An operator releases it by restoring the
+   and the installation does not set, is not removed. A pass that would remove more than half of the document-owned
+   recorded names that GitHub still holds (the installation's variables are not counted), and at least two, removes none: it reports and audits `removal held`. An operator releases it by restoring the
    document or by removing the names on GitHub.
 9. **D9. One audit record per change.** `roster.github_org_setting.changed` names the organisation, the kind, the name,
    the action and the mode, and never a value. In `enforce` mode it records each change made or refused. In `report`
@@ -101,6 +101,13 @@ and that GitHub Apps stay as they are.
   through `apps.github.apps` and `controllers.github.appRefs`.
 - The controller's report grows a `settings` object. A console that does not know it ignores it.
 - The audit catalogue moves to 1.24.0 with two actions.
+
+## Known limits
+
+- A refusal names the document's map keys in its paths (a variable's name), and a held row repeats the text of an
+  upstream AWS error, which can name a parameter. Neither repeats a value.
+- Somebody with write access on GitHub can delete a managed setting and create one of the same name by hand. The
+  controller then sees a name it recorded and overwrites it; it cannot tell the two apart.
 
 ## Alternatives considered
 
