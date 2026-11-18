@@ -1652,9 +1652,10 @@ requirements:
     milestone: first-version
     runtimes: all
     standards: []
-    issues: [788]
+    issues: [788, 1818]
     tests: [actors/entry/src/discovery.rs, actors/entry/tests/edge.rs]
     verification:
+      - {kind: test-vectors, ref: "kits/conformance/token/signing-alg-vectors.json, discovery: ES384 alone for no RSA key, a pre-published, retiring, dropped or revoked one, or unreadable revocations; ES384 and RS256 for an active one"}
       - {kind: integration-test, ref: "the ring with no RSA key, a pre-published, active, retiring, dropped and a revoked one, and with the revocations unreadable (discovery_lists_rs256_only_while_an_rs256_key_is_active)"}
 
   - id: REQ-AUTHN-110

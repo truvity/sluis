@@ -124,14 +124,17 @@ requirements:
     rationale: "Interoperating clouds and libraries require RS256 and PS256."
     level: MUST
     source: design-decision
-    status: planned
+    status: done
     milestone: first-version
     runtimes: all
+    actors: [signer]
     standards:
       - {id: ST-51, section: "3.3", depth: Partial}
-    issues: [788]
+    issues: [788, 1818]
+    tests: [actors/signer/tests/sign.rs]
     verification:
-      - {kind: integration-test, ref: "per-audience key separation test"}
+      - {kind: test-vectors, ref: "kits/conformance/token/signing-alg-vectors.json, tokens: the RSA key signs the ID tokens of an audience that says RS256 and nothing else; all other tokens are ES384"}
+      - {kind: integration-test, ref: "five states of the key, both callers: key@ makes one RSA signature per RS256 answer, one ES384 per other, none per refusal (the_audiences_that_get_rs256_are_those_of_the_shared_vectors)"}
   - id: REQ-KEYS-006
     area: KEYS
     statement: "sluis MUST publish its public keys as a key set whose entries each carry kid, kty, alg and use."

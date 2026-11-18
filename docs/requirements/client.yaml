@@ -686,8 +686,10 @@ requirements:
     milestone: first-version
     runtimes: all
     standards: []
-    issues: [788]
+    issues: [788, 1818]
+    tests: [actors/store/tests/config.rs]
     verification:
+      - {kind: test-vectors, ref: "kits/conformance/token/signing-alg-vectors.json, config: ES384, RS256, empty and left out are taken; PS256, ES256, other spellings, non-strings and any word on an exchange client are refused"}
       - {kind: integration-test, ref: "the algorithms of the set, other words, an exchange client, null and empty"}
 
   - id: REQ-CLIENT-047
