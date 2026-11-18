@@ -896,6 +896,7 @@ dependencies = [
  "aws-lc-rs",
  "base64 0.23.1",
  "buffa",
+ "buffa-types",
  "bytes",
  "clap",
  "connectrpc",

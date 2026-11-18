@@ -25,6 +25,7 @@ use sluis_proto::sluis::r#type::v2alpha1::HttpReply;
 use crate::Sockets;
 use crate::audit::{Auditor, Request};
 use crate::discovery::Source;
+use crate::limit::{Limit, Limiter, client_of};
 use crate::params::{Bad, FORM_MAX, Params, QUERY_MAX};
 use crate::refuse::{self, Refuse};
 use crate::routes::{self, Front};
@@ -70,6 +71,7 @@ pub(crate) struct State {
     exchange: ExchangeServiceClient<sluis_kit::Transport>,
     reader: ReaderServiceClient<sluis_kit::Transport>,
     docs: Source,
+    limiter: Limiter,
     audit: Auditor,
 }
 
@@ -100,6 +102,7 @@ impl State {
             exchange: ExchangeServiceClient::new(exchange.transport(), exchange.config()),
             reader: ReaderServiceClient::new(reader.transport(), reader.config()),
             docs: Source::new(&s.store),
+            limiter: Limiter::new(s),
             audit,
         }
     }
@@ -324,6 +327,12 @@ async fn route(
             // 3.1.2.1: an authorization endpoint MUST support both). A POST with a query is a request with two
             // sources for its parameters, and is refused as the token endpoint refuses it.
             method_ok(&parts.method, &[Method::GET, Method::POST], "GET, POST")?;
+            // The source address is counted before a byte of the body is read (ADR 0036): a request past the bound costs
+            // nothing but the refusal.
+            state
+                .limiter
+                .address(Limit::AuthorizeAddress, &parts.headers)
+                .await?;
             let raw = if parts.method == Method::POST {
                 if !query.is_empty() {
                     return Err(Refuse::new(400, "unknown_parameter"));
@@ -346,6 +355,11 @@ async fn route(
             // The names that are not on the list are ignored, and only their number is audited.
             let (p, ignored) = all.keeping(routes::AUTHORIZE);
             trace.ignored = Some(ignored);
+            // The client is counted once the request is known to be well formed; the address was counted before.
+            state
+                .limiter
+                .client(Limit::AuthorizeClient, &client_of(&p.get("client_id"), ""))
+                .await?;
             let r = AuthorizeRequest {
                 response_type: p.get("response_type"),
                 client_id: p.get("client_id"),
@@ -401,6 +415,10 @@ async fn route(
             // The person is sent to the upstream to authenticate again; nothing is written. The route takes no parameter: the client
             // whose admission the registration is decided on is the operator's pin in SignInMethods.
             method_ok(&parts.method, &[Method::GET], "GET")?;
+            state
+                .limiter
+                .address(Limit::RecoveryAddress, &parts.headers)
+                .await?;
             no_body(&body)?;
             // A page of another site can make a browser load this URL as an image or a script and start a sign-in the person did
             // not ask for. Only a navigation may come from another site; a browser says so in Fetch Metadata, which a page cannot
@@ -422,6 +440,10 @@ async fn route(
         (Front::Identity, "/passkeys/register") => {
             trace.route = "passkeys_register";
             method_ok(&parts.method, &[Method::POST], "POST")?;
+            state
+                .limiter
+                .address(Limit::RecoveryAddress, &parts.headers)
+                .await?;
             // The answer of the registration page: one form field, and the cookie that holds the ceremony. The route reads no
             // Authorization and no token: a factor is added by the person who has just signed in again, never by a bearer
             // (REQ-REG-051). The header is not read, so it cannot reach `session`.
@@ -448,6 +470,10 @@ async fn route(
         (Front::Identity, "/token") => {
             trace.route = "token";
             method_ok(&parts.method, &[Method::POST], "POST")?;
+            state
+                .limiter
+                .address(Limit::TokenAddress, &parts.headers)
+                .await?;
             token(state, &parts.headers, query, body, trace).await
         }
         (Front::Identity, "/userinfo") => {
@@ -774,6 +800,15 @@ async fn token(
     let raw = read_form(headers, body).await?;
     let raw = raw.as_str();
     let p = Params::parse(raw, FORM_MAX).map_err(bad)?;
+    // The client is counted whatever the grant, once the form is well formed: its id in the form or the user of a Basic header.
+    let basic = headers
+        .get(AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    state
+        .limiter
+        .client(Limit::TokenClient, &client_of(&p.get("client_id"), basic))
+        .await?;
     // One grant type, sent once, from the closed list; each grant has a closed list of its own.
     match p.get("grant_type").as_str() {
         "authorization_code" => {

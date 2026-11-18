@@ -30,6 +30,8 @@ pub struct Sockets {
     pub audit: PathBuf,
     /// `reader`, for the audit front.
     pub reader: PathBuf,
+    /// key@, for the keyed hash of a source address (`mac` purpose, the boundary's key).
+    pub key: PathBuf,
 }
 
 impl Sockets {
@@ -42,6 +44,11 @@ impl Sockets {
             store: run_dir.join("store").join(format!("{boundary}.sock")),
             audit: run_dir.join("audit").join(boundary).join("emit.sock"),
             reader: run_dir.join("reader").join(format!("{boundary}.sock")),
+            key: run_dir
+                .join("key")
+                .join(boundary)
+                .join("entry")
+                .join("key.sock"),
         }
     }
 }
