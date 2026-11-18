@@ -101,7 +101,7 @@ purposes:
     aws: { key_spec: ECC_NIST_P384, per: boundary, baseline: true }
     board: { slot: '9a' }
     users: [signer]
-    notes: "Signs tokens. Its certificate is a non-CA certificate that allows digital signatures only, issued by the node's intermediate; the published key set carries the x5c chain. Never the intermediate itself."
+    notes: "Signs tokens. Its certificate is a non-CA certificate that allows digital signatures only, issued by the node's intermediate when the installation turns the token certificate on (off in the core, decision X1 A); the published key set then carries the x5c chain. Never the intermediate itself."
 
   - name: x509-intermediate
     kind: signing

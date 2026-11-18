@@ -223,6 +223,7 @@ func (s *Server) Init(ctx context.Context) error {
 		return err
 	}
 	s.environment = b.GetEnvironment()
+	s.tokenCertificate = b.GetTokenCertificate()
 	s.defaultTenant = b.GetDefaultTenant()
 	if s.defaultTenant != "" && !validTenant(s.defaultTenant) {
 		return errors.New("boundary/default: default_tenant is not a valid tenant id")

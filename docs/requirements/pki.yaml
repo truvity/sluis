@@ -501,7 +501,7 @@ requirements:
       - {kind: integration-test, ref: "the key set of a test installation: every entry has an x5c chain that verifies against the root list"}
   - id: REQ-PKI-034
     area: PKI
-    statement: "Each ES384 entry of a published key set MUST carry an x5c chain that starts with the entry's own certificate, leads through the node's intermediate and ends at a root."
+    statement: "Each ES384 entry of a key set published by an installation whose Boundary turns the token certificate on MUST carry an x5c chain that starts with the entry's own certificate, leads through the node's intermediate and ends at a root."
     rationale: "A verifier that wants to can then check custody down to the root, and a standard client ignores the member."
     level: MUST
     source: design-decision
@@ -511,7 +511,7 @@ requirements:
     runtimes: all
     standards:
       - {id: ST-62, section: "4", depth: Partial}
-    issues: [774, 914]
+    issues: [774, 914, 1812]
     tests: [actors/signer/src/ring.rs, actors/signer/tests/sign.rs, actors/key/internal/content/vectors_test.go, actors/key/internal/keyd/tokencert_test.go, tools/harness/keyset-check/main_test.go]
     verification:
       - {kind: integration-test, ref: "the key set of a test installation: every ES384 entry has an x5c chain to the root list; an RSA entry has none"}
@@ -816,3 +816,45 @@ requirements:
     features: ["design"]
     verification:
       - {kind: integration-test, ref: "declare an intermediate: the next trust bundle lacks its certificate, and a sync removes the anchor"}
+  - id: REQ-PKI-057
+    area: PKI
+    statement: "A key set MUST carry no x5c member for any key unless the installation's Boundary turns the token certificate on."
+    rationale: "The token certificate is optional per installation and off in the core, so the core needs no intermediate and no certifier (decision X1 A, ADR 0006)."
+    level: MUST
+    source: design-decision
+    status: done
+    milestone: first-version
+    runtimes: all
+    standards: []
+    issues: [1812]
+    tests: [actors/key/internal/keyd/tokencert_off_test.go]
+    verification:
+      - {kind: integration-test, ref: "key@ with the switch off gives no chain, certifies nothing and refuses Sign and PutCertificate; a stored chain is withdrawn when it goes off and given again when it is on again (tokencert_off_test.go)"}
+  - id: REQ-PKI-058
+    area: PKI
+    statement: "The check of a config set MUST refuse a Boundary that turns the token certificate on while the KeyPlan lists no ES384 key for both x509-intermediate and token-signing."
+    rationale: "A set that turns the certificate on without the intermediate would publish no chain and say it does, and a set that leaves it off needs no intermediate."
+    level: MUST
+    source: design-decision
+    status: done
+    milestone: first-version
+    runtimes: all
+    standards: []
+    issues: [1812]
+    tests: [actors/store/tests/config_set.rs, cli/sluis/configcheck_test.go]
+    verification:
+      - {kind: integration-test, ref: "the local set with the switch on and no intermediate is refused whole by store@'s loader and by sluis config check (exit 3); with the intermediate, or with the switch off, it passes"}
+  - id: REQ-PKI-059
+    area: PKI
+    statement: "The token_certificate setting of the Boundary MUST be a plain true or false that means off when it is absent, read the same by key@ and store@."
+    rationale: "The strict profile reads only a plain true or false as a boolean, and the two readers must agree on what turns a custody claim on."
+    level: MUST
+    source: design-decision
+    status: done
+    milestone: first-version
+    runtimes: all
+    standards: []
+    issues: [1812]
+    tests: [actors/store/tests/vectors.rs, actors/store/tests/boundary_token_certificate.rs, actors/key/internal/keyd/boundary_vectors_test.go]
+    verification:
+      - {kind: test-vectors, ref: "boundary-payloads.json: on, off and absent are read; null, yes, True, 1, a quoted word and a list are refused at default.token_certificate, by key@ in Go and store@ in Rust"}

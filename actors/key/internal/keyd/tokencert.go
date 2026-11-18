@@ -31,6 +31,9 @@ const tokenPurpose = "token-signing"
 
 var errNoIntermediate = errors.New("keyd: no intermediate installed")
 
+// errTokenCertificateOff is the answer of a call that needs the token certificate while the Boundary leaves it off.
+var errTokenCertificateOff = errors.New("keyd: the token certificate is off")
+
 // certificatesByID lists KeyCertificate whole, by id. The kind is small (a wrapping key for each node, an intermediate, a
 // token certificate) and it is listed, never asked for by id: store@ audits a refusal for an absent item, and "not there
 // yet" is the expected answer (ADR 0005; REQ-AUDIT-180).
@@ -63,6 +66,9 @@ type tokenCert struct {
 // tokenCertificateRules reads the installed intermediate of this node and returns the rules a token certificate must
 // meet. It returns errNoIntermediate when none is installed, and another error when store@ failed.
 func (s *Server) tokenCertificateRules(ctx context.Context) (content.TokenCertificateRules, *tokenCert, error) {
+	if !s.tokenCertificate {
+		return content.TokenCertificateRules{}, nil, errTokenCertificateOff
+	}
 	inter, ok := s.planned(handoffPurpose)
 	tok, ok2 := s.planned(tokenPurpose)
 	if !ok || !ok2 || inter.algorithm != algES384 || tok.algorithm != algES384 {
@@ -87,8 +93,12 @@ func (s *Server) tokenCertificateRules(ctx context.Context) (content.TokenCertif
 	return r, &tokenCert{rules: r, issuer: c, chain: cur.GetChain(), sequence: cur.GetTrustSequence(), all: all}, nil
 }
 
-// refuseTokenCertificate refuses a call that could not read the intermediate.
+// refuseTokenCertificate refuses a call that could not read the intermediate, or that asks for a token certificate that the
+// Boundary leaves off: the purpose is one the installation does not enable, as when the plan lacks it.
 func (s *Server) refuseTokenCertificate(ctx context.Context, caller, op, purpose string, err error) error {
+	if errors.Is(err, errTokenCertificateOff) {
+		return s.refuse(ctx, caller, op, purpose, "", connect.CodeFailedPrecondition, reasonPurpose, "purpose")
+	}
 	if errors.Is(err, errNoIntermediate) {
 		return s.refuse(ctx, caller, op, purpose, "", connect.CodeFailedPrecondition, reasonIntermediate, "intermediate")
 	}
@@ -111,6 +121,8 @@ func (s *Server) tokenChain(ctx context.Context, pk purposeKey) [][]byte {
 // renewed, as long as it verifies under the renewed one and names it as issuer (same key, same subject): the key set has
 // no gap while ca makes the certificate again (ADR 0023). Nothing is given while either key is revoked.
 //
+// With the Boundary's token certificate off, the answer is always empty (see the body).
+//
 // withdrawn tells an empty answer that means "take it down" from one that means "none yet": it is true when a certificate
 // is stored for the key and is not given because it does not serve (ended, not begun, not signed by the installed
 // intermediate, or the intermediate or the key is revoked, as KeyRevocation says). When the kinds cannot be read, or
@@ -122,6 +134,13 @@ func (s *Server) tokenChainState(ctx context.Context, pk purposeKey) (chain [][]
 	if err != nil {
 		slog.Warn("KeyCertificate cannot be read: no x5c")
 		return nil, false
+	}
+	if !s.tokenCertificate {
+		// The Boundary leaves the token certificate off (decision X1 A): no chain, whatever is stored. A certificate stored
+		// while it was on is withdrawn, so that the key set drops the chain it carries; with none stored there is nothing to take
+		// down.
+		cur := all[tokenCertificateID(pk)]
+		return nil, cur != nil && len(cur.GetChain()) != 0
 	}
 	cur := all[tokenCertificateID(pk)]
 	if cur == nil || len(cur.GetChain()) == 0 {
@@ -179,6 +198,9 @@ func (s *Server) PutCertificate(ctx context.Context, req *connect.Request[keyv2a
 	}
 	if !s.allows(caller, registry.ScopeBoundary, handoffPurpose, "certify") {
 		return nil, s.refuse(ctx, caller, op, purpose, "", connect.CodePermissionDenied, reasonRule, "purpose")
+	}
+	if !s.tokenCertificate {
+		return nil, s.refuseTokenCertificate(ctx, caller, op, purpose, errTokenCertificateOff)
 	}
 	inter, ok := s.planned(handoffPurpose)
 	tok, ok2 := s.planned(tokenPurpose)
@@ -282,6 +304,11 @@ func (s *Server) TokenKey(ctx context.Context, _ *connect.Request[keyv2alpha1.To
 	}
 	if !s.allows(caller, registry.ScopeBoundary, handoffPurpose, "certify") {
 		return nil, s.refuse(ctx, caller, op, tokenPurpose, "", connect.CodePermissionDenied, reasonRule, "purpose")
+	}
+	// An installation whose Boundary leaves the token certificate off has nothing to certify either: the same empty answer, and no
+	// refusal for a ca that looks every few seconds.
+	if !s.tokenCertificate {
+		return connect.NewResponse(&keyv2alpha1.TokenKeyResponse{}), nil
 	}
 	// A plan without a token-signing key is a plan without anything to certify, not a mistake of ca's: the answer is empty and
 	// nothing is refused, so that a ca that looks every few seconds writes no record each time (REQ-AUDIT-180).

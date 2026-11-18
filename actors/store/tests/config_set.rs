@@ -233,6 +233,83 @@ async fn the_registration_client_must_be_a_client_that_signs_people_in() {
     assert!(matches!(e.loader.reload().await, Reloaded::Applied(_)));
 }
 
+/// The token certificate (decision X1 A of 2026-11-18): off, the set needs no intermediate; on, the KeyPlan lists the
+/// intermediate and the token-signing key, both ES384, or the set would publish no chain and say it does. The committed local
+/// KeyPlan lists no intermediate, as the core needs none.
+///
+/// verifies: REQ-PKI-058
+#[tokio::test]
+async fn the_token_certificate_needs_the_intermediate_in_the_key_plan_only_when_it_is_on() {
+    let e = Env::start().await;
+    let before = e.loader.snapshot().summaries();
+    let plan = source("key-plan");
+    let data = "    - { purpose: data, algorithm: AES-256-GCM }\n";
+    let intermediate = "    - { purpose: x509-intermediate, algorithm: ES384, slot: 9c }\n";
+    assert!(
+        plan.contains(data) && !plan.contains("x509-intermediate"),
+        "the local KeyPlan lists no intermediate"
+    );
+    let on = format!("{}  token_certificate: true\n", source("boundary"));
+    let with_intermediate = plan.replace(data, &format!("{intermediate}{data}"));
+
+    // Off, with and without an intermediate in the plan: applied (the plan may carry the intermediate for a hand-off).
+    e.sign(
+        "boundary",
+        &format!("{}  token_certificate: false\n", source("boundary")),
+        2,
+    );
+    assert!(matches!(e.loader.reload().await, Reloaded::Applied(_)));
+    e.sign("key-plan", &with_intermediate, 2);
+    assert!(matches!(e.loader.reload().await, Reloaded::Applied(_)));
+
+    // On with a plan that has no intermediate: refused whole, naming the document and the place.
+    e.sign("key-plan", plan, 3);
+    e.sign("boundary", &on, 3);
+    let (err, _) = refused(e.loader.reload().await);
+    assert!(
+        err.to_string()
+            .starts_with("KeyPlan: default.purposes: the Boundary turns the token certificate on"),
+        "{err}"
+    );
+    assert_ne!(
+        e.loader.snapshot().summaries(),
+        before,
+        "the first two applied"
+    );
+
+    // On with the intermediate at another algorithm, and with no token-signing key: refused too.
+    e.sign(
+        "key-plan",
+        &plan.replace(
+            data,
+            &format!("    - {{ purpose: x509-intermediate, algorithm: ES256, slot: 9c }}\n{data}"),
+        ),
+        4,
+    );
+    let (err, _) = refused(e.loader.reload().await);
+    assert!(
+        err.to_string().starts_with("KeyPlan: default.purposes: "),
+        "{err}"
+    );
+    e.sign(
+        "key-plan",
+        &with_intermediate.replace(
+            "    - { purpose: token-signing, algorithm: ES384, slot: 9a }\n",
+            "",
+        ),
+        5,
+    );
+    let (err, _) = refused(e.loader.reload().await);
+    assert!(
+        err.to_string().starts_with("KeyPlan: default.purposes: "),
+        "{err}"
+    );
+
+    // On with both keys: applied.
+    e.sign("key-plan", &with_intermediate, 6);
+    assert!(matches!(e.loader.reload().await, Reloaded::Applied(_)));
+}
+
 /// verifies: REQ-AUTHN-009
 #[tokio::test]
 async fn every_step_up_acr_of_the_policy_must_be_one_the_boundary_lists() {

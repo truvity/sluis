@@ -40,7 +40,18 @@ func handoffNode(t *testing.T, driver *fakeDriver) *node { return handoffNodeAll
 // handoffNodeAllowing is handoffNode with the admin socket told which peers it serves; nil keeps the test default.
 func handoffNodeAllowing(t *testing.T, driver *fakeDriver, allow func(uint32) bool) *node {
 	t.Helper()
+	return handoffNodeWith(t, driver, allow, false)
+}
+
+// handoffNodeWith is handoffNodeAllowing with the Boundary's token certificate switched as given (decision X1 A).
+func handoffNodeWith(t *testing.T, driver *fakeDriver, allow func(uint32) bool, tokenCertificate bool) *node {
+	t.Helper()
 	e := newTestEnv(t, "development")
+	if tokenCertificate {
+		b := proto.Clone(e.boundary).(*configv2alpha1.Boundary)
+		b.TokenCertificate = true
+		e.putBoundary(b)
+	}
 	plan := proto.Clone(e.plan).(*configv2alpha1.KeyPlan)
 	plan.Purposes = append(plan.Purposes, &configv2alpha1.KeyPurposePlan{Purpose: "x509-intermediate", Algorithm: "ES384", Slot: "9c"})
 	e.putPlan(plan)

@@ -31,7 +31,7 @@ import (
 // certifiedNode is a node whose intermediate has been certified by a throwaway root and installed.
 func certifiedNode(t *testing.T) (*node, *intRoot, *x509.Certificate) {
 	t.Helper()
-	n := handoffNode(t, nil)
+	n := handoffNodeWith(t, nil, nil, true)
 	root := newIntRoot(t, n)
 	der := certFor(t, n, root, true)
 	if _, err := install(n, "x509-intermediate", false, 1, der); err != nil {
@@ -242,7 +242,7 @@ func TestTheIntermediateSignsNothingButTheTokenCertificate(t *testing.T) {
 
 // There is nothing to certify under before an intermediate is installed: the refusal is its own, and nothing is signed.
 func TestTheIntermediateSignsNothingBeforeItIsInstalled(t *testing.T) {
-	n := handoffNode(t, nil)
+	n := handoffNodeWith(t, nil, nil, true)
 	_, err := signTBS(n, "ca", []byte{0x30, 0x00})
 	wantRefusal(t, err, connect.CodeFailedPrecondition, "intermediate")
 	_, err = putCertificate(n, "ca", "token-signing", []byte{0x30, 0x00})
@@ -551,6 +551,9 @@ func TestTokenKeyTellsCaTheKeyAndTheChain(t *testing.T) {
 // with no intermediate and refuses nothing, so a ca that waits makes no refusal record each time it looks.
 func TestTokenKeyOfAPlanWithoutAnIntermediateRefusesNothing(t *testing.T) {
 	e := newTestEnv(t, "development")
+	b := proto.Clone(e.boundary).(*configv2alpha1.Boundary)
+	b.TokenCertificate = true
+	e.putBoundary(b)
 	n := e.startedNode(nodeOpts{})
 	before, absent := n.audit.count(ActionRefuse), e.store.absentCount()
 	for range 5 {

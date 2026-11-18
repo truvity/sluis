@@ -103,6 +103,19 @@ func (o *mapping) str(k string) (string, error) {
 	return n.Value, nil
 }
 
+// boolean is a switch: a plain true or false, and false when the key is absent. Null, a string and a number are refused,
+// as store@'s reader refuses them.
+func (o *mapping) boolean(k string) (bool, error) {
+	n := o.take(k)
+	if n == nil {
+		return false, nil
+	}
+	if n.Kind != yaml.ScalarNode || signedconfig.ScalarOf(n) != signedconfig.KindBool {
+		return false, fmt.Errorf("%s: must be true or false", o.at(k))
+	}
+	return n.Value == "true", nil
+}
+
 func (o *mapping) required(k string) (string, error) {
 	s, err := o.str(k)
 	if err == nil && s == "" {
