@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// verifies: REQ-KEYS-111
+// verifies: REQ-KEYS-111, REQ-PKI-059
 // The Boundary payload vectors are shared with store@ (actors/store/tests/vectors.rs): key@ takes the environment of the
 // floor from the bytes it verified, so it must read them as store@ does.
 func TestBoundaryPayloadVectors(t *testing.T) {
@@ -34,6 +34,7 @@ func TestBoundaryPayloadVectors(t *testing.T) {
 				DefaultTenant string   `json:"default_tenant"`
 				DeclaredKinds []string `json:"declared_kinds"`
 				ACRValues     []string `json:"acr_values_supported"`
+				TokenCert     bool     `json:"token_certificate"`
 			} `json:"read"`
 		} `json:"cases"`
 	}
@@ -65,6 +66,9 @@ func TestBoundaryPayloadVectors(t *testing.T) {
 			}
 			if !slices.Equal(b.GetAcrValuesSupported(), w.ACRValues) && (len(b.GetAcrValuesSupported()) != 0 || len(w.ACRValues) != 0) {
 				t.Errorf("acr_values_supported = %v, want %v", b.GetAcrValuesSupported(), w.ACRValues)
+			}
+			if b.GetTokenCertificate() != w.TokenCert {
+				t.Errorf("token_certificate = %v, want %v", b.GetTokenCertificate(), w.TokenCert)
 			}
 			if !slices.Equal(b.GetDeclaredKinds(), w.DeclaredKinds) && (len(b.GetDeclaredKinds()) != 0 || len(w.DeclaredKinds) != 0) {
 				t.Errorf("declared_kinds = %v, want %v", b.GetDeclaredKinds(), w.DeclaredKinds)

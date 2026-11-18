@@ -357,6 +357,10 @@ func (g *generator) single(fd protoreflect.FieldDescriptor, rules *fieldRules) (
 		s.set("type", "integer")
 		s.set("minimum", 0)
 		s.set("maximum", 4294967295)
+	case protoreflect.BoolKind:
+		// A switch: the loaders read a plain true or false, and an absent key is false (the strict profile makes no other
+		// word a boolean).
+		s.set("type", "boolean")
 	case protoreflect.MessageKind:
 		if fd.Message().FullName() == "google.protobuf.Duration" {
 			// A duration range is a protovalidate rule: the pattern states the form only (ADR 0004).

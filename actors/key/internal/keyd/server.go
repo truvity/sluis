@@ -141,10 +141,15 @@ type Server struct {
 	// Set by Init, read-only afterwards.
 	environment   string
 	defaultTenant string
-	keys          map[string]purposeKey // the asymmetric purposes of the KeyPlan
-	recipient     string                // this node's label
-	wrappingPub   *ecdh.PublicKey
-	wrappingID    string // the RFC 7638 thumbprint of this node's wrapping key: its id in the KeyPlan
+	// tokenCertificate is the Boundary's switch of the token certificate (decision X1 A of 2026-11-18, ADR 0006 "Amendment of
+	// 2026-11-18"). Off, which is the default, key@ gives no chain for the token-signing key, signs no certificate and keeps
+	// none; the installation needs no intermediate. It is read from the verified Boundary when key@ starts.
+	tokenCertificate bool
+
+	keys        map[string]purposeKey // the asymmetric purposes of the KeyPlan
+	recipient   string                // this node's label
+	wrappingPub *ecdh.PublicKey
+	wrappingID  string // the RFC 7638 thumbprint of this node's wrapping key: its id in the KeyPlan
 
 	reported sync.Map // the recipient problems already audited, so that a pass repeats none
 

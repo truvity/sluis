@@ -120,6 +120,9 @@ func boundaryPayload(t *testing.T, b *configv2alpha1.Boundary) []byte {
 	if len(b.GetDeclaredKinds()) > 0 {
 		item["declared_kinds"] = b.GetDeclaredKinds()
 	}
+	if b.GetTokenCertificate() {
+		item["token_certificate"] = true
+	}
 	out, err := json.Marshal(map[string]any{"default": item})
 	if err != nil {
 		t.Fatal(err)

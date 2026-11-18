@@ -287,6 +287,15 @@ impl Obj {
         }
     }
 
+    /// A switch: a plain `true` or `false`; absent is false. Null, a string and a number are refused.
+    fn switch(&mut self, key: &str) -> R<bool> {
+        match self.take(key) {
+            None => Ok(false),
+            Some(Value::Bool(b)) => Ok(b),
+            Some(_) => err(&self.at(key), "must be true or false"),
+        }
+    }
+
     /// The value of a key, without taking it.
     fn peek(&self, key: &str) -> Option<&Value> {
         self.entries.iter().find(|(k, _)| k == key).map(|(_, v)| v)
@@ -508,6 +517,7 @@ fn boundary(mut o: Obj) -> R<pb::Boundary> {
             return err(&at, "is listed twice");
         }
     }
+    let token_certificate = o.switch("token_certificate")?;
     o.done()?;
     Ok(pb::Boundary {
         name,
@@ -519,6 +529,7 @@ fn boundary(mut o: Obj) -> R<pb::Boundary> {
         declared_kinds,
         default_tenant,
         acr_values_supported,
+        token_certificate,
         ..pb::Boundary::default()
     })
 }

@@ -216,7 +216,9 @@ need_env() {
 }
 
 # config_source copies the config sources to $state/config and adds what only the local installation has: the key of the
-# boundary's intermediate in the KeyPlan (the hand-off, below). The committed source is shared with the boards' prepare
+# boundary's intermediate in the KeyPlan (the hand-off, below), and the Boundary's switch of the token certificate, which the
+# committed source leaves off as the core does (decision X1 A of 2026-11-18) and this installation turns on, because it runs ca
+# and checks the x5c chain (keyset-check). The committed source is shared with the boards' prepare
 # (deploy/boards/prepare.sh), which signs a plan of its own; a purpose added there would make key@ on a board make a key on
 # its card at the next start, which the board run adds deliberately.
 config_source() {
@@ -231,6 +233,10 @@ config_source() {
 	t=$(mktemp)
 	AT=$line NEW='    - { purpose: x509-intermediate, algorithm: ES384, slot: 9c }' awk '$0 == ENVIRON["AT"] { print ENVIRON["NEW"] } { print }' "$state/config/key-plan.yaml" >"$t"
 	cat "$t" >"$state/config/key-plan.yaml"
+	local tenant='  default_tenant: acme'
+	[ "$(grep -cxF -- "$tenant" "$state/config/boundary.yaml")" = 1 ] || { echo "local: boundary.yaml does not hold the line '$tenant' once; update deploy/local/local.sh" >&2; rm -f "$t"; return 1; }
+	AT=$tenant NEW='  token_certificate: true' awk '{ print } $0 == ENVIRON["AT"] { print ENVIRON["NEW"] }' "$state/config/boundary.yaml" >"$t"
+	cat "$t" >"$state/config/boundary.yaml"
 	rm -f "$t"
 }
 

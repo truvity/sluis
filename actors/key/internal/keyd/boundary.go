@@ -42,7 +42,7 @@ func validPart(p string) bool {
 
 // decodeBoundary reads the payload of a Boundary document as store@ reads it (payload.rs `boundary`; the vectors in
 // tests/testdata/signed-config/boundary-payloads.json hold the two readers together): the item `default` with the name,
-// kind, level, environment and issuer, an optional uid_block, declared_kinds and default_tenant, and no other key.
+// kind, level, environment and issuer, an optional uid_block, declared_kinds, default_tenant, acr_values_supported and token_certificate, and no other key.
 func decodeBoundary(payload []byte) (*configv2alpha1.Boundary, error) {
 	root, err := signedconfig.StrictYAML(payload)
 	if err != nil {
@@ -145,6 +145,9 @@ func readBoundary(root *yaml.Node) (*configv2alpha1.Boundary, error) {
 			}
 			b.AcrValuesSupported = append(b.AcrValuesSupported, k.Value)
 		}
+	}
+	if b.TokenCertificate, err = o.boolean("token_certificate"); err != nil {
+		return nil, err
 	}
 	if err := o.done(); err != nil {
 		return nil, err

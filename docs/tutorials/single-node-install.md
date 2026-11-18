@@ -152,7 +152,7 @@ claims = jwt.decode(token, key.key, algorithms=["ES384"], issuer=issuer, audienc
 print(claims["sub"], claims["groups"])
 ```
 
-ES384 is sluis's default. The issuer is the `dev` boundary's own, with its own keys: a token of `dev` is refused by a relying party that pins another boundary's issuer ([0017](/decisions/0017-identity-and-sign-in/#issuers)). Each key-set entry carries an `x5c` chain to the test root, which a careful verifier checks.
+ES384 is sluis's default. The issuer is the `dev` boundary's own, with its own keys: a token of `dev` is refused by a relying party that pins another boundary's issuer ([0017](/decisions/0017-identity-and-sign-in/#issuers)). The local installation turns the token certificate on, so each ES384 key-set entry carries an `x5c` chain to the test root, which a careful verifier checks; an installation that leaves it off (the core does) publishes keys with no `x5c`.
 
 ## 8. Find the audit record
 

@@ -218,7 +218,7 @@ fn the_keyplan_payload_vectors_are_read_as_key_reads_them_in_go() {
     }
 }
 
-/// verifies: REQ-KEYS-111
+/// verifies: REQ-KEYS-111, REQ-PKI-059
 /// The Boundary payload vectors: key@ reads the same text in Go (actors/key/internal/keyd/boundary_vectors_test.go) and
 /// must read the same environment, because it applies the floor of the software key driver to what it verified.
 #[test]
@@ -281,6 +281,13 @@ fn the_boundary_payload_vectors_are_read_as_key_reads_them_in_go() {
                 .map(|a| a.iter().map(|k| k.as_str().unwrap().to_owned()).collect())
                 .unwrap_or_default();
             assert_eq!(b.acr_values_supported, acr, "{name}: acr_values_supported");
+            assert_eq!(
+                b.token_certificate,
+                read.get("token_certificate")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false),
+                "{name}: token_certificate"
+            );
         } else {
             let e = got.expect_err(name).to_string();
             let path = c["refused_path"].as_str().unwrap();

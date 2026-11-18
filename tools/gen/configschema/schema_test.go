@@ -227,6 +227,7 @@ func TestThePayloadShapes(t *testing.T) {
 		field("n", 5, descriptorpb.FieldDescriptorProto_TYPE_UINT32, "", false, nil),
 		field("l", 6, descriptorpb.FieldDescriptorProto_TYPE_STRING, "", true, nil),
 		field("d", 7, descriptorpb.FieldDescriptorProto_TYPE_MESSAGE, ".google.protobuf.Duration", false, nil),
+		field("t", 8, descriptorpb.FieldDescriptorProto_TYPE_BOOL, "", false, nil),
 	}}
 	single, err := schemaForRoot(t, payload("M", "m", "M", "single"), m)
 	if err != nil {
@@ -256,6 +257,7 @@ func TestThePayloadShapes(t *testing.T) {
 		{"a number is a 32-bit unsigned integer and is not null", get(t, single, "$defs", "M", "properties", "n"), `{"maximum":4294967295,"minimum":0,"type":"integer"}`},
 		{"a list that is not required may be null", get(t, single, "$defs", "M", "properties", "l", "type"), `["array","null"]`},
 		{"a duration is not null", get(t, single, "$defs", "M", "properties", "d", "type"), `"string"`},
+		{"a switch is a boolean and is not null", get(t, single, "$defs", "M", "properties", "t"), `{"type":"boolean"}`},
 	} {
 		if g := got(c.v); g != c.want && !sameJSON(g, c.want) {
 			t.Errorf("%s: got %s, want %s", c.name, g, c.want)
