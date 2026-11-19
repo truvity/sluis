@@ -296,7 +296,7 @@ message ReadResponse {
 
 ### The blob contract
 
-`sluis.port.blob.v2alpha1.BlobService` is the audit's own port, not one of store@'s four. It is served by the blob drivers (`fs` today, `s3-compatible` later) to the holders of the audit blob: `writer`, `witness`, `indexer` and `reader` ([0029](/decisions/0029-the-audit-log/#the-write-once-fence)). The path of an object is its key.
+`atoom.blob.v1alpha1.BlobService` (renamed from `sluis.port.blob.v2alpha1.BlobService` when the port moved to [atoom](https://github.com/truvity/atoom/tree/master/blob); the contract is vendored under `third_party/atoom/proto`, and its rules in prose are in [`blob/docs/blob-port.md`](https://github.com/truvity/atoom/blob/master/blob/docs/blob-port.md)) is the audit's own port, not one of store@'s four. It is served by the blob drivers (`fs` today, `s3-compatible` later) to the holders of the audit blob: `writer`, `witness`, `indexer` and `reader` ([0029](/decisions/0029-the-audit-log/#the-write-once-fence)). The path of an object is its key.
 
 ```proto
 service BlobService {

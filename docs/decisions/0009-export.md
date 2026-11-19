@@ -157,6 +157,10 @@ sequenceDiagram
     Note over E: a daily run rebuilds and removes
 ```
 
+### Amendment of 2026-11-19: the destination port and the directory driver moved to atoom
+
+Step 5 of [atoom's extraction plan](https://github.com/truvity/atoom/blob/master/docs/plan.md). The destination contract that "The destination port" above names (`atoom.destination.v1alpha1.DestinationService`, renamed from `sluis.port.destination.v2alpha1`; the calls, the messages and their numbers are the same), the Rust `Destination` trait with its service, the in-memory driver and the suite (the crate that was `sluis-destination`, now `atoom-destination-conformance`), and the directory driver (`destination/dir`) live in [truvity/atoom](https://github.com/truvity/atoom), and sluis pins them by commit (`third_party/atoom`, `just atoom-sync`). Nothing above changes in what a driver does, and the text of this record stays as it was: the rules of the port are documented next to it (`destination/docs/destination-port.md`, `destination/dir/docs/dir.md`), and the conformance kit is atoom's (the binary `destination-conformance`). What stays in sluis: exporter@, which uses atoom's trait and rules and keeps a client of its own for the driver's socket (`actors/exporter/src/driver_client.rs`, the dial of sluis's kit, which hands the caller's deadline and correlation id down), and the executable `driver-exporter-dir` (`drivers/exporter/dir`) as a thin host that registers atoom's library behind sluis's socket, peer credentials, registry owner and command line. The wire names changed with the package, so an exporter@ and a destination driver of two builds do not talk.
+
 ## Consequences
 
 - What leaves sluis is a short, reviewed list, and a reader of the registry can see every export and its consumer.

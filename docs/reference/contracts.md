@@ -15,11 +15,11 @@ Every major component of sluis is a ConnectRPC contract, written in Protobuf und
   | Owner | Package | Example service |
   |---|---|---|
   | An actor | `sluis.<actor>.v2alpha1` | `sluis.exchange.v2alpha1.ExchangeService`, `sluis.store.v2alpha1.StoreService` |
-  | A port, served by its drivers | `sluis.port.<port>.v2alpha1` | `sluis.port.blob.v2alpha1.BlobService`, `sluis.port.index.v2alpha1.IndexService` |
+  | A port, served by its drivers | `sluis.port.<port>.v2alpha1` | none today: every port is atoom's |
   | The integration contracts | `sluis.integration.v2alpha1` | `IntegrationService`, `UpstreamService`, `FactsSourceService` |
   | Types shared by several packages | `sluis.type.v2alpha1` | `Address`, `Grant`, `HttpReply` |
   | Types shared with atoom's ports and drivers, which atoom owns | `atoom.common.v1alpha1` | `Refusal`, `IndexEntry` ([atoom](https://github.com/truvity/atoom/tree/master/common), vendored under `third_party/atoom`) |
-  | A port that atoom owns, served by its drivers | `atoom.<port>.v1alpha1` | `atoom.key.v1alpha1.KeyStoreService`, `atoom.store.v1alpha1.ItemService`, `atoom.source.v1alpha1.SourceService` (vendored under `third_party/atoom`) |
+  | A port that atoom owns, served by its drivers | `atoom.<port>.v1alpha1` | `atoom.key.v1alpha1.KeyStoreService`, `atoom.store.v1alpha1.ItemService`, `atoom.source.v1alpha1.SourceService`, `atoom.blob.v1alpha1.BlobService`, `atoom.transport.v1alpha1.TransportService`, `atoom.index.v1alpha1.IndexService`, `atoom.destination.v1alpha1.DestinationService` (vendored under `third_party/atoom`) |
 
 - **A hyphen in an actor's name becomes an underscore:** `sluis.ssh_ca.v2alpha1`.
 - **Files live at the package's path:** `proto/sluis/exchange/v2alpha1/exchange.proto`. The Go and Rust code is generated from them and is not committed under `proto/`.
@@ -39,7 +39,7 @@ Every major component of sluis is a ConnectRPC contract, written in Protobuf und
 | Discovery and the key set | Anyone | Static documents in a bucket of the boundary ([0017](/decisions/0017-identity-and-sign-in/#issuers)) | The standards |
 | Public Connect services: the console API (built in the Parity phase), the signing API, and in the Quota phase the writing of limits | The console's single-page application, declared clients, CI jobs | Connect over HTTPS through `entry`, JSON or binary Protobuf | `proto/`, published as generated OpenAPI |
 | Internal services: actor to actor | The callers the call graph allows | Connect over a Unix socket with peer credentials, a Lambda invoke, in-cluster gRPC with a projected service-account token whose audience the callee checks, behind a NetworkPolicy (mutual TLS between callers is later work), or HTTPS with mutual TLS between boundaries; binary Protobuf | `proto/` |
-| Port contracts | The owning holder's port library | Connect over the driver's Unix socket | `proto/sluis/port/` ([Store API](/reference/store-api/#the-driver-contracts)) |
+| Port contracts | The owning holder's port library | Connect over the driver's Unix socket | atoom's `<port>/proto/`, vendored under `third_party/atoom/proto` ([Store API](/reference/store-api/#the-driver-contracts)) |
 | Integration contracts | Core actors | As internal services | `proto/sluis/integration/` ([Integration contracts](/architecture/components/#integration-contracts)) |
 
 - **`entry` serves no business logic of its own.** It validates each request against closed parameter lists generated from these contracts and from the standards, and forwards it to the owning actor ([0002](/decisions/0002-families-of-actors/#work-actors)).
