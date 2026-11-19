@@ -23,6 +23,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"
 tracing = "0.1"
 
 [dev-dependencies]
+atoom-blob-conformance.workspace = true
+atoom-socket.workspace = true
 atoom-blob.workspace = true
 connectrpc = { version = "=0.9.1", default-features = false, features = ["json", "gzip", "server"] }
 rustix = { version = "1", features = ["process"] }

@@ -239,3 +239,24 @@ fn serve_refuses_a_socket_gid_of_zero_or_text_before_it_listens() {
         assert!(!sock.exists());
     }
 }
+
+/// atoom's source kit, the suite of the binary `source-conformance`, run through the guarded socket against a directory with one document
+/// (`just conformance`).
+#[tokio::test]
+async fn the_atoom_source_kit_passes_through_the_guarded_socket() {
+    let (docs, s) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let bytes = b"{\"payload\":\"conformance\"}\n".to_vec();
+    std::fs::write(docs.path().join("boundary.jws"), &bytes).unwrap();
+    let sock = s.path().join("config-source.sock");
+    let stop = serve(&sock, docs.path(), "store");
+    up(&sock).await;
+    let fixture = atoom_source_conformance::Fixture {
+        name: "boundary".into(),
+        data: bytes,
+    };
+    let cases = atoom_source_conformance::source_suite(atoom_socket::dial(&sock), &fixture).await;
+    let mut out = Vec::new();
+    let verdict = atoom_source_conformance::report(&cases, &mut out);
+    assert!(verdict.is_ok(), "{}", String::from_utf8_lossy(&out));
+    let _ = stop.send(());
+}

@@ -21,7 +21,8 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1"
 atoom-common.workspace = true
-atoom-destination-conformance.workspace = true
+atoom-destination.workspace = true
+aws-lc-rs = "1"
 base64 = "0.22"
 buffa = { version = "=0.9.2", features = ["json"] }
 buffa-types = { version = "=0.9.2", features = ["json"] }
@@ -38,7 +39,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "net", "signal", "time",
 tracing = "0.1"
 
 [dev-dependencies]
-aws-lc-rs = "1"
+# The in-memory destination (`memory::Memory`) and the suite are the other end of the port in the tests; the product takes the trait from the port crate.
+atoom-destination-conformance.workspace = true
 futures = "0.3"
 rustix = { version = "1", features = ["process"] }
 # The directory driver is the other end of the destination port in the tests.

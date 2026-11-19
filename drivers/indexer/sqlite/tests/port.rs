@@ -261,3 +261,37 @@ async fn a_caller_that_is_not_the_one_named_is_refused_before_anything_is_read()
     assert!(index.search(&search()).unwrap().rows.is_empty());
     let _ = (stop_w.send(()), stop_r.send(()));
 }
+
+/// atoom's index kit, the suite of the binary `index-conformance`, run through the two guarded sockets, the indexer's and the reader's
+/// (`just conformance`). The kit cannot clean up (the contract has no delete): the index is a scratch one.
+#[tokio::test]
+async fn the_atoom_index_kit_passes_through_the_guarded_sockets() {
+    let (d, s) = (dir(), tempfile::tempdir().unwrap());
+    let index = Index::open(d.path()).unwrap();
+    let (wsock, rsock) = (s.path().join("index.sock"), s.path().join("index-ro.sock"));
+    // One process plays both callers, so each socket is served as the one that it answers (`OwnerOnly` and `Exact` are checked per socket).
+    let stop_w = serve(
+        &wsock,
+        Write(index.clone()).router(),
+        Allow::OwnerOnly("indexer"),
+        "indexer",
+    );
+    let stop_r = serve(
+        &rsock,
+        Read(index).router(),
+        Allow::Exact("reader"),
+        "reader",
+    );
+    up(&wsock).await;
+    up(&rsock).await;
+    let cases = atoom_index_conformance::index_suite(
+        atoom_socket::dial(&wsock),
+        atoom_socket::dial(&rsock),
+    )
+    .await;
+    let mut out = Vec::new();
+    let verdict = atoom_index_conformance::report(&cases, &mut out);
+    assert!(verdict.is_ok(), "{}", String::from_utf8_lossy(&out));
+    let _ = stop_w.send(());
+    let _ = stop_r.send(());
+}

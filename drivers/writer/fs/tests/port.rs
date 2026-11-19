@@ -173,3 +173,17 @@ async fn a_caller_that_is_not_the_owner_is_refused_before_anything_is_read() {
     assert!(!r.path().join("a").exists());
     let _ = stop.send(());
 }
+
+/// atoom's blob kit, the suite of the binary `blob-conformance`, run through the guarded socket against an empty root (`just conformance`).
+#[tokio::test]
+async fn the_atoom_blob_kit_passes_through_the_guarded_socket() {
+    let (r, s) = (root(), tempfile::tempdir().unwrap());
+    let sock = s.path().join("blob.sock");
+    let stop = serve(&sock, r.path(), "writer");
+    up(&sock).await;
+    let cases = atoom_blob_conformance::blob_suite(atoom_socket::dial(&sock)).await;
+    let mut out = Vec::new();
+    let verdict = atoom_blob_conformance::report(&cases, &mut out);
+    assert!(verdict.is_ok(), "{}", String::from_utf8_lossy(&out));
+    let _ = stop.send(());
+}

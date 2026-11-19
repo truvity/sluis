@@ -19,7 +19,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use atoom_destination_conformance::check_address;
+use atoom_destination::check_address;
 use buffa_types::google::protobuf::Duration as PbDuration;
 use serde_json::{Map, Value};
 use sluis_proto::sluis::config::v2alpha1::{ExportDestination, ExportedDocument};
