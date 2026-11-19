@@ -39,7 +39,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use crate::driver_client::Client as DriverClient;
 use anyhow::bail;
-use atoom_destination_conformance::Destination;
+use atoom_destination::Destination;
 use clap::{Arg, Command};
 use sluis_audit::Config as AuditConfig;
 use sluis_kit::cli::{Commands, Flags, Refused, shutdown_signal};

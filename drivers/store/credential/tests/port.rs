@@ -243,3 +243,23 @@ fn a_credentials_directory_that_others_can_write_is_not_served() {
     std::fs::set_permissions(creds.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
     assert!(Dir::open(creds.path()).is_ok());
 }
+
+/// atoom's source kit, the suite of the binary `source-conformance`, run through the guarded socket against a directory with one credential
+/// (`just conformance`).
+#[tokio::test]
+async fn the_atoom_source_kit_passes_through_the_guarded_socket() {
+    let (creds, s) = (credentials(), tempfile::tempdir().unwrap());
+    credential(creds.path(), "upstream-workforce", 0o400);
+    let sock = s.path().join("secret-source.sock");
+    let stop = serve(&sock, creds.path(), "store");
+    up(&sock).await;
+    let fixture = atoom_source_conformance::Fixture {
+        name: "upstream-workforce".into(),
+        data: SECRET.to_vec(),
+    };
+    let cases = atoom_source_conformance::source_suite(atoom_socket::dial(&sock), &fixture).await;
+    let mut out = Vec::new();
+    let verdict = atoom_source_conformance::report(&cases, &mut out);
+    assert!(verdict.is_ok(), "{}", String::from_utf8_lossy(&out));
+    let _ = stop.send(());
+}

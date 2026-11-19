@@ -202,3 +202,33 @@ async fn each_socket_answers_its_one_caller_and_nobody_else() {
         let _ = stop.send(());
     }
 }
+
+/// atoom's blob kit in its read-only form (`blob-conformance --read-only`), run through the guarded socket against a root with one object
+/// made as the writing driver makes them (`just conformance`).
+#[tokio::test]
+async fn the_atoom_blob_read_kit_passes_through_the_guarded_socket() {
+    let (r, s) = (root(), tempfile::tempdir().unwrap());
+    let me = rustix::process::geteuid().as_raw();
+    let bytes = b"fixture bytes\n".to_vec();
+    Fs::open(r.path())
+        .unwrap()
+        .create("audit/fixture", &bytes)
+        .unwrap();
+    let sock = s.path().join("blob.sock");
+    let stop = serve(
+        &sock,
+        Fs::open_read_only(r.path(), me).unwrap(),
+        Allow::OwnerOnly("indexer"),
+        "indexer",
+    );
+    up(&sock).await;
+    let fixture = atoom_blob_conformance::Fixture {
+        path: "audit/fixture".into(),
+        data: bytes,
+    };
+    let cases = atoom_blob_conformance::blob_read_suite(atoom_socket::dial(&sock), &fixture).await;
+    let mut out = Vec::new();
+    let verdict = atoom_blob_conformance::report(&cases, &mut out);
+    assert!(verdict.is_ok(), "{}", String::from_utf8_lossy(&out));
+    let _ = stop.send(());
+}

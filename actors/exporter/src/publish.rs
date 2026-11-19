@@ -27,11 +27,12 @@ use std::future::Future;
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime};
 
-use atoom_destination_conformance::{Destination, Document, Error, Purged, sha256_hex};
+use atoom_destination::{Destination, Document, Error, Purged};
 use sluis_proto::sluis::exporter::v2alpha1::ExportReport;
 
 use crate::audit::{Auditor, Written};
 use crate::config::Doc;
+use crate::digest::sha256_hex;
 use crate::keyset::{self, Built};
 use crate::state::{Read, Reports, stamp};
 
@@ -224,7 +225,7 @@ impl Publisher {
         &self,
         driver: &D,
         address: &str,
-    ) -> Result<Option<atoom_destination_conformance::Listed>, Error> {
+    ) -> Result<Option<atoom_destination::Listed>, Error> {
         let mut token: Option<String> = None;
         for _ in 0..100 {
             let page = self.call(driver.list(address, token.as_deref(), 0)).await?;

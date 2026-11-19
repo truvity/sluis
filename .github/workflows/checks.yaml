@@ -172,6 +172,8 @@ jobs:
           restore-keys: |
             code-${{ runner.os }}-
       - run: devbox run -- just check-code
+      # atoom's conformance kits through the guarded sockets of the hosts (they run inside check-code's `cargo test --workspace` too; this names them).
+      - run: devbox run -- just conformance
       # The release builds each executable alone (`cargo zigbuild --package P`), so Cargo resolves the features of P without the
       # features a sibling would add; every job above builds the workspace in one run, which unifies them. A change that
       # compiles only through a sibling's feature would pass them all and fail the release on main. This checks each Rust package

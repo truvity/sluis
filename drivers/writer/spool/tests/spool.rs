@@ -769,3 +769,20 @@ async fn facts_lost_while_no_spool_is_listening_are_counted_in_the_first_record_
     assert_eq!(rec["unmapped"]["sluis"]["lost"]["total"], 3);
     u.down();
 }
+
+/// atoom's transport kit, the suite of the binary `transport-conformance`, run through the two guarded sockets, emit and receive
+/// (`just conformance`). The test process is `entry` on the emit socket (the call graph lets it emit) and `writer` on the receive socket.
+#[tokio::test]
+async fn the_atoom_transport_kit_passes_through_the_guarded_sockets() {
+    let (r, s) = (root(), tempfile::tempdir().unwrap());
+    let u = up(r.path(), s.path(), Some("entry"), Config::default()).await;
+    let cases = atoom_transport_conformance::transport_suite(
+        atoom_socket::dial(&u.emit),
+        atoom_socket::dial(&u.receive),
+    )
+    .await;
+    let mut out = Vec::new();
+    let verdict = atoom_transport_conformance::report(&cases, &mut out);
+    assert!(verdict.is_ok(), "{}", String::from_utf8_lossy(&out));
+    u.down();
+}

@@ -10,30 +10,34 @@ exclude = [
 [workspace.dependencies]
 # atoom, pinned by commit until its first release (docs/plan.md of truvity/atoom, steps 1 to 5): `just atoom-sync` moves this line, go.mod and
 # third_party/atoom together, and `just atoom-check` holds them to one commit. Then it moves to `tag = "v0.1.0"`.
-atoom-common = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
+atoom-common = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
 # The item port (step 3): its contract, the conformance kit, the two drivers' libraries and the plain socket host the kit's client uses.
-atoom-socket = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
-atoom-store = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
-atoom-store-conformance = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
-atoom-store-memory = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
-atoom-store-rqlite = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
+atoom-socket = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-store = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-store-conformance = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-store-memory = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-store-rqlite = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
 # The source port (step 4): its contract and the two drivers' libraries. Both drivers are Linux only, as sluis's boards are.
-atoom-source = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
-atoom-source-credential = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
-atoom-source-file = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
+atoom-source = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-source-conformance = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-source-credential = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-source-file = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
 # The audit ports (step 5): the contracts and the libraries of the five drivers. The blob drivers are Linux only, as sluis's
-# boards are. The destination kit also holds the Destination trait, the service and the in-memory driver that exporter@ and its tests use.
-atoom-blob = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
-atoom-blob-fs = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
-atoom-blob-fsdir = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
-atoom-blob-fsreadonly = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
-atoom-destination = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
-atoom-destination-conformance = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
-atoom-destination-dir = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
-atoom-index = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
-atoom-index-sqlite = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
-atoom-transport = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
-atoom-transport-spool = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
+# boards are. `atoom-destination` is the port crate with the `Destination` trait and the rules (exporter@ takes them from it); the destination kit holds the service, the in-memory driver and the suite.
+atoom-blob = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-blob-conformance = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-blob-fs = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-blob-fsdir = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-blob-fsreadonly = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-destination = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-destination-conformance = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-destination-dir = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-index = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-index-conformance = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-index-sqlite = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-transport = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-transport-conformance = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
+atoom-transport-spool = { git = "https://github.com/truvity/atoom", rev = "02ecbac39cb686bf345fd4e2bc13aea4d12163cd" }
 
 [workspace.package]
 edition = "2024"

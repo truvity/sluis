@@ -359,6 +359,30 @@ rust-check-isolated base: rust-toolchain
         cargo check --locked --package "$p"
     done
 
+# atoom's conformance kits (github.com/truvity/atoom, pinned: third_party/atoom/README.md) against the hosts that sluis builds around the
+# drivers, each through the guarded socket the host serves, with the process's own uid as the caller the host admits (the test uid table
+# of sluis-kit, which no product build has). The key kit is Go and runs in the key drivers' tests (`just go-test`). The Rust kits run here as
+# the library calls that the kit binaries make (`source-conformance`, `blob-conformance`, `transport-conformance`, `index-conformance`,
+# `store-conformance`, `destination-conformance`: each main is a dial, the suite and the report), so there is no binary to install:
+#   source: the file and credential hosts          blob: the fs host (writes) and the read-only fs host (`--read-only`)
+#   transport: the spool host (both sockets)       index: the sqlite host (both sockets)
+#   store: the rqlite host (both namespaces; needs rqlited) and the in-memory engine behind store@'s guard
+#   destination: the directory host
+# `just check-code` runs the same tests inside `cargo test --workspace`; this recipe runs only them, and CI names the step.
+conformance: rust-toolchain rqlite-fetch
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export SLUIS_REQUIRE_RQLITED=1
+    echo "conformance: the source, blob, transport and index kits through the hosts"
+    cargo test --locked -p file -p credential -p sluis-driver-writer-fs -p sluis-driver-indexer-fs -p sluis-driver-writer-spool \
+        -p sluis-driver-indexer-sqlite -- the_atoom_ --test-threads=4
+    echo "conformance: the store kit through the rqlite host and the in-memory engine"
+    cargo test --locked -p rqlite --test driver -- the_driver_passes_the_item_suite_on_both_ports
+    cargo test --locked -p store --test memory_engine -- the_memory_engine_passes_the_item_suite
+    echo "conformance: the destination kit through the directory host"
+    cargo test --locked -p sluis-driver-exporter-dir --test port -- the_suite_passes_through_the_socket
+    echo "conformance: done"
+
 # Format check and Clippy over the Cargo workspace.
 rust-lint: rust-toolchain rust-feature-guard
     cargo fmt --all --check
