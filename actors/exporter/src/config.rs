@@ -467,6 +467,16 @@ mod tests {
         );
     }
 
+    /// The first segment `.atoom` is a driver's own (atoom 0.1.0 reserves it; it reserved `.sluis` before), so a document at such an
+    /// address is refused at the load, and `.sluis` is an ordinary segment.
+    #[test]
+    fn an_address_in_the_reserved_segment_of_atoom_is_refused() {
+        assert_eq!(refused(&json!({"address": ".atoom/jwks"})), Some("address"));
+        assert_eq!(refused(&json!({"address": ".atoom"})), Some("address"));
+        assert_eq!(refused(&json!({"address": "keys/.atoom"})), None);
+        assert_eq!(refused(&json!({"address": ".sluis/jwks"})), None);
+    }
+
     #[test]
     fn the_rest_of_the_check() {
         assert_eq!(refused(&json!({"address": "../jwks"})), Some("address"));

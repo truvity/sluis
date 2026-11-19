@@ -11,7 +11,7 @@ use atoom_blob::atoom::blob::v1alpha1::{
     BlobGetRequest, BlobListRequest, BlobServiceClient, CreateRequest, PutRequest,
 };
 use atoom_blob_fsdir::Fs;
-use atoom_blob_fsreadonly::{ReadOnly, suite};
+use atoom_blob_fsreadonly::ReadOnly;
 use connectrpc::error::ErrorCode;
 use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
 
@@ -71,11 +71,6 @@ fn get(path: &str) -> BlobGetRequest {
         path: path.into(),
         ..Default::default()
     }
-}
-
-#[test]
-fn the_read_side_of_the_port_suite_passes() {
-    suite::run_temp().unwrap();
 }
 
 #[tokio::test]
@@ -203,16 +198,15 @@ async fn each_socket_answers_its_one_caller_and_nobody_else() {
     }
 }
 
-/// atoom's blob kit in its read-only form (`blob-conformance --read-only`), run through the guarded socket against a root with one object
-/// made as the writing driver makes them (`just conformance`).
+/// The smoke test of this host. atoom proves the read-only fs driver against the blob contract in its own CI; this proves that the host starts
+/// it behind sluis's guarded socket and that one read comes back (`just atoom-smoke`).
 #[tokio::test]
-async fn the_atoom_blob_read_kit_passes_through_the_guarded_socket() {
+async fn the_atoom_driver_smoke_one_read_through_the_guarded_socket() {
     let (r, s) = (root(), tempfile::tempdir().unwrap());
     let me = rustix::process::geteuid().as_raw();
-    let bytes = b"fixture bytes\n".to_vec();
     Fs::open(r.path())
         .unwrap()
-        .create("audit/fixture", &bytes)
+        .create("audit/fixture", b"fixture bytes\n")
         .unwrap();
     let sock = s.path().join("blob.sock");
     let stop = serve(
@@ -222,13 +216,11 @@ async fn the_atoom_blob_read_kit_passes_through_the_guarded_socket() {
         "indexer",
     );
     up(&sock).await;
-    let fixture = atoom_blob_conformance::Fixture {
-        path: "audit/fixture".into(),
-        data: bytes,
-    };
-    let cases = atoom_blob_conformance::blob_read_suite(atoom_socket::dial(&sock), &fixture).await;
-    let mut out = Vec::new();
-    let verdict = atoom_blob_conformance::report(&cases, &mut out);
-    assert!(verdict.is_ok(), "{}", String::from_utf8_lossy(&out));
+    let got = client(&sock)
+        .get(get("audit/fixture"))
+        .await
+        .unwrap()
+        .into_owned();
+    assert_eq!(got.data, b"fixture bytes\n");
     let _ = stop.send(());
 }

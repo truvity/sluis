@@ -10,8 +10,8 @@ use std::path::Path;
 use atoom_blob::atoom::blob::v1alpha1::{
     BlobGetRequest, BlobListRequest, BlobServiceClient, CreateRequest, PutRequest,
 };
+use atoom_blob_fs::Fs;
 use atoom_blob_fs::service::Service;
-use atoom_blob_fs::{Fs, suite};
 use connectrpc::error::ErrorCode;
 use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
 
@@ -56,16 +56,10 @@ fn root() -> tempfile::TempDir {
     d
 }
 
-/// verifies: REQ-AUDIT-103, REQ-TEST-009, REQ-ISO-022, REQ-AUDIT-008
-#[test]
-fn the_port_suite_passes() {
-    suite::run_temp().unwrap();
-}
-
 /// A name that exists is refused to a second create whatever the bytes, and a put changes nothing but a pointer: the
 /// port has no way to rewrite a sealed object, and no delete.
 ///
-/// verifies: REQ-ISO-022, REQ-AUDIT-025
+/// verifies: REQ-AUDIT-103, REQ-ISO-022, REQ-AUDIT-025
 #[tokio::test]
 async fn the_writer_uses_the_port_and_every_refusal_names_a_reason() {
     let (r, s) = (root(), tempfile::tempdir().unwrap());
@@ -174,16 +168,31 @@ async fn a_caller_that_is_not_the_owner_is_refused_before_anything_is_read() {
     let _ = stop.send(());
 }
 
-/// atoom's blob kit, the suite of the binary `blob-conformance`, run through the guarded socket against an empty root (`just conformance`).
+/// The smoke test of this host. atoom proves the fs blob driver against the blob contract in its own CI; this proves that the host starts it
+/// behind sluis's guarded socket and that one write and one read come back (`just atoom-smoke`).
 #[tokio::test]
-async fn the_atoom_blob_kit_passes_through_the_guarded_socket() {
+async fn the_atoom_driver_smoke_one_create_and_one_read_through_the_guarded_socket() {
     let (r, s) = (root(), tempfile::tempdir().unwrap());
     let sock = s.path().join("blob.sock");
     let stop = serve(&sock, r.path(), "writer");
     up(&sock).await;
-    let cases = atoom_blob_conformance::blob_suite(atoom_socket::dial(&sock)).await;
-    let mut out = Vec::new();
-    let verdict = atoom_blob_conformance::report(&cases, &mut out);
-    assert!(verdict.is_ok(), "{}", String::from_utf8_lossy(&out));
+    let client = dial(&sock);
+    let c = BlobServiceClient::new(client.transport(), client.config());
+    c.create(CreateRequest {
+        path: "a/b".into(),
+        data: b"x".to_vec(),
+        ..Default::default()
+    })
+    .await
+    .unwrap();
+    let got = c
+        .get(BlobGetRequest {
+            path: "a/b".into(),
+            ..Default::default()
+        })
+        .await
+        .unwrap()
+        .into_owned();
+    assert_eq!(got.data, b"x");
     let _ = stop.send(());
 }

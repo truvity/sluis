@@ -22,8 +22,6 @@ sluis-kit = { path = "../../../kits/rust/sluis-kit" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 
 [dev-dependencies]
-atoom-index-conformance.workspace = true
-atoom-socket.workspace = true
 atoom-index.workspace = true
 buffa = { version = "=0.9.2", features = ["json"] }
 # Lets a test choose which uid is which actor; only a dev edge turns it on.

@@ -136,7 +136,8 @@ requirements:
     rationale: "A fence that holds for one writer can still let two concurrent writers both succeed, as a blob store without conditional writes does."
     level: MUST
     source: design-decision
-    status: done
+    status: partial
+    gap: proved-in-atoom
     milestone: core
     runtimes: all
     standards:

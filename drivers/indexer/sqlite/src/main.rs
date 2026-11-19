@@ -1,6 +1,6 @@
 //! The host of the `sqlite` index driver of the indexer.
 //!
-//! The driver is atoom's (github.com/truvity/atoom, `index/sqlite`, pinned by commit: `third_party/atoom/README.md`): the index port over one
+//! The driver is atoom's (github.com/truvity/atoom, `index/sqlite`, pinned by release: `third_party/atoom/README.md`): the index port over one
 //! SQLite file with FTS5. This file is what is sluis's: the two sockets, one for each caller, with the peer credentials and a check of their
 //! own, the command line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
 //!

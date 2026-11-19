@@ -1,3 +1,5 @@
 source: truvity/atoom
-commit: 02ecbac39cb686bf345fd4e2bc13aea4d12163cd
+version: 0.1.0
+tag: v0.1.0
+commit: a74d671d99aadaa589e48a534396f813cd2073a9
 sha256: dbf24f6cecefa18633d5cbf2b9eb4b0b8e7982ebabc5c7ee12d0b83d6bcca322

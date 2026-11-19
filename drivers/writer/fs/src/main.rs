@@ -1,6 +1,6 @@
 //! The host of the `fs` blob driver of the writer.
 //!
-//! The driver is atoom's (github.com/truvity/atoom, `blob/fs`, pinned by commit: `third_party/atoom/README.md`): the blob port over a local
+//! The driver is atoom's (github.com/truvity/atoom, `blob/fs`, pinned by release: `third_party/atoom/README.md`): the blob port over a local
 //! directory. This file is what is sluis's: the socket with the peer credentials of its caller, the owner check (only `writer` may open it),
 //! the command line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
 //!

@@ -9,7 +9,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-// The item port is atoom's (github.com/truvity/atoom/store, pinned by commit: third_party/atoom/README.md), and this test holds the pinned
+// The item port is atoom's (github.com/truvity/atoom/store, pinned by release: third_party/atoom/README.md), and this test holds the pinned
 // contract to what the requirement says of it: a driver sees items only.
 //
 // verifies: REQ-DATA-069
