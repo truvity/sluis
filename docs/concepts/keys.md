@@ -18,6 +18,8 @@ The key store is the choice of key@'s driver, which is private to key@. There ar
 | **YubiKey PIV** | `yubikey-piv` | [boards](/runtimes/#boards) and other installations on single-board computers: one card per board |
 | **Software** | `software` | [local](/runtimes/#local), CI, and development |
 
+The key port and the software and YubiKey PIV drivers are libraries of [atoom](https://github.com/truvity/atoom) (`key`, `key/software`, `key/yubikeypiv`); sluis runs each behind its own socket, peer check and command line. What a card does, its slot plan, touch and PIN, and the measurements behind them are documented next to the driver ([`key/yubikeypiv/docs`](https://github.com/truvity/atoom/tree/master/key/yubikeypiv/docs), [`key/slotplan/docs`](https://github.com/truvity/atoom/tree/master/key/slotplan/docs)).
+
 The local installation uses software keys and needs no hardware. A dedicated development card is opt-in: only key@ reaches it, through the host's smart-card service. The floor is in code: the software driver refuses to start when the environment is `production`, and configuration chooses only among the modes the floor allows, so a development configuration loaded on the wrong board cannot make a software key a production authority key ([ADR 0006](/decisions/0006-keys-and-sealing/#floors-in-code)). On Kubernetes the keys are AWS KMS keys; the workload tokens a pod presents are the cluster's projected service-account tokens, which the cluster signs and sluis neither holds nor signs.
 
 PKCS#11 drivers (YubiHSM 2, Nitrokey HSM 2), more drivers and post-quantum keys come later ([#1029](https://github.com/truvity/sluis/issues/1029)).
