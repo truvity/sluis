@@ -15,10 +15,10 @@ import (
 
 	"connectrpc.com/connect"
 
+	keyv1alpha1 "github.com/truvity/atoom/key/gen/atoom/key/v1alpha1"
 	"github.com/truvity/sluis/v2/actors/key/internal/envelope"
 	"github.com/truvity/sluis/v2/actors/key/internal/wrap"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
-	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
 	"github.com/truvity/sluis/v2/kits/go/rpc"
 )
 
@@ -294,7 +294,7 @@ func (s *Server) unwrap(ctx context.Context, ref keyRef, w *keyv2alpha1.DataKeyW
 	if _, err := wrap.ParsePublic(w.GetEphemeralPublic()); err != nil {
 		return nil, errors.New("keyd: the wrap has a bad ephemeral key")
 	}
-	res, err := s.driver.Ecdh(ctx, connect.NewRequest(&keystorev2alpha1.EcdhRequest{
+	res, err := s.driver.Ecdh(ctx, connect.NewRequest(&keyv1alpha1.EcdhRequest{
 		Purpose: wrappingPurpose, PeerPublic: w.GetEphemeralPublic(),
 	}))
 	if err != nil {

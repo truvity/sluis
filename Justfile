@@ -503,7 +503,7 @@ check-code: rust-toolchain rqlite-fetch
     SLUIS_REQUIRE_RQLITED=1 just go-lint go-test rust-lint rust-test
 
 # The advisory gate (REQ-SUPPLY-030), as the job `advisories` of checks.yaml runs it: govulncheck over every Go module
-# (the default build, and the card driver with the tag sluis_card), cargo audit over every Cargo.lock and osv-scanner over
+# (the default build, and the card driver with the tag atoom_card), cargo audit over every Cargo.lock and osv-scanner over
 # the lock files (go.mod, Cargo.lock, site/yarn.lock). It fails on a known advisory that affects us, unless
 # tools/advisories/ignore.yaml lists it with a reason and an expiry date. Needs the network (vuln.go.dev, api.osv.dev, the
 # RustSec database), and for the card build gcc, pkg-config and libpcsclite-dev on the host; `just check-advisories

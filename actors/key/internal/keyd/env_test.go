@@ -30,12 +30,12 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/truvity/atoom/common/refusal"
+	keyv1alpha1 "github.com/truvity/atoom/key/gen/atoom/key/v1alpha1"
+	"github.com/truvity/atoom/key/gen/atoom/key/v1alpha1/keyv1alpha1connect"
 	"github.com/truvity/sluis/v2/actors/key/internal/envelope"
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
-	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1/keystorev2alpha1connect"
 	storev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1/storev2alpha1connect"
 	typev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/type/v2alpha1"
@@ -347,7 +347,7 @@ func (f *fakeStore) wrapWriteCount() int {
 
 // fakeDriver is a key-store driver that holds software keys in memory, one per purpose.
 type fakeDriver struct {
-	keystorev2alpha1connect.UnimplementedKeyStoreServiceHandler
+	keyv1alpha1connect.UnimplementedKeyStoreServiceHandler
 	store string
 	mu    sync.Mutex
 	keys  map[string]*ecdsa.PrivateKey
@@ -393,7 +393,7 @@ func newFakeDriver(storeName string) *fakeDriver {
 
 // wrappingID makes the wrapping key if there is none and returns its RFC 7638 thumbprint: the id a KeyPlan lists.
 func (d *fakeDriver) wrappingID() string {
-	res, err := d.Ensure(context.Background(), connect.NewRequest(&keystorev2alpha1.EnsureRequest{Purpose: "wrapping", Algorithm: "ECDH-P384"}))
+	res, err := d.Ensure(context.Background(), connect.NewRequest(&keyv1alpha1.EnsureRequest{Purpose: "wrapping", Algorithm: "ECDH-P384"}))
 	if err != nil {
 		panic(err)
 	}
@@ -404,13 +404,13 @@ func (d *fakeDriver) wrappingID() string {
 	return id
 }
 
-func (d *fakeDriver) Capabilities(context.Context, *connect.Request[keystorev2alpha1.CapabilitiesRequest]) (*connect.Response[keystorev2alpha1.CapabilitiesResponse], error) {
+func (d *fakeDriver) Capabilities(context.Context, *connect.Request[keyv1alpha1.CapabilitiesRequest]) (*connect.Response[keyv1alpha1.CapabilitiesResponse], error) {
 	// Both drivers declare RS256: the card holds the RSA key of the RS256 purpose in slot 88.
 	algs := []string{"ES384", "ES256", "RS256", "ECDH-P384"}
-	return connect.NewResponse(&keystorev2alpha1.CapabilitiesResponse{Store: d.store, Attests: d.store == "yubikey-piv", Algorithms: algs}), nil
+	return connect.NewResponse(&keyv1alpha1.CapabilitiesResponse{Store: d.store, Attests: d.store == "yubikey-piv", Algorithms: algs}), nil
 }
 
-func (d *fakeDriver) Ensure(_ context.Context, req *connect.Request[keystorev2alpha1.EnsureRequest]) (*connect.Response[keystorev2alpha1.EnsureResponse], error) {
+func (d *fakeDriver) Ensure(_ context.Context, req *connect.Request[keyv1alpha1.EnsureRequest]) (*connect.Response[keyv1alpha1.EnsureResponse], error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if req.Msg.GetAlgorithm() == "RS256" {
@@ -426,7 +426,7 @@ func (d *fakeDriver) Ensure(_ context.Context, req *connect.Request[keystorev2al
 		if err != nil {
 			return nil, err
 		}
-		return connect.NewResponse(&keystorev2alpha1.EnsureResponse{SpkiDer: der, Created: !ok}), nil
+		return connect.NewResponse(&keyv1alpha1.EnsureResponse{SpkiDer: der, Created: !ok}), nil
 	}
 	k, ok := d.keys[req.Msg.GetPurpose()]
 	if !ok {
@@ -452,17 +452,17 @@ func (d *fakeDriver) Ensure(_ context.Context, req *connect.Request[keystorev2al
 	if err != nil {
 		return nil, err
 	}
-	res := &keystorev2alpha1.EnsureResponse{SpkiDer: der, Created: !ok, CreatedAt: timestamppb.New(d.made[req.Msg.GetPurpose()])}
+	res := &keyv1alpha1.EnsureResponse{SpkiDer: der, Created: !ok, CreatedAt: timestamppb.New(d.made[req.Msg.GetPurpose()])}
 	return connect.NewResponse(res), nil
 }
 
-func (d *fakeDriver) PublicKey(_ context.Context, req *connect.Request[keystorev2alpha1.KeyStorePublicKeyRequest]) (*connect.Response[keystorev2alpha1.KeyStorePublicKeyResponse], error) {
+func (d *fakeDriver) PublicKey(_ context.Context, req *connect.Request[keyv1alpha1.PublicKeyRequest]) (*connect.Response[keyv1alpha1.PublicKeyResponse], error) {
 	if rk := d.rsaKey(req.Msg.GetPurpose()); rk != nil {
 		der, err := x509.MarshalPKIXPublicKey(&rk.PublicKey)
 		if err != nil {
 			return nil, err
 		}
-		return connect.NewResponse(&keystorev2alpha1.KeyStorePublicKeyResponse{SpkiDer: der}), nil
+		return connect.NewResponse(&keyv1alpha1.PublicKeyResponse{SpkiDer: der}), nil
 	}
 	k, err := d.key(req.Msg.GetPurpose())
 	if err != nil {
@@ -472,7 +472,7 @@ func (d *fakeDriver) PublicKey(_ context.Context, req *connect.Request[keystorev
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&keystorev2alpha1.KeyStorePublicKeyResponse{SpkiDer: der}), nil
+	return connect.NewResponse(&keyv1alpha1.PublicKeyResponse{SpkiDer: der}), nil
 }
 
 // rsaKey is the RSA key of the purpose, or nil.
@@ -492,7 +492,7 @@ func (d *fakeDriver) key(purpose string) (*ecdsa.PrivateKey, error) {
 	return k, nil
 }
 
-func (d *fakeDriver) Sign(_ context.Context, req *connect.Request[keystorev2alpha1.KeyStoreSignRequest]) (*connect.Response[keystorev2alpha1.KeyStoreSignResponse], error) {
+func (d *fakeDriver) Sign(_ context.Context, req *connect.Request[keyv1alpha1.SignRequest]) (*connect.Response[keyv1alpha1.SignResponse], error) {
 	// As the card driver: the pin-release key signs only the texts the driver writes (BeginPinRelease, SealPin).
 	if req.Msg.GetPurpose() == "pin-release" {
 		return nil, refusal.New(connect.CodeInvalidArgument, "purpose", "purpose")
@@ -516,7 +516,7 @@ func (d *fakeDriver) Sign(_ context.Context, req *connect.Request[keystorev2alph
 		if err != nil {
 			return nil, err
 		}
-		return connect.NewResponse(&keystorev2alpha1.KeyStoreSignResponse{SignatureDer: sig}), nil
+		return connect.NewResponse(&keyv1alpha1.SignResponse{SignatureDer: sig}), nil
 	}
 	k, err := d.key(req.Msg.GetPurpose())
 	if err != nil {
@@ -531,10 +531,10 @@ func (d *fakeDriver) Sign(_ context.Context, req *connect.Request[keystorev2alph
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&keystorev2alpha1.KeyStoreSignResponse{SignatureDer: sig}), nil
+	return connect.NewResponse(&keyv1alpha1.SignResponse{SignatureDer: sig}), nil
 }
 
-func (d *fakeDriver) Ecdh(_ context.Context, req *connect.Request[keystorev2alpha1.EcdhRequest]) (*connect.Response[keystorev2alpha1.EcdhResponse], error) {
+func (d *fakeDriver) Ecdh(_ context.Context, req *connect.Request[keyv1alpha1.EcdhRequest]) (*connect.Response[keyv1alpha1.EcdhResponse], error) {
 	if d.isLocked() {
 		return nil, refusal.New(connect.CodeFailedPrecondition, "locked", "")
 	}
@@ -556,7 +556,7 @@ func (d *fakeDriver) Ecdh(_ context.Context, req *connect.Request[keystorev2alph
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&keystorev2alpha1.EcdhResponse{SharedSecret: secret}), nil
+	return connect.NewResponse(&keyv1alpha1.EcdhResponse{SharedSecret: secret}), nil
 }
 
 // recorder is an Auditor that keeps the events; failing makes every emit an error.
@@ -778,7 +778,7 @@ func (e *testEnv) newNode(o nodeOpts) *node {
 	if o.real != nil {
 		dsock = o.real.socket
 	} else {
-		dpath, dh := keystorev2alpha1connect.NewKeyStoreServiceHandler(o.driver)
+		dpath, dh := keyv1alpha1connect.NewKeyStoreServiceHandler(o.driver)
 		serveFake(e.t, dsock, dpath, dh)
 	}
 

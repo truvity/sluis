@@ -113,11 +113,10 @@ var forbiddenGo = []string{
 // The crates of the same.
 var forbiddenRust = []string{"aws-sdk-kms", "aws-sdk-cloudhsmv2", "cryptoki", "pkcs11", "yubikey", "pcsc", "google-cloud-kms", "azure_security_keyvault_keys", "vaultrs", "tss-esapi"}
 
-// keyDrivers are the trees whose code is a key driver: the one place a key-store client may be imported, and only the
-// client of its own store. The software driver imports none.
-var keyDrivers = map[string][]string{
-	"drivers/key/yubikey-piv/": {"github.com/go-piv/piv-go"},
-}
+// keyDrivers are the trees of this module whose code is a key driver: the one place a key-store client may be imported, and only the
+// client of its own store. The drivers are atoom's now (github.com/truvity/atoom/key/<driver>, which holds the card driver's piv-go), and
+// the hosts that stay here import no client, so the list is empty: any import of one in this module is refused.
+var keyDrivers = map[string][]string{}
 
 // forbiddenImport returns the forbidden packages that Go source imports, and does not read the rest of the file.
 func forbiddenImport(src []byte, name string) ([]string, error) {
@@ -237,8 +236,7 @@ func TestNoCodeImportsAKeyManagementSDKOutsideItsDriver(t *testing.T) {
 	if goFiles < 300 || manifests < 10 {
 		t.Fatalf("the walk read %d Go files and %d manifests: it did not read the repository", goFiles, manifests)
 	}
-	// The one allowed import is real: the card driver imports piv-go, so the exception is not an unused entry.
-	if driverImports == 0 {
-		t.Fatal("no key driver imports its client: the exception is unused or the walk missed the driver")
+	if driverImports != 0 {
+		t.Fatalf("%d imports of a key-store client were allowed by an exception: there is none", driverImports)
 	}
 }

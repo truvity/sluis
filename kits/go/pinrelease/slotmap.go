@@ -1,3 +1,5 @@
+// Package pinrelease reads the slot map of the signed KeyPlan, which stays in sluis (the signed configuration is its own contract). The wire
+// format of the PIN release is atoom's: github.com/truvity/atoom/key/pinrelease.
 package pinrelease
 
 import (
@@ -7,6 +9,8 @@ import (
 	"strings"
 
 	"go.yaml.in/yaml/v3"
+
+	atoompin "github.com/truvity/atoom/key/pinrelease"
 
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	"github.com/truvity/sluis/v2/kits/go/signedconfig"
@@ -19,8 +23,8 @@ import (
 
 // PurposePinRelease and SlotPinRelease are the purpose and the slot of the key that signs a request and an answer.
 const (
-	PurposePinRelease = "pin-release"
-	SlotPinRelease    = "87"
+	PurposePinRelease = atoompin.PurposePinRelease
+	SlotPinRelease    = atoompin.SlotPinRelease
 )
 
 // MaxNodeChars bounds a node name, which labels logs and audit facts (an address part holds 128 characters).

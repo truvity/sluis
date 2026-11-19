@@ -16,7 +16,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/truvity/sluis/v2/drivers/key/yubikey-piv/internal/card"
 	"github.com/truvity/sluis/v2/kits/go/cli"
 )
 
@@ -114,26 +113,6 @@ func TestSerialAndGIDMustBeNumbers(t *testing.T) {
 	}
 	if code, _, _ := run(t, "check", "--serial", "x"); code != cli.ExitUsage {
 		t.Errorf("a serial that is not a number: exit %d, want 2", code)
-	}
-}
-
-func TestABuildWithoutCardSupportSaysSoAndMakesNothing(t *testing.T) {
-	if card.HasCardSupport {
-		t.Skip("SKIP: this build talks to cards; the test is for the build without the tag sluis_card")
-	}
-	base := t.TempDir()
-	socket, admin := filepath.Join(base, "s"), filepath.Join(base, "a")
-	code, _, stderr := run(t, append([]string{"serve", "--environment", "development", "--socket", socket, "--admin-socket", admin, "--node", "n"}, pinFlags(t)...)...)
-	if code != cli.ExitFailed || !strings.Contains(stderr, "sluis_card") {
-		t.Fatalf("exit %d; stderr: %s", code, stderr)
-	}
-	for _, p := range []string{socket, admin} {
-		if _, err := os.Lstat(p); err == nil {
-			t.Fatalf("%s was made", p)
-		}
-	}
-	if code, _, _ := run(t, "check", "--environment", "development"); code != cli.ExitFailed {
-		t.Fatalf("check: exit %d, want 1", code)
 	}
 }
 

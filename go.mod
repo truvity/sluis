@@ -8,12 +8,17 @@ require (
 	connectrpc.com/connect v1.21.1
 	filippo.io/torchwood v0.10.0
 	github.com/go-jose/go-jose/v4 v4.1.7
-	github.com/go-piv/piv-go/v2 v2.6.0
 	github.com/go-webauthn/webauthn v0.18.2
 	github.com/gowebpki/jcs v1.0.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/transparency-dev/formats v0.1.1
-	github.com/truvity/atoom/common v0.0.0-20261118222836-075ccc8fca5b
+	github.com/truvity/atoom/common v0.0.0
+	github.com/truvity/atoom/key v0.0.0
+	github.com/truvity/atoom/key/conformance v0.0.0
+	github.com/truvity/atoom/key/pinrelease v0.0.0
+	github.com/truvity/atoom/key/slotplan v0.0.0
+	github.com/truvity/atoom/key/software v0.0.0-20261118233937-1a91a13fee2c
+	github.com/truvity/atoom/key/yubikeypiv v0.0.0-20261118233937-1a91a13fee2c
 	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/mod v0.42.0
 	google.golang.org/protobuf v1.36.12
@@ -22,6 +27,7 @@ require (
 require (
 	filippo.io/mldsa v0.0.0-20260215214346-43d0283efc3e // indirect
 	github.com/fxamacker/cbor/v2 v2.9.4 // indirect
+	github.com/go-piv/piv-go/v2 v2.6.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/go-webauthn/x v0.3.1 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
@@ -37,3 +43,17 @@ require (
 )
 
 tool connectrpc.com/connect/cmd/protoc-gen-connect-go
+
+replace github.com/truvity/atoom/common v0.0.0 => github.com/truvity/atoom/common v0.0.0-20261118233937-1a91a13fee2c
+
+replace github.com/truvity/atoom/key v0.0.0 => github.com/truvity/atoom/key v0.0.0-20261118233937-1a91a13fee2c
+
+replace github.com/truvity/atoom/key/conformance v0.0.0 => github.com/truvity/atoom/key/conformance v0.0.0-20261118233937-1a91a13fee2c
+
+replace github.com/truvity/atoom/key/pinrelease v0.0.0 => github.com/truvity/atoom/key/pinrelease v0.0.0-20261118233937-1a91a13fee2c
+
+replace github.com/truvity/atoom/key/slotplan v0.0.0 => github.com/truvity/atoom/key/slotplan v0.0.0-20261118233937-1a91a13fee2c
+
+replace github.com/truvity/atoom/key/software v0.0.0 => github.com/truvity/atoom/key/software v0.0.0-20261118233937-1a91a13fee2c
+
+replace github.com/truvity/atoom/key/yubikeypiv v0.0.0 => github.com/truvity/atoom/key/yubikeypiv v0.0.0-20261118233937-1a91a13fee2c

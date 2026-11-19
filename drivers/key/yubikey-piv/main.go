@@ -8,7 +8,7 @@
 //	yubikey-piv conformance --socket PATH
 //	yubikey-piv version
 //
-// The executable that talks to a card is built natively with the tag sluis_card and CGO_ENABLED=1 (`just
+// The executable that talks to a card is built natively with the tag atoom_card and CGO_ENABLED=1 (`just
 // build-arm64-native`). A build without the tag has the same commands and refuses to open a card.
 package main
 
@@ -17,14 +17,73 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"strconv"
 
-	"github.com/truvity/sluis/v2/drivers/key/yubikey-piv/internal/driver"
+	keykit "github.com/truvity/atoom/key/conformance"
+	"github.com/truvity/atoom/key/gen/atoom/key/v1alpha1/keyv1alpha1connect"
+	"github.com/truvity/atoom/key/yubikeypiv"
+
 	"github.com/truvity/sluis/v2/kits/go/cli"
+	"github.com/truvity/sluis/v2/kits/go/registry"
 	"github.com/truvity/sluis/v2/kits/go/rpc"
 	"github.com/truvity/sluis/v2/kits/go/signedconfig"
 )
+
+// This is the host of the card key driver: sluis's socket with peer credentials, the registry owner, the command line and the check of
+// the signed KeyPlan of a PIN release (keyplan.go). The driver itself, its handler and its logic, is the library
+// github.com/truvity/atoom/key/yubikeypiv; the executable that talks to a card is built natively with the tag atoom_card.
+
+// name is the registry name of the driver's user; its owner is key.
+const name = "driver-key-yubikey-piv"
+
+// owner returns the actor that owns the driver: key. The driver's socket serves nobody else.
+func owner() string {
+	o, _ := registry.DriverOwner(name)
+	return o
+}
+
+// floor checks the environment: a usage error for a value that is not one. This driver runs in every environment.
+func floor(environment string) error {
+	if err := yubikeypiv.Floor(environment); err != nil {
+		return cli.Usage(errors.New("--environment must be development, staging or production"))
+	}
+	return nil
+}
+
+// peerName names the caller of a call for the journal.
+func peerName(ctx context.Context) string {
+	if p, ok := rpc.PeerFromContext(ctx); ok {
+		return p.Name
+	}
+	return ""
+}
+
+// keyServerConfig is the socket of the key-store service: mode 0600 for the driver's user alone, and only the owner may call.
+func keyServerConfig(boundary, socket string) rpc.ServerConfig {
+	return rpc.ServerConfig{
+		Actor:    name,
+		Boundary: boundary,
+		Socket:   socket,
+		Mode:     0o600,
+		Allow:    rpc.OwnerOnly(owner()),
+	}
+}
+
+// refused turns what the library refuses into the exit status of a refusal; a missing serial is a usage error.
+func refused(err error) error {
+	var pe *yubikeypiv.Problems
+	switch {
+	case errors.As(err, &pe):
+		return cli.Refused(pe.List...)
+	case errors.Is(err, yubikeypiv.ErrSerial):
+		return cli.Usage(errors.New("--serial is required outside development: the driver is bound to one card"))
+	case errors.Is(err, yubikeypiv.ErrEnvironment):
+		return cli.Usage(err)
+	}
+	return err
+}
 
 func main() {
 	cli.Main("yubikey-piv", cli.Commands{Serve: serve, Check: check, Conformance: conformance}, flags)
@@ -65,7 +124,7 @@ func serve(ctx context.Context, f cli.Flags) error {
 		return cli.Usage(errors.New("--environment is required"))
 	}
 	// The environment is checked before anything is opened: no socket, no card.
-	if err := driver.Floor(env); err != nil {
+	if err := floor(env); err != nil {
 		return err
 	}
 	if f.Socket == "" {
@@ -98,16 +157,10 @@ func serve(ctx context.Context, f cli.Flags) error {
 	}
 	// The driver is bound to one card outside development, so that a genuine YubiKey that is not the board's cannot be
 	// adopted because its attestations match the slot map.
-	if env != driver.Development && sn == 0 {
+	if env != yubikeypiv.Development && sn == 0 {
 		return cli.Usage(errors.New("--serial is required outside development"))
 	}
-	cfg := rpc.ServerConfig{
-		Actor:    driver.Name,
-		Boundary: f.Boundary,
-		Socket:   f.Socket,
-		Mode:     0o600,
-		Allow:    rpc.OwnerOnly(driver.Owner()),
-	}
+	cfg := keyServerConfig(f.Boundary, f.Socket)
 	// The owner is another uid: a group that only the owner joins may connect. OwnerOnly still decides who may call.
 	if gid := value(f, "socket-gid"); gid != "0" && gid != "" {
 		n, err := strconv.ParseUint(gid, 10, 32)
@@ -118,8 +171,20 @@ func serve(ctx context.Context, f cli.Flags) error {
 	}
 	// The administrator of a node is root, reached through sudo: the socket is mode 0600 and the driver checks the
 	// peer's uid again before it reads the PIN.
-	admin := driver.AdminConfig{Socket: adminSocket, Allow: func(uid uint32) bool { return uid == 0 }}
-	return driver.Run(ctx, driver.Options{Environment: env, Node: node, Serial: sn, Publishers: publishers, StateDir: stateDir}, cfg, admin)
+	admin := yubikeypiv.AdminConfig{Socket: adminSocket, Allow: func(uid uint32) bool { return uid == 0 }}
+	// The KeyPlan of a PIN release is verified here, with the publisher keys of the bootstrap file and the mark in the state directory.
+	peers, err := newPlanKeys(publishers, stateDir)
+	if err != nil {
+		return err
+	}
+	host := yubikeypiv.Host{
+		HandlerOptions: rpc.HandlerOptions(cfg),
+		Serve: func(ctx context.Context, path string, h http.Handler) error {
+			return rpc.Serve(ctx, cfg, rpc.Handler{Path: path, H: h})
+		},
+	}
+	opts := yubikeypiv.Options{Environment: env, Node: node, Boundary: cfg.Boundary, Serial: sn, PeerKeys: peers, StateDir: stateDir, Caller: peerName}
+	return refused(yubikeypiv.Run(ctx, opts, host, admin))
 }
 
 // check opens the card, applies the firmware floor and verifies the attestation of every key it holds. It
@@ -127,21 +192,26 @@ func serve(ctx context.Context, f cli.Flags) error {
 func check(_ context.Context, f cli.Flags) error {
 	env := value(f, "environment")
 	if env == "" {
-		env = driver.Staging // check never makes a key; the environment only has to be a real one
+		env = yubikeypiv.Staging // check never makes a key; the environment only has to be a real one
 	}
 	sn, err := serial(f)
 	if err != nil {
 		return err
 	}
-	if env != driver.Development && sn == 0 {
+	if env != yubikeypiv.Development && sn == 0 {
 		return cli.Usage(errors.New("--serial is required outside development"))
 	}
-	return driver.Check(driver.Options{Environment: env, Serial: sn})
+	return refused(yubikeypiv.Check(yubikeypiv.Options{Environment: env, Serial: sn}))
 }
 
 func conformance(ctx context.Context, f cli.Flags) error {
 	if f.Socket == "" {
 		return cli.Usage(errors.New("--socket is required"))
 	}
-	return driver.Conformance(ctx, f.Socket, os.Stdout)
+	hc, url := rpc.Dial(f.Socket)
+	c := keyv1alpha1connect.NewKeyStoreServiceClient(hc, url, rpc.ClientOptions()...)
+	if err := keykit.Run(ctx, c, os.Stdout); err != nil {
+		return cli.Refused(err.Error())
+	}
+	return nil
 }

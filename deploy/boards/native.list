@@ -5,4 +5,4 @@
 # `just build-arm64` leaves them to this build (it cross-compiles with CGO off), and picks up their output.
 #
 # Columns, separated by a tab: the package below the repository root, and the Go build tags.
-drivers/key/yubikey-piv	sluis_card
+drivers/key/yubikey-piv	atoom_card

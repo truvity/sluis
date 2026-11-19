@@ -17,13 +17,13 @@ import (
 	"connectrpc.com/connect"
 
 	krefusal "github.com/truvity/atoom/common/refusal"
-	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1/keystorev2alpha1connect"
+	keyv1alpha1 "github.com/truvity/atoom/key/gen/atoom/key/v1alpha1"
+	"github.com/truvity/atoom/key/gen/atoom/key/v1alpha1/keyv1alpha1connect"
 )
 
 // fakeDriver is the admin side of a card driver: a locked one that accepts one PIN.
 type fakeDriver struct {
-	keystorev2alpha1connect.UnimplementedUnlockServiceHandler
+	keyv1alpha1connect.UnimplementedUnlockServiceHandler
 	mu       sync.Mutex
 	node     string
 	pin      string
@@ -33,13 +33,13 @@ type fakeDriver struct {
 	got      []string
 }
 
-func (f *fakeDriver) Status(context.Context, *connect.Request[keystorev2alpha1.StatusRequest]) (*connect.Response[keystorev2alpha1.StatusResponse], error) {
+func (f *fakeDriver) Status(context.Context, *connect.Request[keyv1alpha1.StatusRequest]) (*connect.Response[keyv1alpha1.StatusResponse], error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return connect.NewResponse(&keystorev2alpha1.StatusResponse{Node: f.node, Locked: f.locked, PinRetries: f.retries}), nil
+	return connect.NewResponse(&keyv1alpha1.StatusResponse{Node: f.node, Locked: f.locked, PinRetries: f.retries}), nil
 }
 
-func (f *fakeDriver) Unlock(_ context.Context, req *connect.Request[keystorev2alpha1.UnlockRequest]) (*connect.Response[keystorev2alpha1.UnlockResponse], error) {
+func (f *fakeDriver) Unlock(_ context.Context, req *connect.Request[keyv1alpha1.UnlockRequest]) (*connect.Response[keyv1alpha1.UnlockResponse], error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.attempts++
@@ -49,7 +49,7 @@ func (f *fakeDriver) Unlock(_ context.Context, req *connect.Request[keystorev2al
 		return nil, krefusal.New(connect.CodePermissionDenied, "pin", "pin")
 	}
 	f.locked = false
-	return connect.NewResponse(&keystorev2alpha1.UnlockResponse{}), nil
+	return connect.NewResponse(&keyv1alpha1.UnlockResponse{}), nil
 }
 
 func serveDriver(t *testing.T, f *fakeDriver) string {
@@ -65,7 +65,7 @@ func serveDriver(t *testing.T, f *fakeDriver) string {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
-	mux.Handle(keystorev2alpha1connect.NewUnlockServiceHandler(f))
+	mux.Handle(keyv1alpha1connect.NewUnlockServiceHandler(f))
 	var p http.Protocols
 	p.SetHTTP1(true)
 	p.SetUnencryptedHTTP2(true)

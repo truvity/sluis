@@ -58,7 +58,7 @@ const RUST_FN = /^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?(?:unsafe\s+)?fn\s+(\
 const RUST_MOD = /^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w+\s*\{?/;
 
 // The build tags CI runs Go tests with (`go test -tags sluis_test`, the Justfile), and the platform it runs on. A file
-// constrained by any other tag (sluis_card, ignore, ...) is not run, so its tests are no evidence.
+// constrained by any other tag (atoom_card, ignore, ...) is not run, so its tests are no evidence.
 const GO_TAGS_TRUE = new Set(['sluis_test', 'linux', 'unix', 'gc']);
 const GO_OTHER_OS = /_(?:windows|darwin|freebsd|netbsd|openbsd|plan9|js|wasip1|solaris|aix|android|ios|illumos|dragonfly)_test\.go$/;
 

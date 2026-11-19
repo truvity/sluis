@@ -13,8 +13,8 @@ import (
 
 	"connectrpc.com/connect"
 
+	keyv1alpha1 "github.com/truvity/atoom/key/gen/atoom/key/v1alpha1"
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
-	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
 	"github.com/truvity/sluis/v2/kits/go/store"
 )
 
@@ -273,7 +273,7 @@ func (s *Server) currentWrappingID(ctx context.Context) (string, error) {
 	if s.wrappingID != "" {
 		return s.wrappingID, nil
 	}
-	res, err := s.driver.PublicKey(ctx, connect.NewRequest(&keystorev2alpha1.KeyStorePublicKeyRequest{Purpose: wrappingPurpose}))
+	res, err := s.driver.PublicKey(ctx, connect.NewRequest(&keyv1alpha1.PublicKeyRequest{Purpose: wrappingPurpose}))
 	if err != nil {
 		if connect.CodeOf(err) == connect.CodeNotFound {
 			return "", nil

@@ -569,7 +569,7 @@ jobs:
       contents: read
 
   # The advisory gate (REQ-SUPPLY-030): govulncheck over every Go module (twice: the default build, and the card driver
-  # with the tag sluis_card), cargo audit over every Cargo.lock and osv-scanner over the lock files, failing on a known
+  # with the tag atoom_card), cargo audit over every Cargo.lock and osv-scanner over the lock files, failing on a known
   # advisory that affects us unless tools/advisories/ignore.yaml lists it, with a reason and an expiry date. A new advisory
   # can turn this job red on a commit that did not touch a dependency; that is the point, and the fix is a bump (or a
   # dated entry), not a re-run. The card build is cgo and needs pkg-config and libpcsclite-dev, as native-arm64 installs
@@ -582,7 +582,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: The card driver's C dependencies (govulncheck with the tag sluis_card)
+      - name: The card driver's C dependencies (govulncheck with the tag atoom_card)
         run: |
           set -euo pipefail
           sudo apt-get update -qq

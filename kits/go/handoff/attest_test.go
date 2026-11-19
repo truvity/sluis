@@ -316,7 +316,7 @@ func TestAtLeast(t *testing.T) {
 
 // The pin of the real maker's root is the root file the card driver embeds.
 func TestYubicoRootPin(t *testing.T) {
-	blk, _ := pem.Decode(mustRead(t, "../../../drivers/key/yubikey-piv/internal/card/certs/yubico-attestation-root-1.pem"))
+	blk, _ := pem.Decode(mustRead(t, "yubico/yubico-attestation-root-1.pem"))
 	if blk == nil {
 		t.Fatal("no root in the driver's file")
 	}
@@ -373,7 +373,7 @@ func TestPIVIssuerNameRule(t *testing.T) {
 func TestPIVIssuerNameRuleOnTheRealBundle(t *testing.T) {
 	read := func(name string) []*x509.Certificate {
 		var out []*x509.Certificate
-		for rest := mustRead(t, "../../../drivers/key/yubikey-piv/internal/card/certs/"+name); ; {
+		for rest := mustRead(t, "yubico/"+name); ; {
 			var blk *pem.Block
 			if blk, rest = pem.Decode(rest); blk == nil {
 				return out

@@ -27,8 +27,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/truvity/atoom/key/slotplan"
 	"github.com/truvity/sluis/v2/kits/go/handoff"
-	"github.com/truvity/sluis/v2/kits/go/slotplan"
 )
 
 // What stands in for ritueel here, and what does not.

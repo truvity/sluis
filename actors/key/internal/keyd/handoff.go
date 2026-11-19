@@ -13,8 +13,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/truvity/atoom/common/refusal"
+	keyv1alpha1 "github.com/truvity/atoom/key/gen/atoom/key/v1alpha1"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
-	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
 	"github.com/truvity/sluis/v2/kits/go/handoff"
 	"github.com/truvity/sluis/v2/kits/go/store"
 )
@@ -59,7 +59,7 @@ func (s *Server) Prepare(ctx context.Context, req *connect.Request[keyv2alpha1.P
 	if err != nil {
 		return nil, err
 	}
-	caps, err := s.driver.Capabilities(ctx, connect.NewRequest(&keystorev2alpha1.CapabilitiesRequest{}))
+	caps, err := s.driver.Capabilities(ctx, connect.NewRequest(&keyv1alpha1.CapabilitiesRequest{}))
 	if err != nil {
 		return nil, unavailable(reasonDriver)
 	}
@@ -69,11 +69,11 @@ func (s *Server) Prepare(ctx context.Context, req *connect.Request[keyv2alpha1.P
 		out.Store = handoff.StoreSoftware
 	case "yubikey-piv":
 		out.Store = handoff.StorePIV
-		att, err := s.driver.Attest(ctx, connect.NewRequest(&keystorev2alpha1.AttestRequest{Purpose: purpose}))
+		att, err := s.driver.Attest(ctx, connect.NewRequest(&keyv1alpha1.AttestRequest{Purpose: purpose}))
 		if err != nil {
 			return nil, unavailable(reasonDriver)
 		}
-		ver, err := s.driver.VerifyAttestation(ctx, connect.NewRequest(&keystorev2alpha1.VerifyAttestationRequest{
+		ver, err := s.driver.VerifyAttestation(ctx, connect.NewRequest(&keyv1alpha1.VerifyAttestationRequest{
 			Attestation: att.Msg.GetAttestation(), AttestationSigner: att.Msg.GetAttestationSigner(),
 		}))
 		if err != nil || !bytes.Equal(ver.Msg.GetSpkiDer(), pk.spki) {
@@ -114,7 +114,7 @@ func (s *Server) SignRequest(ctx context.Context, req *connect.Request[keyv2alph
 		return nil, s.refuse(ctx, caller, op, purpose, "", connect.CodeResourceExhausted, reasonRate, "")
 	}
 	digest := sha512.Sum384(req.Msg.GetInfo())
-	res, err := s.driver.Sign(ctx, connect.NewRequest(&keystorev2alpha1.KeyStoreSignRequest{Purpose: purpose, Digest: digest[:], Algorithm: algES384}))
+	res, err := s.driver.Sign(ctx, connect.NewRequest(&keyv1alpha1.SignRequest{Purpose: purpose, Digest: digest[:], Algorithm: algES384}))
 	if err != nil {
 		return nil, unavailable(reasonDriver)
 	}

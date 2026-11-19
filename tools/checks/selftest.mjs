@@ -191,7 +191,7 @@ reqExpect('a done record with a test kind and manual, attestation only', catalog
 reqExpect('a done record with a test kind and manual, both', catalogueFiles(done(), { ...testFile(goTagged), ...attestation(goodAttestation) }, BOTH), 'pass');
 reqExpect('a done record whose only tagged test is ignored', catalogueFiles(done(), { 'actors/example/tests/it.rs': `/// ${verifies} REQ-EX-001\n#[test]\n#[ignore]\nfn the_example() {}\n` }), 'fail', { has: ['no evidence'] });
 reqExpect('a done record whose only tagged test is skipped first thing', catalogueFiles(done(), testFile(`// ${verifies} REQ-EX-001\nfunc TestTheExample(t *testing.T) {\n\tt.Skip("SKIP: later")\n}\n`)), 'fail', { has: ['no evidence'] });
-reqExpect('a done record whose only tagged test needs a build tag CI does not run', catalogueFiles(done(), testFile(`//go:build sluis_card\n\npackage x\n\n// ${verifies} REQ-EX-001\nfunc TestTheExample(t *testing.T) {}\n`)), 'fail', { has: ['no evidence'] });
+reqExpect('a done record whose only tagged test needs a build tag CI does not run', catalogueFiles(done(), testFile(`//go:build atoom_card\n\npackage x\n\n// ${verifies} REQ-EX-001\nfunc TestTheExample(t *testing.T) {}\n`)), 'fail', { has: ['no evidence'] });
 reqExpect('an attestations file that does not parse', catalogueFiles(done(manualRecord), { 'docs/requirements/attestations.yaml': 'schema: 1\nattestations: [\n' }, MANUAL), 'fail', { has: ['L1 attestations.yaml', 'cannot be parsed'] });
 reqExpect('a catalogue that declares no milestone', catalogueFiles('    status: planned\n    features: [design]\n', { 'docs/requirements/index.yaml': readFileSync(join(repo, 'docs/requirements/index.yaml'), 'utf8').replace(/  milestones:\n(?:    .*\n)+/, '  milestones: {}\n') }), 'fail', { has: ['milestones', 'fewer than 1 properties'] });
 
@@ -276,12 +276,12 @@ const rustFile = [
 collect('tags are found where a CI-run test carries them, and nowhere else', {
   'actors/a/a_test.go': `package a\n\n// ${verifies} REQ-EX-001, REQ-EX-002\nfunc TestTagged(t *testing.T) {}\n\nfunc TestREQ_EX_012_FromTheName(t *testing.T) {}\n\nfunc TestUntagged(t *testing.T) {\n\t// REQ-EX-003 is only mentioned\n}\n\nfunc TestTable(t *testing.T) {\n\tt.Run("REQ-EX-004/plain_method", func(t *testing.T) {})\n\tt.Run("a case named REQ-EX-005", func(t *testing.T) {})\n\tfor name := range map[string]int{\n\t\t"REQ-EX-011/a table key": 1,\n\t} {\n\t\t_ = name\n\t}\n}\n`,
   'actors/a/false_test.go': goFalse,
-  'actors/e/card_test.go': goTag('sluis_card', 'REQ-EX-040'),
-  'actors/e/both_test.go': goTag('sluis_card && sluis_test', 'REQ-EX-044'),
+  'actors/e/card_test.go': goTag('atoom_card', 'REQ-EX-040'),
+  'actors/e/both_test.go': goTag('atoom_card && sluis_test', 'REQ-EX-044'),
   'actors/e/ignore_test.go': goTag('ignore', 'REQ-EX-045'),
   'actors/e/seam_test.go': goTag('sluis_test', 'REQ-EX-041'),
   'actors/e/linux_test.go': goTag('linux', 'REQ-EX-042'),
-  'actors/e/not_card_test.go': goTag('!sluis_card', 'REQ-EX-043'),
+  'actors/e/not_card_test.go': goTag('!atoom_card', 'REQ-EX-043'),
   'actors/e/other_os_windows_test.go': 'package e\n\n// ' + verifies + ' REQ-EX-046\nfunc TestW(t *testing.T) {}\n',
   'actors/b/tests/b.rs': rustFile,
   'actors/g/it.rs': `#![cfg(feature = "x")]\n\n/// ${verifies} REQ-EX-056\n#[test]\nfn gated_file() {}\n`,

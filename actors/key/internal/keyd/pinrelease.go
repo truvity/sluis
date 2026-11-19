@@ -21,10 +21,10 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/truvity/atoom/common/refusal"
+	keyv1alpha1 "github.com/truvity/atoom/key/gen/atoom/key/v1alpha1"
+	"github.com/truvity/atoom/key/pinrelease"
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
-	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
-	"github.com/truvity/sluis/v2/kits/go/pinrelease"
 	"github.com/truvity/sluis/v2/kits/go/registry"
 	"github.com/truvity/sluis/v2/kits/go/store"
 )
@@ -207,7 +207,7 @@ func (s *Server) peerKey(ctx context.Context, rc *revCache, plan *configv2alpha1
 	if rel.GetSlot() != pinReleaseSlot || len(rel.GetAttestation()) == 0 {
 		return nil, refused("slot-map")
 	}
-	res, err := s.driver.VerifyAttestation(ctx, connect.NewRequest(&keystorev2alpha1.VerifyAttestationRequest{
+	res, err := s.driver.VerifyAttestation(ctx, connect.NewRequest(&keyv1alpha1.VerifyAttestationRequest{
 		Attestation: rel.GetAttestation(), AttestationSigner: rel.GetAttestationSigner(),
 	}))
 	if err != nil {
@@ -515,7 +515,7 @@ func driverRefusal(err error) error {
 // answer seals this node's PIN to a verified request, signs the answer and writes it, after its audit fact is durable.
 // The driver is given the request's signature and the KeyPlan document key@ verified, and verifies both itself.
 func (s *Server) answer(ctx context.Context, id string, r pinrelease.Request, text, sig, planDoc []byte) (bool, error) {
-	sealed, err := s.driver.SealPin(ctx, connect.NewRequest(&keystorev2alpha1.SealPinRequest{RequestText: text, RequestSignatureDer: sig, KeyPlan: planDoc}))
+	sealed, err := s.driver.SealPin(ctx, connect.NewRequest(&keyv1alpha1.SealPinRequest{RequestText: text, RequestSignatureDer: sig, KeyPlan: planDoc}))
 	if err != nil {
 		if reason, _ := refusal.Reason(err); connect.CodeOf(err) == connect.CodeFailedPrecondition && (reason == "locked" || reason == "no_pin") {
 			return false, errNoPIN
@@ -622,7 +622,7 @@ func (s *Server) RequestPin(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	begin, err := s.driver.BeginPinRelease(ctx, connect.NewRequest(&keystorev2alpha1.BeginPinReleaseRequest{RequestId: rid}))
+	begin, err := s.driver.BeginPinRelease(ctx, connect.NewRequest(&keyv1alpha1.BeginPinReleaseRequest{RequestId: rid}))
 	if err != nil {
 		switch reason, _ := refusal.Reason(err); {
 		case connect.CodeOf(err) == connect.CodeFailedPrecondition && reason == "unlocked":
@@ -703,7 +703,7 @@ func (s *Server) takeAnswer(ctx context.Context, r pinrelease.Request, text []by
 		s.refusePin(ctx, "answer", a.Releaser, r.ID, at, "signature")
 		return errNoAnswer
 	}
-	_, err = s.driver.FinishPinRelease(ctx, connect.NewRequest(&keystorev2alpha1.FinishPinReleaseRequest{
+	_, err = s.driver.FinishPinRelease(ctx, connect.NewRequest(&keyv1alpha1.FinishPinReleaseRequest{
 		AnswerText: at, AnswerSignatureDer: sig, KeyPlan: planDoc,
 	}))
 	if err != nil {
@@ -823,7 +823,7 @@ func (s *Server) pinLoops(ctx context.Context) {
 		return
 	}
 	// A store that does not attest (software) holds no PIN and cannot verify a peer's attestation: it takes no part.
-	caps, err := s.driver.Capabilities(ctx, connect.NewRequest(&keystorev2alpha1.CapabilitiesRequest{}))
+	caps, err := s.driver.Capabilities(ctx, connect.NewRequest(&keyv1alpha1.CapabilitiesRequest{}))
 	if err != nil || !caps.Msg.GetAttests() {
 		return
 	}
@@ -872,7 +872,7 @@ func (s *Server) slotMapLine(ctx context.Context, plan *configv2alpha1.KeyPlan) 
 		if _, ok := planAlgorithm(p.GetAlgorithm()); !ok || p.GetSlot() == "" {
 			continue
 		}
-		res, err := s.driver.PublicKey(ctx, connect.NewRequest(&keystorev2alpha1.KeyStorePublicKeyRequest{Purpose: p.GetPurpose()}))
+		res, err := s.driver.PublicKey(ctx, connect.NewRequest(&keyv1alpha1.PublicKeyRequest{Purpose: p.GetPurpose()}))
 		if connect.CodeOf(err) == connect.CodeNotFound {
 			continue
 		}
@@ -883,7 +883,7 @@ func (s *Server) slotMapLine(ctx context.Context, plan *configv2alpha1.KeyPlan) 
 			return "", fmt.Errorf("key-store driver public key %s: does not parse", p.GetPurpose())
 		}
 		sl := slotMapSlot{Slot: p.GetSlot(), Purpose: p.GetPurpose(), PublicKey: enc.EncodeToString(res.Msg.GetSpkiDer())}
-		att, err := s.driver.Attest(ctx, connect.NewRequest(&keystorev2alpha1.AttestRequest{Purpose: p.GetPurpose()}))
+		att, err := s.driver.Attest(ctx, connect.NewRequest(&keyv1alpha1.AttestRequest{Purpose: p.GetPurpose()}))
 		if err == nil {
 			sl.Attestation = enc.EncodeToString(att.Msg.GetAttestation())
 			sl.AttestationSigner = enc.EncodeToString(att.Msg.GetAttestationSigner())

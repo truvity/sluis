@@ -25,11 +25,11 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
+	keyv1alpha1 "github.com/truvity/atoom/key/gen/atoom/key/v1alpha1"
+	"github.com/truvity/atoom/key/gen/atoom/key/v1alpha1/keyv1alpha1connect"
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
-	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1/keystorev2alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/handoff"
 	"github.com/truvity/sluis/v2/kits/go/rpc"
 )
@@ -137,7 +137,7 @@ type pivDriver struct {
 	lie bool
 }
 
-func (d *pivDriver) Attest(_ context.Context, req *connect.Request[keystorev2alpha1.AttestRequest]) (*connect.Response[keystorev2alpha1.AttestResponse], error) {
+func (d *pivDriver) Attest(_ context.Context, req *connect.Request[keyv1alpha1.AttestRequest]) (*connect.Response[keyv1alpha1.AttestResponse], error) {
 	k, err := d.key(req.Msg.GetPurpose())
 	if err != nil {
 		return nil, err
@@ -147,11 +147,11 @@ func (d *pivDriver) Attest(_ context.Context, req *connect.Request[keystorev2alp
 		other, _ := d.key("token-signing")
 		spki, _ = x509.MarshalPKIXPublicKey(&other.PublicKey)
 	}
-	return connect.NewResponse(&keystorev2alpha1.AttestResponse{Attestation: spki, AttestationSigner: []byte("card")}), nil
+	return connect.NewResponse(&keyv1alpha1.AttestResponse{Attestation: spki, AttestationSigner: []byte("card")}), nil
 }
 
-func (d *pivDriver) VerifyAttestation(_ context.Context, req *connect.Request[keystorev2alpha1.VerifyAttestationRequest]) (*connect.Response[keystorev2alpha1.VerifyAttestationResponse], error) {
-	return connect.NewResponse(&keystorev2alpha1.VerifyAttestationResponse{SpkiDer: req.Msg.GetAttestation(), Slot: "9c"}), nil
+func (d *pivDriver) VerifyAttestation(_ context.Context, req *connect.Request[keyv1alpha1.VerifyAttestationRequest]) (*connect.Response[keyv1alpha1.VerifyAttestationResponse], error) {
+	return connect.NewResponse(&keyv1alpha1.VerifyAttestationResponse{SpkiDer: req.Msg.GetAttestation(), Slot: "9c"}), nil
 }
 
 // verifies: REQ-PKI-028
@@ -163,10 +163,10 @@ func TestPrepareOnACardCarriesTheAttestationAndRefusesALyingOne(t *testing.T) {
 	for _, lie := range []bool{false, true} {
 		pd := &pivDriver{fakeDriver: n.driver, lie: lie}
 		sock := filepath.Join(shortDir(t), "d.sock")
-		path, h := keystorev2alpha1connect.NewKeyStoreServiceHandler(pd)
+		path, h := keyv1alpha1connect.NewKeyStoreServiceHandler(pd)
 		serveFake(t, sock, path, h)
 		hc, url := rpc.Dial(sock)
-		n.srv.driver = keystorev2alpha1connect.NewKeyStoreServiceClient(hc, url, rpc.ClientOptions()...)
+		n.srv.driver = keyv1alpha1connect.NewKeyStoreServiceClient(hc, url, rpc.ClientOptions()...)
 		res, err := n.handoff().Prepare(context.Background(), connect.NewRequest(&keyv2alpha1.PrepareRequest{Purpose: "x509-intermediate"}))
 		if lie {
 			n.refusal(t, err, connect.CodeFailedPrecondition, reasonAttestation, "attestation")
