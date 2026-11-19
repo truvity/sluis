@@ -1,0 +1,60 @@
+// The blob port: a store of named objects with a write-once create and a conditional overwrite of a pointer. The first driver keeps
+// them in a local directory.
+syntax = "proto3";
+
+package atoom.blob.v1alpha1;
+
+// BlobService keeps a log's objects: write-once tiles and a few pointers that move.
+service BlobService {
+  rpc Create(CreateRequest) returns (CreateResponse);   // create-if-absent: already_exists if present (the write-once fence)
+  rpc Put(PutRequest) returns (PutResponse);            // conditional overwrite, only for the paths the driver allows (the checkpoint pointer, the writer state)
+  rpc Get(BlobGetRequest) returns (BlobGetResponse);
+  rpc List(BlobListRequest) returns (BlobListResponse);
+}
+
+// CreateRequest writes an object that must not exist.
+message CreateRequest {
+  string path = 1;   // the object's path
+  bytes data = 2;    // the bytes to keep
+}
+
+// CreateResponse carries the entity tag.
+message CreateResponse {
+  string etag = 1;  // the object's entity tag
+}
+
+// PutRequest overwrites an object under a condition.
+message PutRequest {
+  string path = 1;      // the object's path
+  bytes data = 2;       // the bytes to keep
+  string if_match = 3;  // the etag the object must have; empty = must be absent
+}
+
+// PutResponse carries the entity tag.
+message PutResponse {
+  string etag = 1;  // the object's new entity tag
+}
+
+// BlobGetRequest reads an object.
+message BlobGetRequest {
+  string path = 1;  // the object's path
+}
+
+// BlobGetResponse carries the object.
+message BlobGetResponse {
+  bytes data = 1;   // the object's bytes
+  string etag = 2;  // the object's entity tag
+}
+
+// BlobListRequest lists objects by prefix.
+message BlobListRequest {
+  string prefix = 1;      // the path prefix
+  string page_token = 2;  // opaque
+  int32 page_size = 3;    // the page size
+}
+
+// BlobListResponse is one page of paths.
+message BlobListResponse {
+  repeated string paths = 1;      // the paths of the page
+  string next_page_token = 2;     // empty on the last page
+}

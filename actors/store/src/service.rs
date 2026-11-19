@@ -17,10 +17,10 @@ use connectrpc::{
 };
 use sluis_kit::{Peer, refusal};
 use sluis_proto::atoom::common::v1alpha1::IndexEntry;
-use sluis_proto::sluis::config::v2alpha1 as pb;
-use sluis_proto::sluis::port::item::v2alpha1::{
+use sluis_proto::atoom::store::v1alpha1::{
     Condition, Delete, DriverItem, Put, QueryRequest, TransactRequest, condition::Expect,
 };
+use sluis_proto::sluis::config::v2alpha1 as pb;
 use sluis_proto::sluis::store::v2alpha1::{
     Consistency, GetRequest, GetResponse, GetSignedConfigRequest, GetSignedConfigResponse, Item,
     ListRequest, ListResponse, StoreService, Verb, WatchRequest, WatchResponse, WriteRequest,
@@ -1172,7 +1172,7 @@ impl<E: ItemEngine, G: GrantOpener, A: AuditSink> Service<E, G, A> {
         tx: TransactRequest,
         condition_ops: &[usize],
         verbs: &[&'static str],
-    ) -> Res<sluis_proto::sluis::port::item::v2alpha1::TransactResponse> {
+    ) -> Res<sluis_proto::atoom::store::v1alpha1::TransactResponse> {
         match self.engine(class).transact(tx.clone()).await {
             Ok(r) => Ok(r),
             Err(EngineError::Unavailable | EngineError::SequenceExpired) => Err(engine_down()),

@@ -2658,7 +2658,7 @@ async fn the_boundary_and_the_caller_never_come_from_a_field_of_the_request() {
     // An item that sits in the engine under another boundary is not reached by any address.
     f.durable.0.items.lock().unwrap().insert(
         b"prod-b/acme/person/p9".to_vec(),
-        sluis_proto::sluis::port::item::v2alpha1::DriverItem {
+        sluis_proto::atoom::store::v1alpha1::DriverItem {
             key: b"prod-b/acme/person/p9".to_vec(),
             version: 1,
             value: sealed(),

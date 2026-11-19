@@ -39,7 +39,7 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
-use sluis_proto::sluis::port::item::v2alpha1::{DriverItem, QueryRequest, TailLogResponse};
+use sluis_proto::atoom::store::v1alpha1::{DriverItem, QueryRequest, TailLogResponse};
 use sluis_proto::sluis::store::v2alpha1::{ChangeType, Item, WatchResponse};
 use sluis_proto::sluis::r#type::v2alpha1::Address;
 
@@ -655,7 +655,7 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)] // a failed unwrap in a test is the failure
 
     use super::*;
-    use sluis_proto::sluis::port::item::v2alpha1::{
+    use sluis_proto::atoom::store::v1alpha1::{
         QueryRequest, QueryResponse, TransactRequest, TransactResponse,
     };
     use tokio::sync::mpsc;

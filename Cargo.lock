@@ -146,13 +146,98 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 [[package]]
 name = "atoom-common"
 version = "0.0.0"
-source = "git+https://github.com/truvity/atoom?rev=1a91a13fee2c558d23494eabc47d120ee0c32933#1a91a13fee2c558d23494eabc47d120ee0c32933"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
 dependencies = [
  "base64 0.22.1",
  "buffa",
  "connectrpc",
  "connectrpc-build",
  "serde",
+]
+
+[[package]]
+name = "atoom-socket"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "anyhow",
+ "connectrpc",
+ "futures",
+ "http",
+ "hyper",
+ "hyper-util",
+ "tokio",
+ "tower",
+ "tracing",
+]
+
+[[package]]
+name = "atoom-store"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "buffa",
+ "buffa-types",
+ "connectrpc",
+ "connectrpc-build",
+ "serde",
+]
+
+[[package]]
+name = "atoom-store-conformance"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "anyhow",
+ "atoom-common",
+ "atoom-socket",
+ "atoom-store",
+ "buffa-types",
+ "clap",
+ "connectrpc",
+ "futures",
+ "tokio",
+]
+
+[[package]]
+name = "atoom-store-memory"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "anyhow",
+ "atoom-common",
+ "atoom-socket",
+ "atoom-store",
+ "atoom-store-conformance",
+ "clap",
+ "connectrpc",
+ "futures",
+ "tokio",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "atoom-store-rqlite"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "anyhow",
+ "atoom-common",
+ "atoom-socket",
+ "atoom-store",
+ "atoom-store-conformance",
+ "base64 0.22.1",
+ "bytes",
+ "clap",
+ "connectrpc",
+ "futures",
+ "http",
+ "http-body-util",
+ "hyper-util",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2339,22 +2424,17 @@ name = "rqlite"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "base64 0.23.1",
- "buffa",
- "buffa-types",
- "bytes",
+ "atoom-common",
+ "atoom-socket",
+ "atoom-store",
+ "atoom-store-conformance",
+ "atoom-store-memory",
+ "atoom-store-rqlite",
  "clap",
  "connectrpc",
  "futures",
- "http",
- "http-body-util",
- "hyper",
- "hyper-util",
  "rustix",
- "serde_json",
- "sluis-conformance",
  "sluis-kit",
- "sluis-proto",
  "sluis-registry",
  "tempfile",
  "tokio",
@@ -2704,24 +2784,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sluis-conformance"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "atoom-common",
- "buffa",
- "buffa-types",
- "connectrpc",
- "futures",
- "rustix",
- "sluis-conformance",
- "sluis-kit",
- "sluis-proto",
- "tempfile",
- "tokio",
-]
-
-[[package]]
 name = "sluis-destination"
 version = "0.0.0"
 dependencies = [
@@ -2980,6 +3042,11 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "atoom-common",
+ "atoom-socket",
+ "atoom-store",
+ "atoom-store-conformance",
+ "atoom-store-memory",
+ "atoom-store-rqlite",
  "aws-lc-rs",
  "base64 0.23.1",
  "buffa",
@@ -2989,13 +3056,11 @@ dependencies = [
  "credential",
  "file",
  "futures",
- "rqlite",
  "rustix",
  "saphyr-parser",
  "serde",
  "serde_json",
  "sluis-audit",
- "sluis-conformance",
  "sluis-kit",
  "sluis-proto",
  "sluis-registry",

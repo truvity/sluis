@@ -4,18 +4,36 @@
 
 use std::time::Duration;
 
-use sluis_conformance::memory::MemoryEngine;
-use sluis_kit::dial;
-use sluis_proto::sluis::port::item::v2alpha1::{Put, QueryRequest, TransactRequest};
+use atoom_store_memory::MemoryEngine;
+use sluis_kit::{Allow, Identities, ServerConfig, dial};
+use sluis_proto::atoom::store::v1alpha1::{Put, QueryRequest, TransactRequest};
 use store::engine::{DriverEngine, EngineError, ItemEngine};
+
+/// Serves `engine` on `sock` behind sluis's guarded server, with this process's uid as the owner `store`.
+fn serve_memory(engine: &MemoryEngine, sock: std::path::PathBuf) {
+    let me = rustix::process::geteuid().as_raw();
+    let ids = Identities::with(0, move |uid| (uid == me).then_some(("store", 0)));
+    tokio::spawn(sluis_kit::serve_with(
+        ServerConfig {
+            actor: "memory",
+            boundary: "dev".into(),
+            socket: sock,
+            mode: 0o600,
+            socket_gid: None,
+            allow: Allow::OwnerOnly("store"),
+            default_deadline: Duration::from_secs(30),
+        },
+        engine.clone().router(),
+        std::future::pending(),
+        ids,
+    ));
+}
 
 async fn serve() -> (tempfile::TempDir, MemoryEngine, DriverEngine) {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("durable.sock");
     let engine = MemoryEngine::new();
-    let e = engine.clone();
-    let path = socket.clone();
-    tokio::spawn(async move { e.serve(&path, std::future::pending()).await });
+    serve_memory(&engine, socket.clone());
     for _ in 0..200 {
         if socket.exists() {
             break;

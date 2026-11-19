@@ -4,7 +4,7 @@
 #   - go.mod: every github.com/truvity/atoom/<module> requirement, a pseudo-version that ends in the first 12 hex digits of the commit, and
 #     one replace line for each, `<module> v0.0.0 => <module> <that pseudo-version>`: atoom's modules require each other at v0.0.0 until its
 #     first release, and a version that has no tag is resolved by that line, not looked up (it goes with the pin to the tag);
-#   - Cargo.toml: [workspace.dependencies] atoom-common, `git` and `rev`;
+#   - Cargo.toml: [workspace.dependencies] every atoom-* crate, `git` and `rev`;
 #   - third_party/atoom/proto: atoom's proto files at that commit, which proto/ imports (generated Go comes from atoom's own modules), and
 #     third_party/atoom/testdata: the slot map vectors that the Rust twin of key/slotplan reads;
 #   - third_party/atoom/PIN: the commit and the sha256 of the vendored files.
@@ -58,8 +58,8 @@ sync() {
     mkdir -p "$dir/testdata"
     cp "$tmp/src/key/slotplan/testdata/vectors.json" "$dir/testdata/slotplan-vectors.json"
     printf 'source: %s\ncommit: %s\nsha256: %s\n' "$repo" "$commit" "$(digest)" >"$pin"
-    # Cargo: the one line of the workspace.
-    sed -i -E "s#^(atoom-common = \{ git = \"https://github.com/$repo\", )(rev|tag) = \"[^\"]*\"#\1rev = \"$commit\"#" Cargo.toml
+    # Cargo: the lines of the workspace, one per atoom crate.
+    sed -i -E "s#^(atoom-[a-z-]+ = \{ git = \"https://github.com/$repo\", )(rev|tag) = \"[^\"]*\"#\1rev = \"$commit\"#" Cargo.toml
     # Go: every atoom module that go.mod requires, at the pseudo-version of the commit (its time is the commit's, in UTC), and the replace of
     # the placeholder version that atoom's modules require each other at.
     local stamp pseudo mod
@@ -70,7 +70,10 @@ sync() {
         go mod edit -require="$mod@$pseudo" -replace="$mod@v0.0.0=$mod@$pseudo"
     done < <(awk '$1 ~ "^github.com/truvity/atoom/" { print $1 }' go.mod | sort -u)
     go mod tidy
-    cargo update -p atoom-common
+    local crate
+    while IFS= read -r crate; do
+        cargo update -p "$crate"
+    done < <(sed -n -E 's/^(atoom-[a-z-]+) = \{ git = .*/\1/p' Cargo.toml)
     echo "atoom: moved to $commit; now run: just proto-gen"
 }
 
@@ -83,7 +86,14 @@ check() {
     [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "the PIN has no commit of 40 hex digits"
     [ "$(pinned source)" = "$repo" ] || bad "the PIN source is not $repo"
     [ "$(pinned sha256)" = "$(digest)" ] || bad "the files under $dir are not what the PIN's sha256 says (run: tools/atoom/atoom.sh sync $commit; never edit them)"
-    grep -q "^atoom-common = { git = \"https://github.com/$repo\", rev = \"$commit\" }" Cargo.toml || bad "Cargo.toml: atoom-common is not at rev $commit"
+    local crates
+    crates=$(sed -n -E 's/^(atoom-[a-z-]+) = \{ git = .*/\1/p' Cargo.toml)
+    [ -n "$crates" ] || bad "Cargo.toml: no atoom crate"
+    local crate
+    while IFS= read -r crate; do
+        [ -n "$crate" ] || continue
+        grep -q "^$crate = { git = \"https://github.com/$repo\", rev = \"$commit\" }" Cargo.toml || bad "Cargo.toml: $crate is not at rev $commit"
+    done <<<"$crates"
     local mods
     mods=$(awk '$1 ~ "^github.com/truvity/atoom/" { print $1 " " $2 }' go.mod)
     [ -n "$mods" ] || bad "go.mod requires no atoom module"

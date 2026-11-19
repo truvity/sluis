@@ -9,10 +9,22 @@ import "atoom/common/v1alpha1/common.proto";
 
 // ItemService is served by the item drivers: rqlite, memory and dynamodb.
 service ItemService {
+  rpc Capabilities(CapabilitiesRequest) returns (CapabilitiesResponse); // what the driver offers: the optional calls it declares (docs/item-port.md "Capabilities")
   rpc Get(ItemGetRequest) returns (ItemGetResponse);                // key -> item; not_found if absent or expired
   rpc Query(QueryRequest) returns (QueryResponse);                  // items by key prefix, or by index entry, paged
   rpc Transact(TransactRequest) returns (TransactResponse);         // conditions, puts and deletes, all or none
   rpc TailLog(TailLogRequest) returns (stream TailLogResponse);     // the change log from a sequence
+}
+
+// CapabilitiesRequest asks what the driver offers.
+message CapabilitiesRequest {}
+
+// CapabilitiesResponse says what the driver offers. A call that a driver does not offer answers unimplemented, and the driver says so
+// here, so that a caller and the conformance kit know without trying (plan R4). A driver that does not serve Capabilities (it answers
+// unimplemented) is taken to offer every optional call, as the drivers did before this call existed.
+message CapabilitiesResponse {
+  string store = 1;     // the engine behind the driver: "memory", "rqlite" or "dynamodb"
+  bool tail_log = 2;    // true when the driver keeps the change log: TailLog is served, a put or delete with log set is accepted, and a query names a log head and epoch
 }
 
 // DriverItem is an item as a driver keeps it; the driver never knows what a kind means.

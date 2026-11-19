@@ -8,9 +8,15 @@ exclude = [
 ]
 
 [workspace.dependencies]
-# atoom, pinned by commit until its first release (docs/plan.md of truvity/atoom, step 1): `just atoom-sync` moves this line, go.mod and
+# atoom, pinned by commit until its first release (docs/plan.md of truvity/atoom, steps 1 to 3): `just atoom-sync` moves this line, go.mod and
 # third_party/atoom together, and `just atoom-check` holds them to one commit. Then it moves to `tag = "v0.1.0"`.
-atoom-common = { git = "https://github.com/truvity/atoom", rev = "1a91a13fee2c558d23494eabc47d120ee0c32933" }
+atoom-common = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
+# The item port (step 3): its contract, the conformance kit, the two drivers' libraries and the plain socket host the kit's client uses.
+atoom-socket = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
+atoom-store = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
+atoom-store-conformance = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
+atoom-store-memory = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
+atoom-store-rqlite = { git = "https://github.com/truvity/atoom", rev = "bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf" }
 
 [workspace.package]
 edition = "2024"
