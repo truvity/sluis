@@ -122,6 +122,19 @@ A later design that names a serious trade-off changes a row, as R11 says.
 
 The card driver is now a library of [atoom](https://github.com/truvity/atoom) (`key/yubikeypiv`, Go with `piv-go`, step 2 of its plan), and sluis keeps only the executable that hosts it. The text of this record, including the spike S4 findings and the roads not taken on the card, stays as it is; the research is copied next to the driver, in [`key/yubikeypiv/docs/research/s4-piv-go-or-pkcs11.md`](https://github.com/truvity/atoom/blob/master/key/yubikeypiv/docs/research/s4-piv-go-or-pkcs11.md). Rule R5 (AWS drivers are Rust) is unchanged here; the AWS KMS key driver that step 2b adds to atoom is written in Go, and amending R5 for it is the maintainer's.
 
+### Amendment of 2026-11-19: the AWS-backed drivers are written in Go in atoom (R5)
+
+**Proposed — owner review.** Nothing in this amendment is accepted until the maintainer says so; until then the text of R5 and of the table stands, and this records what was built and why.
+
+The AWS KMS key driver (`key/awskms`) and the DynamoDB item driver (`store/dynamodb`) now exist, in [atoom](https://github.com/truvity/atoom) (the ports and drivers moved there, steps 2b and 3 of [its plan](https://github.com/truvity/atoom/blob/master/docs/plan.md)). Both are **Go**, on the AWS SDK for Go v2, where R5 says that AWS drivers are Rust. The reasons:
+
+- **The SDK is the deciding library (R4's own test).** The AWS SDK for Go v2 is the long-established one and covers what the two drivers call: KMS (`Sign`, `GetPublicKey`, `DeriveSharedSecret`, aliases and tags) and DynamoDB (transactions and conditional writes). The AWS SDK for Rust is younger, and the research above (spike S2, 2026-10-30) found that it signs requests and checksums with RustCrypto, outside any module. For a key driver the maturity of the SDK counts for more than a smaller footprint.
+- **The interface is ConnectRPC, so the language of one driver is free.** R10 and R1 say that a driver is its own executable behind a contract, that its language is independent of its caller's, and that a wrong choice reverses one component at a time. A Go driver behind the key port or the item port costs its caller nothing; a Rust twin can replace it behind the same contract and the same kit (R9). atoom's plan says the same: the language is a choice per driver, not per repository.
+- **The reason for "one AWS SDK language in the build" weakens.** It assumed that sluis builds every AWS driver. The drivers are atoom's libraries now, built and tested in atoom, so the cost of a second SDK language falls on atoom's repository, which does not unify languages, and not on sluis's build. sluis links the Go library, or hosts the executable, and keeps its Rust code free of an AWS SDK.
+- **The shape of Lambda fits.** There are no sidecars on Lambda, so a Go function mounts the library on an in-memory transport; no socket and no second process.
+
+The amendment changes these rows of the table when accepted: the AWS drivers `dynamodb` and `aws-kms` are **Go, in atoom**, rule **R4 (the vendor SDKs) with R10**, an exception to R5 as `cloud-cloudflare` is. The other AWS drivers named in the table (`appconfig`, SSM, `sqs`, the `s3-compatible` blob) are not built; their language is decided when each is, by the same reasoning, and R5 stands for them until then. Roads not taken: a Rust KMS and DynamoDB driver first (a second implementation on the younger SDK, for no caller that needs it); amending R5 to read "AWS drivers are Go" (it would settle drivers that do not exist yet).
+
 ## Consequences
 
 - More of sluis moves to Rust on the boards. Reviewers read more Rust, and the Rust gates cover more components; each move waits for the Rust kit to pass the suite.

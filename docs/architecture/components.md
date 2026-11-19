@@ -440,8 +440,8 @@ docs/  site/
 | Directory | Holds |
 | --------- | ----- |
 | `proto/` | The contracts every other directory implements or calls, and the messages of the kinds. A contract change is reviewed here first |
-| `kits/` | The shared kits above, one directory per language, plus the conformance suite |
-| `actors/`, `drivers/` | One directory per actor, and per driver under its owner, matching the layout under `/usr/libexec/sluis/` that the [packages](#packaging) install |
+| `kits/` | The shared kits above, one directory per language, plus sluis's own conformance vectors. The port kits are in [atoom](https://github.com/truvity/atoom) |
+| `actors/`, `drivers/` | One directory per actor, and per driver under its owner, matching the layout under `/usr/libexec/sluis/` that the [packages](#packaging) install. A driver here is the host of a library of [atoom](https://github.com/truvity/atoom): the socket, the peer check and the command line |
 | `node/agent/` | The node agent (`sluis-node`) |
 | `cli/sluis/` | The one `sluis` binary |
 | `host/sluis-host/` | The SSH host service ([SSH](/integrations/infrastructure-access/#ssh)) |
@@ -465,7 +465,7 @@ The structure above is kept by tests that run in CI, cheap to write because the 
 | Only the wiring package imports drivers | An actor that links a driver directly instead of using its port |
 | An authority key has exactly one user actor | A key policy that names two actors |
 | No work actor holds a credential at rest, and no unit holds a holder with a work actor | A fusion or a registry row that breaks [the fusion rule](#the-fusion-rule) |
-| Each driver passes the port's conformance suite | A driver that diverges from the port contract |
+| Each driver passes the port's conformance suite (atoom's kit, run by `just conformance`) | A driver that diverges from the port contract |
 | The deny matrix ([Deployment](/architecture/deployment/#the-deny-matrix)) | A generated policy that is too wide |
 | Each of the two checks holds with the other switched off | A check that passes only because the other caught the case |
 | The drift test: generated rules, grant checks, policy documents, units, sockets and service accounts agree with the registries | A hand edit, or a generator change that missed one output |
