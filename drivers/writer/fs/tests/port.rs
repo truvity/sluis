@@ -1,5 +1,5 @@
-//! The blob port over a real Unix socket: the contract (`proto/`) is the only way in, the caller is
-//! known from the socket's peer uid, and the suite runs on the same engine.
+//! The blob port over a real Unix socket behind sluis's guard: the contract (atoom's, `blob/proto`) is the only way in, the caller is
+//! known from the socket's peer uid, and the suite runs on the same engine. The driver is atoom's (`atoom-blob-fs`); the guard is sluis's.
 
 #![allow(refining_impl_trait)]
 #![allow(clippy::unwrap_used, clippy::expect_used)] // a failed unwrap in a test is the failure
@@ -7,14 +7,13 @@
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
-use connectrpc::Router;
-use connectrpc::error::ErrorCode;
-use sluis_driver_writer_fs::service::Service;
-use sluis_driver_writer_fs::{Fs, suite};
-use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
-use sluis_proto::sluis::port::blob::v2alpha1::{
-    BlobGetRequest, BlobListRequest, BlobServiceClient, BlobServiceExt, CreateRequest, PutRequest,
+use atoom_blob::atoom::blob::v1alpha1::{
+    BlobGetRequest, BlobListRequest, BlobServiceClient, CreateRequest, PutRequest,
 };
+use atoom_blob_fs::service::Service;
+use atoom_blob_fs::{Fs, suite};
+use connectrpc::error::ErrorCode;
+use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
 
 fn serve(socket: &Path, root: &Path, me_is: &'static str) -> tokio::sync::oneshot::Sender<()> {
     let me = rustix::process::geteuid().as_raw();
@@ -28,7 +27,7 @@ fn serve(socket: &Path, root: &Path, me_is: &'static str) -> tokio::sync::onesho
         allow: Allow::OwnerOnly("writer"),
         default_deadline: std::time::Duration::from_secs(10),
     };
-    let router = std::sync::Arc::new(Service(Fs::open(root).unwrap())).register(Router::new());
+    let router = Service(Fs::open(root).unwrap()).router();
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     tokio::spawn(sluis_kit::serve_with(
         cfg,

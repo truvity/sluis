@@ -12,7 +12,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	transportv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1"
+	transportv1alpha1 "github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1"
 )
 
 // The tests below prove the note of best-effort facts that could not be delivered (0029 "Facts that are lost are
@@ -33,7 +33,7 @@ type noteOf struct {
 }
 
 // lostOf returns unmapped.sluis.lost of a request's record; ok is false when the record carries none.
-func lostOf(t *testing.T, r *transportv2alpha1.EmitRequest) (n noteOf, ok bool) {
+func lostOf(t *testing.T, r *transportv1alpha1.EmitRequest) (n noteOf, ok bool) {
 	t.Helper()
 	var rec struct {
 		Unmapped struct {

@@ -23,8 +23,8 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
-	transportv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
+	transportv1alpha1 "github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1"
+	"github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1/transportv1alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/audit"
 )
 
@@ -67,7 +67,7 @@ func newMessage(t *testing.T, em *audit.Emitter, action, tenant string) message 
 }
 
 func (e *env) push(m message) {
-	e.tr.push(&transportv2alpha1.AuditMessage{Uid: m.uid, Record: m.rec})
+	e.tr.push(&transportv1alpha1.AuditMessage{Uid: m.uid, Record: m.rec})
 }
 
 // logEntries reads every entry of the audit log from its files, in order.
@@ -283,17 +283,17 @@ func TestWriterWritesALogTheCLIVerifies(t *testing.T) {
 // flakyTransport is the transport of an emitter whose spool is full while down is set: it refuses, and keeps every
 // message it was handed.
 type flakyTransport struct {
-	transportv2alpha1connect.TransportServiceClient
+	transportv1alpha1connect.TransportServiceClient
 	down bool
-	got  []*transportv2alpha1.EmitRequest
+	got  []*transportv1alpha1.EmitRequest
 }
 
-func (f *flakyTransport) Emit(_ context.Context, r *connect.Request[transportv2alpha1.EmitRequest]) (*connect.Response[transportv2alpha1.EmitResponse], error) {
+func (f *flakyTransport) Emit(_ context.Context, r *connect.Request[transportv1alpha1.EmitRequest]) (*connect.Response[transportv1alpha1.EmitResponse], error) {
 	f.got = append(f.got, r.Msg)
 	if f.down {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("spool full"))
 	}
-	return connect.NewResponse(&transportv2alpha1.EmitResponse{}), nil
+	return connect.NewResponse(&transportv1alpha1.EmitResponse{}), nil
 }
 
 // A record that carries the count of lost facts (unmapped.sluis.lost, 0030 "The sluis fields") is a record like any
@@ -490,7 +490,7 @@ func TestNothingIsAcknowledgedWhenTheCheckpointFails(t *testing.T) {
 }
 
 // openQuarantine opens the sealed message of a quarantine object.
-func openQuarantine(t *testing.T, e *env, path string) (map[string]any, *transportv2alpha1.AuditMessage) {
+func openQuarantine(t *testing.T, e *env, path string) (map[string]any, *transportv1alpha1.AuditMessage) {
 	t.Helper()
 	b, err := os.ReadFile(path) //nolint:gosec // a test path under a temporary directory
 	if err != nil {
@@ -508,7 +508,7 @@ func openQuarantine(t *testing.T, e *env, path string) (map[string]any, *transpo
 	if err != nil {
 		t.Fatalf("the quarantined message does not open at its address: %v", err)
 	}
-	var m transportv2alpha1.AuditMessage
+	var m transportv1alpha1.AuditMessage
 	if err := proto.Unmarshal(pt, &m); err != nil {
 		t.Fatal(err)
 	}
@@ -574,7 +574,7 @@ func TestAMessageWithAUsagePartIsQuarantinedWithIt(t *testing.T) {
 	e.start()
 	m := newMessage(t, em, "key.sign", "globex")
 	usage := []byte(`{"id":"x/0"}`)
-	e.tr.push(&transportv2alpha1.AuditMessage{Uid: m.uid, Record: m.rec, Usage: [][]byte{usage}})
+	e.tr.push(&transportv1alpha1.AuditMessage{Uid: m.uid, Record: m.rec, Usage: [][]byte{usage}})
 	wait(t, "the message to be acknowledged", func() bool { return e.tr.ackedCount() == 1 })
 	reports, _ := filepath.Glob(filepath.Join(e.root, "quarantine", "*"))
 	if len(reports) != 1 {
@@ -592,7 +592,7 @@ func TestAMessageWithAUsagePartIsQuarantinedWithIt(t *testing.T) {
 func TestAMessageWithoutAReadableTenantIsQuarantinedUnderTheOperators(t *testing.T) {
 	e := newEnv(t)
 	e.start()
-	e.tr.push(&transportv2alpha1.AuditMessage{Uid: "u1", Record: []byte("not json")})
+	e.tr.push(&transportv1alpha1.AuditMessage{Uid: "u1", Record: []byte("not json")})
 	wait(t, "the message to be acknowledged", func() bool { return e.tr.ackedCount() == 1 })
 	reports, _ := filepath.Glob(filepath.Join(e.root, "quarantine", "*"))
 	if len(reports) != 1 {
@@ -681,8 +681,8 @@ func TestASecondWriterCannotFork(t *testing.T) {
 	before := e.mustVerify(t)
 
 	m := newMessage(t, em, "key.sign", "acme")
-	err := b.processBatch(ctx, []*transportv2alpha1.Delivery{{DeliveryId: 99, Emitter: "key@dev",
-		Message: &transportv2alpha1.AuditMessage{Uid: m.uid, Record: m.rec}}})
+	err := b.processBatch(ctx, []*transportv1alpha1.Delivery{{DeliveryId: 99, Emitter: "key@dev",
+		Message: &transportv1alpha1.AuditMessage{Uid: m.uid, Record: m.rec}}})
 	var fatal *fatalError
 	if !errors.As(err, &fatal) || !errors.Is(err, ErrFence) {
 		t.Fatalf("B's batch = %v, want a fatal refusal of the fence", err)
@@ -702,11 +702,11 @@ func TestASecondWriterCannotFork(t *testing.T) {
 	e.push(newMessage(t, em, "key.sign", "acme"))
 	wait(t, "the third batch", func() bool { return e.tr.ackedCount() == 3 })
 	stateBefore, _ := os.ReadFile(filepath.Join(e.root, "state", "writer-state"))
-	var ds []*transportv2alpha1.Delivery
+	var ds []*transportv1alpha1.Delivery
 	for i := range 3 {
 		m := newMessage(t, em, "key.sign", "acme")
-		ds = append(ds, &transportv2alpha1.Delivery{DeliveryId: uint64(100 + i), Emitter: "key@dev",
-			Message: &transportv2alpha1.AuditMessage{Uid: m.uid, Record: m.rec}})
+		ds = append(ds, &transportv1alpha1.Delivery{DeliveryId: uint64(100 + i), Emitter: "key@dev",
+			Message: &transportv1alpha1.AuditMessage{Uid: m.uid, Record: m.rec}})
 	}
 	err = c.processBatch(ctx, ds)
 	if !errors.Is(err, ErrFence) {

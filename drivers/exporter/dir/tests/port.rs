@@ -1,5 +1,6 @@
-//! The destination port over a real Unix socket against the directory driver: the contract (`proto/`) is the only
-//! way in, the caller is known from the socket's peer uid, and the suite runs through the wire as well as in process.
+//! The destination port over a real Unix socket against the directory driver behind sluis's guard: the contract (atoom's,
+//! `destination/proto`) is the only way in, the caller is known from the socket's peer uid, and the suite runs through the wire as well
+//! as in process.
 
 #![allow(refining_impl_trait)]
 #![allow(clippy::unwrap_used, clippy::expect_used)] // a failed unwrap in a test is the failure
@@ -7,14 +8,13 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use connectrpc::Router;
+use atoom_destination::atoom::destination::v1alpha1::{DestinationServiceClient, ReadBackRequest};
+use atoom_destination_conformance::rpc::{Client, Service};
+use atoom_destination_conformance::suite::{Caps, run};
+use atoom_destination_conformance::{Destination, Document, Error};
+use atoom_destination_dir::{Directory, Until, suite};
 use connectrpc::error::ErrorCode;
-use sluis_destination::rpc::{Client, Service};
-use sluis_destination::suite::{Caps, run};
-use sluis_destination::{Destination, Document, Error};
-use sluis_driver_exporter_dir::{Directory, Until, suite};
 use sluis_kit::{Allow, Identities, ServerConfig, dial};
-use sluis_proto::sluis::port::destination::v2alpha1::{DestinationServiceClient, ReadBackRequest};
 
 fn serve(socket: &Path, d: Directory, me_is: &'static str) -> tokio::sync::oneshot::Sender<()> {
     let me = rustix::process::geteuid().as_raw();
@@ -28,8 +28,7 @@ fn serve(socket: &Path, d: Directory, me_is: &'static str) -> tokio::sync::onesh
         allow: Allow::OwnerOnly("exporter"),
         default_deadline: std::time::Duration::from_secs(10),
     };
-    use sluis_proto::sluis::port::destination::v2alpha1::DestinationServiceExt;
-    let router = Arc::new(Service(Arc::new(d))).register(Router::new());
+    let router = Service(Arc::new(d)).router();
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     tokio::spawn(sluis_kit::serve_with(
         cfg,
@@ -84,7 +83,7 @@ async fn the_suite_passes_through_the_socket() {
         "exporter",
     );
     up(&sock).await;
-    let client = Client::new(&dial(&sock));
+    let client = Client::new(&atoom_socket::dial(&sock));
     run(&client, &Caps::default()).await.unwrap();
     // A directory has no public address: ReadBack is unsupported on the wire, as `unimplemented`.
     assert_eq!(
@@ -119,7 +118,7 @@ async fn another_caller_is_refused() {
         "signer",
     );
     up(&sock).await;
-    let e = Client::new(&dial(&sock))
+    let e = Client::new(&atoom_socket::dial(&sock))
         .put(doc("x", b"{}"))
         .await
         .unwrap_err();
@@ -156,7 +155,7 @@ async fn a_crash_mid_write_leaves_the_old_document_and_a_restart_cleans_up() {
     assert_eq!(l.len(), 1);
     assert_eq!(
         l[0].sha256,
-        sluis_destination::sha256_hex(br#"{"keys":[1]}"#)
+        atoom_destination_conformance::sha256_hex(br#"{"keys":[1]}"#)
     );
 
     // A restarted driver (a new Directory over the same directories) sweeps it.
@@ -171,7 +170,7 @@ async fn a_crash_mid_write_leaves_the_old_document_and_a_restart_cleans_up() {
     let l = d.list("", None, 0).await.unwrap().documents;
     assert_eq!(
         l[0].sha256,
-        sluis_destination::sha256_hex(br#"{"keys":[3]}"#)
+        atoom_destination_conformance::sha256_hex(br#"{"keys":[3]}"#)
     );
 
     // The next write is whole, and the record is current again.
@@ -179,7 +178,7 @@ async fn a_crash_mid_write_leaves_the_old_document_and_a_restart_cleans_up() {
     assert_eq!(std::fs::read(&live).unwrap(), br#"{"keys":[3,4]}"#);
     assert_eq!(
         w.sha256,
-        sluis_destination::sha256_hex(br#"{"keys":[3,4]}"#)
+        atoom_destination_conformance::sha256_hex(br#"{"keys":[3,4]}"#)
     );
     assert_eq!(strays(), 0);
 }

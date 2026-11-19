@@ -14,7 +14,7 @@ import (
 
 	"golang.org/x/mod/sumdb/note"
 
-	transportv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1"
+	transportv1alpha1 "github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1"
 )
 
 // keysOf collects every object key of a decoded JSON value, at any depth.
@@ -66,8 +66,8 @@ func TestTheLogHoldsOnlyRecordsAndSealEntries(t *testing.T) {
 	e.push(newMessage(t, em, "key.nothing", "acme"))
 	catalogueDoc := canonical(t, map[string]any{"release": "0.0.0", "actions": []any{"key.sign", "store.start"}})
 	schemaEntry := canonical(t, map[string]any{"entry": "schema", "schema": map[string]any{"type": "object"}})
-	e.tr.push(&transportv2alpha1.AuditMessage{Uid: "catalogue-doc", Record: catalogueDoc})
-	e.tr.push(&transportv2alpha1.AuditMessage{Uid: "schema-entry", Record: schemaEntry})
+	e.tr.push(&transportv1alpha1.AuditMessage{Uid: "catalogue-doc", Record: catalogueDoc})
+	e.tr.push(&transportv1alpha1.AuditMessage{Uid: "schema-entry", Record: schemaEntry})
 	const sent = 4 + 1 + 2
 	wait(t, "every message to be acknowledged", func() bool { return e.tr.ackedCount() == sent })
 

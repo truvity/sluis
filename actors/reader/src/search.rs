@@ -25,10 +25,10 @@ use connectrpc::ConnectError;
 use connectrpc::error::ErrorCode;
 use indexer::entry::Opened;
 use sluis_kit::refusal;
+use sluis_proto::atoom::index::v1alpha1::{Partition, Row, SearchRequest as IndexSearch};
 use sluis_proto::sluis::policy::v2alpha1::{
     ActorFacts, DecideRequest, Decision as Verdict, EntityRef,
 };
-use sluis_proto::sluis::port::index::v2alpha1::{Partition, Row, SearchRequest as IndexSearch};
 use sluis_proto::sluis::reader::v2alpha1::{Hit, SearchRequest, SearchResponse};
 
 use crate::config::{Config, Log};

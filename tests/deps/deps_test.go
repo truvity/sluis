@@ -68,10 +68,9 @@ func goDeps(t *testing.T, pattern string) []string {
 	return strings.Fields(string(out))
 }
 
-// The ports of the drivers: the item port (the engines), the blob, index and key store ports, and the source port (the
+// The ports of the drivers are atoom's (below): the item port (the engines), the blob, index and key store ports, and the source port (the
 // config source and the secret source). A work actor has none of them: it reaches data through the store service and keys
-// through the key service. The transport port is the audit-emit port that every actor has.
-var driverPorts = []string{"blob", "index"}
+// through the key service. The transport port, atoom's too, is the audit-emit port that every actor has.
 
 // The key-store port and its drivers are atoom's (github.com/truvity/atoom/key and key/<driver>), not a package of this module: a work actor
 // links none of them either.
@@ -83,6 +82,13 @@ const atoomStore = "github.com/truvity/atoom/store"
 // The source port (the config source and the secret source) and its drivers are atoom's too (github.com/truvity/atoom/source and
 // source/<driver>).
 const atoomSource = "github.com/truvity/atoom/source"
+
+// The blob and index ports of the audit drivers are atoom's (github.com/truvity/atoom/blob and index, and blob/<driver>): a work actor links
+// neither. The transport port (github.com/truvity/atoom/transport) is the one every actor has, and is not listed.
+var atoomAuditPorts = map[string]string{
+	"github.com/truvity/atoom/blob":  "the blob port of the drivers",
+	"github.com/truvity/atoom/index": "the index port of the drivers",
+}
 
 // Libraries that read configuration or secrets from a place, watch a file for it, or speak to an engine or a secret
 // store. A work actor reads its configuration as kinds through the store service, so it needs none of them.
@@ -104,12 +110,12 @@ func goForbidden(actor, imp string) string {
 		case strings.HasPrefix(rel, "actors/") && rel != "actors/"+actor && !strings.HasPrefix(rel, "actors/"+actor+"/"):
 			return "another actor's code"
 		}
-		for _, p := range driverPorts {
-			if rel == "gen/go/sluis/port/"+p || strings.HasPrefix(rel, "gen/go/sluis/port/"+p+"/") {
-				return "the " + p + " port of the drivers"
-			}
-		}
 		return ""
+	}
+	for port, why := range atoomAuditPorts {
+		if imp == port || strings.HasPrefix(imp, port+"/") {
+			return why
+		}
 	}
 	for _, d := range []string{"/software", "/yubikeypiv"} {
 		if imp == atoomKey+d || strings.HasPrefix(imp, atoomKey+d+"/") {
@@ -272,6 +278,15 @@ var atoomItemCrates = []string{"atoom-store-rqlite", "atoom-store-memory", "atoo
 // none of them.
 var atoomSourceCrates = []string{"atoom-source-file", "atoom-source-credential"}
 
+// The crates of atoom's audit ports (blob, index, destination, transport) that hold a driver, a contract that only a driver or exporter@ speaks, or
+// a kit: a work actor links none of them. The transport contract (atoom-transport) is the one every actor has, and is not listed.
+var atoomAuditCrates = []string{
+	"atoom-blob", "atoom-blob-fs", "atoom-blob-fsdir", "atoom-blob-fsreadonly", "atoom-blob-conformance",
+	"atoom-index", "atoom-index-sqlite", "atoom-index-conformance",
+	"atoom-destination", "atoom-destination-dir", "atoom-destination-conformance",
+	"atoom-transport-spool", "atoom-transport-conformance",
+}
+
 var rustForbiddenLibs = []string{
 	"config", "figment", "dotenvy", "dotenv", "envy", "notify", "aws-config", "vaultrs", "keyring",
 	"rusqlite", "sqlx", "diesel", "rqlite", "redis", "tokio-postgres",
@@ -293,6 +308,9 @@ func (g rustGraph) rustForbidden(actor string, p rustPackage) string {
 	}
 	if slices.Contains(atoomSourceCrates, p.Name) {
 		return "a source driver of atoom"
+	}
+	if slices.Contains(atoomAuditCrates, p.Name) {
+		return "a driver, a contract or a kit of atoom's audit ports"
 	}
 	if slices.Contains(rustForbiddenLibs, p.Name) || strings.HasPrefix(p.Name, "aws-sdk-") || strings.HasPrefix(p.Name, "rusoto") {
 		return "a configuration, secret or engine library"
@@ -365,11 +383,11 @@ func TestWorkActorsLinkNoConfigSourceSecretSourceOrDriver(t *testing.T) {
 			t.Error("the control failed: the matcher did not find a driver in the closure of a driver")
 		}
 		if goForbidden("session", "github.com/spf13/viper/internal") == "" || goForbidden("session", module+"/actors/key/internal/keyd") == "" ||
-			goForbidden("session", module+"/gen/go/sluis/port/blob/v2alpha1") == "" || goForbidden("session", atoomKey+"/gen/atoom/key/v1alpha1") == "" ||
+			goForbidden("session", "github.com/truvity/atoom/blob/gen/atoom/blob/v1alpha1") == "" || goForbidden("session", atoomKey+"/gen/atoom/key/v1alpha1") == "" ||
 			goForbidden("session", atoomStore+"/gen/atoom/store/v1alpha1") == "" || goForbidden("session", atoomSource+"/gen/atoom/source/v1alpha1") == "" {
 			t.Error("the control failed: the matcher let a known case through")
 		}
-		if goForbidden("session", module+"/actors/session/internal/sessiond") != "" || goForbidden("session", module+"/gen/go/sluis/port/transport/v2alpha1") != "" {
+		if goForbidden("session", module+"/actors/session/internal/sessiond") != "" || goForbidden("session", "github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1") != "" {
 			t.Error("the matcher refuses what a work actor has")
 		}
 	})

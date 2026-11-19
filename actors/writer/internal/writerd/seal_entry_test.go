@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	transportv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1"
+	transportv1alpha1 "github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1"
 	"github.com/truvity/sluis/v2/kits/go/audit"
 )
 
@@ -24,12 +24,12 @@ import (
 var deliverySeq atomic.Uint64
 
 // deliveries wraps messages as the transport delivers them, from the emitter the fake transport names.
-func deliveries(ms ...message) []*transportv2alpha1.Delivery {
-	out := make([]*transportv2alpha1.Delivery, len(ms))
+func deliveries(ms ...message) []*transportv1alpha1.Delivery {
+	out := make([]*transportv1alpha1.Delivery, len(ms))
 	for i, m := range ms {
-		out[i] = &transportv2alpha1.Delivery{
+		out[i] = &transportv1alpha1.Delivery{
 			DeliveryId: deliverySeq.Add(1), Emitter: "key@" + testBoundary,
-			Message: &transportv2alpha1.AuditMessage{Uid: m.uid, Record: m.rec},
+			Message: &transportv1alpha1.AuditMessage{Uid: m.uid, Record: m.rec},
 		}
 	}
 	return out

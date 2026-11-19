@@ -20,15 +20,15 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/truvity/atoom/blob/gen/atoom/blob/v1alpha1/blobv1alpha1connect"
+	"github.com/truvity/atoom/destination/gen/atoom/destination/v1alpha1/destinationv1alpha1connect"
 	"github.com/truvity/atoom/key/gen/atoom/key/v1alpha1/keyv1alpha1connect"
 	"github.com/truvity/atoom/source/gen/atoom/source/v1alpha1/sourcev1alpha1connect"
 	"github.com/truvity/atoom/store/gen/atoom/store/v1alpha1/storev1alpha1connect"
+	"github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1/transportv1alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/integration/v2alpha1/integrationv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/policy/v2alpha1/policyv2alpha1connect"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/blob/v2alpha1/blobv2alpha1connect"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/destination/v2alpha1/destinationv2alpha1connect"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/signer/v2alpha1/signerv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1/storev2alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/registry"
@@ -107,10 +107,10 @@ func Targets(boundary string) []Target {
 		{ID: "entry", Service: "entry", Socket: fmt.Sprintf("/run/sluis/entry/%s.sock", b), Kind: HTTP,
 			Rule: Only, Who: "harness-forwarder", Note: "only the forwarder; any other peer is dropped and audited"},
 		{ID: "spool-emit", Service: "drv-writer-spool", Socket: fmt.Sprintf("/run/sluis/audit/%s/emit.sock", b), Kind: Connect,
-			Procedure: transportv2alpha1connect.TransportServiceEmitProcedure, Rule: CallGraph, Who: "transport",
+			Procedure: transportv1alpha1connect.TransportServiceEmitProcedure, Rule: CallGraph, Who: "transport",
 			Note: "every emitter of the call graph"},
 		{ID: "spool-receive", Service: "drv-writer-spool", Socket: fmt.Sprintf("/run/sluis/audit/%s/receive.sock", b), Kind: Connect,
-			Procedure: transportv2alpha1connect.TransportServiceAckProcedure, Rule: Only, Who: "writer",
+			Procedure: transportv1alpha1connect.TransportServiceAckProcedure, Rule: Only, Who: "writer",
 			Note: "only the writer; the shared group opens the socket, so the guard refuses the others"},
 	}
 	for _, c := range registry.CallersOf("key") {
@@ -134,10 +134,10 @@ func Targets(boundary string) []Target {
 		drv("drv-secret", "drv-store-credential", fmt.Sprintf("/run/sluis/store/%s/secret-source.sock", b),
 			sourcev1alpha1connect.SourceServiceCapabilitiesProcedure, "driver-store-credential"),
 		drv("drv-blob", "drv-writer-fs", fmt.Sprintf("/run/sluis/writer/%s/blob.sock", b),
-			blobv2alpha1connect.BlobServiceGetProcedure, "driver-writer-fs"),
+			blobv1alpha1connect.BlobServiceGetProcedure, "driver-writer-fs"),
 		// The directory destination of exporter@: List of an empty prefix answers harmlessly to its one caller.
 		drv("drv-exporter", "drv-exporter-dir", fmt.Sprintf("/run/sluis/exporter/%s/directory.sock", b),
-			destinationv2alpha1connect.DestinationServiceListProcedure, "driver-exporter-dir"),
+			destinationv1alpha1connect.DestinationServiceListProcedure, "driver-exporter-dir"),
 	)
 	return ts
 }

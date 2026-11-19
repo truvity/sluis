@@ -14,21 +14,21 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/truvity/atoom/common/refusal"
-	transportv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
+	transportv1alpha1 "github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1"
+	"github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1/transportv1alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/rpc"
 )
 
 // spool is a TransportService that records the emits and answers with err.
 type spool struct {
-	transportv2alpha1connect.UnimplementedTransportServiceHandler
+	transportv1alpha1connect.UnimplementedTransportServiceHandler
 	mu   sync.Mutex
-	reqs []*transportv2alpha1.EmitRequest
+	reqs []*transportv1alpha1.EmitRequest
 	peer []rpc.Peer
 	err  error
 }
 
-func (s *spool) Emit(ctx context.Context, r *connect.Request[transportv2alpha1.EmitRequest]) (*connect.Response[transportv2alpha1.EmitResponse], error) {
+func (s *spool) Emit(ctx context.Context, r *connect.Request[transportv1alpha1.EmitRequest]) (*connect.Response[transportv1alpha1.EmitResponse], error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.reqs = append(s.reqs, r.Msg)
@@ -37,11 +37,11 @@ func (s *spool) Emit(ctx context.Context, r *connect.Request[transportv2alpha1.E
 	if s.err != nil {
 		return nil, s.err
 	}
-	return connect.NewResponse(&transportv2alpha1.EmitResponse{}), nil
+	return connect.NewResponse(&transportv1alpha1.EmitResponse{}), nil
 }
 
 // startSpool serves the spool on a Unix socket, as the emit socket of a boundary; the test process is "key".
-func startSpool(t *testing.T, s *spool) transportv2alpha1connect.TransportServiceClient {
+func startSpool(t *testing.T, s *spool) transportv1alpha1connect.TransportServiceClient {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "a")
 	if err != nil {
@@ -53,7 +53,7 @@ func startSpool(t *testing.T, s *spool) transportv2alpha1connect.TransportServic
 		Actor: "driver-writer-spool", Boundary: "dev", Socket: filepath.Join(dir, "emit.sock"),
 		Allow: func(p rpc.Peer, _ string) bool { return p.Name == "key" },
 	}, func(uid uint32) (string, uint32, bool) { return "key", 0, uid == self })
-	path, h := transportv2alpha1connect.NewTransportServiceHandler(s, rpc.HandlerOptions(cfg)...)
+	path, h := transportv1alpha1connect.NewTransportServiceHandler(s, rpc.HandlerOptions(cfg)...)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- rpc.Serve(ctx, cfg, rpc.Handler{Path: path, H: h}) }()
@@ -64,10 +64,10 @@ func startSpool(t *testing.T, s *spool) transportv2alpha1connect.TransportServic
 		}
 	})
 	hc, url := rpc.Dial(cfg.Socket)
-	c := transportv2alpha1connect.NewTransportServiceClient(hc, url, rpc.ClientOptions()...)
+	c := transportv1alpha1connect.NewTransportServiceClient(hc, url, rpc.ClientOptions()...)
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		_, err := c.Ack(context.Background(), connect.NewRequest(&transportv2alpha1.AckRequest{}))
+		_, err := c.Ack(context.Background(), connect.NewRequest(&transportv1alpha1.AckRequest{}))
 		if connect.CodeOf(err) != connect.CodeUnavailable || time.Now().After(deadline) {
 			break
 		}

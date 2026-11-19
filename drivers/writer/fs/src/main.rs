@@ -1,4 +1,8 @@
-//! The `fs` blob driver of the writer.
+//! The host of the `fs` blob driver of the writer.
+//!
+//! The driver is atoom's (github.com/truvity/atoom, `blob/fs`, pinned by commit: `third_party/atoom/README.md`): the blob port over a local
+//! directory. This file is what is sluis's: the socket with the peer credentials of its caller, the owner check (only `writer` may open it),
+//! the command line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
 //!
 //! ```text
 //! driver-writer-fs serve       --socket PATH --root DIR [--socket-gid GID]
@@ -8,17 +12,14 @@
 //! ```
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, bail};
+use atoom_blob_fs::service::Service;
+use atoom_blob_fs::{Fs, suite};
 use clap::Arg;
-use connectrpc::Router;
-use sluis_driver_writer_fs::service::Service;
-use sluis_driver_writer_fs::{Fs, suite};
 use sluis_kit::cli::{Commands, Flags, Refused, shutdown_signal};
 use sluis_kit::{Allow, ServerConfig};
-use sluis_proto::sluis::port::blob::v2alpha1::BlobServiceExt;
 
 /// The registry name of this driver's user and the actor that owns it (PLAN.md "Socket layout").
 const NAME: &str = "driver-writer-fs";
@@ -66,7 +67,7 @@ impl Commands for Fsd {
             allow: Allow::OwnerOnly(OWNER),
             default_deadline: Duration::from_secs(30),
         };
-        let router = Arc::new(Service(fs)).register(Router::new());
+        let router = Service(fs).router();
         sluis_kit::serve(cfg, router, shutdown_signal()).await
     }
 

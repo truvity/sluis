@@ -38,7 +38,8 @@ tracing = "0.1"
 
 [dev-dependencies]
 # The real index driver is the other end of the index-ro port in the tests; its dev edge turns the test uid table on.
-sluis-driver-indexer-sqlite = { path = "../../drivers/indexer/sqlite" }
+atoom-index.workspace = true
+atoom-index-sqlite.workspace = true
 # Only a dev-dependency turns the test uid table on, so no product build has it (just rust-feature-guard).
 sluis-kit = { path = "../../kits/rust/sluis-kit", features = ["test-identities"] }
 base64 = "0.23"

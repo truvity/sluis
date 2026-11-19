@@ -11,6 +11,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use atoom_destination_conformance::Destination;
+use atoom_destination_conformance::memory::Memory;
 use aws_lc_rs::signature::{ECDSA_P384_SHA384_FIXED_SIGNING, EcdsaKeyPair, KeyPair as _};
 use buffa::Message as _;
 use connectrpc::error::ErrorCode;
@@ -20,15 +22,13 @@ use exporter::publish::Timing;
 use exporter::run::{Engine, EngineConfig, Target};
 use serde_json::Value;
 use sluis_audit::Config as AuditConfig;
-use sluis_destination::Destination;
-use sluis_destination::memory::Memory;
 use sluis_kit::{Allow, Identities, ServerConfig, refusal};
-use sluis_proto::sluis::exporter::v2alpha1::{ExportCursor, ExportManifest, ExportReport};
-use sluis_proto::sluis::key::v2alpha1::KeyRevocation;
-use sluis_proto::sluis::port::transport::v2alpha1::{
+use sluis_proto::atoom::transport::v1alpha1::{
     AckRequest, AckResponse, EmitRequest, EmitResponse, ReceiveRequest, ReceiveResponse,
     TransportService, TransportServiceExt,
 };
+use sluis_proto::sluis::exporter::v2alpha1::{ExportCursor, ExportManifest, ExportReport};
+use sluis_proto::sluis::key::v2alpha1::KeyRevocation;
 use sluis_proto::sluis::signer::v2alpha1::{SigningKey, SigningRing};
 use sluis_proto::sluis::store::v2alpha1::{
     ChangeType, Consistency, GetRequest, GetResponse, GetSignedConfigRequest,
@@ -817,12 +817,12 @@ impl<D> Hang<D> {
 impl<D: Destination> Destination for Hang<D> {
     async fn put(
         &self,
-        doc: sluis_destination::Document,
-    ) -> Result<sluis_destination::Written, sluis_destination::Error> {
+        doc: atoom_destination_conformance::Document,
+    ) -> Result<atoom_destination_conformance::Written, atoom_destination_conformance::Error> {
         self.stuck().await;
         self.inner.put(doc).await
     }
-    async fn delete(&self, address: &str) -> Result<bool, sluis_destination::Error> {
+    async fn delete(&self, address: &str) -> Result<bool, atoom_destination_conformance::Error> {
         self.stuck().await;
         self.inner.delete(address).await
     }
@@ -831,21 +831,21 @@ impl<D: Destination> Destination for Hang<D> {
         prefix: &str,
         page: Option<&str>,
         page_size: usize,
-    ) -> Result<sluis_destination::Page, sluis_destination::Error> {
+    ) -> Result<atoom_destination_conformance::Page, atoom_destination_conformance::Error> {
         self.stuck().await;
         self.inner.list(prefix, page, page_size).await
     }
     async fn purge(
         &self,
         addresses: &[String],
-    ) -> Result<sluis_destination::Purged, sluis_destination::Error> {
+    ) -> Result<atoom_destination_conformance::Purged, atoom_destination_conformance::Error> {
         self.stuck().await;
         self.inner.purge(addresses).await
     }
     async fn read_back(
         &self,
         address: &str,
-    ) -> Result<sluis_destination::Fetched, sluis_destination::Error> {
+    ) -> Result<atoom_destination_conformance::Fetched, atoom_destination_conformance::Error> {
         self.stuck().await;
         self.inner.read_back(address).await
     }
@@ -860,7 +860,7 @@ pub struct Lossy<D> {
     pub inner: D,
     pub lose_answer: Arc<AtomicBool>,
     /// A listing that is frozen (an eventually consistent one): it keeps saying what it said when it was frozen.
-    frozen: Arc<Mutex<Option<sluis_destination::Page>>>,
+    frozen: Arc<Mutex<Option<atoom_destination_conformance::Page>>>,
 }
 
 impl<D: Destination> Lossy<D> {
@@ -882,17 +882,17 @@ impl<D: Destination> Lossy<D> {
 impl<D: Destination> Destination for Lossy<D> {
     async fn put(
         &self,
-        doc: sluis_destination::Document,
-    ) -> Result<sluis_destination::Written, sluis_destination::Error> {
+        doc: atoom_destination_conformance::Document,
+    ) -> Result<atoom_destination_conformance::Written, atoom_destination_conformance::Error> {
         let done = self.inner.put(doc).await?;
         if self.lose_answer.load(Ordering::SeqCst) {
-            return Err(sluis_destination::Error::Unavailable(
+            return Err(atoom_destination_conformance::Error::Unavailable(
                 "the call timed out".into(),
             ));
         }
         Ok(done)
     }
-    async fn delete(&self, address: &str) -> Result<bool, sluis_destination::Error> {
+    async fn delete(&self, address: &str) -> Result<bool, atoom_destination_conformance::Error> {
         self.inner.delete(address).await
     }
     async fn list(
@@ -900,7 +900,7 @@ impl<D: Destination> Destination for Lossy<D> {
         prefix: &str,
         page: Option<&str>,
         page_size: usize,
-    ) -> Result<sluis_destination::Page, sluis_destination::Error> {
+    ) -> Result<atoom_destination_conformance::Page, atoom_destination_conformance::Error> {
         if let Some(p) = self.frozen.lock().unwrap().clone() {
             return Ok(p);
         }
@@ -909,13 +909,13 @@ impl<D: Destination> Destination for Lossy<D> {
     async fn purge(
         &self,
         addresses: &[String],
-    ) -> Result<sluis_destination::Purged, sluis_destination::Error> {
+    ) -> Result<atoom_destination_conformance::Purged, atoom_destination_conformance::Error> {
         self.inner.purge(addresses).await
     }
     async fn read_back(
         &self,
         address: &str,
-    ) -> Result<sluis_destination::Fetched, sluis_destination::Error> {
+    ) -> Result<atoom_destination_conformance::Fetched, atoom_destination_conformance::Error> {
         self.inner.read_back(address).await
     }
 }

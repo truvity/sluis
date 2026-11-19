@@ -22,12 +22,12 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1/transportv1alpha1connect"
 	"github.com/truvity/sluis/v2/actors/session/internal/sessiond"
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	integrationv2alpha1connectpkg "github.com/truvity/sluis/v2/gen/go/sluis/integration/v2alpha1/integrationv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/policy/v2alpha1/policyv2alpha1connect"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
 	sessionv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/session/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/session/v2alpha1/sessionv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/signer/v2alpha1/signerv2alpha1connect"
@@ -168,7 +168,7 @@ func newEnv(t *testing.T, mutate func(*options)) *env {
 	serve(t, sock("signer"), "signer", "session", rpc.Handler{Path: path, H: h})
 	path, h = integrationv2alpha1connectpkg.NewUpstreamServiceHandler(e.upstream)
 	serve(t, sock("up"), "adapter-upstream-oidc", "session", rpc.Handler{Path: path, H: h})
-	path, h = transportv2alpha1connect.NewTransportServiceHandler(e.transport)
+	path, h = transportv1alpha1connect.NewTransportServiceHandler(e.transport)
 	serve(t, sock("emit"), "driver-writer-spool", "session", rpc.Handler{Path: path, H: h})
 
 	dial := func(n string) (connect.HTTPClient, string) { return rpc.Dial(sock(n)) }
@@ -187,7 +187,7 @@ func newEnv(t *testing.T, mutate func(*options)) *env {
 	th, turl := dial("emit")
 	em, err := audit.New(audit.Config{
 		Actor: sessiond.Actor, Boundary: testBoundary, Release: version.Version, Now: clk.now,
-		Transport: transportv2alpha1connect.NewTransportServiceClient(th, turl, rpc.ClientOptions()...),
+		Transport: transportv1alpha1connect.NewTransportServiceClient(th, turl, rpc.ClientOptions()...),
 		Keys:      keys,
 	})
 	if err != nil {

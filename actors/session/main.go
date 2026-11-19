@@ -11,11 +11,11 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1/transportv1alpha1connect"
 	"github.com/truvity/sluis/v2/actors/session/internal/sessiond"
 	"github.com/truvity/sluis/v2/gen/go/sluis/integration/v2alpha1/integrationv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/policy/v2alpha1/policyv2alpha1connect"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/signer/v2alpha1/signerv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1/storev2alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/audit"
@@ -66,7 +66,7 @@ func (f *flags) service(c cli.Flags) (*sessiond.Service, error) {
 	th, turl := dial(orDefault(f.transportSocket, filepath.Join(run, "audit", c.Boundary, "emit.sock")))
 	em, err := audit.New(audit.Config{
 		Actor: sessiond.Actor, Boundary: c.Boundary, Release: version.Version,
-		Transport: transportv2alpha1connect.NewTransportServiceClient(th, turl, rpc.ClientOptions()...),
+		Transport: transportv1alpha1connect.NewTransportServiceClient(th, turl, rpc.ClientOptions()...),
 		Keys:      keys,
 	})
 	if err != nil {

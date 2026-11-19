@@ -1,4 +1,9 @@
-//! The `spool` audit transport driver of the writer.
+//! The host of the `spool` audit transport driver of the writer.
+//!
+//! The driver is atoom's (github.com/truvity/atoom, `transport/spool`, pinned by commit: `third_party/atoom/README.md`): the transport port
+//! over a local, fsync'd, bounded queue. This file is what is sluis's: the two sockets with the peer credentials and the call graph, the
+//! name of an emitter (`<actor>@<boundary>`, from the peer, which is the function atoom's `Emit` asks), the command line (`serve`,
+//! `check`, `conformance`, `version`) and `--socket-gid`.
 //!
 //! ```text
 //! driver-writer-spool serve   --boundary B --socket-dir DIR --root DIR [--socket-gid GID] [--limit-bytes N] [--segment-bytes N]
@@ -12,17 +17,14 @@
 //! of the kit decides by peer uid, the mode is the second wall.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, bail};
+use atoom_transport_spool::service::{Consume, Emit};
+use atoom_transport_spool::{Config, Spool, check_root, suite};
 use clap::Arg;
-use connectrpc::Router;
-use sluis_driver_writer_spool::service::{Consume, Emit};
-use sluis_driver_writer_spool::{Config, Spool, check_root, suite};
 use sluis_kit::cli::{Commands, Flags, Refused, shutdown_signal};
-use sluis_kit::{Allow, ServerConfig};
-use sluis_proto::sluis::port::transport::v2alpha1::TransportServiceExt;
+use sluis_kit::{Allow, ServerConfig, peer};
 
 /// The registry name of this driver's user (PLAN.md "Socket layout").
 const NAME: &str = "driver-writer-spool";
@@ -96,12 +98,14 @@ impl Commands for Spoold {
             allow,
             default_deadline,
         };
-        let emit = Arc::new(Emit {
-            spool: spool.clone(),
-            boundary: f.boundary.clone(),
+        // The emitter is the peer of the socket, never a field of the message: the guard has already named it, and a call without a peer
+        // cannot have passed it (the library refuses it as `caller`).
+        let boundary = f.boundary.clone();
+        let emit = Emit::new(spool.clone(), move |ctx| {
+            peer(ctx.extensions()).map(|p| format!("{}@{}", p.name, boundary))
         })
-        .register(Router::new());
-        let consume = Arc::new(Consume(spool.clone())).register(Router::new());
+        .router();
+        let consume = Consume(spool.clone()).router();
         let a = sluis_kit::serve(
             cfg("emit.sock", Allow::CallGraph, Duration::from_secs(30)),
             emit,

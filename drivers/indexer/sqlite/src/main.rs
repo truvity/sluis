@@ -1,4 +1,8 @@
-//! The `sqlite` index driver of the indexer.
+//! The host of the `sqlite` index driver of the indexer.
+//!
+//! The driver is atoom's (github.com/truvity/atoom, `index/sqlite`, pinned by commit: `third_party/atoom/README.md`): the index port over one
+//! SQLite file with FTS5. This file is what is sluis's: the two sockets, one for each caller, with the peer credentials and a check of their
+//! own, the command line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
 //!
 //! ```text
 //! driver-indexer-sqlite serve       --socket PATH --ro-socket PATH --state-dir DIR [--socket-gid GID] [--ro-socket-gid GID]
@@ -11,17 +15,14 @@
 //! reader: the read side, which has no way to write (PLAN.md "Socket layout").
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, bail};
+use atoom_index_sqlite::service::{Read, Write};
+use atoom_index_sqlite::{Index, suite};
 use clap::Arg;
-use connectrpc::Router;
-use sluis_driver_indexer_sqlite::service::{Read, Write};
-use sluis_driver_indexer_sqlite::{Index, suite};
 use sluis_kit::cli::{Commands, Flags, Refused, shutdown_signal};
 use sluis_kit::{Allow, ServerConfig};
-use sluis_proto::sluis::port::index::v2alpha1::{IndexReadServiceExt, IndexServiceExt};
 
 /// The registry name of this driver's user and the actors that may call it (PLAN.md "Socket layout").
 const NAME: &str = "driver-indexer-sqlite";
@@ -79,8 +80,8 @@ impl Commands for Sqlite {
         let (wgid, rgid) = (gid(&f, "socket-gid")?, gid(&f, "ro-socket-gid")?);
         let write = server(&f, f.socket.clone(), wgid, Allow::OwnerOnly(WRITER));
         let read = server(&f, ro, rgid, Allow::Exact(READER));
-        let wr = Arc::new(Write(index.clone())).register(Router::new());
-        let rr = Arc::new(Read(index)).register(Router::new());
+        let wr = Write(index.clone()).router();
+        let rr = Read(index).router();
         // One signal stops both servers.
         let (stop, _) = tokio::sync::broadcast::channel::<()>(1);
         let (mut a, mut b) = (stop.subscribe(), stop.subscribe());

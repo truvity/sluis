@@ -21,10 +21,10 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/truvity/atoom/common/refusal"
+	transportv1alpha1 "github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1"
+	"github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1/transportv1alpha1connect"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
-	transportv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/rpc"
 )
 
@@ -32,20 +32,20 @@ var fixedNow = time.UnixMilli(1793750400000) // 2026-11-04T00:00:00Z
 
 // fakeTransport records what the emitter sent and answers with err.
 type fakeTransport struct {
-	transportv2alpha1connect.TransportServiceClient
+	transportv1alpha1connect.TransportServiceClient
 	mu   sync.Mutex
-	reqs []*transportv2alpha1.EmitRequest
+	reqs []*transportv1alpha1.EmitRequest
 	err  error
 }
 
-func (f *fakeTransport) Emit(_ context.Context, r *connect.Request[transportv2alpha1.EmitRequest]) (*connect.Response[transportv2alpha1.EmitResponse], error) {
+func (f *fakeTransport) Emit(_ context.Context, r *connect.Request[transportv1alpha1.EmitRequest]) (*connect.Response[transportv1alpha1.EmitResponse], error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.reqs = append(f.reqs, r.Msg)
 	if f.err != nil {
 		return nil, f.err
 	}
-	return connect.NewResponse(&transportv2alpha1.EmitResponse{}), nil
+	return connect.NewResponse(&transportv1alpha1.EmitResponse{}), nil
 }
 
 // fakeKeys answers Mac with a fixed value and records the request.
@@ -88,7 +88,7 @@ func testMAC() []byte {
 	return mac
 }
 
-func newTestEmitter(t *testing.T, tr transportv2alpha1connect.TransportServiceClient, keys keyv2alpha1connect.KeyServiceClient) *Emitter {
+func newTestEmitter(t *testing.T, tr transportv1alpha1connect.TransportServiceClient, keys keyv2alpha1connect.KeyServiceClient) *Emitter {
 	t.Helper()
 	e, err := New(Config{Actor: "key", Boundary: "dev", Release: "0.0.0-test", Transport: tr, Keys: keys, Table: openTable(t), Now: func() time.Time { return fixedNow }})
 	if err != nil {

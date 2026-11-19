@@ -37,6 +37,10 @@ use serde_json::{Value, json};
 use signer::ring::Timing;
 use signer::{Config, Sockets};
 use sluis_kit::{Allow, Identities, ServerConfig, refusal, refusal_reason};
+use sluis_proto::atoom::transport::v1alpha1::{
+    AckRequest, AckResponse, EmitRequest, EmitResponse, ReceiveRequest, ReceiveResponse,
+    TransportService, TransportServiceExt,
+};
 use sluis_proto::sluis::config::v2alpha1::{
     Boundary, InstallationClient, KeyPlan, KeyPurposePlan, TokenLifetime,
 };
@@ -44,10 +48,6 @@ use sluis_proto::sluis::exporter::v2alpha1::ExportReport;
 use sluis_proto::sluis::key::v2alpha1::{
     KeyRevocation, KeyService, KeyServiceExt, PublicKeyRequest, PublicKeyResponse, SignRequest,
     SignResponse,
-};
-use sluis_proto::sluis::port::transport::v2alpha1::{
-    AckRequest, AckResponse, EmitRequest, EmitResponse, ReceiveRequest, ReceiveResponse,
-    TransportService, TransportServiceExt,
 };
 use sluis_proto::sluis::signer::v2alpha1::{
     KeySetRequest, SignTokenRequest, SignTokenResponse, SignerServiceClient,

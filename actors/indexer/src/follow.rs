@@ -25,11 +25,9 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
+use sluis_proto::atoom::index::v1alpha1::{ApplyRequest, Cursor, GetCursorRequest, LogRef, Row};
 use sluis_proto::sluis::key::v2alpha1::{OpenItem, OpenRequest};
 use sluis_proto::sluis::policy::v2alpha1::{ActorFacts, DecideRequest, Decision, EntityRef};
-use sluis_proto::sluis::port::index::v2alpha1::{
-    ApplyRequest, Cursor, GetCursorRequest, LogRef, Row,
-};
 use sluis_proto::sluis::r#type::v2alpha1::Address;
 use tokio::sync::Mutex;
 

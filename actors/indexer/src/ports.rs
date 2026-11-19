@@ -15,12 +15,10 @@ use std::time::Duration;
 use connectrpc::ConnectError;
 use connectrpc::error::ErrorCode;
 use sluis_kit::{Client, Transport, dial};
+use sluis_proto::atoom::blob::v1alpha1::{BlobGetRequest, BlobListRequest, BlobServiceClient};
+use sluis_proto::atoom::index::v1alpha1::IndexServiceClient;
 use sluis_proto::sluis::key::v2alpha1::KeyServiceClient;
 use sluis_proto::sluis::policy::v2alpha1::PolicyServiceClient;
-use sluis_proto::sluis::port::blob::v2alpha1::{
-    BlobGetRequest, BlobListRequest, BlobServiceClient,
-};
-use sluis_proto::sluis::port::index::v2alpha1::IndexServiceClient;
 
 /// How long one call may take.
 pub const CALL: Duration = Duration::from_secs(30);

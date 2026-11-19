@@ -1,4 +1,4 @@
-//! The read-only blob port over real Unix sockets: the contract (`proto/`) is the only way in, the caller is
+//! The read-only blob port over real Unix sockets behind sluis's guard: the contract (atoom's, `blob/proto`) is the only way in, the caller is
 //! known from the socket's peer uid, and nothing the driver serves changes the directory.
 
 #![allow(refining_impl_trait)]
@@ -7,14 +7,13 @@
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
-use connectrpc::Router;
-use connectrpc::error::ErrorCode;
-use sluis_driver_indexer_fs::{ReadOnly, suite};
-use sluis_driver_writer_fs::Fs;
-use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
-use sluis_proto::sluis::port::blob::v2alpha1::{
-    BlobGetRequest, BlobListRequest, BlobServiceClient, BlobServiceExt, CreateRequest, PutRequest,
+use atoom_blob::atoom::blob::v1alpha1::{
+    BlobGetRequest, BlobListRequest, BlobServiceClient, CreateRequest, PutRequest,
 };
+use atoom_blob_fsdir::Fs;
+use atoom_blob_fsreadonly::{ReadOnly, suite};
+use connectrpc::error::ErrorCode;
+use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
 
 fn serve(
     socket: &Path,
@@ -33,7 +32,7 @@ fn serve(
         allow,
         default_deadline: std::time::Duration::from_secs(10),
     };
-    let router = std::sync::Arc::new(ReadOnly(fs)).register(Router::new());
+    let router = ReadOnly(fs).router();
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     tokio::spawn(sluis_kit::serve_with(
         cfg,

@@ -11,19 +11,19 @@ import (
 
 	"connectrpc.com/connect"
 
-	transportv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
+	transportv1alpha1 "github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1"
+	"github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1/transportv1alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/audit"
 )
 
 // downTransport is a spool that refuses every emit, and counts them.
 type downTransport struct {
-	transportv2alpha1connect.TransportServiceClient
+	transportv1alpha1connect.TransportServiceClient
 	mu    sync.Mutex
 	calls int
 }
 
-func (d *downTransport) Emit(context.Context, *connect.Request[transportv2alpha1.EmitRequest]) (*connect.Response[transportv2alpha1.EmitResponse], error) {
+func (d *downTransport) Emit(context.Context, *connect.Request[transportv1alpha1.EmitRequest]) (*connect.Response[transportv1alpha1.EmitResponse], error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.calls++
@@ -40,7 +40,7 @@ func (d *downTransport) count() int {
 // table of sluis, on a spool that is full. Its Lost() is the total that the next record would carry.
 type lostAuditor struct{ e *audit.Emitter }
 
-func newLostAuditor(t *testing.T, tr transportv2alpha1connect.TransportServiceClient) *lostAuditor {
+func newLostAuditor(t *testing.T, tr transportv1alpha1connect.TransportServiceClient) *lostAuditor {
 	t.Helper()
 	e, err := audit.New(audit.Config{Actor: "key", Boundary: testBoundary, Release: "0.0.0-test", Transport: tr})
 	if err != nil {
