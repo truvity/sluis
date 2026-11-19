@@ -54,6 +54,8 @@ github.com/truvity/atoom/key/software v0.0.0-20261119005504-bbe2df79a3af h1:adbt
 github.com/truvity/atoom/key/software v0.0.0-20261119005504-bbe2df79a3af/go.mod h1:mcpGKs7NcNR2l9D48UEWLKLhLW4Xe/aHBFIl0czAHu8=
 github.com/truvity/atoom/key/yubikeypiv v0.0.0-20261119005504-bbe2df79a3af h1:XFU0kNjoAVfcnRITiaE0KhkJE/PuuNqb/ZbqhMybhHE=
 github.com/truvity/atoom/key/yubikeypiv v0.0.0-20261119005504-bbe2df79a3af/go.mod h1:rNtOktqvVhdGBbG3nr4df1yGY7Q4Nr1fxH+Z1qkBTqA=
+github.com/truvity/atoom/source v0.0.0-20261119005504-bbe2df79a3af h1:b4apkXFDd9nwnjzqAUfIcveqvRkhbpqRVR8LGbztmPc=
+github.com/truvity/atoom/source v0.0.0-20261119005504-bbe2df79a3af/go.mod h1:E0LiEbfXK+zCLhUVqlkLD91EBDrdiM63SKgYixQLSe0=
 github.com/truvity/atoom/store v0.0.0-20261119005504-bbe2df79a3af h1:GFUjIYp+XxsjYl3YLPcmycEpfsC3G79Fkq1YM3681a0=
 github.com/truvity/atoom/store v0.0.0-20261119005504-bbe2df79a3af/go.mod h1:sBhjqbQzzHyVRPvQcnBujNz1UBeXv5i5XSuzevUSEWE=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=

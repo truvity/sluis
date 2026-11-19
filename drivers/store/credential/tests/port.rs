@@ -8,15 +8,13 @@ use std::os::unix::fs::PermissionsExt as _;
 use std::path::Path;
 use std::time::Duration;
 
-use connectrpc::Router;
-use connectrpc::error::ErrorCode;
-use sluis_credential::service::Service;
-use sluis_credential::{Dir, suite};
-use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
-use sluis_proto::sluis::port::source::v2alpha1::{
-    CapabilitiesRequest, ReadRequest, SourceServiceClient, SourceServiceExt, SourceWatchRequest,
-    Watch,
+use atoom_source::atoom::source::v1alpha1::{
+    CapabilitiesRequest, ReadRequest, SourceServiceClient, SourceWatchRequest, Watch,
 };
+use atoom_source_credential::service::Service;
+use atoom_source_credential::{Dir, suite};
+use connectrpc::error::ErrorCode;
+use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
 
 /// A value that no log, error text or label may repeat.
 const SECRET: &[u8] = b"tr0ub4dor-and-three-more-words";
@@ -33,7 +31,7 @@ fn serve(socket: &Path, dir: &Path, me_is: &'static str) -> tokio::sync::oneshot
         allow: Allow::OwnerOnly("store"),
         default_deadline: Duration::from_secs(10),
     };
-    let router = std::sync::Arc::new(Service(Dir::open(dir).unwrap())).register(Router::new());
+    let router = Service(Dir::open(dir).unwrap()).router();
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     tokio::spawn(sluis_kit::serve_with(
         cfg,
@@ -75,6 +73,7 @@ fn the_source_suite_passes() {
     suite::run_temp().unwrap();
 }
 
+/// verifies: REQ-DATA-112
 #[tokio::test]
 async fn store_reads_a_secret_and_no_refusal_carries_it() {
     let (creds, s) = (credentials(), tempfile::tempdir().unwrap());
@@ -228,6 +227,7 @@ async fn a_fifo_or_a_foreign_kind_of_file_is_refused_as_bound_and_never_hangs() 
     let _ = stop.send(());
 }
 
+/// verifies: REQ-DATA-112
 #[test]
 fn a_credentials_directory_that_others_can_write_is_not_served() {
     let creds = credentials();

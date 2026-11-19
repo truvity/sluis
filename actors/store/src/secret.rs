@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use connectrpc::error::ErrorCode;
 use sluis_kit::{Client, Transport};
-use sluis_proto::sluis::port::source::v2alpha1::{ReadRequest, SourceServiceClient};
+use sluis_proto::atoom::source::v1alpha1::{ReadRequest, SourceServiceClient};
 
 /// How long one call to the secret source may take.
 const CALL: Duration = Duration::from_secs(10);

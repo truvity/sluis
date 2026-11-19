@@ -71,7 +71,7 @@ func goDeps(t *testing.T, pattern string) []string {
 // The ports of the drivers: the item port (the engines), the blob, index and key store ports, and the source port (the
 // config source and the secret source). A work actor has none of them: it reaches data through the store service and keys
 // through the key service. The transport port is the audit-emit port that every actor has.
-var driverPorts = []string{"blob", "index", "source"}
+var driverPorts = []string{"blob", "index"}
 
 // The key-store port and its drivers are atoom's (github.com/truvity/atoom/key and key/<driver>), not a package of this module: a work actor
 // links none of them either.
@@ -79,6 +79,10 @@ const atoomKey = "github.com/truvity/atoom/key"
 
 // The item port and its drivers are atoom's too (github.com/truvity/atoom/store and store/<driver>).
 const atoomStore = "github.com/truvity/atoom/store"
+
+// The source port (the config source and the secret source) and its drivers are atoom's too (github.com/truvity/atoom/source and
+// source/<driver>).
+const atoomSource = "github.com/truvity/atoom/source"
 
 // Libraries that read configuration or secrets from a place, watch a file for it, or speak to an engine or a secret
 // store. A work actor reads its configuration as kinds through the store service, so it needs none of them.
@@ -117,6 +121,9 @@ func goForbidden(actor, imp string) string {
 	}
 	if imp == atoomStore || strings.HasPrefix(imp, atoomStore+"/") {
 		return "the item port of the drivers"
+	}
+	if imp == atoomSource || strings.HasPrefix(imp, atoomSource+"/") {
+		return "the source port of the drivers"
 	}
 	for _, lib := range goForbiddenLibs {
 		if imp == lib || strings.HasPrefix(imp, lib+"/") {
@@ -261,6 +268,10 @@ func (g rustGraph) dir(p rustPackage) string {
 // through the store service).
 var atoomItemCrates = []string{"atoom-store-rqlite", "atoom-store-memory", "atoom-store-conformance", "atoom-socket"}
 
+// The crates of atoom's source port that hold a driver: a work actor reads its configuration as kinds through the store service and links
+// none of them.
+var atoomSourceCrates = []string{"atoom-source-file", "atoom-source-credential"}
+
 var rustForbiddenLibs = []string{
 	"config", "figment", "dotenvy", "dotenv", "envy", "notify", "aws-config", "vaultrs", "keyring",
 	"rusqlite", "sqlx", "diesel", "rqlite", "redis", "tokio-postgres",
@@ -279,6 +290,9 @@ func (g rustGraph) rustForbidden(actor string, p rustPackage) string {
 	}
 	if slices.Contains(atoomItemCrates, p.Name) {
 		return "an item driver, the conformance kit or the socket host of atoom"
+	}
+	if slices.Contains(atoomSourceCrates, p.Name) {
+		return "a source driver of atoom"
 	}
 	if slices.Contains(rustForbiddenLibs, p.Name) || strings.HasPrefix(p.Name, "aws-sdk-") || strings.HasPrefix(p.Name, "rusoto") {
 		return "a configuration, secret or engine library"
@@ -352,7 +366,7 @@ func TestWorkActorsLinkNoConfigSourceSecretSourceOrDriver(t *testing.T) {
 		}
 		if goForbidden("session", "github.com/spf13/viper/internal") == "" || goForbidden("session", module+"/actors/key/internal/keyd") == "" ||
 			goForbidden("session", module+"/gen/go/sluis/port/blob/v2alpha1") == "" || goForbidden("session", atoomKey+"/gen/atoom/key/v1alpha1") == "" ||
-			goForbidden("session", atoomStore+"/gen/atoom/store/v1alpha1") == "" {
+			goForbidden("session", atoomStore+"/gen/atoom/store/v1alpha1") == "" || goForbidden("session", atoomSource+"/gen/atoom/source/v1alpha1") == "" {
 			t.Error("the control failed: the matcher let a known case through")
 		}
 		if goForbidden("session", module+"/actors/session/internal/sessiond") != "" || goForbidden("session", module+"/gen/go/sluis/port/transport/v2alpha1") != "" {

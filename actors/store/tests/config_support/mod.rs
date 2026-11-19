@@ -4,17 +4,14 @@
 #![allow(dead_code, clippy::unwrap_used, clippy::expect_used)] // each test file uses some of it
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::Duration;
 
 use aws_lc_rs::rand::SystemRandom;
 use aws_lc_rs::signature::{ECDSA_P384_SHA384_FIXED_SIGNING, EcdsaKeyPair, KeyPair};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use connectrpc::Router;
 use serde_json::json;
 use sluis_kit::{Allow, Identities, ServerConfig};
-use sluis_proto::sluis::port::source::v2alpha1::SourceServiceExt as _;
 use store::bootstrap::{Bootstrap, Destination, Publisher};
 
 /// The prefix of a P-384 SubjectPublicKeyInfo (RFC 5480), before the 97-byte point.
@@ -178,10 +175,8 @@ pub fn serve_driver(socket: &Path, dir: &Path) -> tokio::sync::oneshot::Sender<(
         allow: Allow::OwnerOnly("store"),
         default_deadline: Duration::from_secs(10),
     };
-    let router = Arc::new(sluis_file::service::Service(
-        sluis_file::Dir::open(dir).unwrap(),
-    ))
-    .register(Router::new());
+    let router =
+        atoom_source_file::service::Service(atoom_source_file::Dir::open(dir).unwrap()).router();
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     tokio::spawn(sluis_kit::serve_with(
         cfg,

@@ -19,6 +19,7 @@ require (
 	github.com/truvity/atoom/key/slotplan v0.0.0
 	github.com/truvity/atoom/key/software v0.0.0-20261119005504-bbe2df79a3af
 	github.com/truvity/atoom/key/yubikeypiv v0.0.0-20261119005504-bbe2df79a3af
+	github.com/truvity/atoom/source v0.0.0-20261119005504-bbe2df79a3af
 	github.com/truvity/atoom/store v0.0.0-20261119005504-bbe2df79a3af
 	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/mod v0.42.0
@@ -60,3 +61,5 @@ replace github.com/truvity/atoom/key/software v0.0.0 => github.com/truvity/atoom
 replace github.com/truvity/atoom/key/yubikeypiv v0.0.0 => github.com/truvity/atoom/key/yubikeypiv v0.0.0-20261119005504-bbe2df79a3af
 
 replace github.com/truvity/atoom/store v0.0.0 => github.com/truvity/atoom/store v0.0.0-20261119005504-bbe2df79a3af
+
+replace github.com/truvity/atoom/source v0.0.0 => github.com/truvity/atoom/source v0.0.0-20261119005504-bbe2df79a3af

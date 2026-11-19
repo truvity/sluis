@@ -109,7 +109,7 @@ pub fn check_dir(dir: &Path, b: &Bootstrap) -> Vec<Check> {
 #[must_use]
 pub fn load_dir(dir: &Path, b: &Bootstrap, keep: bool) -> (Vec<Check>, Vec<Document>) {
     let mut out = Vec::new();
-    let Ok(dir) = sluis_file::Dir::open(dir) else {
+    let Ok(dir) = atoom_source_file::Dir::open(dir) else {
         out.push(Check::fail(
             "document",
             "",
@@ -202,7 +202,7 @@ fn lock_mode(set: &snapshot::Snapshot) -> Option<Check> {
 }
 
 fn read_and_accept(
-    dir: &sluis_file::Dir,
+    dir: &atoom_source_file::Dir,
     kind: &'static Kind,
     b: &Bootstrap,
 ) -> Result<Document, LoadError> {
@@ -211,15 +211,15 @@ fn read_and_accept(
     snapshot::accept(kind, &data, String::new(), &b.publishers, None)
 }
 
-/// The bytes of the document of `kind`, read by the `file` driver's own code ([`sluis_file::Dir::read`]): the same
+/// The bytes of the document of `kind`, read by the `file` driver's own code ([`atoom_source_file::Dir::read`]): the same
 /// name, the same `openat2(RESOLVE_BENEATH)` resolution, the same refusal of a link out of the directory and of
 /// anything that is not a regular file, and the same bound. A document the driver would not serve, the check does not
 /// read either.
-fn read(dir: &sluis_file::Dir, kind: &Kind) -> Result<Vec<u8>, LoadError> {
+fn read(dir: &atoom_source_file::Dir, kind: &Kind) -> Result<Vec<u8>, LoadError> {
     match dir.read(kind.segment) {
         Ok(d) => Ok(d.data),
         // The loader's words for a `not_found` from the source.
-        Err(sluis_file::Error::Absent) => Err(snapshot::failed(
+        Err(atoom_source_file::Error::Absent) => Err(snapshot::failed(
             Some(kind.name),
             "the source has no document of the kind",
         )),

@@ -916,7 +916,7 @@ fn upstream(mut o: Obj, id: &str) -> R<pb::Upstream> {
     })
 }
 
-/// A credential name as the credential driver accepts it (`sluis_credential::valid_name`, systemd's `LoadCredential=`
+/// A credential name as the credential driver accepts it (`atoom_source_credential::valid_name`, systemd's `LoadCredential=`
 /// rule): letters, digits, `-`, `_` and `.`, not starting with anything but a letter or a digit, at most 128 characters.
 /// The same rule here makes a bad name fail at `config check` and not when the first client asks.
 fn credential_name(name: &str) -> bool {
