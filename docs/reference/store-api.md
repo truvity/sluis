@@ -230,10 +230,11 @@ A driver is a separate binary behind one port, private to its owner ([0005](/dec
 
 ### The item contract
 
-`sluis.port.item.v2alpha1.ItemService`, served by the `rqlite` and `dynamodb` drivers on the durable and the temp socket, and by the `postgres` driver of the Kubernetes installation once it is built ([0005](/decisions/0005-the-store/#amendment-of-2026-11-18-kubernetes-stores-in-postgresql-through-cloudnativepg)).
+`atoom.store.v1alpha1.ItemService` (renamed from `sluis.port.item.v2alpha1.ItemService` when the port moved to [atoom](https://github.com/truvity/atoom/tree/master/store); the contract is vendored under `third_party/atoom/proto`, and its rules in prose are in [`store/docs/item-port.md`](https://github.com/truvity/atoom/blob/master/store/docs/item-port.md)), served by the `rqlite` and `dynamodb` drivers on the durable and the temp socket, and by the `postgres` driver of the Kubernetes installation once it is built ([0005](/decisions/0005-the-store/#amendment-of-2026-11-18-kubernetes-stores-in-postgresql-through-cloudnativepg)).
 
 ```proto
 service ItemService {
+  rpc Capabilities(CapabilitiesRequest) returns (CapabilitiesResponse);  // what the driver offers: its engine, and whether it keeps the change log
   rpc Get(ItemGetRequest) returns (ItemGetResponse);          // key -> item; not_found if absent or expired
   rpc Query(QueryRequest) returns (QueryResponse);            // items by key prefix, or by index entry, paged
   rpc Transact(TransactRequest) returns (TransactResponse);   // conditions, puts and deletes, all or none
@@ -337,7 +338,7 @@ Every driver binary has the same four commands.
 | `version` | Prints the driver's version and the contract versions it speaks |
 | `conformance` | Runs the port's suite against the driver. A driver passes the suite or it is not a driver |
 
-The in-memory engine, for tests only, passes the same suite as `rqlite` and `dynamodb`, and the `postgres` driver passes it too. The suite holds the conditional-update, expiry, ordering and change-log cases of the item contract and the capability cases of the source contract.
+The suite is atoom's (`store/conformance`: the library, and the binary `store-conformance --socket PATH`, which runs against a driver in any language); `conformance` of sluis's `rqlite` host runs it. The in-memory engine, for tests only (atoom's `store/memory`), passes the same suite as `rqlite` and `dynamodb`, and the `postgres` driver passes it too. The suite holds the conditional-update, expiry, ordering and change-log cases of the item contract and the capability cases of the source contract.
 
 ## The sealed envelope
 
