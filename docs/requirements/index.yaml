@@ -64,3 +64,4 @@ catalogue:
     attestation-missing: "Its verification includes a manual check, and no attestation records that check yet."
     external-suite-not-run: "The external conformance suite or vector set named in its verification does not run in CI yet; the tests that do run are tagged as evidence."
     smoke-not-in-ci: "Covered only by a smoke program that does not run in CI."
+    proved-in-atoom: "The behaviour is atoom's: atoom's conformance kit proves it for the driver in atoom's CI (decision D4 A of atoom's extraction), and sluis runs only a smoke test of its host. The proof is in truvity/atoom, not in a test of this repository."

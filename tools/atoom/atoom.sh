@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
-# The atoom dependency (github.com/truvity/atoom, plan: docs/plan.md there, step 1), kept at ONE commit in four places:
+# The atoom dependency (github.com/truvity/atoom, plan: docs/plan.md there), kept at ONE released version in four places:
 #
-#   - go.mod: every github.com/truvity/atoom/<module> requirement, a pseudo-version that ends in the first 12 hex digits of the commit, and
-#     one replace line for each, `<module> v0.0.0 => <module> <that pseudo-version>`: atoom's modules require each other at v0.0.0 until its
-#     first release, and a version that has no tag is resolved by that line, not looked up (it goes with the pin to the tag);
-#   - Cargo.toml: [workspace.dependencies] every atoom-* crate, `git` and `rev`;
-#   - third_party/atoom/proto: atoom's proto files at that commit, which proto/ imports (generated Go comes from atoom's own modules), and
+#   - go.mod: every github.com/truvity/atoom/<module> requirement at vX.Y.Z, the tag atoom pushed for each of its Go modules, and no replace
+#     of an atoom module;
+#   - Cargo.toml: [workspace.dependencies] every atoom-* crate, `git` and `tag = "vX.Y.Z"` (Cargo.lock records the commit the tag names);
+#   - third_party/atoom/proto: atoom's proto files at that tag, which proto/ imports (generated Go comes from atoom's own modules), and
 #     third_party/atoom/testdata: the slot map vectors that the Rust twin of key/slotplan reads;
-#   - third_party/atoom/PIN: the commit and the sha256 of the vendored files.
+#   - third_party/atoom/PIN: the version, the tag, the commit the tag names, and the sha256 of the vendored files.
 #
-#   tools/atoom/atoom.sh sync <commit>    move all four to <commit> (40 hex digits; needs the network), then run `just proto-gen`
-#   tools/atoom/atoom.sh check            offline: the four agree, the vendored files are what the PIN says, and the runtime pins of
-#                                         this repository are those of atoom's versions.yaml at that commit
+#   tools/atoom/atoom.sh sync X.Y.Z    move all four to the release X.Y.Z (needs the network; idempotent), then run `just proto-gen`
+#   tools/atoom/atoom.sh check         the four agree; the vendored files are what the PIN says; the runtime pins of this repository are
+#                                      those of atoom's versions.yaml at that tag; and, from the network, the tag still names the pinned
+#                                      commit and atoom's CI job `check` is green on it. It fails closed: when GitHub cannot be read it
+#                                      refuses. A token in GH_TOKEN or GITHUB_TOKEN is sent when set (the unauthenticated rate limit is low).
 #
-# Until atoom has a release the pin is a commit; after its first tag the same script moves to the tag (the PIN then names both).
+# A release of atoom is the only thing sluis pins: a commit that atoom has not tagged is never a pin.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -34,15 +35,48 @@ pinned() { # key
     sed -n "s/^$1: *//p" "$pin"
 }
 
+# One call of the GitHub API, read-only: the body on stdout, a failure (network, status, rate limit) as a non-zero exit.
+api() { # path
+    local args=(-fsSL --retry 3 --retry-delay 2 -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
+    local token=${GH_TOKEN:-${GITHUB_TOKEN:-}}
+    [ -z "$token" ] || args+=(-H "Authorization: Bearer $token")
+    curl "${args[@]}" "https://api.github.com/repos/$repo/$1"
+}
+
+# The commit that the tag $1 of atoom names (an annotated tag is followed to its commit).
+tag_commit() { # tag
+    local ref type sha n=0
+    ref=$(api "git/ref/tags/$1") || return 1
+    while :; do
+        type=$(jq -r '.object.type' <<<"$ref") || return 1
+        sha=$(jq -r '.object.sha' <<<"$ref") || return 1
+        [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || return 1
+        case "$type" in
+            commit) echo "$sha"; return 0 ;;
+            tag) ref=$(api "git/tags/$sha") || return 1 ;;
+            *) return 1 ;;
+        esac
+        n=$((n + 1))
+        [ "$n" -lt 5 ] || return 1
+    done
+}
+
+# The Go modules of atoom that go.mod requires, direct or indirect.
+atoom_modules() {
+    go mod edit -json | jq -r '.Require[]? | select(.Path | startswith("github.com/truvity/atoom/")) | .Path' | sort -u
+}
+
 sync() {
-    local commit=${1:-}
-    [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "usage: atoom.sh sync <the full commit, 40 hex digits>"
+    local version=${1:-}
+    [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "usage: atoom.sh sync <the release, X.Y.Z>"
+    local tag=v$version commit
+    commit=$(tag_commit "$tag") || die "the tag $tag of $repo could not be resolved (is it released?)"
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
-    curl -fsSL "https://codeload.github.com/$repo/tar.gz/$commit" -o "$tmp/atoom.tar.gz"
+    curl -fsSL --retry 3 "https://codeload.github.com/$repo/tar.gz/$commit" -o "$tmp/atoom.tar.gz"
     mkdir "$tmp/src"
     tar -xzf "$tmp/atoom.tar.gz" -C "$tmp/src" --strip-components=1
-    [ -f "$tmp/src/versions.yaml" ] || die "$commit has no versions.yaml"
+    [ -f "$tmp/src/versions.yaml" ] || die "$tag has no versions.yaml"
     rm -rf "$dir/proto"
     mkdir -p "$dir/proto"
     local found=0 p
@@ -51,67 +85,67 @@ sync() {
         cp -R "$p" "$dir/proto/"
         found=1
     done
-    [ "$found" -eq 1 ] || die "$commit has no <port>/proto/atoom directory"
+    [ "$found" -eq 1 ] || die "$tag has no <port>/proto/atoom directory"
     cp "$tmp/src/versions.yaml" "$dir/versions.yaml"
     # The vectors of the slot map check, which sluis's Rust twin (actors/store/src/config/slotplan.rs) reads too.
     rm -rf "$dir/testdata"
     mkdir -p "$dir/testdata"
     cp "$tmp/src/key/slotplan/testdata/vectors.json" "$dir/testdata/slotplan-vectors.json"
-    printf 'source: %s\ncommit: %s\nsha256: %s\n' "$repo" "$commit" "$(digest)" >"$pin"
-    # Cargo: the lines of the workspace, one per atoom crate.
-    sed -i -E "s#^(atoom-[a-z-]+ = \{ git = \"https://github.com/$repo\", )(rev|tag) = \"[^\"]*\"#\1rev = \"$commit\"#" Cargo.toml
-    # Go: every atoom module that go.mod requires, at the pseudo-version of the commit (its time is the commit's, in UTC), and the replace of
-    # the placeholder version that atoom's modules require each other at.
-    local stamp pseudo mod
-    stamp=$(curl -fsSL "https://api.github.com/repos/$repo/commits/$commit" | jq -r '.commit.committer.date | fromdate | strftime("%Y%m%d%H%M%S")')
-    [[ "$stamp" =~ ^[0-9]{14}$ ]] || die "the time of $commit could not be read"
-    pseudo=v0.0.0-$stamp-${commit:0:12}
+    printf 'source: %s\nversion: %s\ntag: %s\ncommit: %s\nsha256: %s\n' "$repo" "$version" "$tag" "$commit" "$(digest)" >"$pin"
+    # Cargo: the lines of the workspace, one per atoom crate, at the tag.
+    sed -i -E "s#^(atoom-[a-z-]+ = \{ git = \"https://github.com/$repo\", )(rev|tag|branch) = \"[^\"]*\"#\1tag = \"$tag\"#" Cargo.toml
+    # Go: every atoom module that go.mod requires, at the tag; no replace of an atoom module is left (the placeholder version of the
+    # commit pins is gone, because atoom's modules require each other at the tag now).
+    local mod old
+    while IFS= read -r old; do
+        [ -n "$old" ] || continue
+        go mod edit -dropreplace="$old"
+    done < <(go mod edit -json | jq -r '.Replace[]? | select(.Old.Path | startswith("github.com/truvity/atoom/")) | .Old.Path + (if .Old.Version then "@" + .Old.Version else "" end)')
     while IFS= read -r mod; do
-        go mod edit -require="$mod@$pseudo" -replace="$mod@v0.0.0=$mod@$pseudo"
-    done < <(awk '$1 ~ "^github.com/truvity/atoom/" { print $1 }' go.mod | sort -u)
+        [ -n "$mod" ] || continue
+        go mod edit -require="$mod@$tag"
+    done < <(atoom_modules)
     go mod tidy
     local crate
     while IFS= read -r crate; do
         cargo update -p "$crate"
     done < <(sed -n -E 's/^(atoom-[a-z-]+) = \{ git = .*/\1/p' Cargo.toml)
-    echo "atoom: moved to $commit; now run: just proto-gen"
+    echo "atoom: moved to $tag (${commit:0:12}); now run: just proto-gen"
 }
 
 check() {
     local fail=0
     bad() { echo "atoom: $*" >&2; fail=1; }
     [ -f "$pin" ] || die "$pin is missing"
-    local commit
+    local version tag commit
+    version=$(pinned version)
+    tag=$(pinned tag)
     commit=$(pinned commit)
+    [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "the PIN has no version, X.Y.Z"
+    [ "$tag" = "v$version" ] || die "the PIN's tag is '$tag', not v$version"
     [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "the PIN has no commit of 40 hex digits"
     [ "$(pinned source)" = "$repo" ] || bad "the PIN source is not $repo"
-    [ "$(pinned sha256)" = "$(digest)" ] || bad "the files under $dir are not what the PIN's sha256 says (run: tools/atoom/atoom.sh sync $commit; never edit them)"
+    [ "$(pinned sha256)" = "$(digest)" ] || bad "the files under $dir are not what the PIN's sha256 says (run: tools/atoom/atoom.sh sync $version; never edit them)"
     local crates
     crates=$(sed -n -E 's/^(atoom-[a-z-]+) = \{ git = .*/\1/p' Cargo.toml)
     [ -n "$crates" ] || bad "Cargo.toml: no atoom crate"
     local crate
     while IFS= read -r crate; do
         [ -n "$crate" ] || continue
-        grep -q "^$crate = { git = \"https://github.com/$repo\", rev = \"$commit\" }" Cargo.toml || bad "Cargo.toml: $crate is not at rev $commit"
+        grep -q "^$crate = { git = \"https://github.com/$repo\", tag = \"$tag\" }" Cargo.toml || bad "Cargo.toml: $crate is not at tag $tag"
     done <<<"$crates"
-    local mods
-    mods=$(awk '$1 ~ "^github.com/truvity/atoom/" { print $1 " " $2 }' go.mod)
+    local mods line
+    mods=$(go mod edit -json | jq -r '.Require[]? | select(.Path | startswith("github.com/truvity/atoom/")) | .Path + " " + .Version')
     [ -n "$mods" ] || bad "go.mod requires no atoom module"
-    local line
-    # A module that atoom's own modules require at the placeholder v0.0.0 stays at v0.0.0 in the build list (the pseudo-version sorts below it);
-    # its replace line, checked below, is what puts it at the commit.
-    local replaced
-    replaced=$(go mod edit -json | jq -r '.Replace[]? | select(.Old.Path | startswith("github.com/truvity/atoom/")) | select(.Old.Version == "v0.0.0") | .Old.Path')
     while IFS= read -r line; do
         [ -n "$line" ] || continue
-        if [ "${line#* }" = v0.0.0 ]; then
-            grep -qxF "${line% *}" <<<"$replaced" || bad "go.mod: ${line% *} is at v0.0.0 and has no replace to the commit ${commit:0:12}"
-            continue
-        fi
-        [[ "${line#* }" == *-"${commit:0:12}" ]] || bad "go.mod: ${line% *} is ${line#* }, not at the commit ${commit:0:12}"
+        [ "${line#* }" = "$tag" ] || bad "go.mod: ${line% *} is ${line#* }, not $tag"
     done <<<"$mods"
+    local rep
+    rep=$(go mod edit -json | jq -r '.Replace[]? | select(.Old.Path | startswith("github.com/truvity/atoom/")) | .Old.Path')
+    [ -z "$rep" ] || bad "go.mod: an atoom module is replaced ($(tr '\n' ' ' <<<"$rep")); a pin is a release, never a replace"
 
-    # The runtime pins: atoom's versions.yaml at that commit says what atoom builds with; this repository uses the same.
+    # The runtime pins: atoom's versions.yaml at that tag says what atoom builds with; this repository uses the same.
     local key val
     declare -A v
     while IFS= read -r line; do
@@ -125,7 +159,7 @@ check() {
     want() { [ "$3" = "$4" ] || bad "$1: $2 is '$3', atoom's versions.yaml says '$4'"; }
     want go.mod "connectrpc.com/connect" "$(awk '$1 == "connectrpc.com/connect" { print $2 }' go.mod)" "${v[go_connect]}"
     want go.mod "google.golang.org/protobuf" "$(awk '$1 == "google.golang.org/protobuf" { print $2 }' go.mod)" "${v[go_protobuf]}"
-    local f crate pair got
+    local f got pair
     while IFS= read -r f; do
         for pair in "connectrpc:rust_connectrpc" "buffa:rust_buffa" "buffa-types:rust_buffa" "connectrpc-build:rust_connectrpc_build"; do
             crate=${pair%%:*}
@@ -134,20 +168,23 @@ check() {
             done < <(sed -n -E "s/^${crate} *= *\"([^\"]*)\".*/\1/p; s/^${crate} *= *\{.*version *= *\"([^\"]*)\".*/\1/p" "$f")
         done
     done < <(git ls-files -- 'Cargo.toml' '*/Cargo.toml')
-    local rep
-    rep=$(go mod edit -json | jq -r '.Replace[]? | select(.Old.Path | startswith("github.com/truvity/atoom/")) | .Old.Path + " " + (.Old.Version // "") + " " + .New.Path + " " + (.New.Version // "")')
-    while IFS= read -r line; do
-        [ -n "$line" ] || continue
-        read -r old oldv new newv <<<"$line"
-        [ "$oldv" = v0.0.0 ] && [ "$old" = "$new" ] || bad "go.mod: the replace of $old $oldv must be to $old at the pinned commit"
-        [[ "$newv" == *-"${commit:0:12}" ]] || bad "go.mod: the replace of $old is to $newv, not at the commit ${commit:0:12}"
-    done <<<"$rep"
     [ "$fail" -eq 0 ] || exit 1
-    echo "atoom: go.mod, Cargo.toml and $dir are at ${commit:0:12}, and the runtime pins agree with its versions.yaml"
+
+    # The network part, which fails closed: whatever cannot be read is a refusal, not a pass.
+    local named
+    named=$(tag_commit "$tag") || die "refused: the tag $tag of $repo could not be read from GitHub, so the pin cannot be checked"
+    [ "$named" = "$commit" ] || die "refused: the tag $tag of $repo names $named now, but the PIN says $commit (a tag that moved; never pin it)"
+    local runs n ok
+    runs=$(api "commits/$commit/check-runs?check_name=check&filter=latest&per_page=100") || die "refused: the CI of $repo at $commit could not be read from GitHub, so the pin cannot be checked"
+    n=$(jq -r '[.check_runs[]? | select(.name == "check")] | length' <<<"$runs") || die "refused: the answer about the CI of $commit could not be read"
+    [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] || die "refused: atoom's CI job 'check' has no run on $commit"
+    ok=$(jq -r '[.check_runs[] | select(.name == "check") | select(.status == "completed" and .conclusion == "success")] | length' <<<"$runs") || die "refused: the answer about the CI of $commit could not be read"
+    [ "$ok" = "$n" ] || die "refused: atoom's CI job 'check' is not green on $commit ($ok of $n runs succeeded)"
+    echo "atoom: go.mod, Cargo.toml and $dir are at $tag (${commit:0:12}); the tag names that commit, atoom's CI job 'check' is green on it, and the runtime pins agree with its versions.yaml"
 }
 
 case "${1:-}" in
     sync) shift; sync "$@" ;;
     check) check ;;
-    *) die "usage: atoom.sh sync <commit> | check" ;;
+    *) die "usage: atoom.sh sync <X.Y.Z> | check" ;;
 esac

@@ -12,8 +12,8 @@ use atoom_index::atoom::index::v1alpha1::{
     ApplyRequest, Cursor, GetCursorRequest, IndexReadServiceClient, IndexServiceClient, LogRef,
     Partition, Row, SearchRequest,
 };
+use atoom_index_sqlite::Index;
 use atoom_index_sqlite::service::{Read, Write};
-use atoom_index_sqlite::{Index, suite};
 use connectrpc::Router;
 use connectrpc::error::ErrorCode;
 use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
@@ -97,15 +97,6 @@ fn search() -> SearchRequest {
         tenants: vec!["acme".into()],
         ..SearchRequest::default()
     }
-}
-
-/// The index port suite: word search matches words without stemming, folds diacritics, finds a prefix and no substring,
-/// and reaches only the searchable columns, the same for the driver the suite runs on and every driver that passes it.
-///
-/// verifies: REQ-AUDIT-145, REQ-AUDIT-070, REQ-AUDIT-067
-#[test]
-fn the_port_suite_passes() {
-    suite::run_temp().unwrap();
 }
 
 #[tokio::test]
@@ -262,10 +253,11 @@ async fn a_caller_that_is_not_the_one_named_is_refused_before_anything_is_read()
     let _ = (stop_w.send(()), stop_r.send(()));
 }
 
-/// atoom's index kit, the suite of the binary `index-conformance`, run through the two guarded sockets, the indexer's and the reader's
-/// (`just conformance`). The kit cannot clean up (the contract has no delete): the index is a scratch one.
+/// The smoke test of this host. atoom proves the sqlite index driver against the index contract in its own CI; this proves that the host starts
+/// it behind sluis's two guarded sockets and that one batch goes in on the indexer's socket and one search comes out on the reader's
+/// (`just atoom-smoke`).
 #[tokio::test]
-async fn the_atoom_index_kit_passes_through_the_guarded_sockets() {
+async fn the_atoom_driver_smoke_one_apply_and_one_search_through_the_guarded_sockets() {
     let (d, s) = (dir(), tempfile::tempdir().unwrap());
     let index = Index::open(d.path()).unwrap();
     let (wsock, rsock) = (s.path().join("index.sock"), s.path().join("index-ro.sock"));
@@ -284,14 +276,26 @@ async fn the_atoom_index_kit_passes_through_the_guarded_sockets() {
     );
     up(&wsock).await;
     up(&rsock).await;
-    let cases = atoom_index_conformance::index_suite(
-        atoom_socket::dial(&wsock),
-        atoom_socket::dial(&rsock),
-    )
-    .await;
-    let mut out = Vec::new();
-    let verdict = atoom_index_conformance::report(&cases, &mut out);
-    assert!(verdict.is_ok(), "{}", String::from_utf8_lossy(&out));
-    let _ = stop_w.send(());
-    let _ = stop_r.send(());
+    let w = dial(&wsock);
+    IndexServiceClient::new(w.transport(), w.config())
+        .apply(ApplyRequest {
+            log: ::buffa::MessageField::some(log()),
+            next: ::buffa::MessageField::some(Cursor {
+                size: 1,
+                root: vec![7; 32],
+                ..Cursor::default()
+            }),
+            rows: vec![row(1)],
+            ..ApplyRequest::default()
+        })
+        .await
+        .unwrap();
+    let r = dial(&rsock);
+    let got = IndexReadServiceClient::new(r.transport(), r.config())
+        .search(search())
+        .await
+        .unwrap()
+        .into_owned();
+    assert_eq!(got.rows.len(), 1);
+    let _ = (stop_w.send(()), stop_r.send(()));
 }

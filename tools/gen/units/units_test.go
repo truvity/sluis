@@ -603,7 +603,7 @@ func TestDeterministic(t *testing.T) {
 // that a row invented, fails here and not on a board.
 //
 // The flags that an atoom library defines for the host that mounts it are not in that directory: the rqlite driver's settings are
-// atoom's (`atoom_store_rqlite::config::flags`, pinned by commit). A test of the host, `the_unit_flags_are_the_flags_of_the_binary` in
+// atoom's (`atoom_store_rqlite::config::flags`, pinned by release). A test of the host, `the_unit_flags_are_the_flags_of_the_binary` in
 // drivers/store/rqlite/tests/driver.rs, runs `rqlite serve --help` and holds the binary to every flag listed here.
 func TestEveryFlagIsDefinedByItsBinary(t *testing.T) {
 	root := filepath.Join("..", "..", "..")

@@ -1,6 +1,5 @@
 //! The destination port over a real Unix socket against the directory driver behind sluis's guard: the contract (atoom's,
-//! `destination/proto`) is the only way in, the caller is known from the socket's peer uid, and the suite runs through the wire as well
-//! as in process.
+//! `destination/proto`) is the only way in, and the caller is known from the socket's peer uid.
 
 #![allow(refining_impl_trait)]
 #![allow(clippy::unwrap_used, clippy::expect_used)] // a failed unwrap in a test is the failure
@@ -10,7 +9,6 @@ use std::sync::Arc;
 
 use atoom_destination::atoom::destination::v1alpha1::{DestinationServiceClient, ReadBackRequest};
 use atoom_destination_conformance::rpc::{Client, Service};
-use atoom_destination_conformance::suite::{Caps, run};
 use atoom_destination_conformance::{Destination, Document, Error};
 use atoom_destination_dir::{Directory, Until, suite};
 use connectrpc::error::ErrorCode;
@@ -60,20 +58,11 @@ fn doc(address: &str, body: &[u8]) -> Document {
     }
 }
 
-/// The port's suite and the directory's own cases pass over temporary directories (what `conformance` runs).
-///
-/// verifies: REQ-EXPORT-027
+/// The smoke test of this host. atoom proves the directory driver against the destination contract in its own CI; this proves that the host
+/// starts it behind sluis's guarded socket, that exporter@'s side can write and list one document through the wire, and that a call the
+/// directory cannot serve (ReadBack: it has no public address) answers `unimplemented` with the reason `unsupported` (`just atoom-smoke`).
 #[tokio::test]
-async fn the_destination_port_suite_passes_for_the_directory_driver() {
-    suite::run_temp().await.unwrap();
-}
-
-/// The same suite through the Connect service, from exporter@'s side: every call crosses the wire and the driver's
-/// socket answers exporter@ alone.
-///
-/// verifies: REQ-EXPORT-027
-#[tokio::test]
-async fn the_suite_passes_through_the_socket() {
+async fn the_atoom_driver_smoke_one_put_and_one_list_through_the_guarded_socket() {
     let (root, state) = suite::temp().unwrap();
     let s = tempfile::tempdir().unwrap();
     let sock = s.path().join("directory.sock");
@@ -84,15 +73,15 @@ async fn the_suite_passes_through_the_socket() {
     );
     up(&sock).await;
     let client = Client::new(&atoom_socket::dial(&sock));
-    run(&client, &Caps::default()).await.unwrap();
-    // A directory has no public address: ReadBack is unsupported on the wire, as `unimplemented`.
-    assert_eq!(
-        client.read_back("https://sluis.example.com/jwks").await,
-        Err(Error::Unsupported)
-    );
+    let put = client
+        .put(doc("jwks.json", br#"{"keys":[1]}"#))
+        .await
+        .unwrap();
+    let listed = client.list("", None, 0).await.unwrap().documents;
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].sha256, put.sha256);
     let raw = dial(&sock);
-    let c = DestinationServiceClient::new(raw.transport(), raw.config());
-    let e = c
+    let e = DestinationServiceClient::new(raw.transport(), raw.config())
         .read_back(ReadBackRequest {
             address: "https://sluis.example.com/jwks".into(),
             ..Default::default()

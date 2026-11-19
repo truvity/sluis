@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)] // a failed unwrap in a test is the failure
-//! The memory driver of atoom (library `atoom-store-memory`, pinned by commit: `third_party/atoom/README.md`) under sluis's host: the
-//! item suite of atoom's conformance kit, run through a socket that sluis's own guarded server serves, with this process's uid as the
-//! owner `store`. The tests that atoom keeps for the driver itself run in atoom; these are the ones that prove, in this repository's
+//! The memory driver of atoom (library `atoom-store-memory`, pinned by release: `third_party/atoom/README.md`) under sluis's host: the
+//! engine behind a socket that sluis's own guarded server serves, with this process's uid as the owner `store`. atoom's item kit and the
+//! tests that atoom keeps for the driver itself run in atoom's CI; here is one smoke test, and the tests that prove, in this repository's
 //! CI, what the records below say of the engine that store@'s own tests run on.
 
 use std::path::PathBuf;
@@ -10,7 +10,6 @@ use std::time::Duration;
 use atoom_store::atoom::store::v1alpha1::{
     ItemServiceClient, Put, QueryRequest, TailLogRequest, TransactRequest,
 };
-use atoom_store_conformance::{item_suite, report};
 use atoom_store_memory::MemoryEngine;
 use connectrpc::error::ErrorCode;
 use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
@@ -55,21 +54,38 @@ async fn wait_for(sock: &std::path::Path) {
     panic!("{} did not appear", sock.display());
 }
 
-/// verifies: REQ-DATA-101, REQ-DATA-102, REQ-DATA-055, REQ-DATA-063, REQ-DATA-098, REQ-DATA-114, REQ-DATA-115
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn the_memory_engine_passes_the_item_suite() {
+/// The smoke test of this host. atoom proves the in-memory driver against the item contract in its own CI; this proves that store@'s
+/// engine starts behind sluis's guarded socket and that one write and one read come back (`just atoom-smoke`).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_atoom_driver_smoke_one_write_and_one_read_through_the_guarded_socket() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("durable.sock");
     let (stop, server) = serve(&MemoryEngine::new(), socket.clone());
     wait_for(&socket).await;
-    let cases = item_suite(atoom_socket::dial(&socket)).await;
-    let mut out = Vec::new();
-    let verdict = report(&cases, &mut out);
-    print!("{}", String::from_utf8_lossy(&out));
+    let c = dial(&socket);
+    let rpc = ItemServiceClient::new(c.transport(), c.config());
+    rpc.transact(TransactRequest {
+        puts: vec![Put {
+            key: b"smoke/one".to_vec(),
+            value: b"v".to_vec(),
+            ..Put::default()
+        }],
+        ..TransactRequest::default()
+    })
+    .await
+    .unwrap();
+    let got = rpc
+        .get(atoom_store::atoom::store::v1alpha1::ItemGetRequest {
+            key: b"smoke/one".to_vec(),
+            linearizable: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap()
+        .into_owned();
+    assert_eq!(got.item.value, b"v");
     let _ = stop.send(());
     server.await.unwrap().unwrap();
-    verdict.unwrap();
-    assert!(cases.len() >= 10, "the suite ran {} cases", cases.len());
 }
 
 /// verifies: REQ-DATA-114, REQ-DATA-115
@@ -170,26 +186,4 @@ async fn a_log_made_again_has_another_epoch_and_a_saved_position_is_refused() {
         .map(|_| ())
         .expect_err("the old stream is refused");
     assert_eq!(refusal_reason(&end).as_deref(), Some("sequence_expired"));
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_second_run_of_the_suite_finds_the_engine_clean() {
-    let dir = tempfile::tempdir().unwrap();
-    let socket = dir.path().join("durable.sock");
-    let (stop, server) = serve(&MemoryEngine::new(), socket.clone());
-    wait_for(&socket).await;
-    for _ in 0..2 {
-        let cases = item_suite(atoom_socket::dial(&socket)).await;
-        report(&cases, &mut Vec::new()).unwrap();
-    }
-    // The suite removes what it wrote.
-    let c = dial(&socket);
-    let left = ItemServiceClient::new(c.transport(), c.config())
-        .query(QueryRequest::default())
-        .await
-        .unwrap()
-        .into_owned();
-    assert!(left.items.is_empty(), "the suite left items behind");
-    let _ = stop.send(());
-    server.await.unwrap().unwrap();
 }

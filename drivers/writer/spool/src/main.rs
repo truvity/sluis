@@ -1,6 +1,6 @@
 //! The host of the `spool` audit transport driver of the writer.
 //!
-//! The driver is atoom's (github.com/truvity/atoom, `transport/spool`, pinned by commit: `third_party/atoom/README.md`): the transport port
+//! The driver is atoom's (github.com/truvity/atoom, `transport/spool`, pinned by release: `third_party/atoom/README.md`): the transport port
 //! over a local, fsync'd, bounded queue. This file is what is sluis's: the two sockets with the peer credentials and the call graph, the
 //! name of an emitter (`<actor>@<boundary>`, from the peer, which is the function atoom's `Emit` asks), the command line (`serve`,
 //! `check`, `conformance`, `version`) and `--socket-gid`.

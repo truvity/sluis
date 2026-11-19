@@ -1,6 +1,6 @@
 //! The host of the `credential` driver of store@ (the secret source).
 //!
-//! The driver is atoom's (github.com/truvity/atoom, `source/credential`, pinned by commit: `third_party/atoom/README.md`): the source contract over
+//! The driver is atoom's (github.com/truvity/atoom, `source/credential`, pinned by release: `third_party/atoom/README.md`): the source contract over
 //! systemd credentials. This file is what is sluis's: the socket with the peer credentials of its caller, the owner check of the registry (only
 //! store@ may open it), the command line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
 //!

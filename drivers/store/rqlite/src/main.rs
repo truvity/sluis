@@ -1,6 +1,6 @@
 //! `rqlite`: the host of the rqlite driver of store@ for the durable and the temp port.
 //!
-//! The driver is atoom's (github.com/truvity/atoom, `store/rqlite`, pinned by commit: `third_party/atoom/README.md`): the item contract
+//! The driver is atoom's (github.com/truvity/atoom, `store/rqlite`, pinned by release: `third_party/atoom/README.md`): the item contract
 //! over rqlite, the sweeper and the flags. This file is what is sluis's: the socket with the peer credentials of its caller, the owner
 //! check of the registry (only store@ may open it), the command line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
 //!

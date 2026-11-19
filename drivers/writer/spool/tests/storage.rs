@@ -1,11 +1,11 @@
-//! The spool's files: the suite, and the damage cases that need a look at the directory.
+//! The spool's files: the damage cases that need a look at the directory.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)] // a failed unwrap in a test is the failure
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use atoom_transport_spool::{Config, Spool, suite};
+use atoom_transport_spool::{Config, Spool};
 
 fn root() -> tempfile::TempDir {
     let d = tempfile::tempdir().unwrap();
@@ -36,12 +36,6 @@ const SMALL: Config = Config {
     limit: 1 << 20,
     segment: 64,
 };
-
-/// verifies: REQ-AUDIT-032
-#[test]
-fn the_transport_suite_passes() {
-    suite::run_temp().unwrap();
-}
 
 #[test]
 fn a_flipped_byte_in_the_last_frame_is_cut_like_a_torn_write() {

@@ -134,7 +134,7 @@ Standards coverage and the test suites that hold it.
 | Feature | What v1 does | v1 documentation |
 |---|---|---|
 | **[OpenID conformance and standards coverage](https://github.com/truvity/sluis/issues/850)** | The OpenID Foundation Config, Basic OP, RP-Initiated Logout and Back-Channel Logout plans with no failures. **Changed:** the v2 harness signs in through a real identity provider, Keycloak in a container; sluis holds no conformance account ([Conformance](/standards/conformance/)). | [Run the OpenID conformance suite](/v1/guides/sluis/run-conformance/) |
-| **[Port conformance suite](https://github.com/truvity/sluis/issues/851)** | One shared behavioural suite for every adapter of every port. **v2:** each driver contract has a `conformance` command, and a driver passes it or it is not a driver ([ADR 0005](/decisions/0005-the-store/#drivers)). The conformance kit of each port is in [atoom](https://github.com/truvity/atoom), and `just conformance` runs them against sluis's hosts. | [Ports](/v1/reference/sluis/ports/) |
+| **[Port conformance suite](https://github.com/truvity/sluis/issues/851)** | One shared behavioural suite for every adapter of every port. **v2:** each driver contract has a `conformance` command, and a driver passes it or it is not a driver ([ADR 0005](/decisions/0005-the-store/#drivers)). The conformance kit of each port is in [atoom](https://github.com/truvity/atoom) and runs in atoom's CI; sluis keeps one smoke test for each host (`just atoom-smoke`). | [Ports](/v1/reference/sluis/ports/) |
 | **[Policy tests](https://github.com/truvity/sluis/issues/852)** | A policy loaded and evaluated in CI before it ships. | [Test a policy](/v1/guides/sluis/test-the-policy/) |
 
 ## Documentation

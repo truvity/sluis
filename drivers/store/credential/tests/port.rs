@@ -11,8 +11,8 @@ use std::time::Duration;
 use atoom_source::atoom::source::v1alpha1::{
     CapabilitiesRequest, ReadRequest, SourceServiceClient, SourceWatchRequest, Watch,
 };
+use atoom_source_credential::Dir;
 use atoom_source_credential::service::Service;
-use atoom_source_credential::{Dir, suite};
 use connectrpc::error::ErrorCode;
 use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
 
@@ -66,11 +66,6 @@ fn credential(dir: &Path, name: &str, mode: u32) {
     let p = dir.join(name);
     std::fs::write(&p, SECRET).unwrap();
     std::fs::set_permissions(&p, std::fs::Permissions::from_mode(mode)).unwrap();
-}
-
-#[test]
-fn the_source_suite_passes() {
-    suite::run_temp().unwrap();
 }
 
 /// verifies: REQ-DATA-112
@@ -244,22 +239,25 @@ fn a_credentials_directory_that_others_can_write_is_not_served() {
     assert!(Dir::open(creds.path()).is_ok());
 }
 
-/// atoom's source kit, the suite of the binary `source-conformance`, run through the guarded socket against a directory with one credential
-/// (`just conformance`).
+/// The smoke test of this host. atoom proves the credential driver against the source contract in its own CI; this proves that the host starts
+/// it behind sluis's guarded socket and that one read comes back (`just atoom-smoke`).
 #[tokio::test]
-async fn the_atoom_source_kit_passes_through_the_guarded_socket() {
+async fn the_atoom_driver_smoke_one_read_through_the_guarded_socket() {
     let (creds, s) = (credentials(), tempfile::tempdir().unwrap());
     credential(creds.path(), "upstream-workforce", 0o400);
     let sock = s.path().join("secret-source.sock");
     let stop = serve(&sock, creds.path(), "store");
     up(&sock).await;
-    let fixture = atoom_source_conformance::Fixture {
-        name: "upstream-workforce".into(),
-        data: SECRET.to_vec(),
-    };
-    let cases = atoom_source_conformance::source_suite(atoom_socket::dial(&sock), &fixture).await;
-    let mut out = Vec::new();
-    let verdict = atoom_source_conformance::report(&cases, &mut out);
-    assert!(verdict.is_ok(), "{}", String::from_utf8_lossy(&out));
+    let client = dial(&sock);
+    let c = SourceServiceClient::new(client.transport(), client.config());
+    let got = c
+        .read(ReadRequest {
+            name: "upstream-workforce".into(),
+            ..Default::default()
+        })
+        .await
+        .unwrap()
+        .into_owned();
+    assert_eq!(got.data, SECRET);
     let _ = stop.send(());
 }

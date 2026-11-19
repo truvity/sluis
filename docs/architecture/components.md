@@ -465,7 +465,7 @@ The structure above is kept by tests that run in CI, cheap to write because the 
 | Only the wiring package imports drivers | An actor that links a driver directly instead of using its port |
 | An authority key has exactly one user actor | A key policy that names two actors |
 | No work actor holds a credential at rest, and no unit holds a holder with a work actor | A fusion or a registry row that breaks [the fusion rule](#the-fusion-rule) |
-| Each driver passes the port's conformance suite (atoom's kit, run by `just conformance`) | A driver that diverges from the port contract |
+| Each driver passes the port's conformance suite (atoom's kit, run in atoom's CI; sluis runs a smoke test of each host, `just atoom-smoke`) | A driver that diverges from the port contract |
 | The deny matrix ([Deployment](/architecture/deployment/#the-deny-matrix)) | A generated policy that is too wide |
 | Each of the two checks holds with the other switched off | A check that passes only because the other caught the case |
 | The drift test: generated rules, grant checks, policy documents, units, sockets and service accounts agree with the registries | A hand edit, or a generator change that missed one output |

@@ -53,11 +53,10 @@ tracing = "0.1"
 
 [dev-dependencies]
 store = { path = ".", features = ["test-audit-timeout"] }
-# The secret source driver (atoom's, pinned by commit), served in the tests over its real contract.
+# The secret source driver (atoom's, pinned by release), served in the tests over its real contract.
 atoom-source-credential.workspace = true
-# atoom's item drivers (the rqlite driver, the memory driver), its conformance kit and the client of its socket, pinned by commit
+# atoom's item drivers (the rqlite driver, the memory driver), its conformance kit and the client of its socket, pinned by release
 # (third_party/atoom/README.md): served in the tests behind sluis's own guarded server, over their real contract: Watch end to end.
-atoom-socket.workspace = true
 atoom-store.workspace = true
 atoom-store-conformance.workspace = true
 atoom-store-memory.workspace = true

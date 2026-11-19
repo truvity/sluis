@@ -1,6 +1,6 @@
 //! The host of the `directory` driver of exporter@.
 //!
-//! The driver is atoom's (github.com/truvity/atoom, `destination/dir`, pinned by commit: `third_party/atoom/README.md`): the destination port
+//! The driver is atoom's (github.com/truvity/atoom, `destination/dir`, pinned by release: `third_party/atoom/README.md`): the destination port
 //! over a local directory that a forwarder serves. This file is what is sluis's: the socket with the peer credentials of its caller, the owner
 //! check (only exporter@ may open it), the command line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
 //!

@@ -15,7 +15,6 @@ import (
 	"connectrpc.com/connect"
 	"go.yaml.in/yaml/v3"
 
-	keykit "github.com/truvity/atoom/key/conformance"
 	keyv1alpha1 "github.com/truvity/atoom/key/gen/atoom/key/v1alpha1"
 	"github.com/truvity/atoom/key/gen/atoom/key/v1alpha1/keyv1alpha1connect"
 
@@ -115,15 +114,25 @@ func TestSocketMode(t *testing.T) {
 	}
 }
 
-// The kit of atoom's key port passes against the host over its socket.
-func TestConformancePassesAgainstItself(t *testing.T) {
+// The smoke test of this host. atoom proves the software driver against the key port in its own CI, kit included; this proves that the host
+// starts it behind sluis's socket and that one key is made, read back and signed with through the wire (`just atoom-smoke`).
+func TestAtoomDriverSmokeOneEnsureOnePublicKeyOneSign(t *testing.T) {
 	r := start(t, "development", "key")
-	var out bytes.Buffer
-	if err := keykit.Run(context.Background(), r.client, &out); err != nil {
-		t.Fatalf("%v\n%s", err, out.String())
+	ctx := context.Background()
+	made, err := r.client.Ensure(ctx, connect.NewRequest(&keyv1alpha1.EnsureRequest{Purpose: "token-signing", Algorithm: "ES384"}))
+	if err != nil {
+		t.Fatalf("Ensure: %v", err)
 	}
-	if !strings.Contains(out.String(), "0 failed") {
-		t.Fatalf("report: %s", out.String())
+	pub, err := r.client.PublicKey(ctx, connect.NewRequest(&keyv1alpha1.PublicKeyRequest{Purpose: "token-signing"}))
+	if err != nil {
+		t.Fatalf("PublicKey: %v", err)
+	}
+	if len(made.Msg.SpkiDer) == 0 || !bytes.Equal(made.Msg.SpkiDer, pub.Msg.SpkiDer) {
+		t.Fatalf("the public key of Ensure and of PublicKey differ: %x %x", made.Msg.SpkiDer, pub.Msg.SpkiDer)
+	}
+	sig, err := r.client.Sign(ctx, connect.NewRequest(&keyv1alpha1.SignRequest{Purpose: "token-signing", Algorithm: "ES384", Digest: make([]byte, 48)}))
+	if err != nil || len(sig.Msg.SignatureDer) == 0 {
+		t.Fatalf("Sign: %v", err)
 	}
 }
 

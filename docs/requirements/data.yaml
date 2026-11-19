@@ -865,7 +865,7 @@ requirements:
     actors: [store]
     standards: []
     issues: [952]
-    tests: [actors/store/tests/store.rs, actors/store/tests/memory_engine.rs, drivers/store/rqlite/tests/driver.rs]
+    tests: [actors/store/tests/store.rs]
     verification:
       - {kind: integration-test, ref: "each put and delete of a watched or exportable kind goes to the engine as one transaction that asks for its log row, and the log grows by that row; a kind nobody watches asks for none"}
       - {kind: conformance-suite, ref: "a transaction that is refused leaves no log row and no change, one that holds leaves one row for each logged put and delete, on every engine"}
@@ -1365,7 +1365,7 @@ requirements:
     actors: [store]
     standards: []
     issues: [956]
-    tests: [actors/store/tests/watch_engines.rs, actors/store/tests/memory_engine.rs, drivers/store/rqlite/tests/driver.rs]
+    tests: [actors/store/tests/watch_engines.rs]
     verification:
       - {kind: integration-test, ref: "six takers race for one lease through store@ on memory and rqlite: one wins each of four rounds, the others are told it is taken or stale, and the version grows by one at each takeover"}
       - {kind: conformance-suite, ref: "six writers race on one key with the same condition on every engine: one wins, the version of the winner is the next one"}
@@ -1861,7 +1861,7 @@ requirements:
     runtimes: all
     standards: []
     issues: [864]
-    tests: [actors/store/tests/watch_engines.rs, actors/store/tests/memory_engine.rs, drivers/store/rqlite/tests/driver.rs]
+    tests: [actors/store/tests/watch_engines.rs]
     verification:
       - {kind: conformance-suite, ref: "version conformance on every engine: create, delete, create again gives 1; through store@ on memory and rqlite, a create after a delete or a sweep is at version 1"}
   - id: REQ-DATA-099

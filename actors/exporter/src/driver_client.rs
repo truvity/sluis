@@ -1,6 +1,6 @@
 //! The client of a destination driver's socket: the [`Destination`] that the engine publishes through.
 //!
-//! The trait, the documents and the rules are atoom's (`atoom-destination`, the port crate, pinned by commit: `third_party/atoom/README.md`), and so is
+//! The trait, the documents and the rules are atoom's (`atoom-destination`, the port crate, pinned by release: `third_party/atoom/README.md`), and so is
 //! a client of its own, but that one dials with atoom's plain socket. This one dials with sluis's kit, which hands the caller's deadline and
 //! correlation id down (contracts.md "Every call"), and speaks the contract through `sluis-proto`'s copy of the vendored messages. The two
 //! clients map every code and every refusal the same way.

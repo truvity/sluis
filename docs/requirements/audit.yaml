@@ -242,7 +242,6 @@ requirements:
     tests:
       - actors/store/tests/audit_log_lock.rs
       - actors/writer/internal/writerd/state_register_test.go
-      - drivers/writer/fs/tests/port.rs
     verification:
       - {kind: test-vectors, ref: "port suite blob: the fs driver (lock mode none) passes it; the AuditLog kind refuses a lock mode that is missing or not none, removable or compliance (store@), and the writer does not start on one"}
   - id: REQ-AUDIT-028
@@ -1095,14 +1094,13 @@ requirements:
     rationale: "One conformance suite needs the same answer from every driver."
     level: MUST
     source: design-decision
-    status: done
+    status: partial
+    gap: proved-in-atoom
     milestone: core
     runtimes: all
     standards:
       - {id: ST-103, section: "test plan", depth: Full}
     issues: [839]
-    tests:
-      - drivers/indexer/sqlite/tests/port.rs
     verification:
       - {kind: test-vectors, ref: "port suite index full text"}
   - id: REQ-AUDIT-071
@@ -1595,7 +1593,7 @@ requirements:
     issues: [1121, 837, 851]
     tests: [drivers/writer/fs/tests/port.rs]
     verification:
-      - {kind: conformance-suite, ref: "the blob port's conformance suite and the fs driver's backend suite (atoom, blob/conformance and blob/fs), run behind the host's guard by the host's tests"}
+      - {kind: integration-test, ref: "a second create of an existing path through the fs host's guarded socket is refused as taken; atoom's blob conformance suite holds every blob driver to the same rule in atoom's CI"}
   - id: REQ-AUDIT-104
     area: AUDIT
     statement: "An audit record MUST name the sluis extension, with its name, uid and version, in `metadata.extensions`."
@@ -2196,7 +2194,8 @@ requirements:
     rationale: "A partition is a boundary the index itself enforces, apart from the grant (ADR 0028)."
     level: MUST
     source: design-decision
-    status: done
+    status: partial
+    gap: proved-in-atoom
     milestone: core
     runtimes: all
     actors: [indexer]

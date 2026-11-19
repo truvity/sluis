@@ -1,4 +1,4 @@
-//! The rqlite driver of atoom (library `atoom-store-rqlite`, pinned by commit) under sluis's host, against a real rqlite 10.6.6: a
+//! The rqlite driver of atoom (library `atoom-store-rqlite`, pinned by release) under sluis's host, against a real rqlite 10.6.6: a
 //! pinned release binary that the test starts as a plain process on a temporary data directory and free loopback ports (`just rqlite-fetch`
 //! puts it in `.cache/rqlite`). No container.
 //!
@@ -205,74 +205,39 @@ fn rqlite_command(args: &[&str]) -> std::process::Output {
         .expect("run the rqlite binary")
 }
 
-/// verifies: REQ-DATA-101, REQ-DATA-102, REQ-DATA-055, REQ-DATA-063, REQ-DATA-098, REQ-DATA-113, REQ-DATA-114, REQ-DATA-115
-/// The suite includes the log head of a query: never 0, and a tail from it misses nothing written after the page.
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn the_driver_passes_the_item_suite_on_both_ports() {
+/// The smoke test of this host. atoom proves the rqlite driver against the item contract in its own CI (its item kit, against its own rqlite);
+/// this proves that the host starts it behind sluis's guarded socket on a real rqlite and that one write and one read come back
+/// (`just atoom-smoke`).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_atoom_driver_smoke_one_write_and_one_read_through_the_guarded_socket() {
     let Some(bin) = rqlited() else { return };
     let node = start_node(&bin, None).await;
-    for ns in ["durable", "temp"] {
-        let d = driver(&node, ns);
-        d.ensure_schema().await.unwrap();
-        d.ensure_schema().await.expect("the schema is idempotent");
-        let served = serve(&d).await;
-
-        let cases = atoom_store_conformance::item_suite(atoom_socket::dial(&served.socket)).await;
-        let mut out = Vec::new();
-        let verdict = atoom_store_conformance::report(&cases, &mut out);
-        print!("[{ns}]\n{}", String::from_utf8_lossy(&out));
-        verdict.unwrap();
-        assert!(cases.len() >= 10);
-
-        // The command of the binary does the same over the socket, and a second run finds the
-        // engine clean.
-        let run = rqlite_command(&["conformance", "--socket", served.socket.to_str().unwrap()]);
-        assert!(
-            run.status.success(),
-            "rqlite conformance: {}{}",
-            String::from_utf8_lossy(&run.stdout),
-            String::from_utf8_lossy(&run.stderr)
-        );
-        assert!(String::from_utf8_lossy(&run.stdout).contains("0 failed"));
-
-        // What the suite wrote is gone from the tables, not only hidden.
-        let rq = Rq::new(&node.url, None).unwrap();
-        let counts = rq
-            .query(
-                Level::Linearizable,
-                &[
-                    Stmt::new(format!("SELECT COUNT(*) FROM {}_items", ns), vec![]),
-                    Stmt::new(format!("SELECT COUNT(*) FROM {}_index", ns), vec![]),
-                    Stmt::new(format!("SELECT COUNT(*) FROM {}_guard", ns), vec![]),
-                ],
-            )
-            .await
-            .unwrap();
-        for (i, what) in ["items", "index entries", "guard rows"].iter().enumerate() {
-            let n = atoom_store_rqlite::client::rows(&counts, i).unwrap()[0][0]
-                .as_i64()
-                .unwrap();
-            if n != 0 {
-                // Name what is left (key, expiry, version), so that the next failure says which case left it.
-                let left = rq
-                    .query(
-                        Level::Linearizable,
-                        &[Stmt::new(
-                            format!(
-                                "SELECT key, expires_at, version FROM {}_items ORDER BY key LIMIT 10",
-                                ns
-                            ),
-                            vec![],
-                        )],
-                    )
-                    .await
-                    .map(|r| format!("{:?}", atoom_store_rqlite::client::rows(&r, 0)))
-                    .unwrap_or_default();
-                panic!("{ns}: the suite left {n} {what}; items now: {left}");
-            }
-        }
-        served.stop().await;
-    }
+    let d = driver(&node, "durable");
+    d.ensure_schema().await.unwrap();
+    let served = serve(&d).await;
+    let c = dial(&served.socket);
+    let rpc = ItemServiceClient::new(c.transport(), c.config());
+    rpc.transact(TransactRequest {
+        puts: vec![Put {
+            key: b"smoke/one".to_vec(),
+            value: b"v".to_vec(),
+            ..Put::default()
+        }],
+        ..TransactRequest::default()
+    })
+    .await
+    .unwrap();
+    let got = rpc
+        .get(atoom_store::atoom::store::v1alpha1::ItemGetRequest {
+            key: b"smoke/one".to_vec(),
+            linearizable: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap()
+        .into_owned();
+    assert_eq!(got.item.value, b"v");
+    served.stop().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

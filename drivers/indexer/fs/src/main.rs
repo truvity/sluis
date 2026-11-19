@@ -1,6 +1,6 @@
 //! The host of the read-only `fs` blob driver of the indexer and the reader.
 //!
-//! The driver is atoom's (github.com/truvity/atoom, `blob/fsreadonly`, pinned by commit: `third_party/atoom/README.md`): `Get` and `List` of the
+//! The driver is atoom's (github.com/truvity/atoom, `blob/fsreadonly`, pinned by release: `third_party/atoom/README.md`): `Get` and `List` of the
 //! directory that `blob/fs` keeps. This file is what is sluis's: the two sockets, one for each caller, with the peer credentials and a
 //! check of their own, the uid that must own the directory (the writer's driver in this process's uid block, from the registry), the command
 //! line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.

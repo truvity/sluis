@@ -770,19 +770,19 @@ async fn facts_lost_while_no_spool_is_listening_are_counted_in_the_first_record_
     u.down();
 }
 
-/// atoom's transport kit, the suite of the binary `transport-conformance`, run through the two guarded sockets, emit and receive
-/// (`just conformance`). The test process is `entry` on the emit socket (the call graph lets it emit) and `writer` on the receive socket.
+/// The smoke test of this host. atoom proves the spool driver against the transport contract in its own CI; this proves that the host starts
+/// it behind sluis's two guarded sockets and that one message goes in on the emit socket and comes out on the receive socket
+/// (`just atoom-smoke`). The test process is `entry` on the emit socket and `writer` on the receive socket.
 #[tokio::test]
-async fn the_atoom_transport_kit_passes_through_the_guarded_sockets() {
+async fn the_atoom_driver_smoke_one_emit_and_one_receive_through_the_guarded_sockets() {
     let (r, s) = (root(), tempfile::tempdir().unwrap());
     let u = up(r.path(), s.path(), Some("entry"), Config::default()).await;
-    let cases = atoom_transport_conformance::transport_suite(
-        atoom_socket::dial(&u.emit),
-        atoom_socket::dial(&u.receive),
-    )
-    .await;
-    let mut out = Vec::new();
-    let verdict = atoom_transport_conformance::report(&cases, &mut out);
-    assert!(verdict.is_ok(), "{}", String::from_utf8_lossy(&out));
+    client(&u.emit).emit(msg("u1", b"{}")).await.unwrap();
+    let mut st = client(&u.receive)
+        .receive(ReceiveRequest::default())
+        .await
+        .unwrap();
+    assert_eq!(next!(st), vec![(1, "entry@dev".into(), "u1".into())]);
+    drop(st);
     u.down();
 }

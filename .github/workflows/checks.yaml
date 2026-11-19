@@ -122,6 +122,8 @@ jobs:
     timeout-minutes: 10
     env:
       PUBLIC_CONTENT_DENYLIST: ${{ secrets.PUBLIC_CONTENT_DENYLIST }}
+      # `just atoom-check` reads atoom's CI for the pinned commit from the GitHub API (public data; the token only lifts the rate limit).
+      GH_TOKEN: ${{ github.token }}
       REQUIRE_DENYLIST: ${{ github.event_name == 'merge_group' || github.event_name == 'push' || (vars.DENYLIST_REQUIRED == 'true' && github.event.pull_request.head.repo.full_name == github.repository) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -172,8 +174,9 @@ jobs:
           restore-keys: |
             code-${{ runner.os }}-
       - run: devbox run -- just check-code
-      # atoom's conformance kits through the guarded sockets of the hosts (they run inside check-code's `cargo test --workspace` too; this names them).
-      - run: devbox run -- just conformance
+      # One smoke test for each host of an atoom driver (they run inside check-code's `cargo test --workspace` and `go test` too; this names them).
+      # atoom's own conformance kits run in atoom's CI (decision D4 A).
+      - run: devbox run -- just atoom-smoke
       # The release builds each executable alone (`cargo zigbuild --package P`), so Cargo resolves the features of P without the
       # features a sibling would add; every job above builds the workspace in one run, which unifies them. A change that
       # compiles only through a sibling's feature would pass them all and fail the release on main. This checks each Rust package

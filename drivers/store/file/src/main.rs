@@ -1,6 +1,6 @@
 //! The host of the `file` driver of store@ (the config source).
 //!
-//! The driver is atoom's (github.com/truvity/atoom, `source/file`, pinned by commit: `third_party/atoom/README.md`): the source contract over
+//! The driver is atoom's (github.com/truvity/atoom, `source/file`, pinned by release: `third_party/atoom/README.md`): the source contract over
 //! a directory of signed config documents. This file is what is sluis's: the socket with the peer credentials of its caller, the owner check of the registry (only
 //! store@ may open it), the command line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
 //!

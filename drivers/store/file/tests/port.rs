@@ -10,8 +10,8 @@ use std::time::Duration;
 use atoom_source::atoom::source::v1alpha1::{
     CapabilitiesRequest, ReadRequest, SourceServiceClient, SourceWatchRequest, Watch,
 };
+use atoom_source_file::Dir;
 use atoom_source_file::service::Service;
-use atoom_source_file::{Dir, suite};
 use connectrpc::error::ErrorCode;
 use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
 
@@ -48,11 +48,6 @@ async fn up(socket: &Path) {
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     panic!("no socket");
-}
-
-#[test]
-fn the_source_suite_passes() {
-    suite::run_temp().unwrap();
 }
 
 /// verifies: REQ-DATA-070
@@ -240,23 +235,25 @@ fn serve_refuses_a_socket_gid_of_zero_or_text_before_it_listens() {
     }
 }
 
-/// atoom's source kit, the suite of the binary `source-conformance`, run through the guarded socket against a directory with one document
-/// (`just conformance`).
+/// The smoke test of this host. atoom proves the file driver against the source contract in its own CI; this proves that the host starts it
+/// behind sluis's guarded socket and that one read comes back (`just atoom-smoke`).
 #[tokio::test]
-async fn the_atoom_source_kit_passes_through_the_guarded_socket() {
+async fn the_atoom_driver_smoke_one_read_through_the_guarded_socket() {
     let (docs, s) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
-    let bytes = b"{\"payload\":\"conformance\"}\n".to_vec();
-    std::fs::write(docs.path().join("boundary.jws"), &bytes).unwrap();
+    std::fs::write(docs.path().join("boundary.jws"), b"doc one").unwrap();
     let sock = s.path().join("config-source.sock");
     let stop = serve(&sock, docs.path(), "store");
     up(&sock).await;
-    let fixture = atoom_source_conformance::Fixture {
-        name: "boundary".into(),
-        data: bytes,
-    };
-    let cases = atoom_source_conformance::source_suite(atoom_socket::dial(&sock), &fixture).await;
-    let mut out = Vec::new();
-    let verdict = atoom_source_conformance::report(&cases, &mut out);
-    assert!(verdict.is_ok(), "{}", String::from_utf8_lossy(&out));
+    let client = dial(&sock);
+    let c = SourceServiceClient::new(client.transport(), client.config());
+    let got = c
+        .read(ReadRequest {
+            name: "boundary".into(),
+            ..Default::default()
+        })
+        .await
+        .unwrap()
+        .into_owned();
+    assert_eq!(got.data, b"doc one");
     let _ = stop.send(());
 }

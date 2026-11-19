@@ -410,8 +410,6 @@ requirements:
     actors: [exporter]
     standards: []
     issues: [1453, 1454, 1714]
-    tests:
-      - drivers/exporter/dir/tests/port.rs
     verification:
       - {kind: integration-test, ref: "the suite runs against the directory driver (in process, through its socket) and the in-memory driver; with no public address ReadBack is unsupported and Purge answers none; bucket: #1454"}
   - id: REQ-EXPORT-028
