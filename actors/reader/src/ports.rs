@@ -10,12 +10,10 @@ use std::time::Duration;
 use connectrpc::ConnectError;
 use connectrpc::error::ErrorCode;
 use sluis_kit::{Client, Transport, dial, refusal, refusal_reason};
+use sluis_proto::atoom::blob::v1alpha1::{BlobGetRequest, BlobListRequest, BlobServiceClient};
+use sluis_proto::atoom::index::v1alpha1::IndexReadServiceClient;
 use sluis_proto::sluis::key::v2alpha1::KeyServiceClient;
 use sluis_proto::sluis::policy::v2alpha1::PolicyServiceClient;
-use sluis_proto::sluis::port::blob::v2alpha1::{
-    BlobGetRequest, BlobListRequest, BlobServiceClient,
-};
-use sluis_proto::sluis::port::index::v2alpha1::IndexReadServiceClient;
 
 /// How long one call to a dependency may take.
 pub const CALL: Duration = Duration::from_secs(20);

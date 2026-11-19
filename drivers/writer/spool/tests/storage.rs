@@ -5,7 +5,7 @@
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use sluis_driver_writer_spool::{Config, Spool, suite};
+use atoom_transport_spool::{Config, Spool, suite};
 
 fn root() -> tempfile::TempDir {
     let d = tempfile::tempdir().unwrap();

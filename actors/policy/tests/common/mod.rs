@@ -18,6 +18,10 @@ use policy::service::{Deps, Service};
 use serde_json::Value;
 use sluis_audit::{Config as AuditConfig, Emitter};
 use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal};
+use sluis_proto::atoom::transport::v1alpha1::{
+    AckRequest, AckResponse, EmitRequest, EmitResponse, ReceiveRequest, ReceiveResponse,
+    TransportService, TransportServiceExt,
+};
 use sluis_proto::sluis::config::v2alpha1 as cfg;
 use sluis_proto::sluis::key::v2alpha1::{
     KeyService, KeyServiceClient, KeyServiceExt, MacRequest, MacResponse, OpenGrantRequest,
@@ -27,10 +31,6 @@ use sluis_proto::sluis::key::v2alpha1::{
 use sluis_proto::sluis::policy::v2alpha1::{
     ActorFacts, Authentication, ClientFacts, DecideRequest, EntityRef, PersonFacts,
     PolicyServiceClient, PolicyServiceExt as _,
-};
-use sluis_proto::sluis::port::transport::v2alpha1::{
-    AckRequest, AckResponse, EmitRequest, EmitResponse, ReceiveRequest, ReceiveResponse,
-    TransportService, TransportServiceExt,
 };
 use sluis_proto::sluis::store::v2alpha1::{
     GetRequest, GetResponse, GetSignedConfigRequest, GetSignedConfigResponse, Item, ListRequest,

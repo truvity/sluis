@@ -1,4 +1,4 @@
-//! The index port over real Unix sockets: the contract (`proto/`) is the only way in, the caller is
+//! The index port over real Unix sockets behind sluis's guard: the contract (atoom's, `index/proto`) is the only way in, the caller is
 //! known from the socket's peer uid, the indexer's socket answers the indexer only and the reader's
 //! socket answers the reader only, and the reader's socket has no way to write.
 
@@ -7,17 +7,16 @@
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
-use std::sync::Arc;
 
+use atoom_index::atoom::index::v1alpha1::{
+    ApplyRequest, Cursor, GetCursorRequest, IndexReadServiceClient, IndexServiceClient, LogRef,
+    Partition, Row, SearchRequest,
+};
+use atoom_index_sqlite::service::{Read, Write};
+use atoom_index_sqlite::{Index, suite};
 use connectrpc::Router;
 use connectrpc::error::ErrorCode;
-use sluis_driver_indexer_sqlite::service::{Read, Write};
-use sluis_driver_indexer_sqlite::{Index, suite};
 use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
-use sluis_proto::sluis::port::index::v2alpha1::{
-    ApplyRequest, Cursor, GetCursorRequest, IndexReadServiceClient, IndexReadServiceExt,
-    IndexServiceClient, IndexServiceExt, LogRef, Partition, Row, SearchRequest,
-};
 
 /// Serves one side on a socket, as the process `me_is` says it is.
 fn serve(
@@ -116,13 +115,13 @@ async fn the_indexer_writes_and_the_reader_reads_each_on_its_own_socket() {
     let (wsock, rsock) = (s.path().join("index.sock"), s.path().join("index-ro.sock"));
     let stop_w = serve(
         &wsock,
-        Arc::new(Write(index.clone())).register(Router::new()),
+        Write(index.clone()).router(),
         Allow::OwnerOnly("indexer"),
         "indexer",
     );
     let stop_r = serve(
         &rsock,
-        Arc::new(Read(index)).register(Router::new()),
+        Read(index).router(),
         Allow::Exact("reader"),
         "reader",
     );
@@ -227,13 +226,13 @@ async fn a_caller_that_is_not_the_one_named_is_refused_before_anything_is_read()
     // The writer's socket sees the reader as its caller, and the reader's socket sees the indexer.
     let stop_w = serve(
         &wsock,
-        Arc::new(Write(index.clone())).register(Router::new()),
+        Write(index.clone()).router(),
         Allow::OwnerOnly("indexer"),
         "reader",
     );
     let stop_r = serve(
         &rsock,
-        Arc::new(Read(index.clone())).register(Router::new()),
+        Read(index.clone()).router(),
         Allow::Exact("reader"),
         "indexer",
     );

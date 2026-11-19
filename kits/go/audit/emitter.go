@@ -18,10 +18,10 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/truvity/atoom/common/refusal"
+	transportv1alpha1 "github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1"
+	"github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1/transportv1alpha1connect"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
-	transportv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/rpc"
 )
 
@@ -159,7 +159,7 @@ type Event struct {
 type Config struct {
 	Actor, Boundary, Release string // Release is version.Version
 	// Transport is the client of the emit socket: rpc.Dial("/run/sluis/audit/<boundary>/emit.sock").
-	Transport transportv2alpha1connect.TransportServiceClient
+	Transport transportv1alpha1connect.TransportServiceClient
 	// Keys is the client of key@; nil for an actor with no pseudonym rule, which then cannot send a Subject.
 	Keys keyv2alpha1connect.KeyServiceClient
 	// Now is the clock; nil means time.Now. A test injects one.
@@ -298,8 +298,8 @@ func (e *Emitter) emit(ctx context.Context, ev Event, blocking, counted bool) (e
 	if err != nil {
 		return err
 	}
-	req := &transportv2alpha1.EmitRequest{
-		Message:  &transportv2alpha1.AuditMessage{Uid: uid, Record: rec},
+	req := &transportv1alpha1.EmitRequest{
+		Message:  &transportv1alpha1.AuditMessage{Uid: uid, Record: rec},
 		Blocking: blocking,
 	}
 	if _, err := e.cfg.Transport.Emit(ctx, connect.NewRequest(req)); err != nil {

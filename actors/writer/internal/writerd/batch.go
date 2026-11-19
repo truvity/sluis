@@ -13,9 +13,9 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/truvity/atoom/common/refusal"
+	transportv1alpha1 "github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
 	policyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/policy/v2alpha1"
-	transportv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1"
 	typev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/type/v2alpha1"
 	"github.com/truvity/sluis/v2/kits/go/audit"
 )
@@ -25,7 +25,7 @@ const writerName = "writer"
 
 // accepted is a message that passed the checks, with the tenant it is routed to.
 type accepted struct {
-	d      *transportv2alpha1.Delivery
+	d      *transportv1alpha1.Delivery
 	info   recordInfo
 	tenant string
 }
@@ -33,7 +33,7 @@ type accepted struct {
 // processBatch handles one batch of deliveries to the end: it sorts them into duplicates, refusals and records,
 // seals the records, writes the log, and only then acknowledges every delivery of the batch. A failure before the
 // first object is written is returned plain, and the stream is opened again; one after it is fatal.
-func (s *Server) processBatch(ctx context.Context, ds []*transportv2alpha1.Delivery) error {
+func (s *Server) processBatch(ctx context.Context, ds []*transportv1alpha1.Delivery) error {
 	now := s.now()
 	nowMS := now.UnixMilli()
 	trust := s.clockTrust(now)
@@ -148,7 +148,7 @@ func reasonCounts(refused []refusedMessage) map[string]int {
 }
 
 type refusedMessage struct {
-	d   *transportv2alpha1.Delivery
+	d   *transportv1alpha1.Delivery
 	rej *rejection
 }
 
@@ -388,12 +388,12 @@ func (s *Server) write(ctx context.Context, entries [][]byte, ids []string, nowM
 }
 
 // ack acknowledges every delivery of the batch, once the checkpoint that covers them is durable.
-func (s *Server) ack(ctx context.Context, ds []*transportv2alpha1.Delivery) error {
+func (s *Server) ack(ctx context.Context, ds []*transportv1alpha1.Delivery) error {
 	ids := make([]uint64, len(ds))
 	for i, d := range ds {
 		ids[i] = d.GetDeliveryId()
 	}
-	if _, err := s.tr.Ack(ctx, connect.NewRequest(&transportv2alpha1.AckRequest{DeliveryIds: ids})); err != nil {
+	if _, err := s.tr.Ack(ctx, connect.NewRequest(&transportv1alpha1.AckRequest{DeliveryIds: ids})); err != nil {
 		return fmt.Errorf("acknowledge: %w", err)
 	}
 	return nil

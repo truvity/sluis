@@ -46,10 +46,8 @@ use connectrpc::ConnectError;
 use connectrpc::error::ErrorCode;
 use serde_json::{Map, Value};
 use sluis_kit::{Transport, dial, refusal};
+use sluis_proto::atoom::transport::v1alpha1::{AuditMessage, EmitRequest, TransportServiceClient};
 use sluis_proto::sluis::key::v2alpha1::{KeyServiceClient, MacRequest};
-use sluis_proto::sluis::port::transport::v2alpha1::{
-    AuditMessage, EmitRequest, TransportServiceClient,
-};
 
 pub use canonical::canonical;
 pub use policy::{POLICY_VERSION, check_policy, max_cost, valid_release};

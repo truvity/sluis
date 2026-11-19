@@ -20,9 +20,9 @@ import (
 	"connectrpc.com/connect"
 	"go.yaml.in/yaml/v3"
 
+	transportv1alpha1 "github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1"
+	"github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1/transportv1alpha1connect"
 	"github.com/truvity/sluis/v2/actors/key/internal/keyd"
-	transportv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/audit"
 	"github.com/truvity/sluis/v2/kits/go/cli"
 )
@@ -60,13 +60,13 @@ func TestCommandLine(t *testing.T) {
 
 // A fake transport that keeps what it is given.
 type fakeTransport struct {
-	transportv2alpha1connect.TransportServiceClient
-	got []*transportv2alpha1.EmitRequest
+	transportv1alpha1connect.TransportServiceClient
+	got []*transportv1alpha1.EmitRequest
 }
 
-func (f *fakeTransport) Emit(_ context.Context, req *connect.Request[transportv2alpha1.EmitRequest]) (*connect.Response[transportv2alpha1.EmitResponse], error) {
+func (f *fakeTransport) Emit(_ context.Context, req *connect.Request[transportv1alpha1.EmitRequest]) (*connect.Response[transportv1alpha1.EmitResponse], error) {
 	f.got = append(f.got, req.Msg)
-	return connect.NewResponse(&transportv2alpha1.EmitResponse{}), nil
+	return connect.NewResponse(&transportv1alpha1.EmitResponse{}), nil
 }
 
 // exampleOf is the event of an action's example record in the shared vectors (kits/conformance/audit/action-vectors.json,
@@ -404,29 +404,29 @@ func TestABlockingEmitThatFailsFailsClosed(t *testing.T) {
 }
 
 type failingTransport struct {
-	transportv2alpha1connect.TransportServiceClient
+	transportv1alpha1connect.TransportServiceClient
 }
 
-func (failingTransport) Emit(context.Context, *connect.Request[transportv2alpha1.EmitRequest]) (*connect.Response[transportv2alpha1.EmitResponse], error) {
+func (failingTransport) Emit(context.Context, *connect.Request[transportv1alpha1.EmitRequest]) (*connect.Response[transportv1alpha1.EmitResponse], error) {
 	return nil, errors.New("transport down")
 }
 
 // flakyTransport refuses while down is set and keeps what it takes otherwise.
 type flakyTransport struct {
-	transportv2alpha1connect.TransportServiceClient
+	transportv1alpha1connect.TransportServiceClient
 	down bool
-	got  []*transportv2alpha1.EmitRequest
+	got  []*transportv1alpha1.EmitRequest
 }
 
-func (f *flakyTransport) Emit(_ context.Context, r *connect.Request[transportv2alpha1.EmitRequest]) (*connect.Response[transportv2alpha1.EmitResponse], error) {
+func (f *flakyTransport) Emit(_ context.Context, r *connect.Request[transportv1alpha1.EmitRequest]) (*connect.Response[transportv1alpha1.EmitResponse], error) {
 	f.got = append(f.got, r.Msg)
 	if f.down {
 		return nil, errors.New("spool full")
 	}
-	return connect.NewResponse(&transportv2alpha1.EmitResponse{}), nil
+	return connect.NewResponse(&transportv1alpha1.EmitResponse{}), nil
 }
 
-func lostCount(t *testing.T, r *transportv2alpha1.EmitRequest) (int64, bool) {
+func lostCount(t *testing.T, r *transportv1alpha1.EmitRequest) (int64, bool) {
 	t.Helper()
 	var rec struct {
 		Unmapped struct {

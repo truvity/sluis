@@ -28,9 +28,9 @@ import (
 	jose "github.com/go-jose/go-jose/v4"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1/transportv1alpha1connect"
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/audit"
 	"github.com/truvity/sluis/v2/kits/go/registry"
 )
@@ -123,7 +123,7 @@ func validateAudit(t *testing.T, events []Event) {
 	t.Helper()
 	e, err := audit.New(audit.Config{
 		Actor: "key", Boundary: testBoundary, Release: "0.0.0-test",
-		Transport: transportv2alpha1connect.NewTransportServiceClient(http.DefaultClient, "http://unused.invalid"),
+		Transport: transportv1alpha1connect.NewTransportServiceClient(http.DefaultClient, "http://unused.invalid"),
 	})
 	if err != nil {
 		t.Fatal(err)

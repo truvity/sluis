@@ -66,7 +66,10 @@ fn ident_string(v: &str) -> String {
     if fits {
         v.to_owned()
     } else {
-        format!("h-{}", &sluis_destination::sha256_hex(v.as_bytes())[..16])
+        format!(
+            "h-{}",
+            &atoom_destination_conformance::sha256_hex(v.as_bytes())[..16]
+        )
     }
 }
 

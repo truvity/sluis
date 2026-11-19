@@ -25,13 +25,13 @@ import (
 	"filippo.io/torchwood"
 	"golang.org/x/mod/sumdb/note"
 
+	"github.com/truvity/atoom/blob/gen/atoom/blob/v1alpha1/blobv1alpha1connect"
+	transportv1alpha1 "github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1"
+	"github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1/transportv1alpha1connect"
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/policy/v2alpha1/policyv2alpha1connect"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/blob/v2alpha1/blobv2alpha1connect"
-	transportv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1/storev2alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/audit"
 	"github.com/truvity/sluis/v2/kits/go/rpc"
@@ -105,7 +105,7 @@ type Server struct {
 	keys  keyv2alpha1connect.KeyServiceClient
 	pol   policyv2alpha1connect.PolicyServiceClient
 	blob  blobIO
-	tr    transportv2alpha1connect.TransportServiceClient
+	tr    transportv1alpha1connect.TransportServiceClient
 
 	// Set by Init, read-only afterwards.
 	project, logID, origin, prefix, logName string
@@ -157,13 +157,13 @@ func New(cfg Config) (*Server, error) {
 		storev2alpha1connect.NewStoreServiceClient(sh, su, rpc.ClientOptions()...),
 		keyv2alpha1connect.NewKeyServiceClient(kh, ku, rpc.ClientOptions()...),
 		policyv2alpha1connect.NewPolicyServiceClient(ph, pu, rpc.ClientOptions()...),
-		blobv2alpha1connect.NewBlobServiceClient(bh, bu, rpc.ClientOptions()...),
-		transportv2alpha1connect.NewTransportServiceClient(th, tu, rpc.ClientOptions()...)), nil
+		blobv1alpha1connect.NewBlobServiceClient(bh, bu, rpc.ClientOptions()...),
+		transportv1alpha1connect.NewTransportServiceClient(th, tu, rpc.ClientOptions()...)), nil
 }
 
 func newServer(cfg Config, st storev2alpha1connect.StoreServiceClient, keys keyv2alpha1connect.KeyServiceClient,
-	pol policyv2alpha1connect.PolicyServiceClient, blob blobv2alpha1connect.BlobServiceClient,
-	tr transportv2alpha1connect.TransportServiceClient) *Server {
+	pol policyv2alpha1connect.PolicyServiceClient, blob blobv1alpha1connect.BlobServiceClient,
+	tr transportv1alpha1connect.TransportServiceClient) *Server {
 	now := cfg.Now
 	if now == nil {
 		now = time.Now
@@ -529,13 +529,13 @@ func (s *Server) movePointer(ctx context.Context, data []byte, size int64) error
 func (s *Server) consume(ctx context.Context) (worked bool, _ error) {
 	sctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	stream, err := s.tr.Receive(sctx, connect.NewRequest(&transportv2alpha1.ReceiveRequest{MaxBatch: uint32(s.cfg.BatchMax)})) //nolint:gosec // a small positive number
+	stream, err := s.tr.Receive(sctx, connect.NewRequest(&transportv1alpha1.ReceiveRequest{MaxBatch: uint32(s.cfg.BatchMax)})) //nolint:gosec // a small positive number
 	if err != nil {
 		return false, fmt.Errorf("receive: %w", err)
 	}
 	defer func() { _ = stream.Close() }()
 
-	in := make(chan *transportv2alpha1.Delivery, s.cfg.BatchMax)
+	in := make(chan *transportv1alpha1.Delivery, s.cfg.BatchMax)
 	ended := make(chan error, 1)
 	go func() {
 		for stream.Receive() {
@@ -573,8 +573,8 @@ func (s *Server) consume(ctx context.Context) (worked bool, _ error) {
 
 // collect waits for the first message, then gathers until BatchMax or BatchWindow after the first, whichever is
 // first. It returns what it has, with the error that ended the stream if that is what stopped it.
-func (s *Server) collect(ctx context.Context, in <-chan *transportv2alpha1.Delivery, ended <-chan error) ([]*transportv2alpha1.Delivery, error) {
-	var batch []*transportv2alpha1.Delivery
+func (s *Server) collect(ctx context.Context, in <-chan *transportv1alpha1.Delivery, ended <-chan error) ([]*transportv1alpha1.Delivery, error) {
+	var batch []*transportv1alpha1.Delivery
 	select {
 	case d := <-in:
 		batch = append(batch, d)

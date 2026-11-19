@@ -9,9 +9,9 @@ import (
 	"log/slog"
 	"path/filepath"
 
+	"github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1/transportv1alpha1connect"
 	"github.com/truvity/sluis/v2/actors/adapter-upstream-oidc/internal/upstreamd"
 	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1/storev2alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/audit"
 	"github.com/truvity/sluis/v2/kits/go/cli"
@@ -54,7 +54,7 @@ func (f *flags) service(c cli.Flags) (*upstreamd.Service, error) {
 	kh, kurl := rpc.Dial(keySocket)
 	em, err := audit.New(audit.Config{
 		Actor: upstreamd.Actor, Boundary: c.Boundary, Release: version.Version,
-		Transport: transportv2alpha1connect.NewTransportServiceClient(th, turl, rpc.ClientOptions()...),
+		Transport: transportv1alpha1connect.NewTransportServiceClient(th, turl, rpc.ClientOptions()...),
 		Keys:      keyv2alpha1connect.NewKeyServiceClient(kh, kurl, rpc.ClientOptions()...),
 	})
 	if err != nil {

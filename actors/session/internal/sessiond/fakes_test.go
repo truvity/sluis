@@ -29,14 +29,14 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/truvity/atoom/common/refusal"
+	transportv1alpha1 "github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1"
+	"github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1/transportv1alpha1connect"
 	integrationv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/integration/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/integration/v2alpha1/integrationv2alpha1connect"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
 	policyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/policy/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/policy/v2alpha1/policyv2alpha1connect"
-	transportv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
 	signerv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/signer/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/signer/v2alpha1/signerv2alpha1connect"
 	storev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1"
@@ -852,20 +852,20 @@ func (f *fakeUpstream) Complete(_ context.Context, req *connect.Request[integrat
 // ---- audit transport ---------------------------------------------------------------------------------------------
 
 type fakeTransport struct {
-	transportv2alpha1connect.UnimplementedTransportServiceHandler
+	transportv1alpha1connect.UnimplementedTransportServiceHandler
 	mu   sync.Mutex
-	msgs []*transportv2alpha1.AuditMessage
+	msgs []*transportv1alpha1.AuditMessage
 	err  error
 }
 
-func (f *fakeTransport) Emit(_ context.Context, req *connect.Request[transportv2alpha1.EmitRequest]) (*connect.Response[transportv2alpha1.EmitResponse], error) {
+func (f *fakeTransport) Emit(_ context.Context, req *connect.Request[transportv1alpha1.EmitRequest]) (*connect.Response[transportv1alpha1.EmitResponse], error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.err != nil {
 		return nil, f.err
 	}
 	f.msgs = append(f.msgs, req.Msg.GetMessage())
-	return connect.NewResponse(&transportv2alpha1.EmitResponse{}), nil
+	return connect.NewResponse(&transportv1alpha1.EmitResponse{}), nil
 }
 
 func (f *fakeTransport) records() [][]byte {

@@ -15,7 +15,7 @@ use aws_lc_rs::digest;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use serde_json::Value;
-use sluis_proto::sluis::port::index::v2alpha1::Row;
+use sluis_proto::atoom::index::v1alpha1::Row;
 
 /// The height of every tile of a `tlog-tiles` log: 256 hashes or entries.
 pub const TILE: u64 = 256;

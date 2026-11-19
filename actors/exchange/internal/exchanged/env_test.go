@@ -23,6 +23,8 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/truvity/atoom/common/refusal"
+	transportv1alpha1 "github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1"
+	"github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1/transportv1alpha1connect"
 	"github.com/truvity/sluis/v2/actors/exchange/internal/exchanged"
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	exchangev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/exchange/v2alpha1"
@@ -31,8 +33,6 @@ import (
 	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
 	policyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/policy/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/policy/v2alpha1/policyv2alpha1connect"
-	transportv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
 	signerv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/signer/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/signer/v2alpha1/signerv2alpha1connect"
 	storev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1"
@@ -188,20 +188,20 @@ func (f *fakeStore) has(kind, id string) bool {
 // ---- the audit transport and key@ ---------------------------------------------------------------------------------
 
 type fakeTransport struct {
-	transportv2alpha1connect.UnimplementedTransportServiceHandler
+	transportv1alpha1connect.UnimplementedTransportServiceHandler
 	mu   sync.Mutex
-	msgs []*transportv2alpha1.AuditMessage
+	msgs []*transportv1alpha1.AuditMessage
 	fail bool
 }
 
-func (f *fakeTransport) Emit(_ context.Context, req *connect.Request[transportv2alpha1.EmitRequest]) (*connect.Response[transportv2alpha1.EmitResponse], error) {
+func (f *fakeTransport) Emit(_ context.Context, req *connect.Request[transportv1alpha1.EmitRequest]) (*connect.Response[transportv1alpha1.EmitResponse], error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.fail {
 		return nil, refusal.New(connect.CodeUnavailable, "spool", "")
 	}
 	f.msgs = append(f.msgs, req.Msg.GetMessage())
-	return connect.NewResponse(&transportv2alpha1.EmitResponse{}), nil
+	return connect.NewResponse(&transportv1alpha1.EmitResponse{}), nil
 }
 
 // records decodes what the emitter handed over.
@@ -461,7 +461,7 @@ func newEnv(t *testing.T, o envOptions) *env {
 	sock := func(n string) string { return filepath.Join(d, n+".sock") }
 	path, h := storev2alpha1connect.NewStoreServiceHandler(st)
 	serve(t, sock("store"), "exchange", fakeCfg("store"), rpc.Handler{Path: path, H: h})
-	path, h = transportv2alpha1connect.NewTransportServiceHandler(tr)
+	path, h = transportv1alpha1connect.NewTransportServiceHandler(tr)
 	serve(t, sock("emit"), "exchange", fakeCfg("transport"), rpc.Handler{Path: path, H: h})
 	path, h = keyv2alpha1connect.NewKeyServiceHandler(key)
 	serve(t, sock("key"), "exchange", fakeCfg("key"), rpc.Handler{Path: path, H: h})
@@ -480,7 +480,7 @@ func newEnv(t *testing.T, o envOptions) *env {
 	keys := keyv2alpha1connect.NewKeyServiceClient(kh, kurl, rpc.ClientOptions()...)
 	em, err := audit.New(audit.Config{
 		Actor: exchanged.Actor, Boundary: testBoundary, Release: version.Version,
-		Transport: transportv2alpha1connect.NewTransportServiceClient(th, turl, rpc.ClientOptions()...), Keys: keys,
+		Transport: transportv1alpha1connect.NewTransportServiceClient(th, turl, rpc.ClientOptions()...), Keys: keys,
 		Now: func() time.Time { return t0 },
 	})
 	if err != nil {

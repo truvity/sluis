@@ -34,16 +34,16 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	blobv1alpha1 "github.com/truvity/atoom/blob/gen/atoom/blob/v1alpha1"
+	"github.com/truvity/atoom/blob/gen/atoom/blob/v1alpha1/blobv1alpha1connect"
 	"github.com/truvity/atoom/common/refusal"
+	transportv1alpha1 "github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1"
+	"github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1/transportv1alpha1connect"
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
 	policyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/policy/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/policy/v2alpha1/policyv2alpha1connect"
-	blobv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/blob/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/blob/v2alpha1/blobv2alpha1connect"
-	transportv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
 	storev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1/storev2alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/rpc"
@@ -382,7 +382,7 @@ func (f *fakeKey) verifier(t *testing.T, origin string) string {
 // reads them. It follows the port: create-if-absent through link, a conditional put only on the two pointers, and
 // the entity tag the SHA-384 of the content.
 type fakeBlob struct {
-	blobv2alpha1connect.UnimplementedBlobServiceHandler
+	blobv1alpha1connect.UnimplementedBlobServiceHandler
 	ev   *events
 	root string
 	mu   sync.Mutex
@@ -451,7 +451,7 @@ func tooBig(n int) error {
 	return connect.NewError(connect.CodeResourceExhausted, fmt.Errorf("request body size exceeds limit %d", blobRequestMax))
 }
 
-func (f *fakeBlob) Create(_ context.Context, req *connect.Request[blobv2alpha1.CreateRequest]) (*connect.Response[blobv2alpha1.CreateResponse], error) {
+func (f *fakeBlob) Create(_ context.Context, req *connect.Request[blobv1alpha1.CreateRequest]) (*connect.Response[blobv1alpha1.CreateResponse], error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := tooBig(len(req.Msg.GetPath()) + len(req.Msg.GetData()) + 8); err != nil {
@@ -464,10 +464,10 @@ func (f *fakeBlob) Create(_ context.Context, req *connect.Request[blobv2alpha1.C
 		return nil, err
 	}
 	f.ev.add("blob.create:%s", req.Msg.GetPath())
-	return connect.NewResponse(&blobv2alpha1.CreateResponse{Etag: etagOf(req.Msg.GetData())}), nil
+	return connect.NewResponse(&blobv1alpha1.CreateResponse{Etag: etagOf(req.Msg.GetData())}), nil
 }
 
-func (f *fakeBlob) Put(_ context.Context, req *connect.Request[blobv2alpha1.PutRequest]) (*connect.Response[blobv2alpha1.PutResponse], error) {
+func (f *fakeBlob) Put(_ context.Context, req *connect.Request[blobv1alpha1.PutRequest]) (*connect.Response[blobv1alpha1.PutResponse], error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	m := req.Msg
@@ -506,10 +506,10 @@ func (f *fakeBlob) Put(_ context.Context, req *connect.Request[blobv2alpha1.PutR
 		}
 	}
 	f.ev.add("blob.put:%s", m.GetPath())
-	return connect.NewResponse(&blobv2alpha1.PutResponse{Etag: etagOf(m.GetData())}), nil
+	return connect.NewResponse(&blobv1alpha1.PutResponse{Etag: etagOf(m.GetData())}), nil
 }
 
-func (f *fakeBlob) Get(_ context.Context, req *connect.Request[blobv2alpha1.BlobGetRequest]) (*connect.Response[blobv2alpha1.BlobGetResponse], error) {
+func (f *fakeBlob) Get(_ context.Context, req *connect.Request[blobv1alpha1.BlobGetRequest]) (*connect.Response[blobv1alpha1.BlobGetResponse], error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	full, err := f.path(req.Msg.GetPath())
@@ -520,10 +520,10 @@ func (f *fakeBlob) Get(_ context.Context, req *connect.Request[blobv2alpha1.Blob
 	if err != nil {
 		return nil, refusal.New(connect.CodeNotFound, "absent", "path")
 	}
-	return connect.NewResponse(&blobv2alpha1.BlobGetResponse{Data: b, Etag: etagOf(b)}), nil
+	return connect.NewResponse(&blobv1alpha1.BlobGetResponse{Data: b, Etag: etagOf(b)}), nil
 }
 
-func (f *fakeBlob) List(_ context.Context, req *connect.Request[blobv2alpha1.BlobListRequest]) (*connect.Response[blobv2alpha1.BlobListResponse], error) {
+func (f *fakeBlob) List(_ context.Context, req *connect.Request[blobv1alpha1.BlobListRequest]) (*connect.Response[blobv1alpha1.BlobListResponse], error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out []string
@@ -538,7 +538,7 @@ func (f *fakeBlob) List(_ context.Context, req *connect.Request[blobv2alpha1.Blo
 		return nil
 	})
 	slices.Sort(out)
-	return connect.NewResponse(&blobv2alpha1.BlobListResponse{Paths: out}), nil
+	return connect.NewResponse(&blobv1alpha1.BlobListResponse{Paths: out}), nil
 }
 
 // ---- the transport
@@ -546,12 +546,12 @@ func (f *fakeBlob) List(_ context.Context, req *connect.Request[blobv2alpha1.Blo
 // fakeTransport is a spool: Emit appends a message, Receive streams the unacknowledged ones in order and, as the
 // spool does, starts again from the oldest unacknowledged message on each new stream; one consumer at a time.
 type fakeTransport struct {
-	transportv2alpha1connect.UnimplementedTransportServiceHandler
+	transportv1alpha1connect.UnimplementedTransportServiceHandler
 	ev      *events
 	emitter string
 	mu      sync.Mutex
 	next    uint64
-	pending []*transportv2alpha1.Delivery
+	pending []*transportv1alpha1.Delivery
 	acked   []uint64
 	wake    chan struct{}
 	busy    bool
@@ -562,9 +562,9 @@ func newFakeTransport(ev *events, emitter string) *fakeTransport {
 	return &fakeTransport{ev: ev, emitter: emitter, wake: make(chan struct{}, 1), next: 1}
 }
 
-func (f *fakeTransport) push(m *transportv2alpha1.AuditMessage) {
+func (f *fakeTransport) push(m *transportv1alpha1.AuditMessage) {
 	f.mu.Lock()
-	f.pending = append(f.pending, &transportv2alpha1.Delivery{DeliveryId: f.next, Emitter: f.emitter, Message: m})
+	f.pending = append(f.pending, &transportv1alpha1.Delivery{DeliveryId: f.next, Emitter: f.emitter, Message: m})
 	f.next++
 	f.mu.Unlock()
 	select {
@@ -573,12 +573,12 @@ func (f *fakeTransport) push(m *transportv2alpha1.AuditMessage) {
 	}
 }
 
-func (f *fakeTransport) Emit(_ context.Context, req *connect.Request[transportv2alpha1.EmitRequest]) (*connect.Response[transportv2alpha1.EmitResponse], error) {
+func (f *fakeTransport) Emit(_ context.Context, req *connect.Request[transportv1alpha1.EmitRequest]) (*connect.Response[transportv1alpha1.EmitResponse], error) {
 	f.push(req.Msg.GetMessage())
-	return connect.NewResponse(&transportv2alpha1.EmitResponse{}), nil
+	return connect.NewResponse(&transportv1alpha1.EmitResponse{}), nil
 }
 
-func (f *fakeTransport) Receive(ctx context.Context, _ *connect.Request[transportv2alpha1.ReceiveRequest], st *connect.ServerStream[transportv2alpha1.ReceiveResponse]) error {
+func (f *fakeTransport) Receive(ctx context.Context, _ *connect.Request[transportv1alpha1.ReceiveRequest], st *connect.ServerStream[transportv1alpha1.ReceiveResponse]) error {
 	f.mu.Lock()
 	if f.busy {
 		f.mu.Unlock()
@@ -591,7 +591,7 @@ func (f *fakeTransport) Receive(ctx context.Context, _ *connect.Request[transpor
 	var sent uint64
 	for {
 		f.mu.Lock()
-		var out []*transportv2alpha1.Delivery
+		var out []*transportv1alpha1.Delivery
 		for _, d := range f.pending {
 			if d.GetDeliveryId() > sent {
 				out = append(out, d)
@@ -600,7 +600,7 @@ func (f *fakeTransport) Receive(ctx context.Context, _ *connect.Request[transpor
 		f.mu.Unlock()
 		if len(out) > 0 {
 			sent = out[len(out)-1].GetDeliveryId()
-			if err := st.Send(&transportv2alpha1.ReceiveResponse{Deliveries: out}); err != nil {
+			if err := st.Send(&transportv1alpha1.ReceiveResponse{Deliveries: out}); err != nil {
 				return err
 			}
 		}
@@ -613,15 +613,15 @@ func (f *fakeTransport) Receive(ctx context.Context, _ *connect.Request[transpor
 	}
 }
 
-func (f *fakeTransport) Ack(_ context.Context, req *connect.Request[transportv2alpha1.AckRequest]) (*connect.Response[transportv2alpha1.AckResponse], error) {
+func (f *fakeTransport) Ack(_ context.Context, req *connect.Request[transportv1alpha1.AckRequest]) (*connect.Response[transportv1alpha1.AckResponse], error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.ev.add("transport.ack:%d", len(req.Msg.GetDeliveryIds()))
 	for _, id := range req.Msg.GetDeliveryIds() {
-		f.pending = slices.DeleteFunc(f.pending, func(d *transportv2alpha1.Delivery) bool { return d.GetDeliveryId() == id })
+		f.pending = slices.DeleteFunc(f.pending, func(d *transportv1alpha1.Delivery) bool { return d.GetDeliveryId() == id })
 		f.acked = append(f.acked, id)
 	}
-	return connect.NewResponse(&transportv2alpha1.AckResponse{}), nil
+	return connect.NewResponse(&transportv1alpha1.AckResponse{}), nil
 }
 
 func (f *fakeTransport) ackedCount() int {
@@ -708,9 +708,9 @@ func newEnv(t *testing.T) *env {
 	serveOn("key", p, h)
 	p, h = policyv2alpha1connect.NewPolicyServiceHandler(e.pol)
 	serveOn("policy", p, h)
-	p, h = blobv2alpha1connect.NewBlobServiceHandler(e.blob)
+	p, h = blobv1alpha1connect.NewBlobServiceHandler(e.blob)
 	serveOn("blob", p, h)
-	p, h = transportv2alpha1connect.NewTransportServiceHandler(e.tr)
+	p, h = transportv1alpha1connect.NewTransportServiceHandler(e.tr)
 	serveOn("transport", p, h)
 
 	e.cfg = Config{
@@ -796,5 +796,5 @@ func (e *env) verifier() string { return e.key.verifier(e.t, testOrigin) }
 
 // dummyTransport is the Transport the emitter library requires; Record, which the tests use, never calls it.
 type dummyTransport struct {
-	transportv2alpha1connect.TransportServiceClient
+	transportv1alpha1connect.TransportServiceClient
 }

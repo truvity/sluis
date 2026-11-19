@@ -46,6 +46,9 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for LogSink {
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
+use atoom_destination_conformance::memory::{Call, Memory, Op};
+use atoom_destination_conformance::{Destination, Error, sha256_hex};
+use atoom_destination_dir::{Directory, suite};
 use aws_lc_rs::rand::SystemRandom;
 use aws_lc_rs::signature::{ECDSA_P384_SHA384_FIXED, UnparsedPublicKey};
 use base64::Engine as _;
@@ -54,9 +57,6 @@ use common::{PATIENCE, World, doc, kids, public_doc, spawn, test_key, until, unt
 use exporter::config::Refused;
 use exporter::run::Target;
 use serde_json::Value;
-use sluis_destination::memory::{Call, Memory, Op};
-use sluis_destination::{Destination, Error, sha256_hex};
-use sluis_driver_exporter_dir::{Directory, suite};
 use sluis_proto::sluis::store::v2alpha1::Consistency;
 
 /// What the audit log holds of `exporter.unverified`, for the message of a wait that timed out: the status and the closed
@@ -1918,7 +1918,7 @@ async fn a_header_only_write_and_a_digest_that_does_not_match_make_exactly_the_f
     m.inner.heal();
     // (With the headers of the document, so that only its digest tells it from the one that was to be written.)
     m.inner
-        .put(sluis_destination::Document {
+        .put(atoom_destination_conformance::Document {
             address: "jwks".into(),
             content_type: "application/json".into(),
             cache_control: "public, max-age=300".into(),

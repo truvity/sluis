@@ -1,4 +1,9 @@
-//! The read-only `fs` blob driver of the indexer and the reader.
+//! The host of the read-only `fs` blob driver of the indexer and the reader.
+//!
+//! The driver is atoom's (github.com/truvity/atoom, `blob/fsreadonly`, pinned by commit: `third_party/atoom/README.md`): `Get` and `List` of the
+//! directory that `blob/fs` keeps. This file is what is sluis's: the two sockets, one for each caller, with the peer credentials and a
+//! check of their own, the uid that must own the directory (the writer's driver in this process's uid block, from the registry), the command
+//! line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
 //!
 //! ```text
 //! driver-indexer-fs serve       --socket PATH --reader-socket PATH --root DIR [--socket-gid GID] [--reader-socket-gid GID]
@@ -12,17 +17,19 @@
 //! block (REQ-ISO-072), taken from the registry, so no number is passed in.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, bail};
+use atoom_blob_fsdir::Fs;
+use atoom_blob_fsreadonly::{ReadOnly, suite};
 use clap::Arg;
-use connectrpc::Router;
-use sluis_driver_indexer_fs::{NAME, ReadOnly, WRITER_DRIVER, suite};
-use sluis_driver_writer_fs::Fs;
 use sluis_kit::cli::{Commands, Flags, Refused, shutdown_signal};
 use sluis_kit::{Allow, ServerConfig};
-use sluis_proto::sluis::port::blob::v2alpha1::BlobServiceExt;
+
+/// The registry name of this driver's user.
+const NAME: &str = "driver-indexer-fs";
+/// The registry name of the writer's driver, whose directory this one reads.
+const WRITER_DRIVER: &str = "driver-writer-fs";
 
 /// The actors that may call it, one socket each (PLAN.md "Socket layout").
 const INDEXER: &str = "indexer";
@@ -92,7 +99,7 @@ impl Commands for Fsd {
         let (igid, rgid) = (gid(&f, "socket-gid")?, gid(&f, "reader-socket-gid")?);
         let for_indexer = server(&f, f.socket.clone(), igid, Allow::OwnerOnly(INDEXER));
         let for_reader = server(&f, ro, rgid, Allow::Exact(READER));
-        let router = || Arc::new(ReadOnly(fs.clone())).register(Router::new());
+        let router = || ReadOnly(fs.clone()).router();
         // One signal stops both servers.
         let (stop, _) = tokio::sync::broadcast::channel::<()>(1);
         let (mut a, mut b) = (stop.subscribe(), stop.subscribe());

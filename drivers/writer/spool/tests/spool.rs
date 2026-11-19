@@ -1,4 +1,4 @@
-//! The spool over real Unix sockets: the contract (`proto/`) is the only way in, the caller is
+//! The spool over real Unix sockets behind sluis's guard: the contract (atoom's, `transport/proto`) is the only way in, the caller is
 //! known from the socket's peer uid, and the real Rust emitter hands its records to it. The Go
 //! emitter needs a Go toolchain run from inside a Rust test; it is covered by the shared vectors
 //! of `kits/conformance/audit` and by the end-to-end test of the local installation instead.
@@ -12,19 +12,18 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
+use atoom_transport::atoom::transport::v1alpha1::{
+    AckRequest, AuditMessage, EmitRequest, ReceiveRequest, TransportServiceClient,
+};
+use atoom_transport_spool::service::{Consume, Emit};
+use atoom_transport_spool::{Config, Spool};
 use connectrpc::Router;
 use connectrpc::error::ErrorCode;
 use serde_json::Value;
 use sluis_audit::{
     Action, Activity, Config as EmitterConfig, DEFS_NAME, Emitter, Event, Row, Status, Table,
 };
-use sluis_driver_writer_spool::service::{Consume, Emit};
-use sluis_driver_writer_spool::{Config, Spool};
-use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
-use sluis_proto::sluis::port::transport::v2alpha1::{
-    AckRequest, AuditMessage, EmitRequest, ReceiveRequest, TransportServiceClient,
-    TransportServiceExt,
-};
+use sluis_kit::{Allow, Identities, ServerConfig, dial, peer, refusal_reason};
 
 /// A spool served on both sockets. `emit_as` is what the registry would call the test process on
 /// the emit socket (`None`: unknown); on the receive socket it is always `writer`.
@@ -83,17 +82,16 @@ async fn up_as(
         "emit.sock",
         Allow::CallGraph,
         emit_as,
-        std::sync::Arc::new(Emit {
-            spool: spool.clone(),
-            boundary: "dev".into(),
+        Emit::new(spool.clone(), |ctx| {
+            peer(ctx.extensions()).map(|p| format!("{}@dev", p.name))
         })
-        .register(Router::new()),
+        .router(),
     );
     let receive = serve(
         "receive.sock",
         Allow::Exact("writer"),
         Some(receive_as),
-        std::sync::Arc::new(Consume(spool.clone())).register(Router::new()),
+        Consume(spool.clone()).router(),
     );
     for s in [&emit, &receive] {
         for _ in 0..200 {
@@ -313,10 +311,7 @@ async fn a_malformed_message_is_refused_with_its_field() {
         assert_eq!(e.code, ErrorCode::InvalidArgument, "{field}");
     }
     let e = c
-        .emit(msg(
-            "u",
-            &vec![0u8; sluis_driver_writer_spool::MAX_MESSAGE + 1],
-        ))
+        .emit(msg("u", &vec![0u8; atoom_transport_spool::MAX_MESSAGE + 1]))
         .await
         .unwrap_err();
     assert_eq!(e.code, ErrorCode::InvalidArgument);

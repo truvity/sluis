@@ -19,14 +19,14 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/truvity/atoom/common/refusal"
+	transportv1alpha1 "github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1"
+	"github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1/transportv1alpha1connect"
 	"github.com/truvity/sluis/v2/actors/adapter-upstream-oidc/internal/upstreamd"
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	integrationv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/integration/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/integration/v2alpha1/integrationv2alpha1connect"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
-	transportv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
 	storev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1/storev2alpha1connect"
 	typev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/type/v2alpha1"
@@ -163,26 +163,26 @@ func (f *fakeStore) List(_ context.Context, req *connect.Request[storev2alpha1.L
 
 // fakeTransport records what the emitter hands over.
 type fakeTransport struct {
-	transportv2alpha1connect.UnimplementedTransportServiceHandler
+	transportv1alpha1connect.UnimplementedTransportServiceHandler
 	mu   sync.Mutex
-	msgs []*transportv2alpha1.AuditMessage
+	msgs []*transportv1alpha1.AuditMessage
 	fail bool // Emit answers unavailable, as a full spool does
 }
 
-func (f *fakeTransport) Emit(_ context.Context, req *connect.Request[transportv2alpha1.EmitRequest]) (*connect.Response[transportv2alpha1.EmitResponse], error) {
+func (f *fakeTransport) Emit(_ context.Context, req *connect.Request[transportv1alpha1.EmitRequest]) (*connect.Response[transportv1alpha1.EmitResponse], error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.fail {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("spool full"))
 	}
 	f.msgs = append(f.msgs, req.Msg.GetMessage())
-	return connect.NewResponse(&transportv2alpha1.EmitResponse{}), nil
+	return connect.NewResponse(&transportv1alpha1.EmitResponse{}), nil
 }
 
-func (f *fakeTransport) records() []*transportv2alpha1.AuditMessage {
+func (f *fakeTransport) records() []*transportv1alpha1.AuditMessage {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return append([]*transportv2alpha1.AuditMessage(nil), f.msgs...)
+	return append([]*transportv1alpha1.AuditMessage(nil), f.msgs...)
 }
 
 // fakeKey answers Mac with an HMAC-SHA384 under a fixed test key, and keeps the requests.
@@ -255,7 +255,7 @@ func newEnv(t *testing.T, o envOptions) *env {
 
 	tr, key := &fakeTransport{}, &fakeKey{}
 	trSock, keySock := filepath.Join(dir, "emit.sock"), filepath.Join(dir, "key.sock")
-	path, h = transportv2alpha1connect.NewTransportServiceHandler(tr)
+	path, h = transportv1alpha1connect.NewTransportServiceHandler(tr)
 	serve(t, trSock, "transport", "adapter-upstream-oidc", anyone, rpc.Handler{Path: path, H: h})
 	path, h = keyv2alpha1connect.NewKeyServiceHandler(key)
 	serve(t, keySock, "key", "adapter-upstream-oidc", anyone, rpc.Handler{Path: path, H: h})
@@ -270,7 +270,7 @@ func newEnv(t *testing.T, o envOptions) *env {
 	kh, kurl := dial(keySock)
 	em, err := audit.New(audit.Config{
 		Actor: upstreamd.Actor, Boundary: testBoundary, Release: version.Version,
-		Transport: transportv2alpha1connect.NewTransportServiceClient(th, turl, rpc.ClientOptions()...),
+		Transport: transportv1alpha1connect.NewTransportServiceClient(th, turl, rpc.ClientOptions()...),
 		Keys:      keyv2alpha1connect.NewKeyServiceClient(kh, kurl, rpc.ClientOptions()...),
 	})
 	if err != nil {

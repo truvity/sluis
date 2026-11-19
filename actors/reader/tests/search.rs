@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+use atoom_index_sqlite::service::Read;
 use aws_lc_rs::aead::{Aad, Nonce, RandomizedNonceKey};
 use buffa::Message as _;
 use common::{BOUNDARY, Env, LOG, PROJECT, Rec};
@@ -26,8 +27,15 @@ use reader::search::Searcher;
 use reader::service::Service;
 use serde_json::Value;
 use sluis_audit::Emitter;
-use sluis_driver_indexer_sqlite::service::Read;
 use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal, refusal_reason};
+use sluis_proto::atoom::blob::v1alpha1::{
+    BlobGetRequest, BlobGetResponse, BlobListRequest, BlobListResponse, BlobService,
+    BlobServiceExt, CreateRequest, CreateResponse, PutRequest, PutResponse,
+};
+use sluis_proto::atoom::transport::v1alpha1::{
+    AckRequest, AckResponse, EmitRequest, EmitResponse, ReceiveRequest, ReceiveResponse,
+    TransportService, TransportServiceExt,
+};
 use sluis_proto::sluis::config::v2alpha1::{AuditLog, LogDecl};
 use sluis_proto::sluis::key::v2alpha1::{
     KeyService, KeyServiceExt, MacRequest, MacResponse, OpenGrantRequest, OpenGrantResponse,
@@ -36,15 +44,6 @@ use sluis_proto::sluis::key::v2alpha1::{
 };
 use sluis_proto::sluis::policy::v2alpha1::{
     DecideRequest, DecideResponse, Decision, PolicyService, PolicyServiceExt, Reason,
-};
-use sluis_proto::sluis::port::blob::v2alpha1::{
-    BlobGetRequest, BlobGetResponse, BlobListRequest, BlobListResponse, BlobService,
-    BlobServiceExt, CreateRequest, CreateResponse, PutRequest, PutResponse,
-};
-use sluis_proto::sluis::port::index::v2alpha1::IndexReadServiceExt;
-use sluis_proto::sluis::port::transport::v2alpha1::{
-    AckRequest, AckResponse, EmitRequest, EmitResponse, ReceiveRequest, ReceiveResponse,
-    TransportService, TransportServiceExt,
 };
 use sluis_proto::sluis::reader::v2alpha1::{
     ReaderServiceClient, ReaderServiceExt, SearchRequest, SearchResponse,
@@ -576,7 +575,7 @@ impl Rd {
             serve(
                 &sockets.index,
                 "driver-indexer-sqlite",
-                Arc::new(Read(env.index.clone())).register(Router::new()),
+                Read(env.index.clone()).router(),
                 Allow::Exact("reader"),
                 "reader",
             ),
@@ -1010,7 +1009,7 @@ async fn a_dependency_that_is_down_fails_closed() {
 
 #[tokio::test]
 async fn an_index_row_that_is_not_the_record_in_the_log_fails_the_call() {
-    use sluis_proto::sluis::port::index::v2alpha1::{ApplyRequest, Cursor, LogRef};
+    use atoom_index::atoom::index::v1alpha1::{ApplyRequest, Cursor, LogRef};
     let rd = Rd::new().await;
     // Make the index lie: a row for seq 0 of the log with the record id of another record.
     let rows = rd.env.search(&["acme"], "").await;
@@ -1034,7 +1033,7 @@ async fn an_index_row_that_is_not_the_record_in_the_log_fails_the_call() {
                 state: vec![],
                 ..Cursor::default()
             }),
-            rows: vec![liar],
+            rows: vec![as_driver_row(&liar)],
             ..ApplyRequest::default()
         })
         .unwrap();
@@ -1068,7 +1067,7 @@ async fn read_appended(
     rec: &Rec,
     seq: i64,
 ) -> (Rd, Result<SearchResponse, connectrpc::ConnectError>) {
-    use sluis_proto::sluis::port::index::v2alpha1::{ApplyRequest, Cursor, LogRef};
+    use atoom_index::atoom::index::v1alpha1::{ApplyRequest, Cursor, LogRef};
     let rd = Rd::over(rd_env).await;
     let rows = rd.env.search(&["acme"], "").await;
     let mut row = rows.last().unwrap().clone();
@@ -1096,7 +1095,7 @@ async fn read_appended(
                 state: vec![],
                 ..Cursor::default()
             }),
-            rows: vec![row],
+            rows: vec![as_driver_row(&row)],
             ..ApplyRequest::default()
         })
         .unwrap();
@@ -1371,4 +1370,12 @@ async fn a_read_of_several_tenants_is_audited_with_every_decision_and_the_denyin
             .len()
             == 1
     );
+}
+
+/// The index driver is called as a library here, so its row is the driver's own type (atoom's contract), not the copy that sluis-proto
+/// generates for the reader: the two are wire-identical, so the bytes carry one into the other.
+fn as_driver_row(
+    r: &sluis_proto::atoom::index::v1alpha1::Row,
+) -> atoom_index::atoom::index::v1alpha1::Row {
+    atoom_index::atoom::index::v1alpha1::Row::decode_from_slice(&r.encode_to_vec()).unwrap()
 }

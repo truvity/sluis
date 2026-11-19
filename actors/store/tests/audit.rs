@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use connectrpc::{RequestContext, Response, Router, ServiceRequest, ServiceResult, ServiceStream};
 use sluis_kit::{Allow, Identities, ServerConfig, refusal};
-use sluis_proto::sluis::port::transport::v2alpha1::{
+use sluis_proto::atoom::transport::v1alpha1::{
     AckRequest, AckResponse, EmitRequest, EmitResponse, ReceiveRequest, ReceiveResponse,
     TransportService, TransportServiceExt as _,
 };

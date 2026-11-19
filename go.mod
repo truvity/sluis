@@ -12,7 +12,9 @@ require (
 	github.com/gowebpki/jcs v1.0.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/transparency-dev/formats v0.1.1
+	github.com/truvity/atoom/blob v0.0.0-20261119005504-bbe2df79a3af
 	github.com/truvity/atoom/common v0.0.0
+	github.com/truvity/atoom/destination v0.0.0-20261119005504-bbe2df79a3af
 	github.com/truvity/atoom/key v0.0.0
 	github.com/truvity/atoom/key/conformance v0.0.0
 	github.com/truvity/atoom/key/pinrelease v0.0.0
@@ -21,6 +23,7 @@ require (
 	github.com/truvity/atoom/key/yubikeypiv v0.0.0-20261119005504-bbe2df79a3af
 	github.com/truvity/atoom/source v0.0.0-20261119005504-bbe2df79a3af
 	github.com/truvity/atoom/store v0.0.0-20261119005504-bbe2df79a3af
+	github.com/truvity/atoom/transport v0.0.0-20261119005504-bbe2df79a3af
 	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/mod v0.42.0
 	google.golang.org/protobuf v1.36.12
@@ -63,3 +66,9 @@ replace github.com/truvity/atoom/key/yubikeypiv v0.0.0 => github.com/truvity/ato
 replace github.com/truvity/atoom/store v0.0.0 => github.com/truvity/atoom/store v0.0.0-20261119005504-bbe2df79a3af
 
 replace github.com/truvity/atoom/source v0.0.0 => github.com/truvity/atoom/source v0.0.0-20261119005504-bbe2df79a3af
+
+replace github.com/truvity/atoom/blob v0.0.0 => github.com/truvity/atoom/blob v0.0.0-20261119005504-bbe2df79a3af
+
+replace github.com/truvity/atoom/transport v0.0.0 => github.com/truvity/atoom/transport v0.0.0-20261119005504-bbe2df79a3af
+
+replace github.com/truvity/atoom/destination v0.0.0 => github.com/truvity/atoom/destination v0.0.0-20261119005504-bbe2df79a3af

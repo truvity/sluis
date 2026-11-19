@@ -144,6 +144,68 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
+name = "atoom-blob"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "buffa",
+ "buffa-types",
+ "connectrpc",
+ "connectrpc-build",
+ "serde",
+]
+
+[[package]]
+name = "atoom-blob-fs"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "anyhow",
+ "atoom-blob-fsdir",
+ "atoom-socket",
+ "clap",
+ "connectrpc",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "atoom-blob-fsdir"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "anyhow",
+ "atoom-blob",
+ "atoom-common",
+ "aws-lc-rs",
+ "connectrpc",
+ "rustix",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "atoom-blob-fsreadonly"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "anyhow",
+ "atoom-blob",
+ "atoom-blob-fsdir",
+ "atoom-common",
+ "atoom-socket",
+ "clap",
+ "connectrpc",
+ "rustix",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "atoom-common"
 version = "0.0.0"
 source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
@@ -153,6 +215,83 @@ dependencies = [
  "connectrpc",
  "connectrpc-build",
  "serde",
+]
+
+[[package]]
+name = "atoom-destination"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "buffa",
+ "buffa-types",
+ "connectrpc",
+ "connectrpc-build",
+ "serde",
+]
+
+[[package]]
+name = "atoom-destination-conformance"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "anyhow",
+ "atoom-common",
+ "atoom-destination",
+ "atoom-socket",
+ "aws-lc-rs",
+ "clap",
+ "connectrpc",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "atoom-destination-dir"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "anyhow",
+ "atoom-destination-conformance",
+ "atoom-socket",
+ "clap",
+ "rustix",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "atoom-index"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "buffa",
+ "buffa-types",
+ "connectrpc",
+ "connectrpc-build",
+ "serde",
+]
+
+[[package]]
+name = "atoom-index-sqlite"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "anyhow",
+ "atoom-common",
+ "atoom-index",
+ "atoom-socket",
+ "buffa",
+ "clap",
+ "connectrpc",
+ "rusqlite",
+ "rustix",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -285,6 +424,39 @@ dependencies = [
  "http-body-util",
  "hyper-util",
  "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "atoom-transport"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "buffa",
+ "buffa-types",
+ "connectrpc",
+ "connectrpc-build",
+ "serde",
+]
+
+[[package]]
+name = "atoom-transport-spool"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "anyhow",
+ "atoom-common",
+ "atoom-socket",
+ "atoom-transport",
+ "aws-lc-rs",
+ "buffa",
+ "clap",
+ "connectrpc",
+ "futures",
+ "rustix",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1105,6 +1277,9 @@ name = "exporter"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "atoom-common",
+ "atoom-destination-conformance",
+ "atoom-destination-dir",
  "aws-lc-rs",
  "base64 0.22.1",
  "buffa",
@@ -1115,8 +1290,6 @@ dependencies = [
  "rustix",
  "serde_json",
  "sluis-audit",
- "sluis-destination",
- "sluis-driver-exporter-dir",
  "sluis-kit",
  "sluis-proto",
  "sluis-registry",
@@ -1559,6 +1732,8 @@ name = "indexer"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "atoom-index",
+ "atoom-index-sqlite",
  "aws-lc-rs",
  "base64 0.23.1",
  "buffa",
@@ -1568,7 +1743,6 @@ dependencies = [
  "rustix",
  "serde_json",
  "signed_note",
- "sluis-driver-indexer-sqlite",
  "sluis-kit",
  "sluis-proto",
  "sluis-store",
@@ -2371,6 +2545,8 @@ name = "reader"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "atoom-index",
+ "atoom-index-sqlite",
  "aws-lc-rs",
  "base64 0.23.1",
  "buffa",
@@ -2381,7 +2557,6 @@ dependencies = [
  "rustix",
  "serde_json",
  "sluis-audit",
- "sluis-driver-indexer-sqlite",
  "sluis-kit",
  "sluis-proto",
  "sluis-store",
@@ -2831,30 +3006,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "sluis-destination"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "aws-lc-rs",
- "connectrpc",
- "sluis-kit",
- "sluis-proto",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "sluis-driver-exporter-dir"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "atoom-destination",
+ "atoom-destination-conformance",
+ "atoom-destination-dir",
+ "atoom-socket",
  "clap",
  "connectrpc",
  "rustix",
- "serde_json",
- "sluis-destination",
  "sluis-kit",
- "sluis-proto",
  "tempfile",
  "tokio",
  "tracing",
@@ -2865,16 +3028,16 @@ name = "sluis-driver-indexer-fs"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "atoom-blob",
+ "atoom-blob-fsdir",
+ "atoom-blob-fsreadonly",
  "clap",
  "connectrpc",
  "rustix",
- "sluis-driver-writer-fs",
  "sluis-kit",
- "sluis-proto",
  "sluis-registry",
  "tempfile",
  "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -2882,16 +3045,15 @@ name = "sluis-driver-indexer-sqlite"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "atoom-index",
+ "atoom-index-sqlite",
  "buffa",
  "clap",
  "connectrpc",
- "rusqlite",
  "rustix",
  "sluis-kit",
- "sluis-proto",
  "tempfile",
  "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -2899,13 +3061,12 @@ name = "sluis-driver-writer-fs"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "aws-lc-rs",
- "buffa",
+ "atoom-blob",
+ "atoom-blob-fs",
  "clap",
  "connectrpc",
  "rustix",
  "sluis-kit",
- "sluis-proto",
  "tempfile",
  "tokio",
  "tracing",
@@ -2916,16 +3077,14 @@ name = "sluis-driver-writer-spool"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "aws-lc-rs",
- "buffa",
+ "atoom-transport",
+ "atoom-transport-spool",
  "clap",
  "connectrpc",
- "futures",
  "rustix",
  "serde_json",
  "sluis-audit",
  "sluis-kit",
- "sluis-proto",
  "sluis-registry",
  "tempfile",
  "tokio",
@@ -3202,7 +3361,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys",

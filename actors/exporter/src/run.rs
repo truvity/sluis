@@ -37,11 +37,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
+use crate::driver_client::Client as DriverClient;
 use anyhow::bail;
+use atoom_destination_conformance::Destination;
 use clap::{Arg, Command};
 use sluis_audit::Config as AuditConfig;
-use sluis_destination::Destination;
-use sluis_destination::rpc::Client as DriverClient;
 use sluis_kit::cli::{Commands, Flags, Refused, shutdown_signal};
 use sluis_kit::{Client, dial};
 use sluis_proto::sluis::exporter::v2alpha1::export_manifest::Entry;

@@ -15,14 +15,14 @@ use sluis_audit::{
     Action, Activity, Config, DEFS_NAME, Emitter, Event, Row, Status, Subject, Table,
 };
 use sluis_kit::{Allow, Identities, ServerConfig, refusal, refusal_reason};
+use sluis_proto::atoom::transport::v1alpha1::{
+    AckRequest, AckResponse, EmitRequest, EmitResponse, ReceiveRequest, ReceiveResponse,
+    TransportService, TransportServiceExt,
+};
 use sluis_proto::sluis::key::v2alpha1::{
     KeyService, KeyServiceExt, MacRequest, MacResponse, OpenGrantRequest, OpenGrantResponse,
     OpenRequest, OpenResponse, PublicKeyRequest, PublicKeyResponse, SealGrantRequest,
     SealGrantResponse, SealRequest, SealResponse, SignRequest, SignResponse,
-};
-use sluis_proto::sluis::port::transport::v2alpha1::{
-    AckRequest, AckResponse, EmitRequest, EmitResponse, ReceiveRequest, ReceiveResponse,
-    TransportService, TransportServiceExt,
 };
 
 /// 2026-11-04T00:00:00Z.

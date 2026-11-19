@@ -12,6 +12,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+use atoom_index_sqlite::Index;
+use atoom_index_sqlite::service::{Read, Write};
 use aws_lc_rs::aead::{AES_256_GCM, Aad, Nonce, RandomizedNonceKey};
 use aws_lc_rs::digest;
 use aws_lc_rs::rand::SystemRandom;
@@ -26,9 +28,12 @@ use indexer::merkle;
 use indexer::ports::Sockets;
 use indexer::run::Settings;
 use serde_json::{Value, json};
-use sluis_driver_indexer_sqlite::Index;
-use sluis_driver_indexer_sqlite::service::{Read, Write};
 use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal};
+use sluis_proto::atoom::blob::v1alpha1::{
+    BlobGetRequest, BlobGetResponse, BlobListRequest, BlobListResponse, BlobService,
+    BlobServiceExt, CreateRequest, CreateResponse, PutRequest, PutResponse,
+};
+use sluis_proto::atoom::index::v1alpha1::{IndexReadServiceClient, Partition, Row, SearchRequest};
 use sluis_proto::sluis::config::v2alpha1::{AuditLog, LogDecl};
 use sluis_proto::sluis::key::v2alpha1::{
     KeyService, KeyServiceExt, MacRequest, MacResponse, OpenGrantRequest, OpenGrantResponse,
@@ -37,13 +42,6 @@ use sluis_proto::sluis::key::v2alpha1::{
 };
 use sluis_proto::sluis::policy::v2alpha1::{
     DecideRequest, DecideResponse, Decision, PolicyService, PolicyServiceExt,
-};
-use sluis_proto::sluis::port::blob::v2alpha1::{
-    BlobGetRequest, BlobGetResponse, BlobListRequest, BlobListResponse, BlobService,
-    BlobServiceExt, CreateRequest, CreateResponse, PutRequest, PutResponse,
-};
-use sluis_proto::sluis::port::index::v2alpha1::{
-    IndexReadServiceClient, IndexReadServiceExt, IndexServiceExt, Partition, Row, SearchRequest,
 };
 use sluis_proto::sluis::store::v2alpha1::{
     GetRequest, GetResponse, GetSignedConfigRequest, GetSignedConfigResponse, Item, ListRequest,
@@ -829,14 +827,14 @@ impl Env {
             serve(
                 &sockets.index,
                 "driver-indexer-sqlite",
-                Arc::new(Write(index.clone())).register(Router::new()),
+                Write(index.clone()).router(),
                 Allow::OwnerOnly("indexer"),
                 "indexer",
             ),
             serve(
                 &ro,
                 "driver-indexer-sqlite",
-                Arc::new(Read(index.clone())).register(Router::new()),
+                Read(index.clone()).router(),
                 Allow::Exact("reader"),
                 "reader",
             ),
@@ -902,7 +900,8 @@ impl Env {
     }
 
     pub fn cursor_size(&self) -> i64 {
-        use sluis_proto::sluis::port::index::v2alpha1::{GetCursorRequest, LogRef};
+        // The index is called as a library here, so the request is the driver's own type (atoom's contract), not the copy sluis-proto generates.
+        use atoom_index::atoom::index::v1alpha1::{GetCursorRequest, LogRef};
         self.index
             .get_cursor(&GetCursorRequest {
                 log: ::buffa::MessageField::some(LogRef {

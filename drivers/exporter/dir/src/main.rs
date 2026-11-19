@@ -1,4 +1,8 @@
-//! The `directory` driver of exporter@.
+//! The host of the `directory` driver of exporter@.
+//!
+//! The driver is atoom's (github.com/truvity/atoom, `destination/dir`, pinned by commit: `third_party/atoom/README.md`): the destination port
+//! over a local directory that a forwarder serves. This file is what is sluis's: the socket with the peer credentials of its caller, the owner
+//! check (only exporter@ may open it), the command line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
 //!
 //! ```text
 //! driver-exporter-dir serve       --socket PATH --root DIR --state-dir DIR [--socket-gid GID]
@@ -15,13 +19,16 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, bail};
+use atoom_destination_conformance::rpc::Service;
+use atoom_destination_dir::{Directory, suite};
 use clap::Arg;
-use connectrpc::Router;
-use sluis_destination::rpc::Service;
-use sluis_driver_exporter_dir::{Directory, NAME, OWNER, suite};
 use sluis_kit::cli::{Commands, Flags, Refused, shutdown_signal};
 use sluis_kit::{Allow, ServerConfig};
-use sluis_proto::sluis::port::destination::v2alpha1::DestinationServiceExt;
+
+/// The registry name of this driver's user.
+const NAME: &str = "driver-exporter-dir";
+/// The registry name of its one caller.
+const OWNER: &str = "exporter";
 
 struct Driver;
 
@@ -54,7 +61,7 @@ impl Commands for Driver {
         if swept > 0 {
             tracing::warn!(swept, "removed temporary files a crash left behind");
         }
-        let router = Arc::new(Service(Arc::new(d))).register(Router::new());
+        let router = Service(Arc::new(d)).router();
         sluis_kit::serve(
             ServerConfig {
                 actor: NAME,

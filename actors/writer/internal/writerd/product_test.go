@@ -11,8 +11,8 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	transportv1alpha1 "github.com/truvity/atoom/transport/gen/atoom/transport/v1alpha1"
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
-	transportv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1"
 )
 
 // asProduct returns the message with metadata.product.name changed, in canonical form as an emitter writes it.
@@ -68,7 +68,7 @@ func TestARecordOfAProductTheProjectDoesNotDeclareIsRefusedAndOneOfItsOwnIsSeale
 			if err != nil {
 				t.Fatalf("the quarantined message does not open: %v", err)
 			}
-			var kept transportv2alpha1.AuditMessage
+			var kept transportv1alpha1.AuditMessage
 			if err := proto.Unmarshal(pt, &kept); err != nil {
 				t.Fatal(err)
 			}

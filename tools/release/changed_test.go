@@ -19,7 +19,7 @@ func TestChangedRustPackages(t *testing.T) {
 		want    []string
 	}{
 		"one actor":                   {[]string{"actors/store/src/main.rs"}, []string{"store"}},
-		"a driver":                    {[]string{"drivers/indexer/fs/src/lib.rs", "docs/a.md"}, []string{"sluis-driver-indexer-fs"}},
+		"a driver":                    {[]string{"drivers/indexer/fs/src/main.rs", "docs/a.md"}, []string{"sluis-driver-indexer-fs"}},
 		"two":                         {[]string{"actors/entry/Cargo.toml", "actors/store/x.rs"}, []string{"entry", "store"}},
 		"a kit":                       {[]string{"kits/rust/sluis-store/src/lib.rs"}, []string{"entry", "sluis-driver-indexer-fs", "store"}},
 		"the lock file":               {[]string{"Cargo.lock"}, []string{"entry", "sluis-driver-indexer-fs", "store"}},
