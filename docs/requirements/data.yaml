@@ -272,7 +272,7 @@ requirements:
     standards: []
     tests: [drivers/store/credential/tests/port.rs]
     verification:
-      - {kind: test-vectors, ref: "the vectors of atoom's credential crate (truvity/atoom, source/credential, unit tests): directory, file and ACL; the Rocky board's chown case (systemd 257) rests on them alone, as Rocky 10 in Docker sets up no credentials directory"}
+      - {kind: test-vectors, ref: "atoom's credential crate vectors (source/credential): directory, file and ACL; the Rocky board's chown case (systemd 257) rests on them alone, as Rocky 10 in Docker sets up no credentials directory"}
       - {kind: integration-test, ref: "the credential host's tests in this repository: a secret that others can read is refused, and a credentials directory that group or others can write is not served"}
       - {kind: integration-test, ref: "os-container-test.sh on Ubuntu 26.04: the real driver in its unit, with the dr-xr-x---+ directory systemd 259 makes, and credential check reads the three credentials"}
   - id: REQ-DATA-018
