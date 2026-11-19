@@ -92,7 +92,7 @@ func validPIVSlot(s string) bool {
 }
 
 // YubicoRootSHA256 is the SHA-256 of the DER of "Yubico Attestation Root 1", the root of the real maker: the pin the card driver
-// holds (drivers/key/yubikey-piv/internal/card/yubico.go), checked against the file in the kit's tests. A chain that ends in this
+// holds (the card driver of atoom, key/yubikeypiv/internal/card/yubico.go), checked against the file in the kit's tests. A chain that ends in this
 // root is held to the maker's own names; a chain that ends in any other pinned root (the made-up makers of the tests) is held to a
 // looser rule, chosen by the root the chain ends in and by nothing a caller says.
 const YubicoRootSHA256 = "62760c6a6ef91679f454c8902b80fd009825b3f25da90f1fbace2ec6586cd5a8"

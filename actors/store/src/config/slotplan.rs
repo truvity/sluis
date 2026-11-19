@@ -1,6 +1,6 @@
 //! The card slot map check (ADR 0006, "The slot plan"; docs/reference/keys.md, "Board slot plan"): which PIV slot each
-//! enabled key purpose of a KeyPlan lives in. It is the Rust twin of `kits/go/slotplan`, which key@ applies when it
-//! starts and in its check command, and the two read the same vectors (`kits/go/slotplan/testdata/vectors.json`), so
+//! enabled key purpose of a KeyPlan lives in. It is the Rust twin of `github.com/truvity/atoom/key/slotplan`, which key@ applies when it
+//! starts and in its check command, and the two read the same vectors (atoom's `key/slotplan/testdata/vectors.json`, vendored at `third_party/atoom/testdata/slotplan-vectors.json`), so
 //! that `sluis config check`, store@ at load and key@ apply the same slot map rules (REQ-PKI-037, REQ-PKI-038, REQ-PKI-042). These are the rules common to all stores; on a card key@ adds limits of the card driver (`CheckCard`: no override of a default slot, no card-key purpose outside the default map) that only key@'s check applies.
 //!
 //! The map is the default one (version 2) with the installation's overrides: a purpose names its slot in the KeyPlan, or
@@ -116,7 +116,7 @@ pub fn check(at: &str, purposes: &[Purpose<'_>]) -> Result<(), String> {
 mod tests {
     use super::*;
 
-    const VECTORS: &str = include_str!("../../../../kits/go/slotplan/testdata/vectors.json");
+    const VECTORS: &str = include_str!("../../../../third_party/atoom/testdata/slotplan-vectors.json");
     const KEYS_YAML: &str = include_str!("../../../../docs/architecture/keys.yaml");
 
     /// verifies: REQ-KEYS-278
@@ -147,7 +147,7 @@ mod tests {
 
     /// verifies: REQ-PKI-037, REQ-PKI-038, REQ-PKI-042, REQ-KEYS-268, REQ-KEYS-279
     ///
-    /// The vectors key@ reads in Go (`kits/go/slotplan`): each case is accepted, or refused with the text it holds.
+    /// The vectors key@ reads in Go (`key/slotplan` of atoom): each case is accepted, or refused with the text it holds.
     #[test]
     fn the_shared_vectors_are_accepted_and_refused_as_key_does() {
         let v: serde_json::Value = serde_json::from_str(VECTORS).unwrap();

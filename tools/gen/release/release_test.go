@@ -177,11 +177,11 @@ func TestParsers(t *testing.T) {
 	if _, err := parseCargoMetadata([]byte(two), "/r"); err == nil {
 		t.Error("two binaries in one directory were accepted")
 	}
-	n, err := parseNativeList("# c\n\ndrivers/key/yubikey-piv\tsluis_card\n")
-	if err != nil || n["drivers/key/yubikey-piv"] != "sluis_card" {
+	n, err := parseNativeList("# c\n\ndrivers/key/yubikey-piv\tatoom_card\n")
+	if err != nil || n["drivers/key/yubikey-piv"] != "atoom_card" {
 		t.Fatalf("parseNativeList = %v, %v", n, err)
 	}
-	if _, err := parseNativeList("drivers/key/yubikey-piv sluis_card\n"); err == nil {
+	if _, err := parseNativeList("drivers/key/yubikey-piv atoom_card\n"); err == nil {
 		t.Error("a native.list line without a tab was accepted")
 	}
 }

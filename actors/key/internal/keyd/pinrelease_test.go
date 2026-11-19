@@ -21,10 +21,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/truvity/atoom/common/refusal"
+	keyv1alpha1 "github.com/truvity/atoom/key/gen/atoom/key/v1alpha1"
+	"github.com/truvity/atoom/key/pinrelease"
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
-	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
-	"github.com/truvity/sluis/v2/kits/go/pinrelease"
 )
 
 // The fake driver's side of the PIN release: the same calls as the card driver, over a PIN in memory, and an
@@ -46,7 +46,7 @@ func (d *fakeDriver) isLocked() bool {
 	return d.locked
 }
 
-func (d *fakeDriver) Attest(_ context.Context, req *connect.Request[keystorev2alpha1.AttestRequest]) (*connect.Response[keystorev2alpha1.AttestResponse], error) {
+func (d *fakeDriver) Attest(_ context.Context, req *connect.Request[keyv1alpha1.AttestRequest]) (*connect.Response[keyv1alpha1.AttestResponse], error) {
 	if req.Msg.GetPurpose() != "pin-release" {
 		return nil, refusal.New(connect.CodeFailedPrecondition, "no_attestation", "")
 	}
@@ -66,19 +66,19 @@ func (d *fakeDriver) Attest(_ context.Context, req *connect.Request[keystorev2al
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&keystorev2alpha1.AttestResponse{Attestation: b, AttestationSigner: []byte(fakeSigner)}), nil
+	return connect.NewResponse(&keyv1alpha1.AttestResponse{Attestation: b, AttestationSigner: []byte(fakeSigner)}), nil
 }
 
-func (d *fakeDriver) VerifyAttestation(_ context.Context, req *connect.Request[keystorev2alpha1.VerifyAttestationRequest]) (*connect.Response[keystorev2alpha1.VerifyAttestationResponse], error) {
+func (d *fakeDriver) VerifyAttestation(_ context.Context, req *connect.Request[keyv1alpha1.VerifyAttestationRequest]) (*connect.Response[keyv1alpha1.VerifyAttestationResponse], error) {
 	d.verifyCalls.Add(1)
 	var a fakeAttestation
 	if string(req.Msg.GetAttestationSigner()) != fakeSigner || json.Unmarshal(req.Msg.GetAttestation(), &a) != nil {
 		return nil, refusal.New(connect.CodeFailedPrecondition, "attestation", "attestation")
 	}
-	return connect.NewResponse(&keystorev2alpha1.VerifyAttestationResponse{SpkiDer: a.SPKI, Slot: a.Slot, PinPolicy: a.PIN, TouchPolicy: a.Touch}), nil
+	return connect.NewResponse(&keyv1alpha1.VerifyAttestationResponse{SpkiDer: a.SPKI, Slot: a.Slot, PinPolicy: a.PIN, TouchPolicy: a.Touch}), nil
 }
 
-func (d *fakeDriver) BeginPinRelease(_ context.Context, req *connect.Request[keystorev2alpha1.BeginPinReleaseRequest]) (*connect.Response[keystorev2alpha1.BeginPinReleaseResponse], error) {
+func (d *fakeDriver) BeginPinRelease(_ context.Context, req *connect.Request[keyv1alpha1.BeginPinReleaseRequest]) (*connect.Response[keyv1alpha1.BeginPinReleaseResponse], error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if !d.locked {
@@ -97,7 +97,7 @@ func (d *fakeDriver) BeginPinRelease(_ context.Context, req *connect.Request[key
 		return nil, err
 	}
 	d.oneTime, d.oneText = k, text
-	return connect.NewResponse(&keystorev2alpha1.BeginPinReleaseResponse{EphemeralPublic: k.PublicKey().Bytes(), RequestText: text, RequestSignatureDer: sig}), nil
+	return connect.NewResponse(&keyv1alpha1.BeginPinReleaseResponse{EphemeralPublic: k.PublicKey().Bytes(), RequestText: text, RequestSignatureDer: sig}), nil
 }
 
 // signPin signs a text the fake wrote with its pin-release key, as the card driver does. The caller holds mu.
@@ -121,7 +121,7 @@ func (d *fakeDriver) checked(sig, keyPlan []byte) error {
 	return nil
 }
 
-func (d *fakeDriver) SealPin(_ context.Context, req *connect.Request[keystorev2alpha1.SealPinRequest]) (*connect.Response[keystorev2alpha1.SealPinResponse], error) {
+func (d *fakeDriver) SealPin(_ context.Context, req *connect.Request[keyv1alpha1.SealPinRequest]) (*connect.Response[keyv1alpha1.SealPinResponse], error) {
 	d.sealCalls.Add(1)
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -149,10 +149,10 @@ func (d *fakeDriver) SealPin(_ context.Context, req *connect.Request[keystorev2a
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&keystorev2alpha1.SealPinResponse{AnswerText: at, AnswerSignatureDer: sig}), nil
+	return connect.NewResponse(&keyv1alpha1.SealPinResponse{AnswerText: at, AnswerSignatureDer: sig}), nil
 }
 
-func (d *fakeDriver) FinishPinRelease(_ context.Context, req *connect.Request[keystorev2alpha1.FinishPinReleaseRequest]) (*connect.Response[keystorev2alpha1.FinishPinReleaseResponse], error) {
+func (d *fakeDriver) FinishPinRelease(_ context.Context, req *connect.Request[keyv1alpha1.FinishPinReleaseRequest]) (*connect.Response[keyv1alpha1.FinishPinReleaseResponse], error) {
 	d.finishCalls.Add(1)
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -180,7 +180,7 @@ func (d *fakeDriver) FinishPinRelease(_ context.Context, req *connect.Request[ke
 		return nil, refusal.New(connect.CodePermissionDenied, "pin", "pin")
 	}
 	d.locked, d.held = false, pin
-	return connect.NewResponse(&keystorev2alpha1.FinishPinReleaseResponse{}), nil
+	return connect.NewResponse(&keyv1alpha1.FinishPinReleaseResponse{}), nil
 }
 
 // board is one board of the PIN release tests: its driver and its key@.
@@ -192,7 +192,7 @@ type board struct {
 
 func ensureKey(t *testing.T, d *fakeDriver, purpose, alg string) []byte {
 	t.Helper()
-	res, err := d.Ensure(context.Background(), connect.NewRequest(&keystorev2alpha1.EnsureRequest{Purpose: purpose, Algorithm: alg}))
+	res, err := d.Ensure(context.Background(), connect.NewRequest(&keyv1alpha1.EnsureRequest{Purpose: purpose, Algorithm: alg}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func ensureKey(t *testing.T, d *fakeDriver, purpose, alg string) []byte {
 func slotMapOf(t *testing.T, name string, d *fakeDriver) *configv2alpha1.NodeSlotMap {
 	t.Helper()
 	ensureKey(t, d, "pin-release", "ES384")
-	att, err := d.Attest(context.Background(), connect.NewRequest(&keystorev2alpha1.AttestRequest{Purpose: "pin-release"}))
+	att, err := d.Attest(context.Background(), connect.NewRequest(&keyv1alpha1.AttestRequest{Purpose: "pin-release"}))
 	if err != nil {
 		t.Fatal(err)
 	}

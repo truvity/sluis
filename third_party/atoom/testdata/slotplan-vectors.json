@@ -1,0 +1,534 @@
+{
+ "about": "Vectors of the card slot map check (key/slotplan). `check` applies to every store, `card` only to a card store. An empty `error` is accepted; otherwise the refusal holds this text. sluis's Rust loader of its signed key plan reads the same file. The default map is version 2 (2026-11-18): the slots 89 to 8f belong to their purposes, 90 to 95 are the rotation spares, and a purpose the map does not hold (`second-intermediate` here) needs a slot that the plan names.",
+ "cases": [
+  {
+   "name": "default map",
+   "check": [
+    {
+     "purpose": "wrapping",
+     "algorithm": "ECDH-P384",
+     "slot": ""
+    },
+    {
+     "purpose": "token-signing",
+     "algorithm": "ES384",
+     "slot": "9a"
+    },
+    {
+     "purpose": "audit-log",
+     "algorithm": "ES256",
+     "slot": ""
+    },
+    {
+     "purpose": "data",
+     "algorithm": "AES-256-GCM",
+     "slot": ""
+    }
+   ],
+   "error": "",
+   "card": ""
+  },
+  {
+   "name": "a purpose of version 2 in another slot than its own",
+   "check": [
+    {
+     "purpose": "issuance-log",
+     "algorithm": "ES384",
+     "slot": "88"
+    }
+   ],
+   "error": "",
+   "card": "the card driver serves no slot for this purpose"
+  },
+  {
+   "name": "two purposes name one slot",
+   "check": [
+    {
+     "purpose": "token-signing",
+     "algorithm": "ES384",
+     "slot": "9a"
+    },
+    {
+     "purpose": "x509-intermediate",
+     "algorithm": "ES384",
+     "slot": "9a"
+    }
+   ],
+   "error": "shared with token-signing",
+   "card": ""
+  },
+  {
+   "name": "a named slot takes another's default",
+   "check": [
+    {
+     "purpose": "token-signing",
+     "algorithm": "ES384",
+     "slot": ""
+    },
+    {
+     "purpose": "release-signing",
+     "algorithm": "ES384",
+     "slot": "9a"
+    }
+   ],
+   "error": "shared with token-signing",
+   "card": ""
+  },
+  {
+   "name": "the token key in the intermediate's slot",
+   "check": [
+    {
+     "purpose": "x509-intermediate",
+     "algorithm": "ES384",
+     "slot": ""
+    },
+    {
+     "purpose": "token-signing",
+     "algorithm": "ES384",
+     "slot": "9c"
+    }
+   ],
+   "error": "shared with x509-intermediate",
+   "card": ""
+  },
+  {
+   "name": "an enabled purpose that the map does not hold has no slot",
+   "check": [
+    {
+     "purpose": "second-intermediate",
+     "algorithm": "ES384",
+     "slot": ""
+    }
+   ],
+   "error": "no slot",
+   "card": ""
+  },
+  {
+   "name": "9e is no board slot",
+   "check": [
+    {
+     "purpose": "issuance-log",
+     "algorithm": "ES384",
+     "slot": "9e"
+    }
+   ],
+   "error": "not a slot of a board",
+   "card": ""
+  },
+  {
+   "name": "96 is above the retired range",
+   "check": [
+    {
+     "purpose": "issuance-log",
+     "algorithm": "ES384",
+     "slot": "96"
+    }
+   ],
+   "error": "not a slot of a board",
+   "card": ""
+  },
+  {
+   "name": "an upper-case slot",
+   "check": [
+    {
+     "purpose": "issuance-log",
+     "algorithm": "ES384",
+     "slot": "9A"
+    }
+   ],
+   "error": "not a slot of a board",
+   "card": ""
+  },
+  {
+   "name": "a purpose listed twice",
+   "check": [
+    {
+     "purpose": "token-signing",
+     "algorithm": "ES384",
+     "slot": ""
+    },
+    {
+     "purpose": "token-signing",
+     "algorithm": "ES384",
+     "slot": "88"
+    }
+   ],
+   "error": "listed twice",
+   "card": ""
+  },
+  {
+   "name": "another slot for a purpose of the map",
+   "check": [
+    {
+     "purpose": "token-signing",
+     "algorithm": "ES384",
+     "slot": "88"
+    }
+   ],
+   "error": "",
+   "card": "differs from the slot of the card driver"
+  },
+  {
+   "name": "the default slot repeated",
+   "check": [
+    {
+     "purpose": "token-signing",
+     "algorithm": "ES384",
+     "slot": "9a"
+    }
+   ],
+   "error": "",
+   "card": ""
+  },
+  {
+   "name": "a data key has no slot",
+   "check": [
+    {
+     "purpose": "data",
+     "algorithm": "AES-256-GCM",
+     "slot": ""
+    }
+   ],
+   "error": "",
+   "card": ""
+  },
+  {
+   "name": "an empty plan",
+   "check": [],
+   "error": "",
+   "card": ""
+  },
+  {
+   "name": "a slot that is not hex",
+   "check": [
+    {
+     "purpose": "issuance-log",
+     "algorithm": "ES384",
+     "slot": "zz"
+    }
+   ],
+   "error": "not a slot of a board",
+   "card": ""
+  },
+  {
+   "name": "a slot of one digit",
+   "check": [
+    {
+     "purpose": "issuance-log",
+     "algorithm": "ES384",
+     "slot": "9"
+    }
+   ],
+   "error": "not a slot of a board",
+   "card": ""
+  },
+  {
+   "name": "a slot of three digits",
+   "check": [
+    {
+     "purpose": "issuance-log",
+     "algorithm": "ES384",
+     "slot": "988"
+    }
+   ],
+   "error": "not a slot of a board",
+   "card": ""
+  },
+  {
+   "name": "a slot with a sign",
+   "check": [
+    {
+     "purpose": "issuance-log",
+     "algorithm": "ES384",
+     "slot": "+a"
+    }
+   ],
+   "error": "not a slot of a board",
+   "card": ""
+  },
+  {
+   "name": "four refusals in one plan, in the order of the list",
+   "check": [
+    {
+     "purpose": "token-signing",
+     "algorithm": "ES384",
+     "slot": "9a"
+    },
+    {
+     "purpose": "x509-intermediate",
+     "algorithm": "ES384",
+     "slot": "9a"
+    },
+    {
+     "purpose": "second-intermediate",
+     "algorithm": "ES384",
+     "slot": ""
+    },
+    {
+     "purpose": "wrapping",
+     "algorithm": "ECDH-P384",
+     "slot": "9e"
+    }
+   ],
+   "error": "purposes[1].slot: shared with token-signing; purposes[2]: no slot (name one of the spare slots 90 to 95); purposes[3].slot: not a slot of a board",
+   "card": ""
+  },
+  {
+   "name": "RS256 purpose in its slot 88",
+   "check": [
+    {
+     "purpose": "token-signing",
+     "algorithm": "ES384",
+     "slot": "9a"
+    },
+    {
+     "purpose": "token-signing-rs256",
+     "algorithm": "RS256",
+     "slot": "88"
+    }
+   ],
+   "error": "",
+   "card": ""
+  },
+  {
+   "name": "RS256 purpose with no slot takes 88",
+   "check": [
+    {
+     "purpose": "token-signing-rs256",
+     "algorithm": "RS256",
+     "slot": ""
+    }
+   ],
+   "error": "",
+   "card": ""
+  },
+  {
+   "name": "RS256 purpose in a slot of another purpose",
+   "check": [
+    {
+     "purpose": "token-signing",
+     "algorithm": "ES384",
+     "slot": "9a"
+    },
+    {
+     "purpose": "token-signing-rs256",
+     "algorithm": "RS256",
+     "slot": "9a"
+    }
+   ],
+   "error": "purposes[1].slot: shared with token-signing",
+   "card": ""
+  },
+  {
+   "name": "RS256 purpose in a slot that is no board slot",
+   "check": [
+    {
+     "purpose": "token-signing-rs256",
+     "algorithm": "RS256",
+     "slot": "9e"
+    }
+   ],
+   "error": "purposes[0].slot: not a slot of a board",
+   "card": ""
+  },
+  {
+   "name": "RS256 purpose listed twice",
+   "check": [
+    {
+     "purpose": "token-signing-rs256",
+     "algorithm": "RS256",
+     "slot": "88"
+    },
+    {
+     "purpose": "token-signing-rs256",
+     "algorithm": "RS256",
+     "slot": "89"
+    }
+   ],
+   "error": "purposes[1]: listed twice",
+   "card": ""
+  },
+  {
+   "name": "RS256 purpose in the slot of the default holder of another",
+   "check": [
+    {
+     "purpose": "token-signing-rs256",
+     "algorithm": "RS256",
+     "slot": "9a"
+    },
+    {
+     "purpose": "token-signing",
+     "algorithm": "ES384",
+     "slot": ""
+    }
+   ],
+   "error": "purposes[1].slot: shared with token-signing-rs256",
+   "card": ""
+  },
+  {
+   "name": "RS256 purpose in another slot (89, the issuance log's)",
+   "check": [
+    {
+     "purpose": "token-signing",
+     "algorithm": "ES384",
+     "slot": "9a"
+    },
+    {
+     "purpose": "token-signing-rs256",
+     "algorithm": "RS256",
+     "slot": "89"
+    }
+   ],
+   "error": "",
+   "card": "purposes[1].slot: differs from the slot of the card driver"
+  },
+  {
+   "name": "another purpose in the slot 88 of the RS256 purpose",
+   "check": [
+    {
+     "purpose": "token-signing-rs256",
+     "algorithm": "RS256",
+     "slot": ""
+    },
+    {
+     "purpose": "issuance-log",
+     "algorithm": "ES384",
+     "slot": "88"
+    }
+   ],
+   "error": "purposes[1].slot: shared with token-signing-rs256",
+   "card": ""
+  },
+  {
+   "name": "another purpose takes slot 88 when the RS256 purpose is not enabled (an override of the map)",
+   "check": [
+    {
+     "purpose": "issuance-log",
+     "algorithm": "ES384",
+     "slot": "88"
+    }
+   ],
+   "error": "",
+   "card": "the card driver serves no slot for this purpose"
+  },
+  {
+   "name": "the purposes of version 2 take their own slots by default",
+   "check": [
+    {
+     "purpose": "issuance-log",
+     "algorithm": "ES384",
+     "slot": ""
+    },
+    {
+     "purpose": "enrolment",
+     "algorithm": "ECDH-P384",
+     "slot": ""
+    },
+    {
+     "purpose": "audit-log",
+     "algorithm": "ES256",
+     "slot": ""
+    },
+    {
+     "purpose": "audit-log-second",
+     "algorithm": "ES256",
+     "slot": ""
+    }
+   ],
+   "error": "",
+   "card": "the card driver serves no slot for this purpose"
+  },
+  {
+   "name": "the second audit writer instance has slot 8f and the first 84",
+   "check": [
+    {
+     "purpose": "audit-log",
+     "algorithm": "ES256",
+     "slot": "84"
+    },
+    {
+     "purpose": "audit-log-second",
+     "algorithm": "ES256",
+     "slot": "8f"
+    }
+   ],
+   "error": "",
+   "card": "purposes[1]: the card driver serves no slot for this purpose"
+  },
+  {
+   "name": "a purpose of version 2 in the slot of another",
+   "check": [
+    {
+     "purpose": "issuance-log",
+     "algorithm": "ES384",
+     "slot": ""
+    },
+    {
+     "purpose": "enrolment",
+     "algorithm": "ECDH-P384",
+     "slot": "89"
+    }
+   ],
+   "error": "purposes[1].slot: shared with issuance-log",
+   "card": ""
+  },
+  {
+   "name": "a purpose of version 2 on the default slot of another",
+   "check": [
+    {
+     "purpose": "enrolment",
+     "algorithm": "ECDH-P384",
+     "slot": ""
+    },
+    {
+     "purpose": "issuance-log",
+     "algorithm": "ES384",
+     "slot": "8a"
+    }
+   ],
+   "error": "purposes[1].slot: shared with enrolment",
+   "card": ""
+  },
+  {
+   "name": "a rotation spare for a purpose that the map does not hold",
+   "check": [
+    {
+     "purpose": "second-intermediate",
+     "algorithm": "ES384",
+     "slot": "90"
+    }
+   ],
+   "error": "",
+   "card": "the card driver serves no slot for this purpose"
+  },
+  {
+   "name": "the last rotation spare is 95",
+   "check": [
+    {
+     "purpose": "second-intermediate",
+     "algorithm": "ES384",
+     "slot": "95"
+    }
+   ],
+   "error": "",
+   "card": "the card driver serves no slot for this purpose"
+  },
+  {
+   "name": "the audit key of a second instance listed twice",
+   "check": [
+    {
+     "purpose": "audit-log-second",
+     "algorithm": "ES256",
+     "slot": "8f"
+    },
+    {
+     "purpose": "audit-log-second",
+     "algorithm": "ES256",
+     "slot": "90"
+    }
+   ],
+   "error": "purposes[1]: listed twice",
+   "card": ""
+  }
+ ]
+}

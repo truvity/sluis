@@ -20,10 +20,10 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	keyv1alpha1 "github.com/truvity/atoom/key/gen/atoom/key/v1alpha1"
+	"github.com/truvity/atoom/key/slotplan"
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
-	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
-	"github.com/truvity/sluis/v2/kits/go/slotplan"
 	"github.com/truvity/sluis/v2/kits/go/store"
 )
 
@@ -127,7 +127,7 @@ func checkPlan(plan *configv2alpha1.KeyPlan) error {
 // one thing while the card did another, or would fail later with a driver error that names no cause. Software and cloud
 // stores have no slots and are not asked.
 func (s *Server) checkStoreSlots(ctx context.Context, plan *configv2alpha1.KeyPlan) error {
-	caps, err := s.driver.Capabilities(ctx, connect.NewRequest(&keystorev2alpha1.CapabilitiesRequest{}))
+	caps, err := s.driver.Capabilities(ctx, connect.NewRequest(&keyv1alpha1.CapabilitiesRequest{}))
 	if err != nil {
 		return fmt.Errorf("key-store driver capabilities: %w", err)
 	}
@@ -283,7 +283,7 @@ func (s *Server) ensureKeys(ctx context.Context, plan *configv2alpha1.KeyPlan) e
 		if _, dup := s.keys[purpose]; dup {
 			return fmt.Errorf("keyplan/default: purpose %s is listed twice", purpose)
 		}
-		res, err := s.driver.Ensure(ctx, connect.NewRequest(&keystorev2alpha1.EnsureRequest{Purpose: purpose, Algorithm: alg}))
+		res, err := s.driver.Ensure(ctx, connect.NewRequest(&keyv1alpha1.EnsureRequest{Purpose: purpose, Algorithm: alg}))
 		if err != nil {
 			return fmt.Errorf("key-store driver ensure %s: %w", purpose, err)
 		}

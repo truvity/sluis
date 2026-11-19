@@ -40,7 +40,7 @@ zone=boards.test
 # test certifier of this directory takes the zone instead.
 names=dev.boards.test
 stem=dev-x509-intermediate
-certs=drivers/key/yubikey-piv/internal/card/certs
+certs=kits/go/handoff/yubico
 # The maker's attestation, pinned: the root and the whole bundle of the repository (the intermediates of both levels help to build
 # the path and none is an anchor), and the SHA-256 of the DER of "Yubico Attestation Root 1", the pin the card driver holds
 # (internal/card/yubico.go). Nothing in the environment changes them: there is no path through this script that trusts another

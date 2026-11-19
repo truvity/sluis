@@ -101,3 +101,37 @@ func TestSignerKeyIsSlot87OfTheNode(t *testing.T) {
 		t.Fatal("an unlisted node has a key")
 	}
 }
+
+// An installation may override the map in its signed KeyPlan, and the card driver reads that slot map itself (it does
+// not trust key@ to have read it). A map that puts two purposes on one slot, or one purpose on two slots, is refused
+// with the path of the second; the same slot on two different nodes is two cards and is fine.
+//
+// verifies: REQ-KEYS-046
+func TestAnInstallationSlotMapCannotShareASlotBetweenKeys(t *testing.T) {
+	plan := func(a, b string) []byte {
+		return []byte("default:\n  cache_ttl: 15m\n  slot_map:\n    - { node: board-a, slots: [" + a + "] }\n    - { node: board-b, slots: [" + b + "] }\n")
+	}
+	key := func(slot, purpose string) string {
+		return "{ slot: \"" + slot + "\", purpose: " + purpose + ", public_key: AQID }"
+	}
+	ok := plan(key("9d", "wrapping")+", "+key("9a", "token-signing"), key("9d", "wrapping"))
+	m, err := SlotMapOf(ok)
+	if err != nil || len(m) != 2 || len(m[0].GetSlots()) != 2 {
+		t.Fatalf("a map with a slot of its own for each key was refused or misread: %v, %v", m, err)
+	}
+	for name, c := range map[string]struct {
+		doc  []byte
+		path string
+	}{
+		"two purposes on one slot":       {plan(key("9d", "wrapping")+", "+key("9d", "token-signing"), ""), "slot_map[0].slots[1].slot"},
+		"one purpose on two slots":       {plan(key("9d", "wrapping")+", "+key("9a", "wrapping"), ""), "slot_map[0].slots[1].purpose"},
+		"a collision on the second node": {plan("", key("85", "release-signing")+", "+key("85", "workload-issuer")), "slot_map[1].slots[1].slot"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := SlotMapOf(c.doc)
+			if err == nil || !strings.Contains(err.Error(), c.path) || !strings.Contains(err.Error(), "listed twice") {
+				t.Fatalf("error = %v, want %q listed twice", err, c.path)
+			}
+		})
+	}
+}

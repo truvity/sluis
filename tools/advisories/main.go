@@ -25,7 +25,7 @@ func main() {
 	ignorePath := flag.String("ignore", "tools/advisories/ignore.yaml", "the ignore list")
 	only := flag.String("only", "go,rust,osv", "the scans to run, a comma-separated subset of go, rust, osv")
 	checkOnly := flag.Bool("check-ignores", false, "judge the ignore list and stop")
-	skipCard := flag.Bool("skip-card", false, "do not scan the card driver (build tag sluis_card), which needs pkg-config and libpcsclite-dev; CI never sets it")
+	skipCard := flag.Bool("skip-card", false, "do not scan the card driver (build tag atoom_card), which needs pkg-config and libpcsclite-dev; CI never sets it")
 	flag.Parse()
 
 	root, err := repoRoot()
@@ -69,11 +69,11 @@ func main() {
 		case "go.mod":
 			goMods++
 			if want["go"] {
-				// The card driver is built with the tag sluis_card and cgo; a scan without the tag does not see it.
-				tagSets := []string{"", "sluis_card"}
+				// The card driver is built with the tag atoom_card and cgo; a scan without the tag does not see it.
+				tagSets := []string{"", "atoom_card"}
 				if *skipCard {
 					tagSets = tagSets[:1]
-					warnings = append(warnings, "the card driver (tag sluis_card) was not scanned: -skip-card")
+					warnings = append(warnings, "the card driver (tag atoom_card) was not scanned: -skip-card")
 				}
 				for _, tags := range tagSets {
 					found, n, err := scanGo(filepath.Dir(f), tags)
@@ -166,7 +166,7 @@ func firstKnown(ids []string, ignores map[string]ignoreEntry) string {
 }
 
 // scanGo runs govulncheck over the module in dir, in source mode: only a vulnerability whose function we call counts.
-// tags are build tags; the card driver needs sluis_card, cgo, pkg-config and libpcsclite-dev, and a scan that cannot
+// tags are build tags; the card driver needs atoom_card, cgo, pkg-config and libpcsclite-dev, and a scan that cannot
 // build it fails rather than skips.
 func scanGo(dir, tags string) ([]finding, int, error) {
 	args := []string{"-format", "json"}

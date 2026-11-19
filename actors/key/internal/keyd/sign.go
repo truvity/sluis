@@ -20,9 +20,9 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/truvity/atoom/common/refusal"
+	keyv1alpha1 "github.com/truvity/atoom/key/gen/atoom/key/v1alpha1"
 	"github.com/truvity/sluis/v2/actors/key/internal/content"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
-	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
 	"github.com/truvity/sluis/v2/kits/go/registry"
 )
 
@@ -135,7 +135,7 @@ func (s *Server) Sign(ctx context.Context, req *connect.Request[keyv2alpha1.Sign
 		d := sha512.Sum384(m.GetContent())
 		digest = d[:]
 	}
-	res, err := s.driver.Sign(ctx, connect.NewRequest(&keystorev2alpha1.KeyStoreSignRequest{
+	res, err := s.driver.Sign(ctx, connect.NewRequest(&keyv1alpha1.SignRequest{
 		Purpose: purpose, Digest: digest, Algorithm: want,
 	}))
 	if err != nil {
@@ -184,7 +184,7 @@ func (s *Server) signRS256(ctx context.Context, caller string, pk purposeKey, co
 		return nil, s.refuse(ctx, caller, "sign", rs256Purpose, "", connect.CodeResourceExhausted, reasonRate, "")
 	}
 	digest := sha256.Sum256(content)
-	res, err := s.driver.Sign(ctx, connect.NewRequest(&keystorev2alpha1.KeyStoreSignRequest{
+	res, err := s.driver.Sign(ctx, connect.NewRequest(&keyv1alpha1.SignRequest{
 		Purpose: rs256Purpose, Digest: digest[:], Algorithm: algRS256,
 	}))
 	if err != nil {

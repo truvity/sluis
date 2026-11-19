@@ -26,10 +26,10 @@ import (
 
 	"connectrpc.com/connect"
 
+	keyv1alpha1 "github.com/truvity/atoom/key/gen/atoom/key/v1alpha1"
+	"github.com/truvity/atoom/key/gen/atoom/key/v1alpha1/keyv1alpha1connect"
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
-	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1/keystorev2alpha1connect"
 	signerv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/signer/v2alpha1"
 	"github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1/storev2alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/pinrelease"
@@ -107,7 +107,7 @@ type Server struct {
 	cfg      Config
 	now      func() time.Time
 	st       storev2alpha1connect.StoreServiceClient
-	driver   keystorev2alpha1connect.KeyStoreServiceClient
+	driver   keyv1alpha1connect.KeyStoreServiceClient
 	wraps    *store.Client[*keyv2alpha1.DataKeyWrap]
 	certs    *store.Client[*keyv2alpha1.KeyCertificate]
 	// revocations is the create-only kind of revoked targets (revocation.go).
@@ -200,7 +200,7 @@ func New(cfg Config) (*Server, error) {
 	hc, url := rpc.Dial(cfg.StoreSocket)
 	st := storev2alpha1connect.NewStoreServiceClient(hc, url, rpc.ClientOptions()...)
 	dc, durl := rpc.Dial(cfg.DriverSocket)
-	driver := keystorev2alpha1connect.NewKeyStoreServiceClient(dc, durl, rpc.ClientOptions()...)
+	driver := keyv1alpha1connect.NewKeyStoreServiceClient(dc, durl, rpc.ClientOptions()...)
 	s, err := newServer(cfg, st, driver)
 	if err != nil {
 		return nil, err
@@ -209,7 +209,7 @@ func New(cfg Config) (*Server, error) {
 	return s, nil
 }
 
-func newServer(cfg Config, st storev2alpha1connect.StoreServiceClient, driver keystorev2alpha1connect.KeyStoreServiceClient) (*Server, error) {
+func newServer(cfg Config, st storev2alpha1connect.StoreServiceClient, driver keyv1alpha1connect.KeyStoreServiceClient) (*Server, error) {
 	now := cfg.Now
 	if now == nil {
 		now = time.Now
@@ -301,7 +301,7 @@ func (s *Server) loadConfig(ctx context.Context) (*configv2alpha1.Boundary, *con
 // checkFloor applies the floors in code to the driver and the environment (ADR 0006, "Floors in code"): the
 // software driver refuses to start in production and warns in staging.
 func (s *Server) checkFloor(ctx context.Context, environment string) error {
-	caps, err := s.driver.Capabilities(ctx, connect.NewRequest(&keystorev2alpha1.CapabilitiesRequest{}))
+	caps, err := s.driver.Capabilities(ctx, connect.NewRequest(&keyv1alpha1.CapabilitiesRequest{}))
 	if err != nil {
 		return fmt.Errorf("key-store driver capabilities: %w", err)
 	}

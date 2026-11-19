@@ -71,7 +71,11 @@ func goDeps(t *testing.T, pattern string) []string {
 // The ports of the drivers: the item port (the engines), the blob, index and key store ports, and the source port (the
 // config source and the secret source). A work actor has none of them: it reaches data through the store service and keys
 // through the key service. The transport port is the audit-emit port that every actor has.
-var driverPorts = []string{"item", "blob", "index", "keystore", "source"}
+var driverPorts = []string{"item", "blob", "index", "source"}
+
+// The key-store port and its drivers are atoom's (github.com/truvity/atoom/key and key/<driver>), not a package of this module: a work actor
+// links none of them either.
+const atoomKey = "github.com/truvity/atoom/key"
 
 // Libraries that read configuration or secrets from a place, watch a file for it, or speak to an engine or a secret
 // store. A work actor reads its configuration as kinds through the store service, so it needs none of them.
@@ -99,6 +103,14 @@ func goForbidden(actor, imp string) string {
 			}
 		}
 		return ""
+	}
+	for _, d := range []string{"/software", "/yubikeypiv"} {
+		if imp == atoomKey+d || strings.HasPrefix(imp, atoomKey+d+"/") {
+			return "a driver"
+		}
+	}
+	if imp == atoomKey || strings.HasPrefix(imp, atoomKey+"/") {
+		return "the keystore port of the drivers"
 	}
 	for _, lib := range goForbiddenLibs {
 		if imp == lib || strings.HasPrefix(imp, lib+"/") {
@@ -328,7 +340,7 @@ func TestWorkActorsLinkNoConfigSourceSecretSourceOrDriver(t *testing.T) {
 			t.Error("the control failed: the matcher did not find a driver in the closure of a driver")
 		}
 		if goForbidden("session", "github.com/spf13/viper/internal") == "" || goForbidden("session", module+"/actors/key/internal/keyd") == "" ||
-			goForbidden("session", module+"/gen/go/sluis/port/item/v2alpha1") == "" {
+			goForbidden("session", module+"/gen/go/sluis/port/item/v2alpha1") == "" || goForbidden("session", atoomKey+"/gen/atoom/key/v1alpha1") == "" {
 			t.Error("the control failed: the matcher let a known case through")
 		}
 		if goForbidden("session", module+"/actors/session/internal/sessiond") != "" || goForbidden("session", module+"/gen/go/sluis/port/transport/v2alpha1") != "" {
