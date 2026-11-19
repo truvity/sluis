@@ -19,7 +19,7 @@
 # A change to what an action carries is a new version. The installation keeps
 # every version it was sent, so records already written keep their meaning.
 source: roster
-version: "1.24.0"
+version: "1.25.0"
 locales: [en]
 
 actor_kinds:
@@ -544,6 +544,17 @@ actions:
     data_schema: https://schemas.example/access-roster/v1/owner-changed.json
     message:
       en: "{actor} changed the owner of GitHub organisation {targets_0_id} from {data_from} to {data_to}"
+
+  roster.github_org.app_switched:
+    summary: A GitHub organisation was moved to the GitHub App the installation declares for it, once that App was created under the organisation and installed there.
+    operation: modify
+    categories: [configuration_change, privileged_access]
+    category: security
+    target_types: [organisation]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/app-switched.json
+    message:
+      en: "GitHub organisation {targets_0_id} moved from App {data_from} to the declared App {data_to}"
 
   roster.github_org.disconnected:
     summary: A GitHub organisation was disconnected.

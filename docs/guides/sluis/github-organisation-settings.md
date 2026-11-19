@@ -6,6 +6,8 @@ Let the GitHub controller keep an organisation's Actions variables, Actions secr
 
 - Give the organisation's App write access to organisation Administration, Secrets and Variables. Name it in `controllers.github.appRefs` ([connect a GitHub organisation](connect/github-organisation.md)).
 
+- To switch an organisation already connected with an App of its own, install the declared App in it: the controller moves to it on its next pass. Until then `app_note` in the report says what is missing. The old App is shown as no longer used, not removed.
+
 - Allow the controller's role `sts:AssumeRole` on the read role of step 1.
 
 - Start in `report` mode, and remove any hand-made setting the document names: the controller never overwrites what it did not create.

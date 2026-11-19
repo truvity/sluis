@@ -134,3 +134,38 @@ func TestWhereAKeyIsKept(t *testing.T) {
 		}
 	}
 }
+
+// notingConn is a store of connections that says why an organisation does not
+// use the App declared for it.
+type notingConn struct {
+	memConn
+	note string
+}
+
+func (n *notingConn) DeclaredAppNote(context.Context, string) (string, error) { return n.note, nil }
+
+// An organisation's App says why the App declared for it is not in use, beside
+// what GitHub says of the App that is, and says nothing when there is nothing
+// to say.
+func TestAnOrganisationsAppSaysWhyItsDeclaredAppIsNotInUse(t *testing.T) {
+	record := connection.Record{Org: "globex", AppID: 1, AppSlug: "g", InstallationID: 2}
+	store := &notingConn{memConn: memConn{records: map[string]connection.Record{"globex": record}}, note: "the App globex-declared is created and not installed in it yet"}
+	svc := New(Deps{Orgs: store})
+	specs, err := svc.controllerAppSpecs(context.Background(), nil, map[string]bool{})
+	if err != nil || len(specs) != 1 || specs[0].note != store.note {
+		t.Fatalf("specs = %+v, %v, want the note", specs, err)
+	}
+	if got := withNote("", specs[0].note); got != store.note {
+		t.Errorf("a note alone reads %q", got)
+	}
+	if got := withNote("GitHub refused", specs[0].note); got != "GitHub refused; "+store.note {
+		t.Errorf("a note after a reason reads %q", got)
+	}
+	store.note = ""
+	if specs, err = svc.controllerAppSpecs(context.Background(), nil, map[string]bool{}); err != nil || specs[0].note != "" {
+		t.Errorf("specs = %+v, %v, want no note", specs, err)
+	}
+	if got := withNote("GitHub refused", ""); got != "GitHub refused" {
+		t.Errorf("no note changed the reason: %q", got)
+	}
+}

@@ -302,7 +302,9 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*App, error) {
 		// Any adapter but `legacy` keeps the links, the organisations'
 		// credentials and the operators' requests on the State and Secrets ports,
 		// and the controller reads them there.
-		base := portstore.New(stores.Ports).WithV5(stores.V5)
+		// The App an organisation acts with is the one the policy declares for it,
+		// once that App is created under the organisation and installed there.
+		base := portstore.New(stores.Ports).WithV5(stores.V5).ConfigureGitHubApps(cfg.policy, nil)
 		if err = base.RequireSecrets(); err != nil {
 			stores.Close()
 			return nil, fmt.Errorf("ports.adapter %s: %w", stores.Adapter, err)

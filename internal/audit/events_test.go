@@ -189,6 +189,7 @@ func every() []*record.Record {
 		audit.GitHubMemberHeld(member, "remove", "the directory cannot vouch for example.com"),
 		audit.GitHubOwnerReported(audit.Member{Org: "example", Login: "owner"}, "remove", "owners are reported, not removed"),
 		audit.GitHubOwnerReported(audit.Member{Org: "example", Team: "platform", Login: "owner"}, "remove", "owners are reported, not removed"),
+		audit.GitHubOrgAppSwitched("example", "example-access-roster", "example-controller"),
 		audit.GitHubOrgSettingChanged("example", "variable", "EXAMPLE_REGION", "update", "enforce", audit.Succeeded()),
 		audit.GitHubOrgSettingChanged("example", "security_configuration", "baseline", "attach", "report", audit.Failed("held: the organisation has no repository shop")),
 		audit.GitHubOrgSettingsRefused("example", "refused", "report", "owner-org-platform org.variables[CI_RUNNER_LABEL_X]: a platform variable"),

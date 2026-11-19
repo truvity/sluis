@@ -12,7 +12,7 @@ The actions sluis records, from the catalogue [`internal/audit/catalogue/roster.
 
 <!-- generated: audit-actions -->
 
-Catalogue version 1.24.0, 104 actions.
+Catalogue version 1.25.0, 105 actions.
 
 | Action | Operation | Targets | Delivery | Summary |
 |---|---|---|---|---|
@@ -55,6 +55,7 @@ Catalogue version 1.24.0, 104 actions.
 | `roster.github_org.connected` | create | organisation | async | A GitHub organisation was connected by installing the App. |
 | `roster.github_org.pass_requested` | modify | organisation | async | An operator asked the GitHub controller to pass over an organisation now. |
 | `roster.github_org.owner_changed` | modify | organisation | async | The directory that owns a GitHub organisation was changed by the installation-wide operator. |
+| `roster.github_org.app_switched` | modify | organisation | async | A GitHub organisation was moved to the GitHub App the installation declares for it, once that App was created under the organisation and installed there. |
 | `roster.github_org.disconnected` | remove | organisation | async | A GitHub organisation was disconnected. |
 | `roster.github_org_setting.changed` | modify | organisation | async | A GitHub organisation's Actions variable, Actions secret or code security configuration was changed by the controller, or in report mode would be. It never carries a value. |
 | `roster.github_org_settings.refused` | modify | organisation | async | A GitHub organisation's settings document was not applied (it could not be read, it failed its checks, or GitHub could not be read as a whole). The last good settings stay. |
