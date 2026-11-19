@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # The atoom dependency (github.com/truvity/atoom, plan: docs/plan.md there, step 1), kept at ONE commit in four places:
 #
-#   - go.mod: every github.com/truvity/atoom/<module> requirement, a pseudo-version that ends in the first 12 hex digits of the commit;
+#   - go.mod: every github.com/truvity/atoom/<module> requirement, a pseudo-version that ends in the first 12 hex digits of the commit, and
+#     one replace line for each, `<module> v0.0.0 => <module> <that pseudo-version>`: atoom's modules require each other at v0.0.0 until its
+#     first release, and a version that has no tag is resolved by that line, not looked up (it goes with the pin to the tag);
 #   - Cargo.toml: [workspace.dependencies] atoom-common, `git` and `rev`;
-#   - third_party/atoom/proto: atoom's proto files at that commit, which proto/ imports (generated Go comes from atoom's own modules);
+#   - third_party/atoom/proto: atoom's proto files at that commit, which proto/ imports (generated Go comes from atoom's own modules), and
+#     third_party/atoom/testdata: the slot map vectors that the Rust twin of key/slotplan reads;
 #   - third_party/atoom/PIN: the commit and the sha256 of the vendored files.
 #
 #   tools/atoom/atoom.sh sync <commit>    move all four to <commit> (40 hex digits; needs the network), then run `just proto-gen`
@@ -24,7 +27,7 @@ die() { echo "atoom: $*" >&2; exit 1; }
 
 # The sha256 of the vendored files: the list of their hashes, in byte order of the path, hashed again.
 digest() {
-    (cd "$dir" && find proto versions.yaml -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
+    (cd "$dir" && find proto versions.yaml testdata -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
 }
 
 pinned() { # key
@@ -50,14 +53,23 @@ sync() {
     done
     [ "$found" -eq 1 ] || die "$commit has no <port>/proto/atoom directory"
     cp "$tmp/src/versions.yaml" "$dir/versions.yaml"
+    # The vectors of the slot map check, which sluis's Rust twin (actors/store/src/config/slotplan.rs) reads too.
+    rm -rf "$dir/testdata"
+    mkdir -p "$dir/testdata"
+    cp "$tmp/src/key/slotplan/testdata/vectors.json" "$dir/testdata/slotplan-vectors.json"
     printf 'source: %s\ncommit: %s\nsha256: %s\n' "$repo" "$commit" "$(digest)" >"$pin"
     # Cargo: the one line of the workspace.
     sed -i -E "s#^(atoom-common = \{ git = \"https://github.com/$repo\", )(rev|tag) = \"[^\"]*\"#\1rev = \"$commit\"#" Cargo.toml
-    # Go: every atoom module that go.mod requires.
-    local mod
+    # Go: every atoom module that go.mod requires, at the pseudo-version of the commit (its time is the commit's, in UTC), and the replace of
+    # the placeholder version that atoom's modules require each other at.
+    local stamp pseudo mod
+    stamp=$(curl -fsSL "https://api.github.com/repos/$repo/commits/$commit" | jq -r '.commit.committer.date | fromdate | strftime("%Y%m%d%H%M%S")')
+    [[ "$stamp" =~ ^[0-9]{14}$ ]] || die "the time of $commit could not be read"
+    pseudo=v0.0.0-$stamp-${commit:0:12}
     while IFS= read -r mod; do
-        go get "$mod@$commit"
+        go mod edit -require="$mod@$pseudo" -replace="$mod@v0.0.0=$mod@$pseudo"
     done < <(awk '$1 ~ "^github.com/truvity/atoom/" { print $1 }' go.mod | sort -u)
+    go mod tidy
     cargo update -p atoom-common
     echo "atoom: moved to $commit; now run: just proto-gen"
 }
@@ -76,8 +88,16 @@ check() {
     mods=$(awk '$1 ~ "^github.com/truvity/atoom/" { print $1 " " $2 }' go.mod)
     [ -n "$mods" ] || bad "go.mod requires no atoom module"
     local line
+    # A module that atoom's own modules require at the placeholder v0.0.0 stays at v0.0.0 in the build list (the pseudo-version sorts below it);
+    # its replace line, checked below, is what puts it at the commit.
+    local replaced
+    replaced=$(go mod edit -json | jq -r '.Replace[]? | select(.Old.Path | startswith("github.com/truvity/atoom/")) | select(.Old.Version == "v0.0.0") | .Old.Path')
     while IFS= read -r line; do
         [ -n "$line" ] || continue
+        if [ "${line#* }" = v0.0.0 ]; then
+            grep -qxF "${line% *}" <<<"$replaced" || bad "go.mod: ${line% *} is at v0.0.0 and has no replace to the commit ${commit:0:12}"
+            continue
+        fi
         [[ "${line#* }" == *-"${commit:0:12}" ]] || bad "go.mod: ${line% *} is ${line#* }, not at the commit ${commit:0:12}"
     done <<<"$mods"
 
@@ -104,6 +124,14 @@ check() {
             done < <(sed -n -E "s/^${crate} *= *\"([^\"]*)\".*/\1/p; s/^${crate} *= *\{.*version *= *\"([^\"]*)\".*/\1/p" "$f")
         done
     done < <(git ls-files -- 'Cargo.toml' '*/Cargo.toml')
+    local rep
+    rep=$(go mod edit -json | jq -r '.Replace[]? | select(.Old.Path | startswith("github.com/truvity/atoom/")) | .Old.Path + " " + (.Old.Version // "") + " " + .New.Path + " " + (.New.Version // "")')
+    while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        read -r old oldv new newv <<<"$line"
+        [ "$oldv" = v0.0.0 ] && [ "$old" = "$new" ] || bad "go.mod: the replace of $old $oldv must be to $old at the pinned commit"
+        [[ "$newv" == *-"${commit:0:12}" ]] || bad "go.mod: the replace of $old is to $newv, not at the commit ${commit:0:12}"
+    done <<<"$rep"
     [ "$fail" -eq 0 ] || exit 1
     echo "atoom: go.mod, Cargo.toml and $dir are at ${commit:0:12}, and the runtime pins agree with its versions.yaml"
 }

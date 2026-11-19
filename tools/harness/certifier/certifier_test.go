@@ -707,7 +707,7 @@ func TestPolicyFromFlags(t *testing.T) {
 // Attestation Intermediate B 1"; the anchors of the first version of this tool, which kept only the intermediates named PIV,
 // could not.
 const (
-	realCerts      = "../../../drivers/key/yubikey-piv/internal/card/certs"
+	realCerts      = "../../../kits/go/handoff/yubico"
 	realRootSHA256 = "62760c6a6ef91679f454c8902b80fd009825b3f25da90f1fbace2ec6586cd5a8" // the card driver's pin
 )
 

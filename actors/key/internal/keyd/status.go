@@ -8,9 +8,9 @@ import (
 
 	"connectrpc.com/connect"
 
+	keyv1alpha1 "github.com/truvity/atoom/key/gen/atoom/key/v1alpha1"
+	"github.com/truvity/atoom/key/slotplan"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
-	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
-	"github.com/truvity/sluis/v2/kits/go/slotplan"
 	"github.com/truvity/sluis/v2/kits/go/store"
 )
 
@@ -22,7 +22,7 @@ import (
 // for an absent item, and "no certificate yet" is an expected answer (ADR 0005; REQ-AUDIT-180). One call is one list of
 // the kind and one call to the driver.
 func (s *Server) Status(ctx context.Context, _ *connect.Request[keyv2alpha1.StatusRequest]) (*connect.Response[keyv2alpha1.StatusResponse], error) {
-	caps, err := s.driver.Capabilities(ctx, connect.NewRequest(&keystorev2alpha1.CapabilitiesRequest{}))
+	caps, err := s.driver.Capabilities(ctx, connect.NewRequest(&keyv1alpha1.CapabilitiesRequest{}))
 	if err != nil {
 		return nil, unavailable(reasonDriver)
 	}

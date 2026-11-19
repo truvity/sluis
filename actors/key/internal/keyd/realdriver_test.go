@@ -16,8 +16,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1/keystorev2alpha1connect"
+	keyv1alpha1 "github.com/truvity/atoom/key/gen/atoom/key/v1alpha1"
+	"github.com/truvity/atoom/key/gen/atoom/key/v1alpha1/keyv1alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/rpc"
 )
 
@@ -62,7 +62,7 @@ func (e *buildError) Error() string { return e.err.Error() + ": " + string(bytes
 type realDriver struct {
 	socket string
 	state  string
-	client keystorev2alpha1connect.KeyStoreServiceClient
+	client keyv1alpha1connect.KeyStoreServiceClient
 }
 
 // startRealDriver runs the software driver on a new state directory in development, seeded with the files given
@@ -99,7 +99,7 @@ func startRealDriver(t *testing.T, seed map[string][]byte) *realDriver {
 	})
 	waitSocket(t, r.socket)
 	hc, url := rpc.Dial(r.socket)
-	r.client = keystorev2alpha1connect.NewKeyStoreServiceClient(hc, url, rpc.ClientOptions()...)
+	r.client = keyv1alpha1connect.NewKeyStoreServiceClient(hc, url, rpc.ClientOptions()...)
 	return r
 }
 
@@ -108,7 +108,7 @@ func (r *realDriver) ensure(t *testing.T, purpose, alg string) []byte {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	res, err := r.client.Ensure(ctx, connect.NewRequest(&keystorev2alpha1.EnsureRequest{Purpose: purpose, Algorithm: alg}))
+	res, err := r.client.Ensure(ctx, connect.NewRequest(&keyv1alpha1.EnsureRequest{Purpose: purpose, Algorithm: alg}))
 	if err != nil {
 		t.Fatalf("Ensure(%s, %s): %v", purpose, alg, err)
 	}

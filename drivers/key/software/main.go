@@ -11,13 +11,73 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"net/http"
 	"os"
 	"strconv"
 
-	"github.com/truvity/sluis/v2/drivers/key/software/internal/driver"
+	keykit "github.com/truvity/atoom/key/conformance"
+	"github.com/truvity/atoom/key/gen/atoom/key/v1alpha1/keyv1alpha1connect"
+	"github.com/truvity/atoom/key/software"
+
 	"github.com/truvity/sluis/v2/kits/go/cli"
+	"github.com/truvity/sluis/v2/kits/go/registry"
 	"github.com/truvity/sluis/v2/kits/go/rpc"
 )
+
+// This is the host of the software key driver: sluis's socket with peer credentials, the registry owner and the command line. The driver
+// itself, its handler and its logic, is the library github.com/truvity/atoom/key/software; sluis turns its production floor on.
+
+// name is the registry name of the driver's user; its owner is key.
+const name = "driver-key-software"
+
+// owner returns the actor that owns the driver: key. The driver's socket serves nobody else.
+func owner() string {
+	o, _ := registry.DriverOwner(name)
+	return o
+}
+
+// floor is the floor in code (ADR 0006): the driver does not run in production. It returns an error that exits 3 for production and a
+// usage error for a value that is not an environment.
+func floor(environment string) error {
+	switch err := software.Floor(environment, true); {
+	case errors.Is(err, software.ErrProduction):
+		return cli.Refused(software.RefusedInProduction)
+	case err != nil:
+		return cli.Usage(errors.New("--environment must be development, staging or production"))
+	}
+	if environment == "" {
+		return cli.Usage(errors.New("--environment must be development, staging or production"))
+	}
+	return nil
+}
+
+// peerName names the caller of a call for the journal.
+func peerName(ctx context.Context) string {
+	if p, ok := rpc.PeerFromContext(ctx); ok {
+		return p.Name
+	}
+	return ""
+}
+
+// runDriver applies the floor, opens the state directory and serves the key-store port on cfg until ctx ends. The floor comes first: in
+// production nothing is opened and no key is read.
+func runDriver(ctx context.Context, env, stateDir string, cfg rpc.ServerConfig) error {
+	if err := floor(env); err != nil {
+		return err
+	}
+	host := software.Host{
+		HandlerOptions: rpc.HandlerOptions(cfg),
+		Serve: func(ctx context.Context, path string, h http.Handler) error {
+			return rpc.Serve(ctx, cfg, rpc.Handler{Path: path, H: h})
+		},
+	}
+	err := software.Run(ctx, software.Options{Environment: env, StateDir: stateDir, RefuseProduction: true, Caller: peerName}, host)
+	var pe *software.Problems
+	if errors.As(err, &pe) {
+		return cli.Refused(pe.Problems...)
+	}
+	return err
+}
 
 func main() {
 	cli.Main("software", cli.Commands{Serve: serve, Check: check, Conformance: conformance}, flags)
@@ -42,7 +102,7 @@ func serve(ctx context.Context, f cli.Flags) error {
 		return cli.Usage(errors.New("--environment is required"))
 	}
 	// The floor comes before anything is opened: no socket, no key.
-	if err := driver.Floor(env); err != nil {
+	if err := floor(env); err != nil {
 		return err
 	}
 	if f.Socket == "" {
@@ -53,11 +113,11 @@ func serve(ctx context.Context, f cli.Flags) error {
 		return cli.Usage(errors.New("--state-dir is required"))
 	}
 	cfg := rpc.ServerConfig{
-		Actor:    driver.Name,
+		Actor:    name,
 		Boundary: f.Boundary,
 		Socket:   f.Socket,
 		Mode:     0o600,
-		Allow:    rpc.OwnerOnly(driver.Owner()),
+		Allow:    rpc.OwnerOnly(owner()),
 	}
 	cfg = withTestCaller(cfg)
 	// The owner is another uid: a group that only the owner joins may connect. OwnerOnly still decides who may call.
@@ -68,7 +128,7 @@ func serve(ctx context.Context, f cli.Flags) error {
 		}
 		cfg.Mode, cfg.GID = 0o660, uint32(n)
 	}
-	return driver.Run(ctx, driver.Options{Environment: env, StateDir: dir}, cfg)
+	return runDriver(ctx, env, dir, cfg)
 }
 
 func check(_ context.Context, f cli.Flags) error {
@@ -78,16 +138,28 @@ func check(_ context.Context, f cli.Flags) error {
 	}
 	// An environment given to check is held to the same floor as serve: a check must not pass what serve refuses.
 	if env := value(f, "environment"); env != "" {
-		if err := driver.Floor(env); err != nil {
+		if err := floor(env); err != nil {
 			return err
 		}
 	}
-	return driver.Check(dir)
+	if err := software.Check(dir); err != nil {
+		var pe *software.Problems
+		if errors.As(err, &pe) {
+			return cli.Refused(pe.Problems...)
+		}
+		return err
+	}
+	return nil
 }
 
 func conformance(ctx context.Context, f cli.Flags) error {
 	if f.Socket == "" {
 		return cli.Usage(errors.New("--socket is required"))
 	}
-	return driver.Conformance(ctx, f.Socket, os.Stdout)
+	hc, url := rpc.Dial(f.Socket)
+	c := keyv1alpha1connect.NewKeyStoreServiceClient(hc, url, rpc.ClientOptions()...)
+	if err := keykit.Run(ctx, c, os.Stdout); err != nil {
+		return cli.Refused(err.Error())
+	}
+	return nil
 }

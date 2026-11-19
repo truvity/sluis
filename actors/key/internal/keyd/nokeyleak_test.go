@@ -26,21 +26,21 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	keyv1alpha1 "github.com/truvity/atoom/key/gen/atoom/key/v1alpha1"
+	"github.com/truvity/atoom/key/gen/atoom/key/v1alpha1/keyv1alpha1connect"
 	"github.com/truvity/sluis/v2/actors/key/internal/envelope"
 	"github.com/truvity/sluis/v2/actors/key/internal/wrap"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
-	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1/keystorev2alpha1connect"
 )
 
 // spyDriver is the driver as key@ sees it, with a record of every message that crosses: the requests key@ sends and the
 // responses it gets. The messages are kept as marshalled bytes, which is what a wire would carry.
 type spyDriver struct {
-	keystorev2alpha1connect.KeyStoreServiceClient
+	keyv1alpha1connect.KeyStoreServiceClient
 	mu      sync.Mutex
 	traffic [][]byte
-	signs   []*keystorev2alpha1.KeyStoreSignRequest
-	ecdhs   []*keystorev2alpha1.EcdhRequest
+	signs   []*keyv1alpha1.SignRequest
+	ecdhs   []*keyv1alpha1.EcdhRequest
 	ensures []string // the purposes Ensure was asked for
 }
 
@@ -54,7 +54,7 @@ func (s *spyDriver) note(m proto.Message) {
 	s.mu.Unlock()
 }
 
-func (s *spyDriver) Ensure(ctx context.Context, req *connect.Request[keystorev2alpha1.EnsureRequest]) (*connect.Response[keystorev2alpha1.EnsureResponse], error) {
+func (s *spyDriver) Ensure(ctx context.Context, req *connect.Request[keyv1alpha1.EnsureRequest]) (*connect.Response[keyv1alpha1.EnsureResponse], error) {
 	s.note(req.Msg)
 	s.mu.Lock()
 	s.ensures = append(s.ensures, req.Msg.GetPurpose())
@@ -66,7 +66,7 @@ func (s *spyDriver) Ensure(ctx context.Context, req *connect.Request[keystorev2a
 	return res, err
 }
 
-func (s *spyDriver) PublicKey(ctx context.Context, req *connect.Request[keystorev2alpha1.KeyStorePublicKeyRequest]) (*connect.Response[keystorev2alpha1.KeyStorePublicKeyResponse], error) {
+func (s *spyDriver) PublicKey(ctx context.Context, req *connect.Request[keyv1alpha1.PublicKeyRequest]) (*connect.Response[keyv1alpha1.PublicKeyResponse], error) {
 	s.note(req.Msg)
 	res, err := s.KeyStoreServiceClient.PublicKey(ctx, req)
 	if err == nil {
@@ -75,10 +75,10 @@ func (s *spyDriver) PublicKey(ctx context.Context, req *connect.Request[keystore
 	return res, err
 }
 
-func (s *spyDriver) Sign(ctx context.Context, req *connect.Request[keystorev2alpha1.KeyStoreSignRequest]) (*connect.Response[keystorev2alpha1.KeyStoreSignResponse], error) {
+func (s *spyDriver) Sign(ctx context.Context, req *connect.Request[keyv1alpha1.SignRequest]) (*connect.Response[keyv1alpha1.SignResponse], error) {
 	s.note(req.Msg)
 	s.mu.Lock()
-	s.signs = append(s.signs, proto.Clone(req.Msg).(*keystorev2alpha1.KeyStoreSignRequest))
+	s.signs = append(s.signs, proto.Clone(req.Msg).(*keyv1alpha1.SignRequest))
 	s.mu.Unlock()
 	res, err := s.KeyStoreServiceClient.Sign(ctx, req)
 	if err == nil {
@@ -87,10 +87,10 @@ func (s *spyDriver) Sign(ctx context.Context, req *connect.Request[keystorev2alp
 	return res, err
 }
 
-func (s *spyDriver) Ecdh(ctx context.Context, req *connect.Request[keystorev2alpha1.EcdhRequest]) (*connect.Response[keystorev2alpha1.EcdhResponse], error) {
+func (s *spyDriver) Ecdh(ctx context.Context, req *connect.Request[keyv1alpha1.EcdhRequest]) (*connect.Response[keyv1alpha1.EcdhResponse], error) {
 	s.note(req.Msg)
 	s.mu.Lock()
-	s.ecdhs = append(s.ecdhs, proto.Clone(req.Msg).(*keystorev2alpha1.EcdhRequest))
+	s.ecdhs = append(s.ecdhs, proto.Clone(req.Msg).(*keyv1alpha1.EcdhRequest))
 	s.mu.Unlock()
 	res, err := s.KeyStoreServiceClient.Ecdh(ctx, req)
 	if err == nil {
@@ -622,10 +622,10 @@ func TestNoResponseOfKeyAtHasAFieldThatCouldHoldADataKey(t *testing.T) {
 	wantReq := map[string][]string{
 		"Ensure":    nil,
 		"PublicKey": nil,
-		"Sign":      {"KeyStoreSignRequest.digest"},
+		"Sign":      {"SignRequest.digest"},
 		"Ecdh":      {"EcdhRequest.peer_public"},
 	}
-	ks := keystorev2alpha1.File_sluis_port_keystore_v2alpha1_keystore_proto.Services().ByName("KeyStoreService").Methods()
+	ks := keyv1alpha1.File_atoom_key_v1alpha1_keystore_proto.Services().ByName("KeyStoreService").Methods()
 	for name, want := range wantReq {
 		m := ks.ByName(protoreflect.Name(name))
 		if m == nil {

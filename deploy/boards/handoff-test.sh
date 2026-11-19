@@ -77,7 +77,7 @@ if [ "\$1" = run ] && [ "\$2" = ./tools/harness/certifier ] && [ "\$3" = certify
 exec "$real_go" "\$@"
 STUB
 chmod +x "$work/bin/go"
-want="run ./tools/harness/certifier certify -dir $SLUIS_BOARDS_STATE/handoff/root -requests $SLUIS_BOARDS_STATE/handoff/requests/b1 -answers $SLUIS_BOARDS_STATE/handoff/answers/b1 -attest-root drivers/key/yubikey-piv/internal/card/certs/yubico-attestation-root-1.pem -attest-bundle drivers/key/yubikey-piv/internal/card/certs/yubico-intermediate.pem -attest-root-sha256 62760c6a6ef91679f454c8902b80fd009825b3f25da90f1fbace2ec6586cd5a8 -serial 31337"
+want="run ./tools/harness/certifier certify -dir $SLUIS_BOARDS_STATE/handoff/root -requests $SLUIS_BOARDS_STATE/handoff/requests/b1 -answers $SLUIS_BOARDS_STATE/handoff/answers/b1 -attest-root kits/go/handoff/yubico/yubico-attestation-root-1.pem -attest-bundle kits/go/handoff/yubico/yubico-intermediate.pem -attest-root-sha256 62760c6a6ef91679f454c8902b80fd009825b3f25da90f1fbace2ec6586cd5a8 -serial 31337"
 rm -f "$work/certify.args"
 PATH="$work/bin:$PATH" SLUIS_BOARD_CARD_SERIALS="b1=31337" deploy/boards/handoff.sh certify b1 >"$work/args.out" 2>&1 || { cat "$work/args.out"; bad "certify through handoff.sh"; }
 [ "$(<"$work/certify.args")" = "$want" ] && ok "certify: handoff.sh passes the repository's Yubico anchors, their pin and the board's serial" || bad "certify: arguments were: $(<"$work/certify.args")"

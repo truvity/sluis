@@ -10,7 +10,7 @@ exclude = [
 [workspace.dependencies]
 # atoom, pinned by commit until its first release (docs/plan.md of truvity/atoom, step 1): `just atoom-sync` moves this line, go.mod and
 # third_party/atoom together, and `just atoom-check` holds them to one commit. Then it moves to `tag = "v0.1.0"`.
-atoom-common = { git = "https://github.com/truvity/atoom", rev = "075ccc8fca5bfb929b1abdece95806d7aea98005" }
+atoom-common = { git = "https://github.com/truvity/atoom", rev = "1a91a13fee2c558d23494eabc47d120ee0c32933" }
 
 [workspace.package]
 edition = "2024"

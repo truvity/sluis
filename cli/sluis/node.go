@@ -14,8 +14,8 @@ import (
 	"connectrpc.com/connect"
 
 	krefusal "github.com/truvity/atoom/common/refusal"
-	keystorev2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/keystore/v2alpha1/keystorev2alpha1connect"
+	keyv1alpha1 "github.com/truvity/atoom/key/gen/atoom/key/v1alpha1"
+	"github.com/truvity/atoom/key/gen/atoom/key/v1alpha1/keyv1alpha1connect"
 	"github.com/truvity/sluis/v2/kits/go/cli"
 	"github.com/truvity/sluis/v2/kits/go/rpc"
 )
@@ -97,8 +97,8 @@ func (a *app) status(ctx context.Context, node, socket string, res *result) erro
 		return err
 	}
 	hc, url := rpc.Dial(socket)
-	c := keystorev2alpha1connect.NewUnlockServiceClient(hc, url, rpc.ClientOptions()...)
-	st, err := c.Status(ctx, connect.NewRequest(&keystorev2alpha1.StatusRequest{}))
+	c := keyv1alpha1connect.NewUnlockServiceClient(hc, url, rpc.ClientOptions()...)
+	st, err := c.Status(ctx, connect.NewRequest(&keyv1alpha1.StatusRequest{}))
 	if err != nil {
 		return dialError("node status", "status", err)
 	}
@@ -152,8 +152,8 @@ func (a *app) unlock(ctx context.Context, node, socket string, secretFd int, res
 	defer clear(pin)
 
 	hc, url := rpc.Dial(socket)
-	c := keystorev2alpha1connect.NewUnlockServiceClient(hc, url, rpc.ClientOptions()...)
-	st, err := c.Status(ctx, connect.NewRequest(&keystorev2alpha1.StatusRequest{}))
+	c := keyv1alpha1connect.NewUnlockServiceClient(hc, url, rpc.ClientOptions()...)
+	st, err := c.Status(ctx, connect.NewRequest(&keyv1alpha1.StatusRequest{}))
 	if err != nil {
 		return dialError("node unlock", "status", err)
 	}
@@ -172,12 +172,12 @@ func (a *app) unlock(ctx context.Context, node, socket string, secretFd int, res
 		_, _ = fmt.Fprintln(a.stderr, "the card has one PIN attempt left: it is not tried; the PUK procedure is the owners'")
 		return refused("pin_retries")
 	}
-	if _, err := c.Unlock(ctx, connect.NewRequest(&keystorev2alpha1.UnlockRequest{Pin: pin})); err != nil {
+	if _, err := c.Unlock(ctx, connect.NewRequest(&keyv1alpha1.UnlockRequest{Pin: pin})); err != nil {
 		// The driver tried the PIN once. Say how many attempts the card has left, so that nobody guesses.
 		if reason, _ := krefusal.Reason(err); reason == "pin_retries" {
 			_, _ = fmt.Fprintln(a.stderr, "the card has one PIN attempt left: it is not tried; the PUK procedure is the owners'")
 		} else if reason == "pin" {
-			if st2, serr := c.Status(ctx, connect.NewRequest(&keystorev2alpha1.StatusRequest{})); serr == nil {
+			if st2, serr := c.Status(ctx, connect.NewRequest(&keyv1alpha1.StatusRequest{})); serr == nil {
 				_, _ = fmt.Fprintf(a.stderr, "the card did not accept the PIN; it allows %d more attempts\n", st2.Msg.GetPinRetries())
 			}
 		}
