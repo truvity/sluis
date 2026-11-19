@@ -118,6 +118,10 @@ A fallback is not chosen in advance. When a spike fails, the maintainer picks th
 
 A later design that names a serious trade-off changes a row, as R11 says.
 
+### Amendment of 2026-11-19: the YubiKey research and the card driver moved to atoom
+
+The card driver is now a library of [atoom](https://github.com/truvity/atoom) (`key/yubikeypiv`, Go with `piv-go`, step 2 of its plan), and sluis keeps only the executable that hosts it. The text of this record, including the spike S4 findings and the roads not taken on the card, stays as it is; the research is copied next to the driver, in [`key/yubikeypiv/docs/research/s4-piv-go-or-pkcs11.md`](https://github.com/truvity/atoom/blob/master/key/yubikeypiv/docs/research/s4-piv-go-or-pkcs11.md). Rule R5 (AWS drivers are Rust) is unchanged here; the AWS KMS key driver that step 2b adds to atoom is written in Go, and amending R5 for it is the maintainer's.
+
 ## Consequences
 
 - More of sluis moves to Rust on the boards. Reviewers read more Rust, and the Rust gates cover more components; each move waits for the Rust kit to pass the suite.
