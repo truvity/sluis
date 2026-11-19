@@ -915,7 +915,7 @@ requirements:
     actors: [key]
     standards: []
     issues: [914]
-    tests: [actors/key/internal/keyd/pinrelease_test.go, kits/go/pinrelease/pinrelease_test.go]
+    tests: [actors/key/internal/keyd/pinrelease_test.go]
     verification:
       - {kind: integration-test, ref: "a locked board unlocks through its peer's PinRelease answer (keyd with fake drivers, in-process)"}
       - {kind: test-vectors, ref: "a PinRelease opened with another request's key fails"}
@@ -1267,8 +1267,7 @@ requirements:
     actors: [key]
     standards: []
     tests:
-      - drivers/key/yubikey-piv/internal/driver/cardreset_test.go
-      - drivers/key/yubikey-piv/internal/card/piv_test.go
+      - drivers/key/yubikey-piv/atoom_evidence_test.go
     verification:
       - {kind: integration-test, ref: "on a fake card: a card left verified is logged out at start, unlock, Status and a peer's release, with keys and counter unchanged; a failed or held reset sends no PIN"}
       - {kind: manual, ref: "on a real board: restart the card driver with pcscd running, then just boards-unlock and a peer's PIN release unlock it; the PIN counter is the same before and after"}
@@ -3298,7 +3297,7 @@ requirements:
     actors: [key]
     standards: []
     tests:
-      - drivers/key/yubikey-piv/internal/driver/cardreset_test.go
+      - drivers/key/yubikey-piv/atoom_evidence_test.go
     verification:
       - {kind: integration-test, ref: "on the fake card, each reset leaves one line with its place and the card state, a card found logged in with no PIN held warns, no line holds the PIN (cardreset_test.go: TestTheResetAt*IsInTheJournal)"}
       - {kind: manual, ref: "on three boards, the reset line after each deploy and after a plain driver restart, with the card state and no PIN held as the page says. Seen 2026-11-07"}
@@ -3570,7 +3569,7 @@ requirements:
     actors: [key]
     standards: []
     issues: [788]
-    tests: [actors/key/internal/keyd/rs256_test.go, drivers/key/software/internal/keystore/keystore_test.go, drivers/key/software/internal/driver/driver_test.go]
+    tests: [actors/key/internal/keyd/rs256_test.go]
     verification:
       - {kind: integration-test, ref: "the software driver makes the key for the RS256 purpose alone and refuses a key file of another kind; key@ refuses an RSA-1024 answer (TestADriverThatAnswersAnotherKeyForRS256IsRefused)"}
   - id: REQ-KEYS-266
@@ -3615,7 +3614,7 @@ requirements:
     actors: [key]
     standards: []
     issues: [788]
-    tests: [actors/key/internal/keyd/slotmap_test.go, kits/go/slotplan/slotplan_test.go, actors/store/src/config/slotplan.rs]
+    tests: [actors/key/internal/keyd/slotmap_test.go, actors/store/src/config/slotplan.rs]
     verification:
       - {kind: test-vectors, ref: "the slot map vectors, read in Go and Rust: an RS256 purpose in a shared slot, a bad slot or listed twice is refused; one in 89 is refused on a card; with no slot it takes 88"}
       - {kind: integration-test, ref: "Init and Check on a card refuse the RS256 purpose in another slot (89) and accept it in 88 or by default (TestACardIsNotGivenAPlanItDoesNotFollow)"}
@@ -3707,7 +3706,7 @@ requirements:
     actors: [key]
     standards: []
     issues: [788]
-    tests: [drivers/key/yubikey-piv/internal/driver/rsa_test.go, drivers/key/yubikey-piv/internal/driver/samepublic_test.go]
+    tests: [drivers/key/yubikey-piv/atoom_evidence_test.go]
     verification:
       - {kind: integration-test, ref: "wrong key in 88: purpose absent, driver up, not replaced (TestAWrongKeyInSlot88OrAnRSAKeyInAnotherSlotIsRefusedAtStart, TestADevelopmentDriverNeverReplacesAForeignKeyInSlot88)"}
       - {kind: integration-test, ref: "Generate returns the attested key (TestSamePublicAcceptsOnlyTheAttestedKey)"}
@@ -3724,7 +3723,7 @@ requirements:
     actors: [key]
     standards: []
     issues: [788]
-    tests: [drivers/key/yubikey-piv/internal/driver/rsa_test.go]
+    tests: [drivers/key/yubikey-piv/atoom_evidence_test.go]
     verification:
       - {kind: integration-test, ref: "a signature that verifies as PKCS#1 v1.5 and not as PSS leaves; a card with a fault in it does not (TestAWrongRSASignatureFromTheCardDoesNotLeaveTheDriver)"}
   - id: REQ-KEYS-276
@@ -3739,7 +3738,7 @@ requirements:
     actors: [key]
     standards: []
     issues: [788]
-    tests: [drivers/key/yubikey-piv/internal/driver/rsa_test.go, drivers/key/yubikey-piv/internal/driver/samepublic_test.go, actors/key/internal/keyd/rs256_test.go]
+    tests: [drivers/key/yubikey-piv/host_test.go, actors/key/internal/keyd/rs256_test.go]
     verification:
       - {kind: integration-test, ref: "more callers than places, card held at a gate, default and tuned: the surplus is refused busy (TestOnlyAFewRSASignaturesAreAdmittedAndTheRestAreRefusedAtOnce)"}
       - {kind: integration-test, ref: "four places: an ES384 call waits for the RSA one on the card, then is signed; the flood beyond four never reaches it (TestAnES384SignatureWaitsForTheRSAOneOnTheCardAndNotForTheFlood)"}
@@ -3775,7 +3774,7 @@ requirements:
     actors: [key]
     standards: []
     issues: [1881]
-    tests: [kits/go/slotplan/slotplan_test.go, drivers/key/yubikey-piv/internal/driver/slotplan_test.go]
+    tests: [drivers/key/yubikey-piv/registry_test.go]
     verification:
       - {kind: integration-test, ref: "the kit's map is the registry's slot plan, version 1's rows kept, none in 90 to 95 (TestTheDefaultIsTheRegistrys); the driver's table is a part (TestTheDriversTableIsTheSlotPlanKitsDefault)"}
   - id: REQ-KEYS-279
@@ -3790,6 +3789,6 @@ requirements:
     actors: [key]
     standards: []
     issues: [1881]
-    tests: [kits/go/slotplan/slotplan_test.go, actors/store/src/config/slotplan.rs]
+    tests: [actors/store/src/config/slotplan.rs]
     verification:
       - {kind: test-vectors, ref: "the slot map vectors, in Go and Rust: a purpose of version 2 with no slot is accepted and takes its own, and one in the slot of another is refused"}
