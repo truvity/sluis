@@ -116,7 +116,8 @@ pub fn check(at: &str, purposes: &[Purpose<'_>]) -> Result<(), String> {
 mod tests {
     use super::*;
 
-    const VECTORS: &str = include_str!("../../../../third_party/atoom/testdata/slotplan-vectors.json");
+    const VECTORS: &str =
+        include_str!("../../../../third_party/atoom/testdata/slotplan-vectors.json");
     const KEYS_YAML: &str = include_str!("../../../../docs/architecture/keys.yaml");
 
     /// verifies: REQ-KEYS-278
