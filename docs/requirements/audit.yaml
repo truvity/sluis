@@ -1593,9 +1593,9 @@ requirements:
     standards:
       - {id: ST-103, section: "blob port", depth: Full}
     issues: [1121, 837, 851]
-    tests: [drivers/writer/fs/src/suite.rs, drivers/writer/fs/tests/port.rs]
+    tests: [drivers/writer/fs/tests/port.rs]
     verification:
-      - {kind: conformance-suite, ref: "port conformance suite, blob create-if-absent"}
+      - {kind: conformance-suite, ref: "the blob port's conformance suite and the fs driver's backend suite (atoom, blob/conformance and blob/fs), run behind the host's guard by the host's tests"}
   - id: REQ-AUDIT-104
     area: AUDIT
     statement: "An audit record MUST name the sluis extension, with its name, uid and version, in `metadata.extensions`."
