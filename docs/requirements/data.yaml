@@ -845,7 +845,7 @@ requirements:
     actors: [store]
     standards: []
     issues: [952]
-    tests: [actors/store/tests/watch_engines.rs, drivers/store/rqlite/src/sql.rs]
+    tests: [actors/store/tests/watch_engines.rs]
     verification:
       - {kind: integration-test, ref: "two store@ instances with different clocks over one engine, memory and rqlite: each item carries the expiry its writer computed from its own clock, and an update sets it from its writer's clock"}
       - {kind: test-vectors, ref: "no statement of the rqlite driver and no column default reads a clock or a random source"}
@@ -863,7 +863,7 @@ requirements:
     actors: [store]
     standards: []
     issues: [952]
-    tests: [actors/store/tests/store.rs, kits/rust/sluis-conformance/src/memory.rs, drivers/store/rqlite/tests/driver.rs]
+    tests: [actors/store/tests/store.rs, actors/store/tests/memory_engine.rs, drivers/store/rqlite/tests/driver.rs]
     verification:
       - {kind: integration-test, ref: "each put and delete of a watched or exportable kind goes to the engine as one transaction that asks for its log row, and the log grows by that row; a kind nobody watches asks for none"}
       - {kind: conformance-suite, ref: "a transaction that is refused leaves no log row and no change, one that holds leaves one row for each logged put and delete, on every engine"}
@@ -1054,7 +1054,7 @@ requirements:
     standards: []
     issues: [1459, 1453]
     tests:
-      - kits/rust/sluis-conformance/src/memory.rs
+      - actors/store/tests/memory_engine.rs
       - drivers/store/rqlite/tests/driver.rs
     verification:
       - {kind: conformance-suite, ref: "the item suite: every query names a nonzero epoch, the same one on every query while the log lasts (log_epoch)"}
@@ -1072,7 +1072,7 @@ requirements:
     standards: []
     issues: [1459, 1453]
     tests:
-      - kits/rust/sluis-conformance/src/memory.rs
+      - actors/store/tests/memory_engine.rs
       - drivers/store/rqlite/tests/driver.rs
       - actors/store/tests/watch_engines.rs
     verification:
@@ -1363,7 +1363,7 @@ requirements:
     actors: [store]
     standards: []
     issues: [956]
-    tests: [actors/store/tests/watch_engines.rs, kits/rust/sluis-conformance/src/memory.rs, drivers/store/rqlite/tests/driver.rs]
+    tests: [actors/store/tests/watch_engines.rs, actors/store/tests/memory_engine.rs, drivers/store/rqlite/tests/driver.rs]
     verification:
       - {kind: integration-test, ref: "six takers race for one lease through store@ on memory and rqlite: one wins each of four rounds, the others are told it is taken or stale, and the version grows by one at each takeover"}
       - {kind: conformance-suite, ref: "six writers race on one key with the same condition on every engine: one wins, the version of the winner is the next one"}
@@ -1859,7 +1859,7 @@ requirements:
     runtimes: all
     standards: []
     issues: [864]
-    tests: [actors/store/tests/watch_engines.rs, kits/rust/sluis-conformance/src/memory.rs, drivers/store/rqlite/tests/driver.rs]
+    tests: [actors/store/tests/watch_engines.rs, actors/store/tests/memory_engine.rs, drivers/store/rqlite/tests/driver.rs]
     verification:
       - {kind: conformance-suite, ref: "version conformance on every engine: create, delete, create again gives 1; through store@ on memory and rqlite, a create after a delete or a sweep is at version 1"}
   - id: REQ-DATA-099
