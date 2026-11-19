@@ -1,0 +1,19 @@
+{
+  "$id": "https://schemas.example/access-roster/v1/app-switched.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "from": {
+      "type": "string",
+      "description": "The catalogue id of the App the organisation's record named before.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "to": {
+      "type": "string",
+      "description": "The catalogue id of the App the organisation's record names now: the one the installation declares for it.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    }
+  }
+}

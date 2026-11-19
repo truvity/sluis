@@ -749,6 +749,16 @@ func GitHubOrgOwnerChanged(actor Actor, org, from, to string) *record.Record {
 		[]*record.Target{targetOrg(org)}, data{"from": ownerWord(from), "to": ownerWord(to)})
 }
 
+// GitHubOrgAppSwitched is an organisation moved by the controller from the App
+// its record named to the App the installation declares for it
+// (`controllers.github.appRefs`), once the declared App is created under the
+// organisation and installed there. from and to are catalogue App ids; the
+// App it leaves is neither uninstalled nor removed.
+func GitHubOrgAppSwitched(org, from, to string) *record.Record {
+	return build("roster.github_org.app_switched", System(), Succeeded(), nil,
+		[]*record.Target{targetOrg(org)}, data{"from": from, "to": to})
+}
+
 // GitHubOrgDisconnected is an organisation disconnected; reason is what the
 // disconnect had to say, if anything.
 func GitHubOrgDisconnected(actor Actor, org string, uninstalled bool, reason string) *record.Record {

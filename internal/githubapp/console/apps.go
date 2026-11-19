@@ -98,6 +98,10 @@ type githubAppSpec struct {
 	// place is where the App's key is kept, for a deployment copying it.
 	place keyPlace
 
+	// note is something an operator should read beside the App's state: why
+	// an organisation does not use the App the configuration declares for it.
+	note string
+
 	// installLookup is why a re-check could not find out whether the App is
 	// installed, empty when it could or was not asked.
 	installLookup string
@@ -509,10 +513,24 @@ func (c *Service) controllerAppSpecs(ctx context.Context, bound map[string]*bind
 			spec.appID, spec.appSlug, spec.htmlURL, spec.installationID = record.AppID, record.AppSlug, record.HTMLURL, record.InstallationID
 			spec.connectedAt, spec.connectedBy = record.ConnectedAt, record.ConnectedBy
 			spec.key = c.organisationKey(ctx, org)
+			if noter, ok := c.deps.Orgs.(declaredAppNoter); ok {
+				note, err := noter.DeclaredAppNote(ctx, org)
+				if err != nil {
+					return nil, err
+				}
+				spec.note = note
+			}
 		}
 		out = append(out, spec)
 	}
 	return out, nil
+}
+
+// declaredAppNoter is a store of organisations that can say why an
+// organisation does not use the App the configuration declares for it
+// (internal/portstore.GitHubOrgs).
+type declaredAppNoter interface {
+	DeclaredAppNote(ctx context.Context, org string) (string, error)
 }
 
 // organisationKey reads one organisation's App key, on a cache miss
@@ -635,7 +653,8 @@ func (c *Service) catalogueAppSpecs(ctx context.Context, taken map[string]bool) 
 			continue
 		}
 		spec := c.catalogueAppSpec(ctx, records[i].ID, catalogue.App{}, records[i], true)
-		spec.keyless = "The catalogue no longer declares this App. Disconnect it, then delete it on GitHub."
+		spec.keyless = "No longer used: the catalogue does not declare this App and no organisation names it (an organisation the configuration moved " +
+			"to another App leaves its old one here). Disconnect it, then delete it on GitHub."
 		taken[spec.id] = true
 		out = append(out, spec)
 	}
@@ -731,7 +750,7 @@ func (c *Service) githubAppView(ctx context.Context, spec githubAppSpec, fresh b
 	// rather than reporting a declaration nobody checked.
 	if spec.key == nil || !spec.declared {
 		out.Permissions = permissionRows(spec.entry.Permissions, nil, nil)
-		out.Reason = spec.keyless
+		out.Reason = withNote(spec.keyless, spec.note)
 		out.State = state
 		out.Attention, out.StateDetail = attentionOf(spec, state, out.GetReason())
 		return out
@@ -746,6 +765,7 @@ func (c *Service) githubAppView(ctx context.Context, spec githubAppSpec, fresh b
 	if out.Reason == "" {
 		out.Reason = spec.installLookup
 	}
+	out.Reason = withNote(out.GetReason(), spec.note)
 	var appPermissions, installationPermissions map[string]string
 	if seen.app != nil {
 		appPermissions = seen.app.Permissions
@@ -778,6 +798,17 @@ func (c *Service) githubAppView(ctx context.Context, spec githubAppSpec, fresh b
 	out.State = state
 	out.Attention, out.StateDetail = attentionOf(spec, state, out.GetReason())
 	return out
+}
+
+// withNote puts a note after a reason, when there are both.
+func withNote(reason, note string) string {
+	switch {
+	case note == "":
+		return reason
+	case reason == "":
+		return note
+	}
+	return reason + "; " + note
 }
 
 // declarer is what to call whoever declared this App: the deployment's

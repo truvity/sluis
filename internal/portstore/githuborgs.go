@@ -44,9 +44,10 @@ func (s *GitHubOrgs) Put(ctx context.Context, record connection.Record, credenti
 		return fmt.Errorf("a record for %s with a credential for %s", record.Org, credential.Org)
 	}
 	if s.b.v5 != nil && record.AppRef == "" {
-		// The configuration's entry overrides; without one the organisation
-		// keeps the App its stored record names, so that an organisation the
-		// migration left naming its App needs no entry.
+		// An organisation the record of which names no App yet takes the
+		// configuration's entry, and without one the App its stored record
+		// names, so that an organisation the migration left naming its App
+		// needs no entry.
 		if f := s.b.declared.AppRef; f != nil {
 			record.AppRef = f(record.Org)
 		}
@@ -57,6 +58,16 @@ func (s *GitHubOrgs) Put(ctx context.Context, record connection.Record, credenti
 			}
 			record.AppRef = stored
 		}
+	}
+	if s.b.v5 != nil && record.AppRef != "" {
+		// The configuration's entry overrides the App the record names, once
+		// the App it declares can act for the organisation (see
+		// [GitHubOrgs.resolve]); until then the record's own App stays.
+		resolved, _, err := s.resolve(ctx, record)
+		if err != nil {
+			return err
+		}
+		record = resolved
 	}
 	if s.b.v5 != nil && record.AppRef == "" {
 		// An organisation connected here has no App of the catalogue yet: its
@@ -176,6 +187,17 @@ func (s *GitHubOrgs) ownAppOf(ctx context.Context, org string) (string, error) {
 	if f := s.b.declared.AppRef; f != nil && f(org) == record.AppRef {
 		return "", nil
 	}
+	// An organisation the configuration has moved to another App no longer
+	// uses this one, although its stored record may not say so yet: the App
+	// is then a leftover for an operator to uninstall, never the
+	// organisation's own to remove with it.
+	resolved, _, err := s.resolve(ctx, record)
+	if err != nil {
+		return "", err
+	}
+	if resolved.AppRef != record.AppRef {
+		return "", nil
+	}
 	// Only an App under the id connecting makes (or the migration made) for
 	// this organisation: a catalogue App that merely has its organisation and
 	// GitHub App id is declared by someone, and others may use it.
@@ -211,6 +233,136 @@ func (s *GitHubOrgs) storedAppRef(ctx context.Context, org string) (string, erro
 	return record.AppRef, nil
 }
 
+// declaredApp is what the configuration's `controllers.github.appRefs` entry
+// says of an organisation's App, set against the App its record names.
+type declaredApp struct {
+	// Ref is the declared App's id; empty when the configuration declares none
+	// for the organisation, or the record already names it.
+	Ref string
+	// App is the declared App's record, when it is kept.
+	App catalogueapp.Record
+	// Ready is whether the declared App can act for the organisation: it is
+	// kept, created under the organisation, installed there and has its key.
+	Ready bool
+	// Why is what is missing, in words an operator can act on, when Ref is set
+	// and Ready is not.
+	Why string
+}
+
+// declared reads the declared App of a record, on layout v5.
+func (s *GitHubOrgs) declared(ctx context.Context, record connection.Record) (declaredApp, error) {
+	f := s.b.declared.AppRef
+	if s.b.v5 == nil || f == nil {
+		return declaredApp{}, nil
+	}
+	ref := f(record.Org)
+	if ref == "" || ref == record.AppRef {
+		return declaredApp{}, nil
+	}
+	out := declaredApp{Ref: ref}
+	app, key, ok, err := NewGitHubCatalogueApps(s.b).Get(ctx, ref)
+	switch {
+	case err != nil:
+		return out, err
+	case !ok:
+		out.Why = fmt.Sprintf("the App %s that the configuration declares for %s is not created yet", ref, record.Org)
+	case app.Org != record.Org:
+		out.Why = fmt.Sprintf("the App %s that the configuration declares for %s was created under %s", ref, record.Org, app.Org)
+	case !app.Installed():
+		out.Why = fmt.Sprintf("the App %s that the configuration declares for %s is created and not installed in it yet", ref, record.Org)
+	case key == "":
+		out.Why = fmt.Sprintf("the key of the App %s that the configuration declares for %s is not kept", ref, record.Org)
+	default:
+		out.App, out.Ready = app, true
+	}
+	return out, nil
+}
+
+// resolve is the record as the organisation is acted for: the configuration's
+// entry overrides the App the stored record names, on layout v5, when the
+// App it declares is created under the organisation and installed there. The
+// App's ids then replace the record's own, for they are the ones its key signs
+// for. When the declared App cannot act yet the record is returned unchanged,
+// and the declaration says why.
+func (s *GitHubOrgs) resolve(ctx context.Context, record connection.Record) (connection.Record, declaredApp, error) {
+	d, err := s.declared(ctx, record)
+	if err != nil || !d.Ready {
+		return record, d, err
+	}
+	record.AppRef, record.AppID, record.AppSlug = d.Ref, d.App.AppID, d.App.AppSlug
+	record.HTMLURL, record.InstallationID = d.App.HTMLURL, d.App.InstallationID
+	return record, d, nil
+}
+
+// DeclaredAppNote says why an organisation does not use the App the
+// configuration declares for it, or the empty string when it does, or when
+// the configuration declares none. It is what the organisation's report and
+// the console say while the declared App is not created, not installed, or
+// created under another organisation.
+func (s *GitHubOrgs) DeclaredAppNote(ctx context.Context, org string) (string, error) {
+	it, err := s.b.getItem(ctx, ghOrgKey(org))
+	if err != nil || it == nil || len(it.Record) == 0 {
+		return "", err
+	}
+	record, err := connection.DecodeRecord(string(it.Record))
+	if err != nil {
+		return "", nil //nolint:nilerr // a record that does not decode names no App
+	}
+	d, err := s.declared(ctx, record)
+	if err != nil || d.Ready {
+		return "", err
+	}
+	return d.Why, nil
+}
+
+// AdoptDeclaredApp writes the organisation's record naming the App the
+// configuration declares for it, when that App can act for the organisation
+// and the stored record names another, and returns the App it named before and
+// the one it names now. Nothing is written, and switched is false, when the
+// record already names the declared App, the configuration declares none, or
+// the declared App cannot act yet ([GitHubOrgs.DeclaredAppNote] says why). A
+// second call finds nothing to do: the switch is made, and told, once. The
+// old App is neither uninstalled nor removed: with no organisation naming it,
+// it is a leftover the console lists for an operator.
+func (s *GitHubOrgs) AdoptDeclaredApp(ctx context.Context, org string) (from, to string, switched bool, err error) {
+	it, err := s.b.getItem(ctx, ghOrgKey(org))
+	if err != nil || it == nil || len(it.Record) == 0 {
+		return "", "", false, err
+	}
+	stored, err := connection.DecodeRecord(string(it.Record))
+	if err != nil {
+		return "", "", false, nil //nolint:nilerr // a record that does not decode names no App
+	}
+	next, d, err := s.resolve(ctx, stored)
+	if err != nil || !d.Ready {
+		return "", "", false, err
+	}
+	err = s.b.editItem(ctx, ghOrgKey(org), 0, func(cur *item) (*item, error) {
+		switched = false
+		if cur == nil || len(cur.Record) == 0 {
+			return nil, errKeep
+		}
+		record, err := connection.DecodeRecord(string(cur.Record))
+		if err != nil || record.AppRef != stored.AppRef {
+			// Gone, or changed under us: the next pass reads what is there.
+			return nil, errKeep
+		}
+		// Only the App changes: the record's owner and connection stay.
+		record.AppRef, record.AppID, record.AppSlug = next.AppRef, next.AppID, next.AppSlug
+		record.HTMLURL, record.InstallationID = next.HTMLURL, next.InstallationID
+		raw, err := connection.EncodeRecord(record)
+		if err != nil {
+			return nil, err
+		}
+		switched = true
+		return &item{Record: json.RawMessage(raw), Secret: cur.Secret}, nil
+	})
+	if err != nil || !switched {
+		return "", "", false, err
+	}
+	return stored.AppRef, next.AppRef, true, nil
+}
+
 // SetOwner changes one organisation's recorded owner and nothing else, under
 // the item's revision: a conflict is retried against what a concurrent write
 // left, so a record a concurrent install just wrote is never written over.
@@ -238,8 +390,10 @@ func (s *GitHubOrgs) SetOwner(ctx context.Context, org, owner string) (previous 
 	return previous, found && err == nil, err
 }
 
-// List returns every connected organisation's record, sorted. A record that
-// does not decode is skipped: one bad entry must not hide every good one.
+// List returns every connected organisation's record, sorted, as it is in use:
+// an organisation the configuration declares another App for, and that App can
+// act for it, names that App (see [GitHubOrgs.resolve]). A record that does not
+// decode is skipped: one bad entry must not hide every good one.
 func (s *GitHubOrgs) List(ctx context.Context) ([]connection.Record, error) {
 	records, err := s.b.listAll(ctx, ghOrgPrefix)
 	if err != nil {
@@ -251,9 +405,16 @@ func (s *GitHubOrgs) List(ctx context.Context) ([]connection.Record, error) {
 		if err != nil || len(it.Record) == 0 {
 			continue
 		}
-		if record, err := connection.DecodeRecord(string(it.Record)); err == nil {
-			out = append(out, record)
+		record, err := connection.DecodeRecord(string(it.Record))
+		if err != nil {
+			continue
 		}
+		if s.b.v5 != nil && record.AppRef != "" {
+			if record, _, err = s.resolve(ctx, record); err != nil {
+				return nil, fmt.Errorf("portstore: list the organisations: %w", err)
+			}
+		}
+		out = append(out, record)
 	}
 	slices.SortFunc(out, func(a, b connection.Record) int { return strings.Compare(a.Org, b.Org) })
 	return out, nil
@@ -269,6 +430,11 @@ func (s *GitHubOrgs) Credential(ctx context.Context, org string) (connection.Cre
 	}
 	if it != nil && len(it.Record) > 0 {
 		if record, err := connection.DecodeRecord(string(it.Record)); err == nil && record.AppRef != "" {
+			if s.b.v5 != nil {
+				if record, _, err = s.resolve(ctx, record); err != nil {
+					return connection.Credential{}, false, err
+				}
+			}
 			return s.appCredential(ctx, record)
 		}
 	}

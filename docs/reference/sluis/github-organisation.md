@@ -13,7 +13,7 @@ All five exist, empty, from the service's first start.
 | Secret `<release>-github-apps` | One credential per organisation: App id, installation, private key. The link App's client id and secret under `_link.json` | The controller, as a volume; the service, to uninstall on Disconnect and redeem a person's authorization |
 | Secret `<release>-github-links` | One link per GitHub account (`<id>.json`): login, proven addresses, state, the person's token pair | The service writes it; the controller rewrites it as it checks, the one Secret its Role may update, by name |
 | Secret `<release>-github-runner-apps` | Every runner App: its three keys once installed, and its record | The service, to find the installation and uninstall; the deployment, to copy the keys to its runners |
-| ConfigMap `<release>-github-status` | The controller's report, one document per organisation, with its `settings` object when the installation configures [organisation settings](../../guides/sluis/github-organisation-settings.md): the document's outcome, each difference, and the names the controller wrote, never a value | The console; the controller replaces its data |
+| ConfigMap `<release>-github-status` | The controller's report, one document per organisation, with its `settings` object when the installation configures [organisation settings](../../guides/sluis/github-organisation-settings.md): the document's outcome, each difference, and the names the controller wrote, never a value; `app_note` while the App `controllers.github.appRefs` declares for it cannot act yet | The console; the controller replaces its data |
 
 ## Backup
 

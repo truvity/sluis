@@ -144,6 +144,20 @@ type AppSource interface {
 	Digest(ctx context.Context) ([sha256.Size]byte, error)
 }
 
+// AppSwitcher is the part of an [AppSource] that moves an organisation to the
+// GitHub App the installation declares for it (`controllers.github.appRefs`),
+// when that App is created under the organisation and installed there
+// (internal/portstore.GitHubOrgs implements it). A source without it keeps
+// whatever App the organisation's record names.
+type AppSwitcher interface {
+	// AdoptDeclaredApp makes the organisation's record name the declared App,
+	// once: switched is true only for the call that wrote it, with the App the
+	// record named before and the one it names now.
+	AdoptDeclaredApp(ctx context.Context, org string) (from, to string, switched bool, err error)
+	// DeclaredAppNote says why the declared App is not in use yet, or is empty.
+	DeclaredAppNote(ctx context.Context, org string) (string, error)
+}
+
 // Controller is the loop and what it remembers between passes.
 type Controller struct {
 	cfg  Config
@@ -347,10 +361,13 @@ func (c *Controller) organisation(
 	// keeps its rows, and a controller that starts after the failure still
 	// finds the held and reported rows it recorded, rather than an empty
 	// report that would have it record them all again.
+	// The App the organisation acts with is settled first: a pass that fails
+	// for want of the right App must still say which one that is.
+	appNote := c.declaredApp(ctx, org)
 	fail := func(err error) (status.Org, bool) {
 		c.deps.Log.WarnContext(ctx, "a pass over an organisation failed", slog.String("org", org), logattr.SafeError("error", err))
 		report := c.journal.Previous(ctx, org)
-		report.Org, report.Enabled = org, enabled
+		report.Org, report.Enabled, report.AppNote = org, enabled, appNote
 		report.Tick = status.Tick{At: started, Outcome: status.OutcomeFailed, Error: err.Error()}
 		return report, errors.Is(err, errPolicyDiffers)
 	}
@@ -381,7 +398,7 @@ func (c *Controller) organisation(
 	report, actions := draft.Decide(confirmations)
 	actions = reconcile.Guard(&report, actions, guards)
 	report.OutsideCollaborators = c.collaborators(ctx, client, token)
-	report.Enabled = enabled
+	report.Enabled, report.AppNote = enabled, appNote
 	report.Tick = status.Tick{At: started, Changes: len(actions)}
 
 	// enabled is this organisation's dry-run switch (internal/rails):
@@ -400,6 +417,36 @@ func (c *Controller) organisation(
 	c.settings(ctx, org, client, token, &report)
 	c.journal.Remember(org, report)
 	return report, otherPolicy
+}
+
+// declaredApp moves an organisation to the App the installation declares for
+// it, when that App can act for it, and says why it has not moved otherwise.
+// The move is written once and audited once, when it is written: a later pass
+// finds the record naming the declared App and does nothing. A failure to
+// write is logged and not fatal, for the credential read already follows the
+// declaration, and the next pass tries again.
+func (c *Controller) declaredApp(ctx context.Context, org string) string {
+	switcher, ok := c.deps.Apps.(AppSwitcher)
+	if !ok {
+		return ""
+	}
+	from, to, switched, err := switcher.AdoptDeclaredApp(ctx, org)
+	if err != nil {
+		c.deps.Log.WarnContext(ctx, "an organisation could not be moved to its declared App", slog.String("org", org), logattr.SafeError("error", err))
+	}
+	if switched {
+		// What was minted with the old App is not the new one's.
+		c.mu.Lock()
+		delete(c.tokens, org)
+		c.mu.Unlock()
+		c.deps.Log.InfoContext(ctx, "an organisation moved to its declared App", slog.String("org", org), slog.String("from", from), slog.String("to", to))
+		c.report(ctx, []*record.Record{audit.GitHubOrgAppSwitched(org, from, to)})
+	}
+	note, err := switcher.DeclaredAppNote(ctx, org)
+	if err != nil {
+		c.deps.Log.WarnContext(ctx, "an organisation's declared App could not be read", slog.String("org", org), logattr.SafeError("error", err))
+	}
+	return note
 }
 
 // token is the organisation's installation token, minted when the one

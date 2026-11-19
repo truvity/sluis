@@ -85,6 +85,12 @@ type Org struct {
 	// security configurations stand against its document (ADR 0080), or nil
 	// when the installation configures none for it. It never holds a value.
 	Settings *Settings `json:"settings,omitempty"`
+	// AppNote says why the organisation does not use the GitHub App the
+	// installation declares for it (`controllers.github.appRefs`): the App is
+	// not created, is not installed in the organisation, or was created under
+	// another one. The organisation keeps the App it has until the declared
+	// one can act. Empty when it uses the declared App, or none is declared.
+	AppNote string `json:"app_note,omitempty"`
 }
 
 // Seats is what the organisation pays for, beside what the policy wants.

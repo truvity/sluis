@@ -3,7 +3,7 @@ import type { Sentences } from "@truvity/audit";
 
 export const roster: Sentences = {
   "source": "roster",
-  "version": "1.24.0",
+  "version": "1.25.0",
   "locales": [
     "en"
   ],
@@ -192,6 +192,12 @@ export const roster: Sentences = {
       "summary": "A person's role on a GitHub team changed.",
       "message": {
         "en": "{outcome, select, success {{subject} became {data_role} of {targets_0_id}} other {GitHub refused to make {subject} {data_role} of {targets_0_id}}}"
+      }
+    },
+    "roster.github_org.app_switched": {
+      "summary": "A GitHub organisation was moved to the GitHub App the installation declares for it, once that App was created under the organisation and installed there.",
+      "message": {
+        "en": "GitHub organisation {targets_0_id} moved from App {data_from} to the declared App {data_to}"
       }
     },
     "roster.github_org.connected": {
