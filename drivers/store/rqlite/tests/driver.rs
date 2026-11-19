@@ -917,6 +917,32 @@ fn serve_refuses_a_socket_gid_of_zero_or_text_before_it_listens() {
     }
 }
 
+/// The flags that the generated units pass to this binary (`tools/gen/units`) are the flags of the binary: five of them are defined by
+/// atoom's library and added to the command line by this host, so the unit generator's own check, which reads the sources of the
+/// binary's directory, cannot see them. It lists them (`libraryFlags` of `TestEveryFlagIsDefinedByItsBinary`), and this test holds the
+/// binary to the same list. This test needs no rqlited.
+#[test]
+fn the_unit_flags_are_the_flags_of_the_binary() {
+    let out = rqlite_command(&["serve", "--help"]);
+    assert!(out.status.success());
+    let help = String::from_utf8_lossy(&out.stdout);
+    for flag in [
+        "--rqlite-url",
+        "--namespace",
+        "--sweep-interval",
+        "--changelog-retention",
+        "--basic-auth-file",
+        "--socket-gid",
+        "--socket",
+        "--boundary",
+    ] {
+        assert!(
+            help.contains(flag),
+            "`rqlite serve --help` has no {flag}:\n{help}"
+        );
+    }
+}
+
 /// A change-log retention above seven days is refused at start (the limit is atoom's, in `store/rqlite`'s settings), before rqlite is
 /// waited for and before the socket exists, and the refusal names the retention. This test needs no rqlited.
 ///
