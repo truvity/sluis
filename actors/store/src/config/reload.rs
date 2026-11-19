@@ -9,7 +9,7 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
-use sluis_proto::sluis::port::source::v2alpha1::{SourceWatchRequest, Watch};
+use sluis_proto::atoom::source::v1alpha1::{SourceWatchRequest, Watch};
 use tokio::sync::mpsc::{self, Sender};
 use tokio::task::JoinSet;
 

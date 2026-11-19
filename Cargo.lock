@@ -172,6 +172,56 @@ dependencies = [
 ]
 
 [[package]]
+name = "atoom-source"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "buffa",
+ "buffa-types",
+ "connectrpc",
+ "connectrpc-build",
+ "serde",
+]
+
+[[package]]
+name = "atoom-source-credential"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "anyhow",
+ "atoom-common",
+ "atoom-socket",
+ "atoom-source",
+ "clap",
+ "connectrpc",
+ "rustix",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "atoom-source-file"
+version = "0.0.0"
+source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
+dependencies = [
+ "anyhow",
+ "atoom-common",
+ "atoom-socket",
+ "atoom-source",
+ "aws-lc-rs",
+ "clap",
+ "connectrpc",
+ "futures",
+ "rustix",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "atoom-store"
 version = "0.0.0"
 source = "git+https://github.com/truvity/atoom?rev=bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf#bbe2df79a3af9979f06325db0f5eb9e74ce4b7cf"
@@ -739,16 +789,15 @@ name = "credential"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "atoom-source",
+ "atoom-source-credential",
  "clap",
  "connectrpc",
- "futures",
  "rustix",
  "sluis-kit",
- "sluis-proto",
  "sluis-registry",
  "tempfile",
  "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -1119,17 +1168,15 @@ name = "file"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "aws-lc-rs",
+ "atoom-source",
+ "atoom-source-file",
  "clap",
  "connectrpc",
- "futures",
  "rustix",
  "sluis-kit",
- "sluis-proto",
  "sluis-registry",
  "tempfile",
  "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -3043,6 +3090,8 @@ dependencies = [
  "anyhow",
  "atoom-common",
  "atoom-socket",
+ "atoom-source-credential",
+ "atoom-source-file",
  "atoom-store",
  "atoom-store-conformance",
  "atoom-store-memory",
@@ -3053,8 +3102,6 @@ dependencies = [
  "buffa-types",
  "clap",
  "connectrpc",
- "credential",
- "file",
  "futures",
  "rustix",
  "saphyr-parser",
@@ -3155,7 +3202,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys",

@@ -27,7 +27,7 @@ import (
 	"github.com/truvity/sluis/v2/gen/go/sluis/policy/v2alpha1/policyv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/port/blob/v2alpha1/blobv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/port/destination/v2alpha1/destinationv2alpha1connect"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/source/v2alpha1/sourcev2alpha1connect"
+	"github.com/truvity/atoom/source/gen/atoom/source/v1alpha1/sourcev1alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/signer/v2alpha1/signerv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/store/v2alpha1/storev2alpha1connect"
@@ -130,9 +130,9 @@ func Targets(boundary string) []Target {
 		drv("drv-temp", "drv-store-rqlite-temp", fmt.Sprintf("/run/sluis/store/%s/temp.sock", b),
 			storev1alpha1connect.ItemServiceGetProcedure, "driver-store-rqlite"),
 		drv("drv-config", "drv-store-file", fmt.Sprintf("/run/sluis/store/%s/config-source.sock", b),
-			sourcev2alpha1connect.SourceServiceCapabilitiesProcedure, "driver-store-file"),
+			sourcev1alpha1connect.SourceServiceCapabilitiesProcedure, "driver-store-file"),
 		drv("drv-secret", "drv-store-credential", fmt.Sprintf("/run/sluis/store/%s/secret-source.sock", b),
-			sourcev2alpha1connect.SourceServiceCapabilitiesProcedure, "driver-store-credential"),
+			sourcev1alpha1connect.SourceServiceCapabilitiesProcedure, "driver-store-credential"),
 		drv("drv-blob", "drv-writer-fs", fmt.Sprintf("/run/sluis/writer/%s/blob.sock", b),
 			blobv2alpha1connect.BlobServiceGetProcedure, "driver-writer-fs"),
 		// The directory destination of exporter@: List of an empty prefix answers harmlessly to its one caller.

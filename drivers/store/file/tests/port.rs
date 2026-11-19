@@ -7,15 +7,13 @@
 use std::path::Path;
 use std::time::Duration;
 
-use connectrpc::Router;
-use connectrpc::error::ErrorCode;
-use sluis_file::service::Service;
-use sluis_file::{Dir, suite};
-use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
-use sluis_proto::sluis::port::source::v2alpha1::{
-    CapabilitiesRequest, ReadRequest, SourceServiceClient, SourceServiceExt, SourceWatchRequest,
-    Watch,
+use atoom_source::atoom::source::v1alpha1::{
+    CapabilitiesRequest, ReadRequest, SourceServiceClient, SourceWatchRequest, Watch,
 };
+use atoom_source_file::service::Service;
+use atoom_source_file::{Dir, suite};
+use connectrpc::error::ErrorCode;
+use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
 
 fn serve(socket: &Path, dir: &Path, me_is: &'static str) -> tokio::sync::oneshot::Sender<()> {
     let me = rustix::process::geteuid().as_raw();
@@ -29,7 +27,7 @@ fn serve(socket: &Path, dir: &Path, me_is: &'static str) -> tokio::sync::oneshot
         allow: Allow::OwnerOnly("store"),
         default_deadline: Duration::from_secs(10),
     };
-    let router = std::sync::Arc::new(Service(Dir::open(dir).unwrap())).register(Router::new());
+    let router = Service(Dir::open(dir).unwrap()).router();
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     tokio::spawn(sluis_kit::serve_with(
         cfg,

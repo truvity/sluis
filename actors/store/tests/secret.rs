@@ -5,14 +5,11 @@
 
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::Path;
-use std::sync::Arc;
 use std::time::Duration;
 
-use connectrpc::Router;
-use sluis_credential::Dir;
-use sluis_credential::service::Service;
+use atoom_source_credential::Dir;
+use atoom_source_credential::service::Service;
 use sluis_kit::{Allow, Identities, ServerConfig, dial};
-use sluis_proto::sluis::port::source::v2alpha1::SourceServiceExt as _;
 use store::secret::{SecretError, SecretSource, SourceSecrets};
 
 const SECRET: &[u8] = b"correct horse battery staple";
@@ -29,7 +26,7 @@ fn serve(socket: &Path, dir: &Path) -> tokio::sync::oneshot::Sender<()> {
         allow: Allow::OwnerOnly("store"),
         default_deadline: Duration::from_secs(10),
     };
-    let router = Arc::new(Service(Dir::open(dir).unwrap())).register(Router::new());
+    let router = Service(Dir::open(dir).unwrap()).router();
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     tokio::spawn(sluis_kit::serve_with(
         cfg,

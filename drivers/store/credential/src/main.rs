@@ -1,4 +1,8 @@
-//! The `credential` driver of store@.
+//! The host of the `credential` driver of store@ (the secret source).
+//!
+//! The driver is atoom's (github.com/truvity/atoom, `source/credential`, pinned by commit: `third_party/atoom/README.md`): the source contract over
+//! systemd credentials. This file is what is sluis's: the socket with the peer credentials of its caller, the owner check of the registry (only
+//! store@ may open it), the command line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
 //!
 //! ```text
 //! credential serve       --socket PATH [--dir DIR] [--socket-gid GID]   # DIR defaults to $CREDENTIALS_DIRECTORY
@@ -8,17 +12,14 @@
 //! ```
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, bail};
+use atoom_source_credential::Dir;
+use atoom_source_credential::service::Service;
 use clap::Arg;
-use connectrpc::Router;
-use sluis_credential::Dir;
-use sluis_credential::service::Service;
 use sluis_kit::cli::{self, Commands, Flags, Refused, shutdown_signal};
 use sluis_kit::{Allow, ServerConfig};
-use sluis_proto::sluis::port::source::v2alpha1::SourceServiceExt;
 
 /// The registry name of this driver's user (docs/architecture/actors.yaml, drivers).
 const DRIVER: &str = "driver-store-credential";
@@ -69,7 +70,7 @@ impl Commands for Credential {
             allow: Allow::OwnerOnly(owner),
             default_deadline: Duration::from_secs(30),
         };
-        let router = Arc::new(Service(dir)).register(Router::new());
+        let router = Service(dir).router();
         sluis_kit::serve(cfg, router, shutdown_signal()).await
     }
 
@@ -84,7 +85,7 @@ impl Commands for Credential {
     }
 
     async fn conformance(&self, _f: Flags) -> Option<anyhow::Result<()>> {
-        Some(sluis_credential::suite::run_temp().context("the source suite"))
+        Some(atoom_source_credential::suite::run_temp().context("the source suite"))
     }
 }
 

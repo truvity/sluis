@@ -12,10 +12,10 @@ use std::time::{Duration, Instant};
 use buffa::Message as _;
 use connectrpc::error::ErrorCode;
 use sluis_kit::{Client, Transport};
-use sluis_proto::sluis::config::v2alpha1 as pb;
-use sluis_proto::sluis::port::source::v2alpha1::{
+use sluis_proto::atoom::source::v1alpha1::{
     CapabilitiesRequest, ReadRequest, SourceServiceClient, Watch,
 };
+use sluis_proto::sluis::config::v2alpha1 as pb;
 use sluis_registry::{Class, Kind};
 
 use super::ConfigSnapshot;

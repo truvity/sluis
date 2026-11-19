@@ -1,4 +1,8 @@
-//! The `file` driver of store@.
+//! The host of the `file` driver of store@ (the config source).
+//!
+//! The driver is atoom's (github.com/truvity/atoom, `source/file`, pinned by commit: `third_party/atoom/README.md`): the source contract over
+//! a directory of signed config documents. This file is what is sluis's: the socket with the peer credentials of its caller, the owner check of the registry (only
+//! store@ may open it), the command line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
 //!
 //! ```text
 //! file serve       --socket PATH --dir DIR [--socket-gid GID]
@@ -8,17 +12,14 @@
 //! ```
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, bail};
+use atoom_source_file::Dir;
+use atoom_source_file::service::Service;
 use clap::Arg;
-use connectrpc::Router;
-use sluis_file::Dir;
-use sluis_file::service::Service;
 use sluis_kit::cli::{self, Commands, Flags, Refused, shutdown_signal};
 use sluis_kit::{Allow, ServerConfig};
-use sluis_proto::sluis::port::source::v2alpha1::SourceServiceExt;
 
 /// The registry name of this driver's user (docs/architecture/actors.yaml, drivers).
 const DRIVER: &str = "driver-store-file";
@@ -65,7 +66,7 @@ impl Commands for File {
             allow: Allow::OwnerOnly(owner),
             default_deadline: Duration::from_secs(30),
         };
-        let router = Arc::new(Service(dir)).register(Router::new());
+        let router = Service(dir).router();
         sluis_kit::serve(cfg, router, shutdown_signal()).await
     }
 
@@ -75,7 +76,7 @@ impl Commands for File {
     }
 
     async fn conformance(&self, _f: Flags) -> Option<anyhow::Result<()>> {
-        Some(sluis_file::suite::run_temp().context("the source suite"))
+        Some(atoom_source_file::suite::run_temp().context("the source suite"))
     }
 }
 
