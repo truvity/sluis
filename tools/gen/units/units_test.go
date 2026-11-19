@@ -601,9 +601,16 @@ func TestDeterministic(t *testing.T) {
 // Every flag of an ExecStart is one that the unit's binary defines: a flag is looked for, quoted, in the Go and Rust sources
 // of the binary's directory, except the two that the kits give to every executable. A flag that a package renames, or
 // that a row invented, fails here and not on a board.
+//
+// The flags that an atoom library defines for the host that mounts it are not in that directory: the rqlite driver's settings are
+// atoom's (`atoom_store_rqlite::config::flags`, pinned by commit). A test of the host, `the_unit_flags_are_the_flags_of_the_binary` in
+// drivers/store/rqlite/tests/driver.rs, runs `rqlite serve --help` and holds the binary to every flag listed here.
 func TestEveryFlagIsDefinedByItsBinary(t *testing.T) {
 	root := filepath.Join("..", "..", "..")
 	kit := map[string]bool{"boundary": true, "socket": true}
+	libraryFlags := map[string][]string{
+		"drivers/store/rqlite": {"rqlite-url", "namespace", "sweep-interval", "changelog-retention", "basic-auth-file"},
+	}
 	n := 0
 	for name, body := range generate(t) {
 		if !strings.HasSuffix(name, "@.service") {
@@ -642,6 +649,9 @@ func TestEveryFlagIsDefinedByItsBinary(t *testing.T) {
 				continue
 			}
 			n++
+			if slices.Contains(libraryFlags[bin], flag) {
+				continue
+			}
 			if !strings.Contains(src.String(), `"`+flag+`"`) {
 				t.Errorf("%s: %s is not a flag of %s", name, f, bin)
 			}
