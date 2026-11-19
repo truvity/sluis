@@ -1,4 +1,8 @@
-//! `rqlite`: the driver of store@ for the durable and the temp port.
+//! `rqlite`: the host of the rqlite driver of store@ for the durable and the temp port.
+//!
+//! The driver is atoom's (github.com/truvity/atoom, `store/rqlite`, pinned by commit: `third_party/atoom/README.md`): the item contract
+//! over rqlite, the sweeper and the flags. This file is what is sluis's: the socket with the peer credentials of its caller, the owner
+//! check of the registry (only store@ may open it), the command line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
 //!
 //! ```text
 //! rqlite serve --socket P --rqlite-url URL --namespace durable|temp [--sweep-interval 30s]
@@ -11,12 +15,12 @@
 use std::time::Duration;
 
 use anyhow::{Context, bail};
+use atoom_store_rqlite::client::Level;
+use atoom_store_rqlite::config::{self, Settings};
+use atoom_store_rqlite::sweeper;
 use clap::Arg;
 use sluis_kit::cli::{self, Commands, Flags, Refused};
 use sluis_kit::{Allow, ServerConfig};
-use sluis_rqlite::client::Level;
-use sluis_rqlite::config::{self, Settings};
-use sluis_rqlite::sweeper;
 
 /// The registry name of this driver's user (docs/architecture/actors.yaml, drivers).
 const DRIVER: &str = "driver-store-rqlite";
@@ -43,20 +47,10 @@ impl Commands for Rqlite {
         anyhow::ensure!(!f.socket.as_os_str().is_empty(), "--socket is required");
         // Checked before rqlite is waited for: a bad flag fails at once.
         let gid = socket_gid(&f)?;
-        let settings = Settings::from_flags(&f)?;
+        let settings = Settings::from_matches(&f.matches)?;
         let driver = settings.driver;
         // The unit starts after rqlite, but rqlite may still be electing a leader.
-        let started = tokio::time::Instant::now();
-        loop {
-            match driver.ensure_schema().await {
-                Ok(()) => break,
-                Err(e) if started.elapsed() < READY => {
-                    tracing::info!(error = %format!("{e:#}"), "rqlite is not ready; trying again");
-                    tokio::time::sleep(Duration::from_secs(1)).await;
-                }
-                Err(e) => return Err(e.context("rqlite did not become ready")),
-            }
-        }
+        driver.ensure_schema_within(READY).await?;
         // Only store@ may open this socket (0005 "Drivers"): the owner is the registry's, not ours.
         let owner = sluis_registry::driver_owner(DRIVER)
             .with_context(|| format!("{DRIVER} is not a driver of the registry"))?;
@@ -91,7 +85,7 @@ impl Commands for Rqlite {
 /// Connects, reads `SELECT 1`-level proof at `linearizable` (the schema version read is one), and
 /// verifies the schema version. A failure is a refusal: exit 3.
 async fn check(f: &Flags) -> anyhow::Result<()> {
-    let settings = Settings::from_flags(f)?;
+    let settings = Settings::from_matches(&f.matches)?;
     settings
         .driver
         .verify_schema(Level::Linearizable)
@@ -105,8 +99,8 @@ async fn conformance(f: &Flags) -> anyhow::Result<()> {
     if f.socket.as_os_str().is_empty() {
         bail!("--socket is required");
     }
-    let cases = sluis_conformance::item_suite(sluis_kit::dial(&f.socket)).await;
-    sluis_conformance::report(&cases, &mut std::io::stdout())
+    let cases = atoom_store_conformance::item_suite(atoom_socket::dial(&f.socket)).await;
+    atoom_store_conformance::report(&cases, &mut std::io::stdout())
         .map_err(|e| Refused(format!("{e:#}")).into())
 }
 

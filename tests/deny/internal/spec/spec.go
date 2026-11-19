@@ -21,12 +21,12 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/truvity/atoom/key/gen/atoom/key/v1alpha1/keyv1alpha1connect"
+	"github.com/truvity/atoom/store/gen/atoom/store/v1alpha1/storev1alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/integration/v2alpha1/integrationv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1/keyv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/policy/v2alpha1/policyv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/port/blob/v2alpha1/blobv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/port/destination/v2alpha1/destinationv2alpha1connect"
-	"github.com/truvity/sluis/v2/gen/go/sluis/port/item/v2alpha1/itemv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/port/source/v2alpha1/sourcev2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/port/transport/v2alpha1/transportv2alpha1connect"
 	"github.com/truvity/sluis/v2/gen/go/sluis/signer/v2alpha1/signerv2alpha1connect"
@@ -126,9 +126,9 @@ func Targets(boundary string) []Target {
 		drv("drv-key", "drv-key-software", fmt.Sprintf("/run/sluis/key/%s/driver/key-store.sock", b),
 			keyv1alpha1connect.KeyStoreServiceCapabilitiesProcedure, "driver-key-software"),
 		drv("drv-durable", "drv-store-rqlite-durable", fmt.Sprintf("/run/sluis/store/%s/durable.sock", b),
-			itemv2alpha1connect.ItemServiceGetProcedure, "driver-store-rqlite"),
+			storev1alpha1connect.ItemServiceGetProcedure, "driver-store-rqlite"),
 		drv("drv-temp", "drv-store-rqlite-temp", fmt.Sprintf("/run/sluis/store/%s/temp.sock", b),
-			itemv2alpha1connect.ItemServiceGetProcedure, "driver-store-rqlite"),
+			storev1alpha1connect.ItemServiceGetProcedure, "driver-store-rqlite"),
 		drv("drv-config", "drv-store-file", fmt.Sprintf("/run/sluis/store/%s/config-source.sock", b),
 			sourcev2alpha1connect.SourceServiceCapabilitiesProcedure, "driver-store-file"),
 		drv("drv-secret", "drv-store-credential", fmt.Sprintf("/run/sluis/store/%s/secret-source.sock", b),

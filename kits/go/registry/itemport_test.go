@@ -5,13 +5,16 @@ import (
 	"strings"
 	"testing"
 
-	itemv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/port/item/v2alpha1"
+	storev1alpha1 "github.com/truvity/atoom/store/gen/atoom/store/v1alpha1"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
+// The item port is atoom's (github.com/truvity/atoom/store, pinned by commit: third_party/atoom/README.md), and this test holds the pinned
+// contract to what the requirement says of it: a driver sees items only.
+//
 // verifies: REQ-DATA-069
 func TestItemPortSeesItemsOnly(t *testing.T) {
-	file := itemv2alpha1.File_sluis_port_item_v2alpha1_item_proto
+	file := storev1alpha1.File_atoom_store_v1alpha1_item_proto
 	services := file.Services()
 	if services.Len() != 1 {
 		t.Fatalf("the item port declares %d services, want exactly ItemService", services.Len())
@@ -21,13 +24,13 @@ func TestItemPortSeesItemsOnly(t *testing.T) {
 		t.Fatalf("the item port's service is %s, want ItemService", svc.Name())
 	}
 
-	// The contract has four calls and none that names a kind.
+	// The contract has four calls and a fifth that says what the driver offers (Capabilities), and none names a kind.
 	var calls []string
 	for i := range svc.Methods().Len() {
 		calls = append(calls, string(svc.Methods().Get(i).Name()))
 	}
 	slices.Sort(calls)
-	if want := []string{"Get", "Query", "TailLog", "Transact"}; !slices.Equal(calls, want) {
+	if want := []string{"Capabilities", "Get", "Query", "TailLog", "Transact"}; !slices.Equal(calls, want) {
 		t.Errorf("ItemService calls = %v, want %v", calls, want)
 	}
 
@@ -88,18 +91,20 @@ func TestItemPortSeesItemsOnly(t *testing.T) {
 	// Every message of the file is pinned exactly, so a leak under another name (a tenant, a purpose, a schema, a
 	// type url) fails here and not only a field named for a kind.
 	want := map[string][]string{
-		"DriverItem":       {"expires_at", "indexes", "key", "value", "version"},
-		"ItemGetRequest":   {"key", "linearizable"},
-		"ItemGetResponse":  {"item"},
-		"QueryRequest":     {"index", "index_value", "linearizable", "page_size", "page_token", "prefix"},
-		"QueryResponse":    {"items", "log_epoch", "log_head", "next_page_token"},
-		"TransactRequest":  {"conditions", "deletes", "puts"},
-		"Condition":        {"absent", "key", "version"},
-		"Put":              {"expires_at", "indexes", "key", "log", "value"},
-		"Delete":           {"key", "log"},
-		"TransactResponse": {"items"},
-		"TailLogRequest":   {"from_sequence", "log_epoch"},
-		"TailLogResponse":  {"deleted", "key", "sequence", "version"},
+		"CapabilitiesRequest":  {},
+		"CapabilitiesResponse": {"store", "tail_log"},
+		"DriverItem":           {"expires_at", "indexes", "key", "value", "version"},
+		"ItemGetRequest":       {"key", "linearizable"},
+		"ItemGetResponse":      {"item"},
+		"QueryRequest":         {"index", "index_value", "linearizable", "page_size", "page_token", "prefix"},
+		"QueryResponse":        {"items", "log_epoch", "log_head", "next_page_token"},
+		"TransactRequest":      {"conditions", "deletes", "puts"},
+		"Condition":            {"absent", "key", "version"},
+		"Put":                  {"expires_at", "indexes", "key", "log", "value"},
+		"Delete":               {"key", "log"},
+		"TransactResponse":     {"items"},
+		"TailLogRequest":       {"from_sequence", "log_epoch"},
+		"TailLogResponse":      {"deleted", "key", "sequence", "version"},
 	}
 	if got := file.Messages().Len(); got != len(want) {
 		t.Errorf("the item port declares %d messages, want the %d pinned here", got, len(want))

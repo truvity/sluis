@@ -14,17 +14,17 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
+use atoom_store_memory::MemoryEngine;
+use atoom_store_rqlite::Driver;
+use atoom_store_rqlite::client::Rq;
+use atoom_store_rqlite::sql::Ns;
 use connectrpc::error::ErrorCode;
-use sluis_conformance::memory::MemoryEngine;
 use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
 use sluis_proto::sluis::store::v2alpha1::{
     ChangeType, GetRequest, ListRequest, Operation, StoreServiceClient, StoreServiceExt as _, Verb,
     WatchRequest, WatchResponse, WriteRequest,
 };
 use sluis_proto::sluis::r#type::v2alpha1::Address;
-use sluis_rqlite::Driver;
-use sluis_rqlite::client::Rq;
-use sluis_rqlite::sql::Ns;
 use store::audit::{AuditEvent, AuditSink};
 use store::config::NoConfig;
 use store::engine::DriverEngine;
@@ -169,7 +169,7 @@ async fn memory_rig() -> Rig {
         (durable.clone(), dsock.clone()),
         (temp.clone(), tsock.clone()),
     ] {
-        tokio::spawn(async move { engine.serve(&sock, std::future::pending()).await });
+        serve_router(engine.router(), sock);
     }
     wait_for(&dsock).await;
     wait_for(&tsock).await;
@@ -270,6 +270,11 @@ async fn start_node(bin: &Path) -> Node {
 
 /// Serves `driver` on `sock` with this process's uid as the owner `store`.
 fn serve_driver(driver: &Driver, sock: PathBuf) {
+    serve_router(driver.clone().router(), sock);
+}
+
+/// Serves the handler of an atoom item driver on `sock`, behind sluis's guarded server, with this process's uid as the owner `store`.
+fn serve_router(router: connectrpc::Router, sock: PathBuf) {
     let me = rustix::process::geteuid().as_raw();
     let ids = Identities::with(0, move |uid| (uid == me).then_some(("store", 0)));
     tokio::spawn(sluis_kit::serve_with(
@@ -282,7 +287,7 @@ fn serve_driver(driver: &Driver, sock: PathBuf) {
             allow: Allow::OwnerOnly("store"),
             default_deadline: Duration::from_secs(30),
         },
-        driver.clone().router(),
+        router,
         std::future::pending(),
         ids,
     ));
@@ -410,7 +415,7 @@ async fn rqlite_rig_through(
         sweep: Box::new(move || {
             let t = swept.clone();
             Box::pin(async move {
-                sluis_rqlite::sweeper::sweep_once(&t, Duration::from_secs(3600))
+                atoom_store_rqlite::sweeper::sweep_once(&t, Duration::from_secs(3600))
                     .await
                     .unwrap();
             })
@@ -421,21 +426,21 @@ async fn rqlite_rig_through(
                 // Every table of the namespace goes, and the schema is made again: a new database. One transaction, so that
                 // a stream that is open polls the old log or the new one and never a database with no tables, which it
                 // would end on with `engine` and not with the refusal of an epoch that the scenario is about.
-                let epoch =
-                    i64::try_from(sluis_conformance::rules::new_log_epoch().unwrap()).unwrap();
+                let epoch = i64::try_from(atoom_store_conformance::rules::new_log_epoch().unwrap())
+                    .unwrap();
                 let mut stmts: Vec<_> = ["items", "index", "log", "meta", "guard"]
                     .iter()
                     .map(|n| {
-                        sluis_rqlite::client::Stmt::new(
+                        atoom_store_rqlite::client::Stmt::new(
                             format!("DROP TABLE IF EXISTS temp_{n}"),
                             vec![],
                         )
                     })
                     .collect();
-                stmts.extend(sluis_rqlite::sql::Ns::new("temp").unwrap().ddl(epoch));
+                stmts.extend(atoom_store_rqlite::sql::Ns::new("temp").unwrap().ddl(epoch));
                 let out = t.rq().request(&stmts, true).await.unwrap();
                 assert!(
-                    sluis_rqlite::client::first_failure(&out).is_none(),
+                    atoom_store_rqlite::client::first_failure(&out).is_none(),
                     "{out:?}"
                 );
             })

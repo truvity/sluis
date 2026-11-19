@@ -1,5 +1,5 @@
-//! The rqlite driver against a real rqlite 10.6.6: a pinned release binary that the test starts
-//! as a plain process on a temporary data directory and free loopback ports (`just rqlite-fetch`
+//! The rqlite driver of atoom (library `atoom-store-rqlite`, pinned by commit) under sluis's host, against a real rqlite 10.6.6: a
+//! pinned release binary that the test starts as a plain process on a temporary data directory and free loopback ports (`just rqlite-fetch`
 //! puts it in `.cache/rqlite`). No container.
 //!
 //! Without the binary a test prints `SKIP: rqlited not fetched; run just rqlite-fetch` and
@@ -12,15 +12,15 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::time::Duration;
 
-use connectrpc::error::ErrorCode;
-use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
-use sluis_proto::sluis::port::item::v2alpha1::{
+use atoom_store::atoom::store::v1alpha1::{
     ItemServiceClient, Put, TailLogRequest, TransactRequest,
 };
-use sluis_rqlite::Driver;
-use sluis_rqlite::client::{Level, Param, Rq, Stmt};
-use sluis_rqlite::sql::Ns;
-use sluis_rqlite::sweeper;
+use atoom_store_rqlite::Driver;
+use atoom_store_rqlite::client::{Level, Param, Rq, Stmt};
+use atoom_store_rqlite::sql::Ns;
+use atoom_store_rqlite::sweeper;
+use connectrpc::error::ErrorCode;
+use sluis_kit::{Allow, Identities, ServerConfig, dial, refusal_reason};
 
 fn rqlited() -> Option<PathBuf> {
     let arch = match std::env::consts::ARCH {
@@ -217,9 +217,9 @@ async fn the_driver_passes_the_item_suite_on_both_ports() {
         d.ensure_schema().await.expect("the schema is idempotent");
         let served = serve(&d).await;
 
-        let cases = sluis_conformance::item_suite(dial(&served.socket)).await;
+        let cases = atoom_store_conformance::item_suite(atoom_socket::dial(&served.socket)).await;
         let mut out = Vec::new();
-        let verdict = sluis_conformance::report(&cases, &mut out);
+        let verdict = atoom_store_conformance::report(&cases, &mut out);
         print!("[{ns}]\n{}", String::from_utf8_lossy(&out));
         verdict.unwrap();
         assert!(cases.len() >= 10);
@@ -249,7 +249,7 @@ async fn the_driver_passes_the_item_suite_on_both_ports() {
             .await
             .unwrap();
         for (i, what) in ["items", "index entries", "guard rows"].iter().enumerate() {
-            let n = sluis_rqlite::client::rows(&counts, i).unwrap()[0][0]
+            let n = atoom_store_rqlite::client::rows(&counts, i).unwrap()[0][0]
                 .as_i64()
                 .unwrap();
             if n != 0 {
@@ -266,7 +266,7 @@ async fn the_driver_passes_the_item_suite_on_both_ports() {
                         )],
                     )
                     .await
-                    .map(|r| format!("{:?}", sluis_rqlite::client::rows(&r, 0)))
+                    .map(|r| format!("{:?}", atoom_store_rqlite::client::rows(&r, 0)))
                     .unwrap_or_default();
                 panic!("{ns}: the suite left {n} {what}; items now: {left}");
             }
@@ -301,7 +301,7 @@ async fn the_two_ports_do_not_see_each_other() {
     let c = dial(&b.socket);
     let rpc = ItemServiceClient::new(c.transport(), c.config());
     let err = rpc
-        .get(sluis_proto::sluis::port::item::v2alpha1::ItemGetRequest {
+        .get(atoom_store::atoom::store::v1alpha1::ItemGetRequest {
             key: b"ns/only-here".to_vec(),
             linearizable: true,
             ..Default::default()
@@ -314,7 +314,7 @@ async fn the_two_ports_do_not_see_each_other() {
     b.stop().await;
 }
 
-/// verifies: REQ-DATA-062, REQ-DATA-101
+/// verifies: REQ-DATA-062, REQ-DATA-101, REQ-DATA-105
 /// The sweeper writes a delete row for the expiry of an item that was written with a log row, so that a watcher sees
 /// expiry as a delete; it trims the log to the retention; and it never frees a lease.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -326,13 +326,13 @@ async fn the_sweeper_frees_expired_items_and_trims_the_log_but_never_a_lease() {
     let served = serve(&d).await;
     let c = dial(&served.socket);
     let rpc = ItemServiceClient::new(c.transport(), c.config());
-    let now = sluis_conformance::rules::now_ms();
+    let now = atoom_store_conformance::rules::now_ms();
     let put = |key: &str, expires: Option<i64>, index: bool| Put {
         key: key.as_bytes().to_vec(),
         value: b"v".to_vec(),
-        expires_at: expires.map(sluis_conformance::rules::ms_to_ts).into(),
+        expires_at: expires.map(atoom_store_conformance::rules::ms_to_ts).into(),
         indexes: if index {
-            vec![sluis_proto::atoom::common::v1alpha1::IndexEntry {
+            vec![atoom_store::atoom::common::v1alpha1::IndexEntry {
                 name: "n".into(),
                 value: b"v".to_vec(),
                 ..Default::default()
@@ -408,7 +408,7 @@ async fn the_sweeper_frees_expired_items_and_trims_the_log_but_never_a_lease() {
         .await
         .unwrap();
     let keys = |i| -> Vec<String> {
-        sluis_rqlite::client::rows(&out, i)
+        atoom_store_rqlite::client::rows(&out, i)
             .unwrap()
             .iter()
             .map(|r| r[0].as_str().unwrap().to_owned())
@@ -421,7 +421,7 @@ async fn the_sweeper_frees_expired_items_and_trims_the_log_but_never_a_lease() {
         "the index entries of the expired item are freed too"
     );
     // The rows were trimmed.
-    let logged = sluis_rqlite::client::rows(&out, 2).unwrap()[0][0]
+    let logged = atoom_store_rqlite::client::rows(&out, 2).unwrap()[0][0]
         .as_i64()
         .unwrap();
     assert_eq!(logged, 0, "every row is older than the retention");
@@ -504,7 +504,7 @@ async fn drop_tables(node: &Node, tables: &[&str]) {
         .collect();
     let out = rq.request(&stmts, true).await.unwrap();
     assert!(
-        sluis_rqlite::client::first_failure(&out).is_none(),
+        atoom_store_rqlite::client::first_failure(&out).is_none(),
         "{out:?}"
     );
 }
@@ -513,7 +513,7 @@ async fn drop_tables(node: &Node, tables: &[&str]) {
 /// that a stream that is open polls the old log or the new one and never a database with no tables, which it would end
 /// on with `engine` and not with the refusal of an epoch the test is about.
 async fn reset_database(node: &Node, ns: &str) {
-    let epoch = i64::try_from(sluis_conformance::rules::new_log_epoch().unwrap()).unwrap();
+    let epoch = i64::try_from(atoom_store_conformance::rules::new_log_epoch().unwrap()).unwrap();
     let mut stmts: Vec<Stmt> = ["items", "index", "log", "meta", "guard"]
         .iter()
         .map(|t| Stmt::new(format!("DROP TABLE IF EXISTS {ns}_{t}"), vec![]))
@@ -522,7 +522,7 @@ async fn reset_database(node: &Node, ns: &str) {
     let rq = Rq::new(&node.url, None).unwrap();
     let out = rq.request(&stmts, true).await.unwrap();
     assert!(
-        sluis_rqlite::client::first_failure(&out).is_none(),
+        atoom_store_rqlite::client::first_failure(&out).is_none(),
         "{out:?}"
     );
 }
@@ -574,7 +574,7 @@ async fn a_log_made_again_after_a_trim_does_not_keep_the_floor_of_the_old_one() 
         rpc.transact(logged(&format!("floor/b{i}"))).await.unwrap();
     }
     let head = rpc
-        .query(sluis_proto::sluis::port::item::v2alpha1::QueryRequest {
+        .query(atoom_store::atoom::store::v1alpha1::QueryRequest {
             prefix: b"floor/".to_vec(),
             ..Default::default()
         })
@@ -638,7 +638,7 @@ async fn a_log_made_again_has_another_epoch_and_a_point_saved_before_it_is_refus
     let page = |rpc: &ItemServiceClient<sluis_kit::Transport>| {
         let rpc = rpc.clone();
         async move {
-            rpc.query(sluis_proto::sluis::port::item::v2alpha1::QueryRequest {
+            rpc.query(atoom_store::atoom::store::v1alpha1::QueryRequest {
                 prefix: b"epoch/".to_vec(),
                 page_size: 1,
                 ..Default::default()
@@ -743,13 +743,13 @@ async fn a_log_made_again_has_another_epoch_and_a_point_saved_before_it_is_refus
         )
         .await
         .unwrap();
-    assert!(sluis_rqlite::client::first_failure(&out).is_none());
+    assert!(atoom_store_rqlite::client::first_failure(&out).is_none());
     assert!(
         d.log_epoch().await.is_err(),
         "a log with no epoch is not read"
     );
     let err = rpc
-        .query(sluis_proto::sluis::port::item::v2alpha1::QueryRequest {
+        .query(atoom_store::atoom::store::v1alpha1::QueryRequest {
             prefix: b"epoch/".to_vec(),
             ..Default::default()
         })
@@ -773,7 +773,7 @@ async fn check_and_version_and_the_basic_authentication() {
     let password = format!(
         "pw-{}-{:x}",
         std::process::id(),
-        sluis_conformance::rules::now_ms()
+        atoom_store_conformance::rules::now_ms()
     );
     let node = start_node(&bin, Some(("sluis", &password))).await;
     let creds = tempfile::NamedTempFile::new().unwrap();
@@ -856,7 +856,7 @@ async fn a_dead_engine_is_unavailable_engine() {
         );
     };
     gone(
-        rpc.get(sluis_proto::sluis::port::item::v2alpha1::ItemGetRequest {
+        rpc.get(atoom_store::atoom::store::v1alpha1::ItemGetRequest {
             key: b"a/b".to_vec(),
             ..Default::default()
         })
@@ -877,14 +877,14 @@ async fn a_dead_engine_is_unavailable_engine() {
         .expect_err("transact"),
     );
     gone(
-        rpc.query(sluis_proto::sluis::port::item::v2alpha1::QueryRequest::default())
+        rpc.query(atoom_store::atoom::store::v1alpha1::QueryRequest::default())
             .await
             .map(|_| ())
             .expect_err("query"),
     );
     // A linearizable query that rqlite cannot answer is refused like the others, and is not answered at a weaker level.
     gone(
-        rpc.query(sluis_proto::sluis::port::item::v2alpha1::QueryRequest {
+        rpc.query(atoom_store::atoom::store::v1alpha1::QueryRequest {
             linearizable: true,
             ..Default::default()
         })
@@ -912,6 +912,38 @@ fn serve_refuses_a_socket_gid_of_zero_or_text_before_it_listens() {
         assert!(
             String::from_utf8_lossy(&out.stderr).contains("--socket-gid"),
             "{gid}"
+        );
+        assert!(!sock.exists());
+    }
+}
+
+/// A change-log retention above seven days is refused at start (the limit is atoom's, in `store/rqlite`'s settings), before rqlite is
+/// waited for and before the socket exists, and the refusal names the retention. This test needs no rqlited.
+///
+/// verifies: REQ-DATA-105
+#[test]
+fn serve_refuses_a_changelog_retention_above_seven_days_before_it_listens() {
+    let run = tempfile::tempdir().unwrap();
+    for retention in ["169h", "8d", "0s"] {
+        let sock = run.path().join("r.sock");
+        let out = Command::new(env!("CARGO_BIN_EXE_rqlite"))
+            .args(["serve", "--socket"])
+            .arg(&sock)
+            .args([
+                "--rqlite-url",
+                "http://127.0.0.1:1",
+                "--namespace",
+                "durable",
+                "--changelog-retention",
+                retention,
+            ])
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(1), "{retention}");
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains("retention"),
+            "{retention}: {}",
+            String::from_utf8_lossy(&out.stderr)
         );
         assert!(!sock.exists());
     }
@@ -983,7 +1015,7 @@ async fn proxy(target: &str) -> Proxy {
 /// listing. The driver never answers one level for the other.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_query_is_read_at_the_level_it_asked_for() {
-    use sluis_proto::sluis::port::item::v2alpha1::QueryRequest;
+    use atoom_store::atoom::store::v1alpha1::QueryRequest;
     let Some(bin) = rqlited() else { return };
     let node = start_node(&bin, None).await;
     let px = proxy(&node.url).await;

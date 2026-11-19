@@ -1,5 +1,5 @@
 //! The item engine: the four calls of the item contract that store@ makes
-//! (`sluis.port.item.v2alpha1.ItemService`).
+//! (`atoom.store.v1alpha1.ItemService`, atoom's item port, vendored under `third_party/atoom`).
 //!
 //! The trait is the seam of the unit tests, which run an in-process engine. The Connect client
 //! below is the only code that talks to a driver, through `sluis_kit::dial`.
@@ -8,7 +8,7 @@ use std::future::Future;
 
 use connectrpc::error::ErrorCode;
 use sluis_kit::{Client, Transport, refusal_reason};
-use sluis_proto::sluis::port::item::v2alpha1::{
+use sluis_proto::atoom::store::v1alpha1::{
     DriverItem, ItemGetRequest, ItemServiceClient, QueryRequest, QueryResponse, TailLogRequest,
     TailLogResponse, TransactRequest, TransactResponse,
 };
