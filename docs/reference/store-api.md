@@ -274,7 +274,7 @@ message TailLogResponse { uint64 sequence = 1; bytes key = 2; uint64 version = 3
 
 ### The source contract
 
-`sluis.port.source.v2alpha1.SourceService`, served by the `file`, `appconfig`, `credential` and `ssm` drivers.
+`atoom.source.v1alpha1.SourceService` (renamed from `sluis.port.source.v2alpha1.SourceService` when the port moved to [atoom](https://github.com/truvity/atoom/tree/master/source); the contract is vendored under `third_party/atoom/proto`, and its rules in prose are in [`source/docs/source-port.md`](https://github.com/truvity/atoom/blob/master/source/docs/source-port.md)), served by the `file`, `appconfig`, `credential` and `ssm` drivers; the `file` and `credential` drivers are atoom's.
 
 ```proto
 service SourceService {
@@ -338,7 +338,7 @@ Every driver binary has the same four commands.
 | `version` | Prints the driver's version and the contract versions it speaks |
 | `conformance` | Runs the port's suite against the driver. A driver passes the suite or it is not a driver |
 
-The suite is atoom's (`store/conformance`: the library, and the binary `store-conformance --socket PATH`, which runs against a driver in any language); `conformance` of sluis's `rqlite` host runs it. The in-memory engine, for tests only (atoom's `store/memory`), passes the same suite as `rqlite` and `dynamodb`, and the `postgres` driver passes it too. The suite holds the conditional-update, expiry, ordering and change-log cases of the item contract and the capability cases of the source contract.
+The suites are atoom's (`store/conformance` and `source/conformance`: the libraries, and the binaries `store-conformance --socket PATH` and `source-conformance --socket PATH --present NAME --bytes FILE`, which run against a driver in any language); `conformance` of sluis's `rqlite` host runs the first, and that of the `file` and `credential` hosts runs the backend suite of atoom's library. The in-memory engine, for tests only (atoom's `store/memory`), passes the same suite as `rqlite` and `dynamodb`, and the `postgres` driver passes it too. The suite holds the conditional-update, expiry, ordering and change-log cases of the item contract and the capability cases of the source contract.
 
 ## The sealed envelope
 
