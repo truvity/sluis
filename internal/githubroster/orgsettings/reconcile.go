@@ -658,7 +658,9 @@ func attached(status string) bool {
 // neither: it is never asked for, so asking would not end, and never detached,
 // since the controller did not choose it. The archived ones that hold the
 // configuration are the third answer, for the report.
-func (r *run) attachmentDiff(ctx context.Context, id int64, exists bool, want tenant.SecurityConfiguration, ids []int64) (missing, extra, archived []int64, err error) {
+func (r *run) attachmentDiff(
+	ctx context.Context, id int64, exists bool, want tenant.SecurityConfiguration, ids []int64,
+) (missing, extra, archived []int64, err error) {
 	wanted := ids
 	if want.Attach.Scope == tenant.ScopeAll {
 		live := make([]githubapp.Repo, 0, len(r.repos))
