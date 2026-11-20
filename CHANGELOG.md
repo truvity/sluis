@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.85.2
+
+A patch release: the console shows an App named by `controllers.github.appRefs` as one row judged against its catalogue declaration, and refuses at load an `appRefs` App declared without `members: write` and `organization_administration` (#1928); a code security configuration can be the organisation's default for new repositories with `attach.default_for_new_repos`, and `scope: all` no longer attaches archived repositories (#1929). Upgrade notes: declare those two permissions on an `appRefs` App; the audit catalogue stays at 1.25.0.
+
 ### Added
 
 - **A code security configuration can be the organisation's default for new repositories.** The `attach` of a configuration in an organisation's settings document (ADR 0080) takes an optional `default_for_new_repos`: `all`, `public`, `private_and_internal` or `none`. The controller sets it with `PUT /orgs/{org}/code-security/configurations/{id}/defaults` on a configuration it wrote, reports drift when GitHub holds another, and does nothing in `report` mode. Absent, the organisation's default is left as it is. A recreated configuration no longer loses the default a hand-made one had: state it in the document. The row is `security_configuration` `<name>:default_for_new_repos`, action `update`, in the report and the existing per-change audit record (no new audit action; the catalogue stays 1.25.0). Two configurations that are both the default for one kind of repository are refused. Refs #1929.
