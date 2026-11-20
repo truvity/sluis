@@ -430,7 +430,7 @@ jobs:
           # The token is for the API calls and nothing else; a credential left
           # in .git/config is one more place a step could read it.
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
       - uses: truvity/ci-actions/token-exchange@576891256d95a4b615dcbbf63cabd71fad9bfa4f # v3.14.2
