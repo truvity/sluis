@@ -21,7 +21,6 @@
 pub mod audit;
 pub mod config;
 pub mod digest;
-pub mod driver_client;
 pub mod keyset;
 pub mod publish;
 pub mod run;

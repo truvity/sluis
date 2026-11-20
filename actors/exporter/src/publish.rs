@@ -28,6 +28,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime};
 
 use atoom_destination::{Destination, Document, Error, Purged};
+use atoom_socket::call::{self, Call};
 use sluis_proto::sluis::exporter::v2alpha1::ExportReport;
 
 use crate::audit::{Auditor, Written};
@@ -143,6 +144,25 @@ pub struct Publisher {
     alerted: Mutex<HashMap<String, Instant>>,
 }
 
+/// A random UUID version 4 (RFC 9562 section 5.4), the form `entry` gives a request (contracts.md "Every call"): 36 characters of
+/// lower-case hex and hyphens, a valid correlation id. `None` when the random generator fails: the calls then go with no id, as
+/// they did before, and are not refused.
+fn new_correlation_id() -> Option<String> {
+    let mut b = [0u8; 16];
+    aws_lc_rs::rand::fill(&mut b).ok()?;
+    b[6] = b[6] & 0x0f | 0x40; // version 4
+    b[8] = b[8] & 0x3f | 0x80; // variant 10
+    let h = atoom_destination::hex(&b);
+    Some(format!(
+        "{}-{}-{}-{}-{}",
+        &h[0..8],
+        &h[8..12],
+        &h[12..16],
+        &h[16..20],
+        &h[20..32]
+    ))
+}
+
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
@@ -190,9 +210,12 @@ impl Publisher {
         lock(&self.alerted).remove(key);
     }
 
-    /// One call to the destination, bounded by [`Timing::call`].
+    /// One call to the destination, bounded by [`Timing::call`]: by a timeout here, and on the wire, where the call is made in a
+    /// [`call::scope`] that carries what is left of that time (`Connect-Timeout-Ms`) and the correlation id of the publication
+    /// ([`Publisher::publish`]), so the driver stops when exporter would give up and its log lines name the publication.
     async fn call<T>(&self, f: impl Future<Output = Result<T, Error>>) -> Result<T, Error> {
-        tokio::time::timeout(self.timing.call, f)
+        let scope = call::current().with_timeout(self.timing.call);
+        tokio::time::timeout(self.timing.call, call::scope(scope, f))
             .await
             .unwrap_or_else(|_| Err(Error::Unavailable("the call timed out".into())))
     }
@@ -259,8 +282,31 @@ impl Publisher {
     /// runs the purge, the read back and the report even when nothing changed (the start and the daily reconcile), and
     /// `removed` are the kids a `KeyRevocation` event named that the caller has not seen in a listing yet: they are all
     /// that is done when the listings cannot be read.
+    ///
+    /// Every call the publication makes to the destination carries one correlation id, made here for this publication (exporter
+    /// serves no request, so no earlier hop gave it one), and the time of [`Timing::call`] (see [`Publisher::call`]).
     #[allow(clippy::too_many_arguments)]
     pub async fn publish<D: Destination>(
+        &self,
+        destination: &str,
+        driver: &D,
+        doc: &Doc,
+        read: &Read,
+        removed: &HashSet<String>,
+        seen: Instant,
+        force: bool,
+    ) -> Outcome {
+        let scope =
+            new_correlation_id().map_or_else(Call::new, |id| Call::new().with_correlation(id));
+        call::scope(
+            scope,
+            self.publish_in(destination, driver, doc, read, removed, seen, force),
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn publish_in<D: Destination>(
         &self,
         destination: &str,
         driver: &D,

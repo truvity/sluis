@@ -11,30 +11,30 @@ exclude = [
 # atoom, pinned by release tag (docs/plan.md of truvity/atoom): `just atoom-sync X.Y.Z` moves these lines, go.mod and third_party/atoom
 # together, and `just atoom-check` holds them to one release and refuses it unless atoom's CI is green on the tagged commit. Cargo.lock
 # records the commit the tag names.
-atoom-common = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
+atoom-common = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
 # The item port: its contract, the conformance kit's library (store@'s tests use its rules, and the rqlite host's `conformance` command its suite), the two drivers' libraries and the plain socket host.
-atoom-socket = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
-atoom-store = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
-atoom-store-conformance = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
-atoom-store-memory = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
-atoom-store-rqlite = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
+atoom-socket = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
+atoom-store = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
+atoom-store-conformance = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
+atoom-store-memory = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
+atoom-store-rqlite = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
 # The source port: its contract and the two drivers' libraries. Both drivers are Linux only, as sluis's boards are.
-atoom-source = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
-atoom-source-credential = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
-atoom-source-file = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
+atoom-source = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
+atoom-source-credential = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
+atoom-source-file = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
 # The audit ports: the contracts and the libraries of the five drivers. The kits of the blob, source, transport and index ports are not used: atoom's CI runs them. The blob drivers are Linux only, as sluis's
-# boards are. `atoom-destination` is the port crate with the `Destination` trait and the rules (exporter@ takes them from it); the destination kit holds the service, the in-memory driver and the suite.
-atoom-blob = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
-atoom-blob-fs = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
-atoom-blob-fsdir = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
-atoom-blob-fsreadonly = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
-atoom-destination = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
-atoom-destination-conformance = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
-atoom-destination-dir = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
-atoom-index = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
-atoom-index-sqlite = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
-atoom-transport = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
-atoom-transport-spool = { git = "https://github.com/truvity/atoom", tag = "v0.1.0" }
+# boards are. `atoom-destination` is the port crate with the `Destination` trait, the rules and the client (exporter@ takes all three from it, over `atoom-socket`'s dial); the destination kit holds the service, the in-memory driver and the suite.
+atoom-blob = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
+atoom-blob-fs = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
+atoom-blob-fsdir = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
+atoom-blob-fsreadonly = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
+atoom-destination = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
+atoom-destination-conformance = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
+atoom-destination-dir = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
+atoom-index = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
+atoom-index-sqlite = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
+atoom-transport = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
+atoom-transport-spool = { git = "https://github.com/truvity/atoom", tag = "v0.2.0" }
 
 [workspace.package]
 edition = "2024"

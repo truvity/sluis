@@ -145,8 +145,8 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "atoom-blob"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "buffa",
  "buffa-types",
@@ -157,8 +157,8 @@ dependencies = [
 
 [[package]]
 name = "atoom-blob-fs"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "anyhow",
  "atoom-blob-fsdir",
@@ -173,8 +173,8 @@ dependencies = [
 
 [[package]]
 name = "atoom-blob-fsdir"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "anyhow",
  "atoom-blob",
@@ -188,8 +188,8 @@ dependencies = [
 
 [[package]]
 name = "atoom-blob-fsreadonly"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "anyhow",
  "atoom-blob",
@@ -207,8 +207,8 @@ dependencies = [
 
 [[package]]
 name = "atoom-common"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "base64 0.22.1",
  "buffa",
@@ -219,9 +219,10 @@ dependencies = [
 
 [[package]]
 name = "atoom-destination"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
+ "atoom-common",
  "buffa",
  "buffa-types",
  "connectrpc",
@@ -231,8 +232,8 @@ dependencies = [
 
 [[package]]
 name = "atoom-destination-conformance"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "anyhow",
  "atoom-common",
@@ -247,8 +248,8 @@ dependencies = [
 
 [[package]]
 name = "atoom-destination-dir"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "anyhow",
  "atoom-destination-conformance",
@@ -264,8 +265,8 @@ dependencies = [
 
 [[package]]
 name = "atoom-index"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "buffa",
  "buffa-types",
@@ -276,8 +277,8 @@ dependencies = [
 
 [[package]]
 name = "atoom-index-sqlite"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "anyhow",
  "atoom-common",
@@ -296,8 +297,8 @@ dependencies = [
 
 [[package]]
 name = "atoom-socket"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "anyhow",
  "atoom-common",
@@ -315,8 +316,8 @@ dependencies = [
 
 [[package]]
 name = "atoom-source"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "buffa",
  "buffa-types",
@@ -327,8 +328,8 @@ dependencies = [
 
 [[package]]
 name = "atoom-source-credential"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "anyhow",
  "atoom-common",
@@ -345,8 +346,8 @@ dependencies = [
 
 [[package]]
 name = "atoom-source-file"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "anyhow",
  "atoom-common",
@@ -365,8 +366,8 @@ dependencies = [
 
 [[package]]
 name = "atoom-store"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "buffa",
  "buffa-types",
@@ -377,8 +378,8 @@ dependencies = [
 
 [[package]]
 name = "atoom-store-conformance"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "anyhow",
  "atoom-common",
@@ -393,8 +394,8 @@ dependencies = [
 
 [[package]]
 name = "atoom-store-memory"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "anyhow",
  "atoom-common",
@@ -410,8 +411,8 @@ dependencies = [
 
 [[package]]
 name = "atoom-store-rqlite"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "anyhow",
  "atoom-common",
@@ -434,8 +435,8 @@ dependencies = [
 
 [[package]]
 name = "atoom-transport"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "buffa",
  "buffa-types",
@@ -446,8 +447,8 @@ dependencies = [
 
 [[package]]
 name = "atoom-transport-spool"
-version = "0.1.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.1.0#a74d671d99aadaa589e48a534396f813cd2073a9"
+version = "0.2.0"
+source = "git+https://github.com/truvity/atoom?tag=v0.2.0#d97aaea5f51f75bf3414512db8680e580121250a"
 dependencies = [
  "anyhow",
  "atoom-common",
@@ -1284,6 +1285,7 @@ dependencies = [
  "atoom-destination",
  "atoom-destination-conformance",
  "atoom-destination-dir",
+ "atoom-socket",
  "aws-lc-rs",
  "base64 0.22.1",
  "buffa",

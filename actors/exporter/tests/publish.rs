@@ -1064,6 +1064,55 @@ async fn the_manifest_names_what_is_configured_and_the_reports_of_the_rest_are_r
     run.stop().await;
 }
 
+/// Every call to a destination is made in a call context: the time of one call (`Timing::call`, which is the `Connect-Timeout-Ms` a
+/// driver's client sends) and the correlation id of the publication, valid for the wire and the same for all the calls of it.
+#[tokio::test]
+async fn every_call_to_a_destination_carries_a_correlation_id_and_the_time_of_a_call() {
+    let w = World::new().await;
+    let spy = common::Spy::new(Memory::new());
+    w.store.set_ring(vec![test_key("kid-a", "active").key]);
+    let targets = vec![Target {
+        name: "mem".into(),
+        driver: spy.clone(),
+        documents: vec![public_doc("https://sluis.example.com")],
+    }];
+    let run = spawn(w.engine(targets, |c| c.timing.call = Duration::from_secs(7)));
+    until(PATIENCE, "a published document", || {
+        spy.inner.body("jwks").is_some()
+            && spy
+                .seen
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|(op, ..)| *op == "read_back")
+    })
+    .await;
+    run.stop().await;
+
+    let seen = spy.seen.lock().unwrap().clone();
+    let ops: Vec<&str> = seen.iter().map(|(op, ..)| *op).collect();
+    for want in ["list", "put", "purge", "read_back"] {
+        assert!(ops.contains(&want), "no {want} in {ops:?}");
+    }
+    for (op, _, left) in &seen {
+        let left = left.expect("a deadline");
+        assert!(
+            left > Duration::from_secs(1) && left <= Duration::from_secs(7),
+            "{op}: {left:?} left of a call of 7 s"
+        );
+    }
+    // The calls up to the first read back are one publication: one id, valid on the wire.
+    let first = seen.iter().position(|(op, ..)| *op == "read_back").unwrap();
+    let id = seen[0].1.clone().expect("a correlation id");
+    assert!(atoom_socket::call::valid_id(&id), "{id}");
+    assert!(
+        seen[..=first]
+            .iter()
+            .all(|(_, c, _)| c.as_ref() == Some(&id)),
+        "one id for a publication: {seen:?}"
+    );
+}
+
 /// A destination that hangs delays nothing for the others: a revocation reaches the healthy one at once, a stop is not
 /// held up by the call in flight, and the hung one is reported `unverified` once its budget is spent.
 ///
