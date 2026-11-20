@@ -112,6 +112,15 @@ type githubAppSpec struct {
 	// this App acts on; reports is whether it could report at all.
 	reported bool
 	reports  bool
+
+	// appRef is the App an organisation's controller row stands for: the id
+	// of the catalogue App its record names. Empty on any other row.
+	appRef string
+	// manages is whether this catalogue App is also the App the roster acts
+	// through for its organisation: the organisation's controller row is then
+	// this one, with both roles and the catalogue declaration as the only one
+	// the App is judged against.
+	manages bool
 }
 
 // githubAppsFacts are the answers about the deployment that come with the
@@ -211,7 +220,7 @@ func (c *Service) decorateApp(app *directoryrosterv1.GitHubApp, id access.Identi
 		return
 	}
 	app.OwnerDirectory, app.OwnerDomain = spec.owner, domains[spec.owner]
-	app.CanChangeOwner = spec.purpose == appController && spec.created && id.Can(access.RoleOperator)
+	app.CanChangeOwner = spec.actsForOrganisation() && spec.created && id.Can(access.RoleOperator)
 }
 
 // GetGitHubApp implements one App's page.
@@ -397,6 +406,7 @@ func (c *Service) githubAppSpecs(ctx context.Context) ([]githubAppSpec, githubAp
 	if err != nil {
 		return nil, facts, err
 	}
+	controllerSpecs, catalogueSpecs = c.mergeRosterApps(controllerSpecs, catalogueSpecs)
 	specs := slices.Concat(linkSpecs, controllerSpecs, runnerSpecs, catalogueSpecs)
 	if facts.owners, err = c.githubOwners(ctx); err != nil {
 		return nil, facts, err
@@ -407,6 +417,35 @@ func (c *Service) githubAppSpecs(ctx context.Context) ([]githubAppSpec, githubAp
 		}
 	}
 	return specs, facts, nil
+}
+
+// mergeRosterApps makes one row of an organisation's controller App and the
+// catalogue App it acts through, when the record names a catalogue App the
+// deployment declares and the declaration covers what the roster needs of an
+// App ([githubapp.RosterNeeds]; `controllers.github.appRefs` is refused at
+// load otherwise). The row is the catalogue App's, judged against its
+// declaration alone: the built-in roster manifest is for an organisation whose
+// App is its own. An organisation whose App is not declared, whose declared App
+// cannot act yet, or that the policy no longer binds, keeps its controller
+// row.
+func (c *Service) mergeRosterApps(controllers, catalogues []githubAppSpec) (kept, merged []githubAppSpec) {
+	merged = catalogues
+	for i := range controllers {
+		ctl := &controllers[i]
+		at := -1
+		if ctl.declared && ctl.created && ctl.appRef != "" {
+			at = slices.IndexFunc(merged, func(s githubAppSpec) bool {
+				return s.id == ctl.appRef && s.declared && s.created && strings.EqualFold(s.org, ctl.org) &&
+					len(githubapp.RosterGaps(s.entry.Permissions)) == 0
+			})
+		}
+		if at < 0 {
+			kept = append(kept, *ctl)
+			continue
+		}
+		merged[at].manages, merged[at].reported, merged[at].reports = true, ctl.reported, ctl.reports
+	}
+	return kept, merged
 }
 
 // presetID is the id a preset App takes, unless a catalogue id already
@@ -512,6 +551,7 @@ func (c *Service) controllerAppSpecs(ctx context.Context, bound map[string]*bind
 			spec.created, spec.installed = true, record.Installed()
 			spec.appID, spec.appSlug, spec.htmlURL, spec.installationID = record.AppID, record.AppSlug, record.HTMLURL, record.InstallationID
 			spec.connectedAt, spec.connectedBy = record.ConnectedAt, record.ConnectedBy
+			spec.appRef = record.AppRef
 			spec.key = c.organisationKey(ctx, org)
 			if noter, ok := c.deps.Orgs.(declaredAppNoter); ok {
 				note, err := noter.DeclaredAppNote(ctx, org)
@@ -714,6 +754,7 @@ func (c *Service) githubAppView(ctx context.Context, spec githubAppSpec, fresh b
 		Installation: spec.entry.InstallationScope(), State: appNotCreated, Declared: spec.declared,
 		Events: slices.Clone(spec.entry.Events), SecretKeys: slices.Clone(spec.place.keys),
 		LinkedAccounts: int32(spec.linked), //nolint:gosec // a count of people
+		ManagesTeams:   spec.manages,
 	}
 	if p := spec.place; p.adapter != "" {
 		out.SecretPlace = &directoryrosterv1.SecretPlace{Adapter: p.adapter, Location: p.location}
@@ -811,6 +852,13 @@ func withNote(reason, note string) string {
 	return reason + "; " + note
 }
 
+// actsForOrganisation is whether the roster acts through this App for its
+// organisation: an organisation's controller App, or a catalogue App that
+// has taken that role ([Service.mergeRosterApps]).
+func (s *githubAppSpec) actsForOrganisation() bool {
+	return s.purpose == appController || s.manages
+}
+
 // declarer is what to call whoever declared this App: the deployment's
 // catalogue, or this service's own manifest builder.
 func (s *githubAppSpec) declarer() string {
@@ -865,7 +913,7 @@ func attentionOf(spec githubAppSpec, state directoryrosterv1.AppState, reason st
 		if spec.linked == 0 {
 			attention, detail = appWaitingPerson, "created; nobody has linked an account through it yet"
 		}
-	case spec.purpose == appController && state == appInstalled && spec.reports && !spec.reported:
+	case spec.actsForOrganisation() && state == appInstalled && spec.reports && !spec.reported:
 		attention, detail = appWaitingController, "installed; the controller has not reported on the organisation yet"
 	case state == appInstalled:
 		attention = appDone

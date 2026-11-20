@@ -240,6 +240,9 @@ export type GitHubAppView = {
   secretLocation: string;
   /** Accounts linked through it. The link App only. */
   linked: number;
+  /** Whether the controller also manages the organisation's members and teams
+   *  through it: a catalogue App named in appRefs is one row with both roles. */
+  managesTeams: boolean;
 };
 
 const purposeOrder: Record<AppPurpose, number> = { link: 0, controller: 1, runners: 2, tokens: 3 };
@@ -370,6 +373,7 @@ export function appView(app: GitHubApp): GitHubAppView {
     secretAdapter: app.secretPlace?.adapter || (app.secret ? "kubernetes" : ""),
     secretLocation: app.secretPlace?.location || app.secret,
     linked: app.linkedAccounts,
+    managesTeams: app.managesTeams,
   };
 }
 
@@ -397,7 +401,7 @@ export function purposeWords(app: GitHubAppView): string {
     case "runners":
       return `runners · ${app.tier}`;
     default:
-      return "tokens";
+      return app.managesTeams ? "tokens · manages teams" : "tokens";
   }
 }
 
@@ -464,9 +468,10 @@ export function summaryOf(app: GitHubAppView): string {
       return `The ${app.tier} runners register with ${app.org} through it; ${stageClause(app)}.`;
     default: {
       const groups = new Set(app.grants.map((g) => g.group)).size;
+      const teams = app.managesTeams ? `The controller manages ${app.org}'s members and teams through it. ` : "";
       return groups === 0
-        ? `No internal group may mint tokens of it in ${app.org}; ${stageClause(app)}.`
-        : `Mints tokens for ${plural(groups, "internal group", "internal groups")} on ${grantReach(app)}; ${stageClause(app)}.`;
+        ? `${teams}No internal group may mint tokens of it in ${app.org}; ${stageClause(app)}.`
+        : `${teams}Mints tokens for ${plural(groups, "internal group", "internal groups")} on ${grantReach(app)}; ${stageClause(app)}.`;
     }
   }
 }

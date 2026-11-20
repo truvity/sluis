@@ -23,7 +23,7 @@ func policyWith(t *testing.T, sections string) (*config.PolicyDocument, error) {
 	return config.Load[config.PolicyDocument](file)
 }
 
-const renovate = "      - {id: renovate, purpose: catalogue, org: example-org, export: true, labels: {team: platform}, permissions: {contents: read}}\n"
+const renovate = "      - {id: renovate, purpose: catalogue, org: example-org, export: true, labels: {team: platform}, permissions: {contents: read, members: write, organization_administration: write}}\n"
 
 func TestTheListGivesEveryViewAndLabel(t *testing.T) {
 	d, err := policyWith(t, `apps:
@@ -116,6 +116,17 @@ func TestTheListIsHeldToItsRules(t *testing.T) {
 		"a ref to another org": {
 			ghApps("{id: x, purpose: catalogue, org: other-org, "+perms+"}") + refs("example-org", "x"), "created under other-org"},
 		"a ref for an unbound org": {ghApps("{id: renovate, "+catalogued+"}") + refs("nowhere", "renovate"), "does not bind"},
+		// The roster is judged against the declaration alone, so the
+		// declaration must give it what its own manifest asks.
+		"a ref to an App without members write": {
+			ghApps("{id: x, purpose: catalogue, org: example-org, permissions: {organization_administration: read}}") + refs("example-org", "x"),
+			"members: write is not declared"},
+		"a ref to an App with members read": {
+			ghApps("{id: x, purpose: catalogue, org: example-org, permissions: {members: read, organization_administration: read}}") + refs("example-org", "x"),
+			"members is declared read and the roster needs write"},
+		"a ref to an App without organisation administration": {
+			ghApps("{id: x, purpose: catalogue, org: example-org, permissions: {members: write}}") + refs("example-org", "x"),
+			"organization_administration: read is not declared"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := policyWith(t, tc.sections)
@@ -223,5 +234,19 @@ func TestTwoOrganisationsMayNotReadThroughOneRole(t *testing.T) {
 	// The fixture binds one organisation, so the second is refused for that and for nothing else.
 	if _, err := policyWith(t, own); err != nil && strings.Contains(err.Error(), "same role") {
 		t.Errorf("two organisations on two roles: %v", err)
+	}
+}
+
+// An App the roster does not act through is held to nothing of the roster's:
+// the check applies to an organisation's appRefs entry alone, and a
+// declaration that covers more than the roster needs passes.
+func TestOnlyAnAppRefsEntryIsHeldToWhatTheRosterNeeds(t *testing.T) {
+	poor := "{id: x, purpose: catalogue, org: example-org, " + perms + "}"
+	if _, err := policyWith(t, ghApps(poor)); err != nil {
+		t.Errorf("an App no organisation names was refused: %v", err)
+	}
+	rich := "{id: x, purpose: catalogue, org: example-org, permissions: {contents: write, members: write, organization_administration: admin}}"
+	if _, err := policyWith(t, ghApps(rich)+"controllers:\n  github: {appRefs: {example-org: x}}\n"); err != nil {
+		t.Errorf("a declaration covering the roster's needs was refused: %v", err)
 	}
 }

@@ -1063,7 +1063,7 @@ function AppPage({
         {
           label: "Owner",
           value:
-            shown.purpose !== "link" && shown.stage !== "not-created" && shown.purpose === "controller"
+            shown.purpose !== "link" && shown.stage !== "not-created" && (shown.purpose === "controller" || shown.managesTeams)
               ? ownerSentence(shown.ownerDirectory, shown.ownerDomain, "only the installation-wide role operates it")
               : undefined,
         },
@@ -1142,7 +1142,7 @@ function AppPage({
 
       {shown.purpose === "tokens" && operator && shown.installationId ? <RecentTokens id={shown.id} /> : null}
 
-      {shown.purpose === "controller" ? (
+      {shown.purpose === "controller" || shown.managesTeams ? (
         <Section title="Acts on" hint="the organisation whose members and teams the controller manages through it">
           <Rows
             items={org ? [org] : []}

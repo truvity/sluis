@@ -52,7 +52,7 @@ The document checks run wherever it is loaded: the binary, `sluisctl policy rend
 | a catalogue grant naming an undeclared group |
 | an App with no `purpose`, a second `link` App, a runner entry without a `tier` |
 | an `appNames` entry for an unbound organisation or a name over 34 characters, a `link` or catalogue `name` over 34 |
-| an `appRefs` entry for an unbound organisation, an undeclared App or one created under another organisation |
+| an `appRefs` entry for an unbound organisation, an undeclared App, one created under another organisation or one declared without `members: write` and `organization_administration: read` or higher |
 | a Slack App for an undeclared workspace |
 | an enabled organisation or workspace the policy does not bind |
 | two clusters for one issuer |

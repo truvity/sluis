@@ -346,7 +346,12 @@ type GitHubApp struct {
 	// where the App's key is kept, whichever store the deployment keeps
 	// secrets in. Unset where nothing says: `secret` then still names a
 	// Kubernetes Secret when there is one.
-	SecretPlace   *SecretPlace `protobuf:"bytes,37,opt,name=secret_place,json=secretPlace,proto3" json:"secret_place,omitempty"`
+	SecretPlace *SecretPlace `protobuf:"bytes,37,opt,name=secret_place,json=secretPlace,proto3" json:"secret_place,omitempty"`
+	// whether the controller also manages the organisation's members and teams
+	// through this App, besides its own purpose: a catalogue App that
+	// `controllers.github.appRefs` names for the organisation is one row with
+	// both roles, judged against its catalogue declaration alone.
+	ManagesTeams  bool `protobuf:"varint,38,opt,name=manages_teams,json=managesTeams,proto3" json:"manages_teams,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -638,6 +643,13 @@ func (x *GitHubApp) GetSecretPlace() *SecretPlace {
 		return x.SecretPlace
 	}
 	return nil
+}
+
+func (x *GitHubApp) GetManagesTeams() bool {
+	if x != nil {
+		return x.ManagesTeams
+	}
+	return false
 }
 
 // SecretPlace is where a deployment keeps an item's secret: the secrets
@@ -4795,7 +4807,7 @@ var File_directoryroster_v1_github_proto protoreflect.FileDescriptor
 
 const file_directoryroster_v1_github_proto_rawDesc = "" +
 	"\n" +
-	"\x1fdirectoryroster/v1/github.proto\x12\x12directoryroster.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\"directoryroster/v1/workspace.proto\"\xb5\v\n" +
+	"\x1fdirectoryroster/v1/github.proto\x12\x12directoryroster.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\"directoryroster/v1/workspace.proto\"\xda\v\n" +
 	"\tGitHubApp\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x10\n" +
 	"\x03org\x18\x02 \x01(\tR\x03org\x128\n" +
@@ -4838,7 +4850,8 @@ const file_directoryroster_v1_github_proto_rawDesc = "" +
 	"\vwebhook_url\x18# \x01(\tR\n" +
 	"webhookUrl\x12H\n" +
 	"\x12webhook_rotated_at\x18$ \x01(\v2\x1a.google.protobuf.TimestampR\x10webhookRotatedAt\x12B\n" +
-	"\fsecret_place\x18% \x01(\v2\x1f.directoryroster.v1.SecretPlaceR\vsecretPlace\"C\n" +
+	"\fsecret_place\x18% \x01(\v2\x1f.directoryroster.v1.SecretPlaceR\vsecretPlace\x12#\n" +
+	"\rmanages_teams\x18& \x01(\bR\fmanagesTeams\"C\n" +
 	"\vSecretPlace\x12\x18\n" +
 	"\aadapter\x18\x01 \x01(\tR\aadapter\x12\x1a\n" +
 	"\blocation\x18\x02 \x01(\tR\blocation\"\x17\n" +

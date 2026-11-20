@@ -320,6 +320,90 @@ func TestThePresetAppsAreCheckedAgainstTheirOwnDeclaration(t *testing.T) {
 	}
 }
 
+// rosterRig is a deployment whose organisation globex acts through a catalogue
+// App its configuration names (`controllers.github.appRefs`): the catalogue
+// declares it with the given permissions, the organisation's record names it,
+// and its key is kept.
+func rosterRig(t *testing.T, permissions string) *appsRig {
+	t.Helper()
+	rig := newAppsRig(t)
+	declared, err := catalogue.Parse([]byte("apps:\n  - id: roster\n    org: globex\n    permissions: " + permissions + "\n"))
+	if err != nil {
+		t.Fatalf("catalogue: %v", err)
+	}
+	rig.console.deps.GitHubCatalogue = declared
+	rig.catalogueApp(t, "roster", rig.github.pem)
+	err = rig.console.deps.GitHubOrgs.Put(context.Background(),
+		connection.Record{Org: "globex", AppRef: "roster", AppID: 44, AppSlug: "globex-roster", InstallationID: 7, ConnectedBy: "ada@north.example"},
+		connection.Credential{Org: "globex", AppID: 44, InstallationID: 7, PrivateKey: rig.github.pem})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rig
+}
+
+// An App an organisation's record names from the catalogue is one row with
+// both roles, judged against its catalogue declaration alone: the built-in
+// roster manifest is for an organisation whose App is its own, and judging the
+// one App against two declarations left one of the two rows reporting drift
+// whatever the App held.
+func TestAnAppNamedByAppRefsIsOneRowJudgedAgainstItsCatalogueDeclaration(t *testing.T) {
+	declaredPermissions := map[string]string{
+		"members": "write", "organization_administration": "write", "organization_secrets": "write", "metadata": "read",
+	}
+	rig := rosterRig(t, "{members: write, organization_administration: write, organization_secrets: write}")
+	rig.github.app, rig.github.installed = declaredPermissions, declaredPermissions
+
+	apps, _ := rig.list(t)
+	if _, twice := apps["globex-controller"]; twice {
+		t.Errorf("the organisation's App is listed twice: %v", ids(apps))
+	}
+	roster := apps["roster"]
+	if roster == nil || roster.GetPurpose() != appTokens || roster.GetOrigin() != appCatalogue || !roster.GetManagesTeams() ||
+		roster.GetOrg() != "globex" || roster.GetState() != appInstalled || roster.GetAttention() != appDone || len(roster.GetDrift()) != 0 {
+		t.Fatalf("the one row = %+v, want an installed catalogue App with both roles and no drift", roster)
+	}
+	if !roster.GetCanChangeOwner() {
+		t.Errorf("the one row does not let an operator change the organisation's owner: %+v", roster)
+	}
+
+	// Somebody sets the App to the roster manifest, as the second row used to
+	// ask: the one row says so, once, against the catalogue's declaration.
+	rig.github.app = map[string]string{"members": "write", "organization_administration": "read", "metadata": "read"}
+	rig.github.installed = rig.github.app
+	checked, err := rig.console.CheckGitHubApp(operator(), &directoryrosterv1.CheckGitHubAppRequest{Id: "roster"})
+	if err != nil {
+		t.Fatalf("CheckGitHubApp: %v", err)
+	}
+	drift := strings.Join(checked.GetApp().GetDrift(), "\n")
+	if checked.GetApp().GetState() != appDrifted || !strings.Contains(drift, "organization_administration: read, and the catalogue declares write") ||
+		!strings.Contains(drift, "The App lacks organization_secrets: write") || strings.Contains(drift, "this service declares") {
+		t.Errorf("an App cut down to the roster manifest = %s:\n%s", checked.GetApp().GetState(), drift)
+	}
+}
+
+// A declaration that does not cover what the roster needs is refused at load;
+// a record that names such an App anyway (an older stored one) keeps both rows
+// rather than judging the roster against less than it needs.
+func TestAnAppNamedByARecordThatCannotServeTheRosterKeepsItsControllerRow(t *testing.T) {
+	rig := rosterRig(t, "{members: read, organization_secrets: write}")
+	apps, _ := rig.list(t)
+	if _, ok := apps["globex-controller"]; !ok || apps["roster"].GetManagesTeams() {
+		t.Errorf("the rows = %v, roster manages teams = %v, want both rows and no merge", ids(apps), apps["roster"].GetManagesTeams())
+	}
+}
+
+// An organisation whose App is its own keeps its controller row, judged against
+// the built-in manifest as before.
+func TestAnOrganisationsOwnAppKeepsItsControllerRow(t *testing.T) {
+	own := newAppsRig(t)
+	own.connect(t, own.github.pem)
+	apps, _ := own.list(t)
+	if app := apps["globex-controller"]; app == nil || app.GetPurpose() != appController || app.GetManagesTeams() {
+		t.Errorf("an organisation's own App = %+v, want its controller row as before", app)
+	}
+}
+
 // A preset whose key cannot be read says so, and claims no match: a
 // declaration nobody checked is not a declaration that holds.
 func TestAPresetWhoseKeyCannotBeReadSaysSoRatherThanMatching(t *testing.T) {

@@ -502,7 +502,7 @@ func TestRenderCarriesTheAppRefsOfTheGitHubController(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := strings.Replace(string(raw), "      - {purpose: runner, tier: stable}\n",
-		"      - {purpose: runner, tier: stable}\n      - {id: roster, purpose: catalogue, org: example-org, permissions: {contents: read}}\n", 1)
+		"      - {purpose: runner, tier: stable}\n      - {id: roster, purpose: catalogue, org: example-org, permissions: {contents: read, members: write, organization_administration: read}}\n", 1)
 	text = strings.Replace(text, "    enabledOrgs: [example-org]\n", "    enabledOrgs: [example-org]\n    appRefs: {example-org: roster}\n", 1)
 	file := filepath.Join(t.TempDir(), "installation.yaml")
 	if err = os.WriteFile(file, []byte(text), 0o600); err != nil {
