@@ -485,8 +485,8 @@ func lowerSet(list []string) map[string]struct{} {
 func thingSet(projects map[string]compile.Project) map[string]struct{} {
 	out := make(map[string]struct{}, len(projects))
 
-	for name, project := range projects {
-		for _, thing := range project.Things(name) {
+	for name := range projects {
+		for _, thing := range projects[name].Things(name) {
 			out[thing] = struct{}{}
 		}
 	}
