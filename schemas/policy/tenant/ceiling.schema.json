@@ -60,9 +60,9 @@
       "type": "array"
     },
     "groups": {
-      "description": "Patterns of the internal groups the owner may mint or be granted: `scope:thing:role`, where `*` stands for one whole segment and never for the installation-wide scope `all`.",
+      "description": "Patterns of the internal groups the owner may mint or be granted: `scope:thing:role`, three segments or five when the thing is `vendor:project:customer`, where `*` stands for one whole segment and never for the installation-wide scope `all`. A `*` in the thing of a three-segment pattern stands for any thing.",
       "items": {
-        "pattern": "^(\\*|[^:*\\s]+):(\\*|[^:*\\s]+):(\\*|[^:*\\s]+)$",
+        "pattern": "^(\\*|[^:*\\s]+)(:(\\*|[^:*\\s]+)){2}(:(\\*|[^:*\\s]+):(\\*|[^:*\\s]+))?$",
         "type": "string"
       },
       "type": "array"

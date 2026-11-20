@@ -19,7 +19,7 @@ A caller holding `devel:grafana:editor`, `devel:grafana:viewer`, `devel:k8s:admi
 
 ## Overrides
 
-A client row, a resource row or the `client_documents` block may set `groups: all` to carry everything. It may set `groups: [thing, ...]` to carry every held group of each thing, in any scope. With a declared vocabulary, each name must be a declared thing.
+A client row, a resource row or the `client_documents` block may set `groups: all` to carry everything. It may set `groups: [thing, ...]` to carry every held group of each thing, in any scope. A thing may be `<vendor>:<project>:<customer>`. With a declared vocabulary, each name must be a declared thing.
 
 A self-described client has no row of its own. It shares the gate `client_documents.requires`, and a `client_documents.groups` override widens it for every document client.
 

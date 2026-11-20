@@ -1,10 +1,14 @@
 package authn
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // The grammar of a group name in the estate's vocabulary, which sluis (the issuer,
 // formerly access-roster) defines and every relying party reads: a grant is
-// named `<scope>:<thing>:<role>`, three segments, none empty.
+// named `<scope>:<thing>:<role>`, three segments, or five when the thing is
+// `<vendor>:<project>:<customer>`, none empty.
 //
 // It is written out here, and not imported from sluis, so that this module does
 // not require sluis: sluis is to import this module's SQS sink, and a module
@@ -22,16 +26,19 @@ const (
 )
 
 // SplitGroup reads a group name as a grant: the scope the role is held in, the
-// thing it is held on, and the role. It reports false for a name that is not a
-// grant: two segments, an empty segment, or a fourth one. The scope is returned
-// as written, so ScopeAll comes back as "all".
+// thing it is held on, and the role. The scope is the first segment, the role the
+// last, and the thing is everything between them, joined by GroupSeparator. It
+// reports false for a name that is not a grant: two segments, four, six or more,
+// or an empty segment. The scope is returned as written, so ScopeAll comes back
+// as "all".
 func SplitGroup(name string) (scope, thing, role string, ok bool) {
 	parts := strings.Split(name, GroupSeparator)
-	if len(parts) != 3 {
+	if len(parts) != 3 && len(parts) != 5 {
 		return "", "", "", false
 	}
-	if parts[0] == "" || parts[1] == "" || parts[2] == "" {
+	if slices.Contains(parts, "") {
 		return "", "", "", false
 	}
-	return parts[0], parts[1], parts[2], true
+	last := len(parts) - 1
+	return parts[0], strings.Join(parts[1:last], GroupSeparator), parts[last], true
 }

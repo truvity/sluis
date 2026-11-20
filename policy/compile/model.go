@@ -1,5 +1,12 @@
 package compile
 
+import (
+	"fmt"
+	"strings"
+
+	"github.com/truvity/sluis/policy"
+)
+
 type (
 	// Model is an installation's access model, resolved: every population
 	// named in its own file replaced by the directory groups and addresses
@@ -64,8 +71,18 @@ type (
 		Database bool
 	}
 
-	// Project is one business project's delivery authority.
+	// Project is one business project's delivery authority. The key it
+	// sits under in [Model.Projects] is its thing: one word (`shop`), or
+	// `<vendor>:<project>:<customer>` (`finttech:landing:ie`), see
+	// [ValidThing].
 	Project struct {
+		// Alias is the project's old one-word thing, optional. While it is
+		// set the roster emits every group of the project under BOTH
+		// things, with the same members, and the vocabulary declares both,
+		// so a client's `requires` and `groups` may name either form during
+		// the move. Dropping the alias drops the old groups. Empty changes
+		// nothing.
+		Alias string
 		// Scopes are the scopes the project runs on.
 		Scopes []string
 		// SecretScopes are the scopes where the project keeps secrets and
@@ -130,6 +147,63 @@ type (
 		Adopt string `yaml:"adopt,omitempty"`
 	}
 )
+
+// Things are the things the project's groups are named under: its key,
+// then its alias when it has one. key is the project's row in
+// [Model.Projects].
+func (p Project) Things(key string) []string {
+	if p.Alias == "" {
+		return []string{key}
+	}
+
+	return []string{key, p.Alias}
+}
+
+// ValidThing reports whether s can be a project's thing: one word or exactly
+// three colon-separated words, none empty. It is [policy.ValidThing].
+func ValidThing(s string) bool { return policy.ValidThing(s) }
+
+// ValidateProjects refuses a project whose key is not a thing, whose alias
+// is not one word, or whose alias is the key of, or the alias of, another
+// project: two projects would then mint the same groups. where names the
+// table in the messages (`projects` gives `projects[<name>]: ...`).
+func ValidateProjects(where string, projects map[string]Project) []error {
+	var errs []error
+
+	owner := map[string]string{}
+
+	for _, key := range sortedKeys(projects) {
+		owner[key] = key
+	}
+
+	for _, key := range sortedKeys(projects) {
+		row := fmt.Sprintf("%s[%s]", where, key)
+
+		if !ValidThing(key) {
+			errs = append(errs, fmt.Errorf("%s: the key must be one word or <vendor>:<project>:<customer>, three words", row))
+		}
+
+		alias := projects[key].Alias
+
+		switch {
+		case alias == "":
+		case alias == key:
+			errs = append(errs, fmt.Errorf("%s: alias %q is the key itself", row, alias))
+		case strings.Contains(alias, policy.Separator) || strings.TrimSpace(alias) != alias:
+			errs = append(errs, fmt.Errorf("%s: alias %q must be one word, the project's old thing", row, alias))
+		default:
+			if other, taken := owner[alias]; taken {
+				errs = append(errs, fmt.Errorf("%s: alias %q is already the thing of project %q", row, alias, other))
+
+				continue
+			}
+
+			owner[alias] = key
+		}
+	}
+
+	return errs
+}
 
 // AllScopes is every scope the project holds a grant on: the ones it runs
 // on and the ones where it only keeps secrets, sorted and without repeats,

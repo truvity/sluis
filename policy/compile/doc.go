@@ -11,9 +11,10 @@
 // optional `vocabulary`, sorted, so a render does not churn.
 //
 // The package adds no concept to the policy. Every group it mints follows
-// the one naming rule, `<scope>:<thing>:<role>` ([policy.SplitGroup]), and
-// the two families that are deliberately not grants, `rung:<name>` and
-// `emp:<slug>` ([policy.FamilyRung], [policy.FamilyEmp]).
+// the one naming rule, `<scope>:<thing>:<role>` ([policy.SplitGroup]), where
+// a thing is one word, or `<vendor>:<project>:<customer>` for a grant of five
+// segments, and the two families that are deliberately not grants,
+// `rung:<name>` and `emp:<slug>` ([policy.FamilyRung], [policy.FamilyEmp]).
 //
 // The model is layered the way the access file is:
 //

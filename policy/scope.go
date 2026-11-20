@@ -28,7 +28,10 @@ type GroupsOverride struct {
 	// shapes, tried in this order against a held name:
 	//
 	//   - the held name's THING (in ANY scope) -- `grafana` keeps
-	//     `devel:grafana:viewer` and `prod:grafana:admin` alike;
+	//     `devel:grafana:viewer` and `prod:grafana:admin` alike. A
+	//     five-segment grant's thing is its whole middle,
+	//     `<vendor>:<project>:<customer>`, so `truvity:dms:generic` keeps
+	//     `prod:truvity:dms:generic:deployer` and no other project's;
 	//   - for a two-segment name (`rung:<name>`, `emp:<slug>`, neither of
 	//     which is a grant and so has no thing to name), its FAMILY --
 	//     `emp` keeps every `emp:<slug>` held, `rung` every `rung:<name>`
@@ -97,8 +100,10 @@ func (g GroupsOverride) empty() bool { return !g.All && len(g.Things) == 0 }
 // validate checks one override on its own: "all", or a list of distinct,
 // non-blank entries, each a THING name, a known FAMILY name
 // ([FamilyRung], [FamilyEmp]), or an exact two-segment name (`rung:sre`).
-// A [Vocabulary] in force narrows which bare word (no separator) passes:
-// a declared thing or a known family, never an undeclared thing -- but
+// A thing is one word or `<vendor>:<project>:<customer>`. A [Vocabulary]
+// in force narrows which thing passes (a bare word or the three-word
+// form): a declared thing or, for a bare word, a known family, never an
+// undeclared thing -- but
 // names nothing about a FAMILY itself (there is no `vocabulary.families`
 // table) and nothing about an exact two-segment name, which is a
 // caller's own identity or rung rather than anything a vocabulary
@@ -119,10 +124,21 @@ func (p Policy) checkGroupsOverride(where string, g GroupsOverride) error {
 		seen[entry] = true
 
 		if strings.Contains(entry, Separator) {
-			// An exact two-segment name, never a thing or a family: a
-			// vocabulary's `things` table has nothing to say about it,
-			// the same way it has nothing to say about a `rung:` or an
-			// `emp:` GRANT, because neither is one.
+			// Three words, `<vendor>:<project>:<customer>`, are a THING,
+			// held to the vocabulary like a bare word.
+			if ValidThing(entry) {
+				if p.Vocabulary != nil {
+					if _, ok := p.Vocabulary.Things[entry]; !ok {
+						return fmt.Errorf("%s: groups names %q, which is not declared under vocabulary.things", where, entry)
+					}
+				}
+
+				continue
+			}
+			// Otherwise an exact two-segment name, never a thing or a
+			// family: a vocabulary's `things` table has nothing to say
+			// about it, the same way it has nothing to say about a
+			// `rung:` or an `emp:` GRANT, because neither is one.
 			continue
 		}
 		if p.Vocabulary == nil || entry == FamilyRung || entry == FamilyEmp {
@@ -142,7 +158,8 @@ func (p Policy) checkGroupsOverride(where string, g GroupsOverride) error {
 type scopePair struct{ scope, thing string }
 
 // requiresPairs reduces a `requires` list to the <scope>:<thing> pairs it
-// names. A `requires` entry that is not a concrete three-segment grant --
+// names, where the thing is one word or `<vendor>:<project>:<customer>`.
+// A `requires` entry that is not a concrete grant ([SplitGroup]) --
 // which validation should never let through, but [ScopeGroups] is called
 // on every request rather than only on a validated policy -- contributes
 // no pair, which is the safe direction: it can only narrow what

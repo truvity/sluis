@@ -11,7 +11,7 @@ Schema: `schemas/policy/tenant/fragment.schema.json`.
 | Key | Holds |
 |---|---|
 | `rungs` | people added to a named rung: `groups`, `users` |
-| `projects` | business projects: `scopes`, `secret_scopes`, `viewer_scopes`, `deployers`, `approvers`, `viewers`, `viewer_users` |
+| `projects` | business projects, keyed by thing (one word, or `<vendor>:<project>:<customer>`): `alias`, `scopes`, `secret_scopes`, `viewer_scopes`, `deployers`, `approvers`, `viewers`, `viewer_users` |
 | `applications` | a `<scope>:<thing>:<role>` group granted to `groups` and `users` |
 | `github` | an organisation's `members`, `teams` and `ignore` |
 | `slack` | a workspace's `channels` |
@@ -28,7 +28,7 @@ Schema: `schemas/policy/tenant/ceiling.schema.json`. The empty ceiling allows no
 | Key | Holds |
 |---|---|
 | `directories` | email domains of every address and directory group |
-| `groups` | patterns `scope:thing:role`; `*` is one whole segment and never the scope `all` |
+| `groups` | patterns `scope:thing:role`, three segments or five; `*` is one whole segment and never the scope `all`; a `*` thing in a three-segment pattern is any thing, one word or three |
 | `rungs` | rungs the owner may add people to |
 | `github_orgs`, `slack_workspaces` | organisations and workspaces the owner holds |
 | `clusters`, `aws_accounts` | where the owner's workloads may run |

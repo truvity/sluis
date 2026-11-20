@@ -4,12 +4,12 @@ The grammar of a grant name. What a name is checked against is [policy vocabular
 
 ## Grammar
 
-A grant is `<scope>:<thing>:<role>`: three lowercase segments, read as *role, on thing, in scope*.
+A grant is `<scope>:<thing>:<role>`: lowercase segments, read as *role, on thing, in scope*.
 
 | Segment | Is | Examples |
 |---|---|---|
 | `scope` | an environment, a tenant id, or `all` | `core`, `prod`, `devel`, `C0north`, `all` |
-| `thing` | a subsystem, project or application | `k8s`, `argocd`, `grafana`, `shop`, `sluis` |
+| `thing` | a subsystem, project or application: one word, or `<vendor>:<project>:<customer>` | `k8s`, `argocd`, `grafana`, `shop`, `sluis`, `finttech:landing:ie` |
 | `role` | a role from that thing's ladder | `viewer`, `operator`, `admin`, `deployer`, `editor` |
 
 Two families of two segments are not grants and are exempt from this page: `rung:<name>` carries a session lifetime, and `emp:<slug>` is a person.
@@ -19,6 +19,7 @@ Any other shape loads, and the start logs the WARN `some group names are neither
 
 | Rule | Behaviour |
 |---|---|
+| Segments | Three, or five when the thing is three words: `prod:finttech:landing:ie:deployer`. The scope is first, the role last, the thing everything between. Four, six or more, or an empty one is not a grant. Cluster groups stay three: `<cluster>:k8s:<kind>`. |
 | `all` | Use it for a thing that exists once per installation, such as `all:grafana:viewer`. A per-environment thing is `devel:k8s:viewer` and `prod:k8s:viewer`, never `all:k8s:viewer`. |
 | Sensitive scope | A [declared vocabulary](policy-vocabulary.md) marks a scope `sensitive`, typically `core` and `prod`. A mapping wildcard never expands into it. A concrete name such as `core:k8s:admin` is unaffected. |
 | Coverage | A role may not cover more scopes than a role it implies. `admin` on every scope implying `user` on `devel` is refused at load. |

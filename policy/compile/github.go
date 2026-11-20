@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/truvity/sluis/policy"
 )
 
 // GitHub Apps held by the issuer, and the CI jobs that may ask it for an
@@ -268,7 +270,7 @@ func ValidateGitHubJobs(where string, jobs map[string]GitHubJob) []error {
 			errs = append(errs, fmt.Errorf("%s: "+format, append([]any{row}, args...)...))
 		}
 
-		if segments := strings.Split(name, ":"); len(segments) != 3 || slices.Contains(segments, "") {
+		if _, _, _, ok := policy.SplitGroup(name); !ok {
 			fail("a job is an internal group, <scope>:<thing>:<role>")
 		}
 

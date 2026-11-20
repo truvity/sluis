@@ -1,0 +1,5 @@
+directories: [acme.example]
+groups:
+  - "dev:acme:web:ie:*"
+  - "stage:acme:web:ie:deployer"
+  - "dev:web:*"

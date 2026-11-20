@@ -304,42 +304,49 @@ func Roster(m Model, c Conventions) *Policy {
 // rosterProjects derives the namespace tier: a project's deploy population
 // holds `<scope>:<project>:deployer` on each scope it holds a grant on, its
 // approve population `approver`, the database levels where it runs, and its
-// viewer where it asks for one.
+// viewer where it asks for one. A project with an alias holds each of these
+// under both its thing and the alias, the same members in both.
 func rosterProjects(m Model, c Conventions, a *adder) {
-	for _, name := range sortedKeys(m.Projects) {
-		project := m.Projects[name]
-		approvers := project.Approvers
-		if len(approvers) == 0 {
-			approvers = project.Deployers
+	for _, key := range sortedKeys(m.Projects) {
+		for _, name := range m.Projects[key].Things(key) {
+			rosterProject(m, c, name, m.Projects[key], a)
+		}
+	}
+}
+
+// rosterProject derives one project's groups under one of its things.
+func rosterProject(m Model, c Conventions, name string, project Project, a *adder) {
+	approvers := project.Approvers
+	if len(approvers) == 0 {
+		approvers = project.Deployers
+	}
+
+	for _, scope := range project.AllScopes() {
+		if !m.hasKubernetes(scope) {
+			continue
 		}
 
-		for _, scope := range project.AllScopes() {
-			if !m.hasKubernetes(scope) {
-				continue
-			}
+		a.add(GroupName(scope, name, ProjectDeployer), project.Deployers, nil, "")
+		a.add(GroupName(scope, name, ProjectApprover), approvers, nil, "")
 
-			a.add(GroupName(scope, name, ProjectDeployer), project.Deployers, nil, "")
-			a.add(GroupName(scope, name, ProjectApprover), approvers, nil, "")
+		// The database levels, only where the project RUNS: a project
+		// that deploys nothing on a scope has no database there.
+		if slices.Contains(project.Scopes, scope) {
+			rosterProjectDatabaseLevels(m, c, scope, name, project.Deployers, a)
+		}
 
-			// The database levels, only where the project RUNS: a project
-			// that deploys nothing on a scope has no database there.
-			if slices.Contains(project.Scopes, scope) {
-				rosterProjectDatabaseLevels(m, c, scope, name, project.Deployers, a)
-			}
-
-			// Read-only, where the project asks for it: on a scope it runs on
-			// the cluster's viewers, rung for rung, or the named users; on a
-			// secret scope its own viewer population, because what is read
-			// there is the team's credentials rather than its application.
-			if slices.Contains(project.ViewerScopes, scope) {
-				switch {
-				case slices.Contains(project.SecretScopes, scope):
-					a.add(GroupName(scope, name, ProjectViewer), project.Viewers, nil, "")
-				case len(project.ViewerUsers) > 0:
-					a.add(GroupName(scope, name, ProjectViewer), nil, project.ViewerUsers, "")
-				default:
-					rosterProjectViewer(m, c, scope, name, a)
-				}
+		// Read-only, where the project asks for it: on a scope it runs on
+		// the cluster's viewers, rung for rung, or the named users; on a
+		// secret scope its own viewer population, because what is read
+		// there is the team's credentials rather than its application.
+		if slices.Contains(project.ViewerScopes, scope) {
+			switch {
+			case slices.Contains(project.SecretScopes, scope):
+				a.add(GroupName(scope, name, ProjectViewer), project.Viewers, nil, "")
+			case len(project.ViewerUsers) > 0:
+				a.add(GroupName(scope, name, ProjectViewer), nil, project.ViewerUsers, "")
+			default:
+				rosterProjectViewer(m, c, scope, name, a)
 			}
 		}
 	}

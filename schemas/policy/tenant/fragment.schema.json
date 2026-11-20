@@ -130,7 +130,7 @@
         "requires": {
           "description": "The groups, any one of which admits a caller. Each must match a group pattern of the owner's ceiling.",
           "items": {
-            "pattern": "^[^:*\\s]+:[^:*\\s]+:[^:*\\s]+$",
+            "pattern": "^[^:*\\s]+(:[^:*\\s]+){2}(:[^:*\\s]+:[^:*\\s]+)?$",
             "type": "string"
           },
           "minItems": 1,
@@ -376,8 +376,13 @@
     },
     "project": {
       "additionalProperties": false,
-      "description": "One business project's delivery authority.",
+      "description": "One business project's delivery authority. The key it sits under is its thing: one word, or `<vendor>:<project>:<customer>`.",
       "properties": {
+        "alias": {
+          "description": "The project's old one-word thing. While it is set, every group of the project is also minted under it, with the same members, and a client may name either form.",
+          "pattern": "^[^:*\\s]+$",
+          "type": "string"
+        },
         "approvers": {
           "description": "Hold the approver group. Empty falls back to the deployers.",
           "items": {
@@ -705,9 +710,9 @@
       "additionalProperties": {
         "$ref": "#/$defs/population"
       },
-      "description": "An internal group, `<scope>:<thing>:<role>`, granted to a population directly.",
+      "description": "An internal group, `<scope>:<thing>:<role>` (three segments, or five when the thing is `<vendor>:<project>:<customer>`), granted to a population directly.",
       "propertyNames": {
-        "pattern": "^[^:*\\s]+:[^:*\\s]+:[^:*\\s]+$"
+        "pattern": "^[^:*\\s]+(:[^:*\\s]+){2}(:[^:*\\s]+:[^:*\\s]+)?$"
       },
       "type": "object"
     },
@@ -731,7 +736,7 @@
       },
       "description": "The company's CI jobs, keyed by the internal group each becomes.",
       "propertyNames": {
-        "pattern": "^[^:*\\s]+:[^:*\\s]+:[^:*\\s]+$"
+        "pattern": "^[^:*\\s]+(:[^:*\\s]+){2}(:[^:*\\s]+:[^:*\\s]+)?$"
       },
       "type": "object"
     },
@@ -742,7 +747,7 @@
       "additionalProperties": {
         "$ref": "#/$defs/project"
       },
-      "description": "The company's business projects, by name.",
+      "description": "The company's business projects, by thing: one word, or `<vendor>:<project>:<customer>`.",
       "type": "object"
     },
     "rungs": {
@@ -765,7 +770,7 @@
       },
       "description": "The company's programs, keyed by the internal group each becomes.",
       "propertyNames": {
-        "pattern": "^[^:*\\s]+:[^:*\\s]+:[^:*\\s]+$"
+        "pattern": "^[^:*\\s]+(:[^:*\\s]+){2}(:[^:*\\s]+:[^:*\\s]+)?$"
       },
       "type": "object"
     }

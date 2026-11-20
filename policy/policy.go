@@ -38,6 +38,10 @@ import (
 // verbatim into a token's `groups` claim and out of it into a relying
 // party's own bindings, re-mapped nowhere in between.
 //
+// A thing may itself be three words, `<vendor>:<project>:<customer>`, which
+// makes the grant five segments: `prod:finttech:landing:ie:deployer`. The
+// scope is still the first segment and the role the last; see [SplitGroup].
+//
 // Two-segment names are deliberately NOT grants: `rung:<name>` carries a
 // session lifetime and `emp:<slug>` is a person, neither being a role on
 // a thing. A reader who sees two segments knows.
@@ -72,7 +76,7 @@ const (
 	// installation directly, as its own workload.
 	RoleReporter = "reporter"
 
-	// Separator divides a grant's three segments.
+	// Separator divides a grant's segments: three, or five.
 	Separator = ":"
 
 	// FamilyRung and FamilyEmp are the two families of two-segment name
@@ -173,8 +177,15 @@ func SplitScopedGroup(name string) (workspace, role string, mine bool) {
 	return scope, role, true
 }
 
-// SplitGroup reads any grant back into its three segments — role, on
-// thing, in scope — and reports false for a name that is not a grant.
+// SplitGroup reads any grant back into its scope, thing and role — role,
+// on thing, in scope — and reports false for a name that is not a grant.
+//
+// A grant has three segments, `<scope>:<thing>:<role>`, or five,
+// `<scope>:<vendor>:<project>:<customer>:<role>`: the scope is the first
+// segment, the role the last, and the thing is everything between them,
+// joined by [Separator] — one word in the three-segment form,
+// `<vendor>:<project>:<customer>` in the five-segment one. A cluster's
+// grants (`<cluster>:k8s:<kind>`) stay three segments.
 //
 // It is the one place the estate takes the shape apart. This hub reads
 // its own two roles through it, and a relying party that keys its
@@ -185,18 +196,42 @@ func SplitScopedGroup(name string) (workspace, role string, mine bool) {
 // The scope is returned as written: [ScopeAll] comes back as "all", and
 // what that means is the reader's to decide, because it differs — this
 // hub reads it as the absence of a scope, an audit log as every tenant.
-// A two-segment name, an empty segment or a fourth one is not a grant.
+// A two-segment name, a four-segment one, one of six or more, or any name
+// with an empty segment is not a grant: the thing is one word or exactly
+// three, never two, so a name that is missing a segment is refused rather
+// than read as a thing with a colon in it.
 func SplitGroup(name string) (scope, thing, role string, ok bool) {
 	parts := strings.Split(name, Separator)
-	if len(parts) != 3 {
+	if len(parts) != grantSegments && len(parts) != grantSegmentsLong {
 		return "", "", "", false
 	}
 
-	if parts[0] == "" || parts[1] == "" || parts[2] == "" {
+	if slices.Contains(parts, "") {
 		return "", "", "", false
 	}
 
-	return parts[0], parts[1], parts[2], true
+	last := len(parts) - 1
+
+	return parts[0], strings.Join(parts[1:last], Separator), parts[last], true
+}
+
+// The segment counts of a grant: `<scope>:<thing>:<role>`, and the longer
+// form whose thing is `<vendor>:<project>:<customer>`.
+const (
+	grantSegments     = 3
+	grantSegmentsLong = 5
+)
+
+// ValidThing reports whether s can stand in the thing position of a
+// grant: one word, or exactly three colon-separated words, none empty. It
+// is the thing [SplitGroup] would read back out of the name built from it.
+func ValidThing(s string) bool {
+	parts := strings.Split(s, Separator)
+	if len(parts) != 1 && len(parts) != grantSegmentsLong-2 {
+		return false
+	}
+
+	return !slices.Contains(parts, "")
 }
 
 // The client kinds.
@@ -1424,7 +1459,7 @@ func (p Policy) checkFragments() error {
 }
 
 // UnconventionalGroups are the declared group names that are neither a
-// grant (`<scope>:<thing>:<role>`) nor one of the two families that
+// grant (`<scope>:<thing>:<role>`, or five segments) nor one of the two families that
 // deliberately are not grants (`rung:<name>`, `emp:<slug>`), sorted.
 //
 // It is a WARNING and not a validation error, on purpose. A name is only
@@ -1456,18 +1491,9 @@ func conventional(name string) bool {
 		return rest != "" && !strings.Contains(rest, ":")
 	}
 
-	parts := strings.Split(name, Separator)
-	if len(parts) != 3 {
-		return false
-	}
+	_, _, _, ok := SplitGroup(name)
 
-	for _, part := range parts {
-		if part == "" {
-			return false
-		}
-	}
-
-	return true
+	return ok
 }
 
 // Unconsumed returns the sorted names of internal groups that are declared
