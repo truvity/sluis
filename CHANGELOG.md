@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.85.1
+
+A patch release: a GitHub App declared in `controllers.github.appRefs` now takes effect for an organisation that was connected earlier with an App of its own (#1924); the audit catalogue moves to 1.25.0 with the new action `roster.github_org.app_switched`. Upgrade notes: none; the audit installation registers catalogue 1.25.0 when the service starts.
+
 ### Fixed
 
 - **A GitHub App declared for an already-connected organisation takes effect.** `controllers.github.appRefs.<org>` was applied only when an organisation's record named no App, so an organisation connected earlier with an App of its own kept minting with it, and the organisation's settings pass failed with `403` when the declared App held the permissions it needed (#1924). The declared App now overrides the App the stored record names, on read (the controller's credential and the console's list) and on write, as soon as it is created under that organisation and installed there; nothing is disconnected. The controller writes the switch into the organisation's record on its next pass and records it once as `roster.github_org.app_switched` (`from`, `to`), and the audit catalogue moves to 1.25.0. Until the declared App is installed (or when it is not created, or was created under another organisation) the stored App stays in use, and the organisation's report says why in the new `app_note`, which the organisation's row in the console shows too. The App an organisation leaves is neither uninstalled nor removed: the console lists it as no longer used for an operator to disconnect. **Upgrade:** none; the audit installation registers catalogue 1.25.0 when the service starts. An organisation with a declared App installed switches on the controller's next pass. See [reconcile a GitHub organisation's settings](docs/guides/sluis/github-organisation-settings.md).
