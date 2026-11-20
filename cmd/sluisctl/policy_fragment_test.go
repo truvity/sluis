@@ -33,6 +33,18 @@ func TestPolicyFragmentCheckAcceptsAFragmentInsideItsCeiling(t *testing.T) {
 	}
 }
 
+func TestPolicyFragmentCheckAcceptsFiveSegmentGroupsAndAnAlias(t *testing.T) {
+	out, err := fragmentCheck(t, "--owner", "acme", "--ceiling", fixture("ceiling-five-segments.yaml"), fixture("fragment-five-segments.yaml"))
+	if err != nil {
+		t.Fatalf("a five-segment fragment inside its ceiling was refused: %v\n%s", err, out)
+	}
+
+	// The same fragment under a ceiling with no five-segment pattern is refused.
+	if out, err := fragmentCheck(t, "--owner", "acme", "--ceiling", fixture("ceiling-acme.yaml"), fixture("fragment-five-segments.yaml")); err == nil {
+		t.Fatalf("a ceiling with no five-segment pattern accepted one:\n%s", out)
+	}
+}
+
 func TestPolicyFragmentCheckSaysItIsPartial(t *testing.T) {
 	out, _ := fragmentCheck(t, "--ceiling", fixture("ceiling-acme.yaml"), fixture("fragment-acme.yaml"))
 	if !strings.Contains(out, "partial") {

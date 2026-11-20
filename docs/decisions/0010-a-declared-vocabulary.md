@@ -1,6 +1,6 @@
 # 0010 — A declared vocabulary: things, scopes, roles, inheritance and mapping wildcards
 
-**Status:** Accepted; extended by [0012](0012-per-role-scopes-in-the-vocabulary.md)
+**Status:** Accepted; extended by [0012](0012-per-role-scopes-in-the-vocabulary.md) and [0081](0081-a-grant-is-three-segments-or-five.md)
 **Date:** 2026-09-26
 
 ## Context

@@ -164,6 +164,10 @@ func (c *checker) rungRows(rows map[string]compile.Population) {
 var projectRoles = []string{compile.ProjectDeployer, compile.ProjectApprover, compile.ProjectViewer}
 
 func (c *checker) projectRows(rows map[string]compile.Project) {
+	for _, err := range compile.ValidateProjects("projects", rows) {
+		c.add(OwnerName, "projects", "%s", err.Error())
+	}
+
 	for _, name := range sortedKeys(rows) {
 		path := key("projects", name)
 		p := rows[name]
@@ -174,9 +178,11 @@ func (c *checker) projectRows(rows map[string]compile.Project) {
 		var outside []string
 
 		for _, scope := range slices.Compact(scopes) {
-			for _, role := range projectRoles {
-				if g := compile.GroupName(scope, name, role); !matchesAny(c.ceiling.Groups, g) {
-					outside = append(outside, g)
+			for _, thing := range p.Things(name) {
+				for _, role := range projectRoles {
+					if g := compile.GroupName(scope, thing, role); !matchesAny(c.ceiling.Groups, g) {
+						outside = append(outside, g)
+					}
 				}
 			}
 		}
@@ -428,7 +434,7 @@ func (c *checker) collisions(f Fragment) {
 		}
 	}
 
-	declared("projects", keySet(f.Projects), keySet(c.base.Projects))
+	declared("projects", thingSet(f.Projects), thingSet(c.base.Projects))
 	declared("applications", keySet(f.Applications), keySet(c.base.Applications))
 	declared("github", keySet(f.GitHub), keySet(c.base.GitHub))
 	declared("slack", keySet(f.Slack), keySet(c.base.Slack))
@@ -469,6 +475,20 @@ func lowerSet(list []string) map[string]struct{} {
 	out := make(map[string]struct{}, len(list))
 	for _, s := range list {
 		out[strings.ToLower(s)] = struct{}{}
+	}
+
+	return out
+}
+
+// thingSet is every thing the projects' groups are named under: each key and
+// each alias, so that an alias is held to the same collision rule as a key.
+func thingSet(projects map[string]compile.Project) map[string]struct{} {
+	out := make(map[string]struct{}, len(projects))
+
+	for name, project := range projects {
+		for _, thing := range project.Things(name) {
+			out[thing] = struct{}{}
+		}
 	}
 
 	return out

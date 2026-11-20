@@ -223,7 +223,7 @@ All three are positive; shortening is allowed. Set them in [the service configur
 |---|---|
 | absent | the pairs of the audience's `requires`, any role |
 | `all` | every group the caller holds |
-| `[thing, ...]` | also every held group of each thing, any scope |
+| `[thing, ...]` | also every held group of each thing, any scope; a thing is one word or `<vendor>:<project>:<customer>` |
 | `[rung]` or `[emp]` | also every held name of that family |
 | `[rung:sre]` | also that one two-segment name |
 
@@ -239,8 +239,8 @@ clients:
 | Validation | Rule |
 |---|---|
 | No declared vocabulary | value is `all` or a list of names |
-| Declared vocabulary | bare word must be a declared thing, `rung` or `emp` |
-| Entry with a separator | exact two-segment name; valid either way |
+| Declared vocabulary | bare word must be a declared thing, `rung` or `emp`; a three-word entry must be a declared thing |
+| Entry with a separator | three words: a thing, such as `truvity:dms:generic`; otherwise an exact two-segment name, valid either way |
 | `groupsScoping` | service `config` key: `off`, `report` (default), `enforce` ([configuration](configuration.md)) |
 
 ## `groups_delimiter`

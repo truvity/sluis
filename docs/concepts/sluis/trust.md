@@ -36,15 +36,15 @@ The claim shape is `groups` only. Kubernetes reads a flat string array, ArgoCD r
 
 ### Naming
 
-Every grant is `<scope>:<thing>:<role>`: three lowercase segments joined by `:`.
+Every grant is `<scope>:<thing>:<role>`: three lowercase segments joined by `:`, or five.
 
 | Segment | Is | Examples |
 |---|---|---|
 | `scope` | An environment, a workspace id or `all`. Never a domain. | `dev`, `prod`, `C0north`, `all` |
-| `thing` | What the role is on. | `k8s`, `shop`, `argocd` |
+| `thing` | What the role is on: one word, or `<vendor>:<project>:<customer>`. | `k8s`, `shop`, `finttech:landing:ie` |
 | `role` | A role from that thing's own ladder. | `admin`, `viewer`, `deployer`, `operator` |
 
-Examples: `prod:k8s:admin`, `prod:shop:deployer`, `all:sluis:operator`. A role scoped to a workspace id also gates the GitHub organisations and Slack workspaces connected under that directory.
+Examples: `prod:k8s:admin`, `prod:shop:deployer`, `all:sluis:operator`, `prod:finttech:landing:ie:deployer`. A role scoped to a workspace id also gates the GitHub organisations and Slack workspaces connected under that directory.
 
 Two-segment names are not grants. `rung:<name>` carries a session lifetime and `emp:<slug>` is a person. A cluster-scoped consumer binds `<env>:k8s:<role>` by default and owns a `thing` of its own only when its role ladder diverges.
 

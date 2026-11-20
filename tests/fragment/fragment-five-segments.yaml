@@ -1,0 +1,8 @@
+projects:
+  "acme:web:ie":
+    alias: web
+    scopes: [dev]
+    deployers: [team-web@acme.example]
+applications:
+  "stage:acme:web:ie:deployer":
+    groups: [team-web@acme.example]

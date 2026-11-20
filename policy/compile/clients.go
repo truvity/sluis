@@ -245,14 +245,14 @@ func (e Endpoints) ValidateLanding() error {
 }
 
 // ValidateGrantNames refuses anything that is not a grant where a grant is
-// required. Only a three-segment `<scope>:<thing>:<role>` name is one: a
+// required. Only a `<scope>:<thing>:<role>` name, of three segments or five, is one: a
 // rung carries a session lifetime and an employee group is a person, both
 // land in the same `groups` claim, and gating on either would read as a
 // sensible rule while granting on a property that is not a role.
 func ValidateGrantNames(groups []string) error {
 	for _, group := range groups {
 		if _, _, _, ok := policy.SplitGroup(group); !ok {
-			return fmt.Errorf("%q is not a grant — it must be <scope>:<thing>:<role>", group)
+			return fmt.Errorf("%q is not a grant — it must be <scope>:<thing>:<role>, three segments or five", group)
 		}
 	}
 

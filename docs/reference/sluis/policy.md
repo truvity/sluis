@@ -85,7 +85,7 @@ A file with an `access` key is an access document ([policy-bindings.md](policy-b
 
 | Form | Meaning |
 |---|---|
-| `<scope>:<thing>:<role>` | a grant; grammar in [taxonomy.md](taxonomy.md) |
+| `<scope>:<thing>:<role>` | a grant of three segments, or five with a thing `<vendor>:<project>:<customer>`; grammar in [taxonomy.md](taxonomy.md) |
 | `rung:<name>` | a session lifetime |
 | `emp:<slug>` | a person |
 

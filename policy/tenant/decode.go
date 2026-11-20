@@ -21,6 +21,7 @@ type (
 	}
 
 	projectWire struct {
+		Alias        string   `yaml:"alias"`
 		Scopes       []string `yaml:"scopes"`
 		SecretScopes []string `yaml:"secret_scopes"`
 		ViewerScopes []string `yaml:"viewer_scopes"`

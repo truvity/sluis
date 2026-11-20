@@ -30,6 +30,10 @@ func TestSplitGroupAgreesWithSluis(t *testing.T) {
 		{"an empty scope", ":sluis:operator", false, "", "", ""},
 		{"an empty role", "mgmt:k8s:", false, "", "", ""},
 		{"four segments", "mgmt:k8s:admin:extra", false, "", "", ""},
+		{"five segments", "prod:finttech:landing:ie:deployer", true, "prod", "finttech:landing:ie", "deployer"},
+		{"five segments, installation-wide", "all:shared:arch:internal:viewer", true, "all", "shared:arch:internal", "viewer"},
+		{"six segments", "prod:a:b:c:d:viewer", false, "", "", ""},
+		{"five segments with an empty one", "prod:finttech::ie:deployer", false, "", "", ""},
 		// What the table above does not say but the code does, so that a change to
 		// either side is a decision: no trimming, no case folding, no escapes.
 		{"an empty name", "", false, "", "", ""},

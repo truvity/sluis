@@ -925,7 +925,7 @@ clients:
 
 // Every grant in the estate has the one shape, and this is the reader
 // every relying party shares. A name that is not a grant — two segments,
-// an empty segment, four — is reported as not one, rather than as a grant
+// an empty segment, four, six — is reported as not one, rather than as a grant
 // with something missing.
 func TestSplitGroupReadsAnyGrant(t *testing.T) {
 	t.Parallel()
@@ -950,6 +950,18 @@ func TestSplitGroupReadsAnyGrant(t *testing.T) {
 		{"an empty scope", ":sluis:operator", false, "", "", ""},
 		{"an empty role", "mgmt:k8s:", false, "", "", ""},
 		{"four segments", "mgmt:k8s:admin:extra", false, "", "", ""},
+		{"a cluster group stays three", "prod:k8s:viewer", true, "prod", "k8s", "viewer"},
+		{"five segments", "prod:finttech:landing:ie:deployer", true, "prod", "finttech:landing:ie", "deployer"},
+		{"five segments, installation-wide", "all:shared:arch:internal:viewer", true, "all", "shared:arch:internal", "viewer"},
+		{"six segments", "prod:finttech:landing:ie:extra:deployer", false, "", "", ""},
+		{"seven segments", "a:b:c:d:e:f:g", false, "", "", ""},
+		{"five segments, an empty scope", ":finttech:landing:ie:deployer", false, "", "", ""},
+		{"five segments, an empty vendor", "prod::landing:ie:deployer", false, "", "", ""},
+		{"five segments, an empty project", "prod:finttech::ie:deployer", false, "", "", ""},
+		{"five segments, an empty customer", "prod:finttech:landing::deployer", false, "", "", ""},
+		{"five segments, an empty role", "prod:finttech:landing:ie:", false, "", "", ""},
+		{"four segments, one of them empty", "prod:finttech::deployer", false, "", "", ""},
+		{"only separators, five segments", "::::", false, "", "", ""},
 	} {
 		scope, thing, role, ok := policy.SplitGroup(tc.group)
 		if ok != tc.ok || scope != tc.scope || thing != tc.thing || role != tc.wantRole {

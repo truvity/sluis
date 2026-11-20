@@ -11,19 +11,19 @@ import (
 	"github.com/truvity/sluis/policy"
 )
 
-const (
-	wildcard   = "*"
-	groupParts = 3
-)
+const wildcard = "*"
 
 var awsAccountID = regexp.MustCompile(`^\d{12}$`)
 
 // MatchGroup reports whether a group matches a ceiling pattern. Both are
-// `scope:thing:role`. A `*` in the pattern stands for one whole segment,
-// never part of one, and never for the installation-wide scope
-// ([policy.ScopeAll]): reaching it takes a pattern that names it. A
-// pattern that is malformed, or a group that is not a group, matches
-// nothing.
+// `scope:thing:role`, where a thing is one word or three
+// (`<vendor>:<project>:<customer>`), see [policy.SplitGroup]. A `*` in the
+// pattern stands for one whole segment, never part of one, and never for the
+// installation-wide scope ([policy.ScopeAll]): reaching it takes a pattern
+// that names it. A pattern's thing may be a single `*`, which stands for any
+// thing, one word or three; a pattern that writes the three words
+// (`finttech:*:ie`) matches the groups of that shape only. A pattern that is
+// malformed, or a group that is not a group, matches nothing.
 func MatchGroup(pattern, group string) bool {
 	if strings.Contains(group, wildcard) {
 		return false
@@ -34,18 +34,30 @@ func MatchGroup(pattern, group string) bool {
 		return false
 	}
 
-	g := strings.Split(group, policy.Separator)
-	if len(g) != groupParts || slices.Contains(g, "") {
+	scope, thing, role, ok := policy.SplitGroup(group)
+	if !ok {
 		return false
 	}
 
-	for i := range p {
-		switch {
-		case p[i] != wildcard:
-			if p[i] != g[i] {
-				return false
-			}
-		case i == 0 && g[i] == policy.ScopeAll:
+	if !matchSegment(p.scope, scope) || !matchSegment(p.role, role) {
+		return false
+	}
+
+	if p.scope == wildcard && scope == policy.ScopeAll {
+		return false
+	}
+
+	if len(p.thing) == 1 && p.thing[0] == wildcard {
+		return true
+	}
+
+	words := strings.Split(thing, policy.Separator)
+	if len(words) != len(p.thing) {
+		return false
+	}
+
+	for i := range words {
+		if !matchSegment(p.thing[i], words[i]) {
 			return false
 		}
 	}
@@ -53,20 +65,34 @@ func MatchGroup(pattern, group string) bool {
 	return true
 }
 
-// splitPattern is the three segments of a well-formed pattern.
-func splitPattern(pattern string) ([]string, bool) {
-	p := strings.Split(pattern, policy.Separator)
-	if len(p) != groupParts {
-		return nil, false
+// matchSegment reports whether one segment of a pattern admits one segment of
+// a group: the same word, or a `*`.
+func matchSegment(pattern, segment string) bool { return pattern == wildcard || pattern == segment }
+
+// groupPattern is a well-formed ceiling pattern taken apart: the scope and role
+// are one segment each, the thing one segment or three.
+type groupPattern struct {
+	scope, role string
+	thing       []string
+}
+
+// splitPattern reads a well-formed pattern: three segments, or five, none
+// empty, a `*` only as a whole segment.
+func splitPattern(text string) (groupPattern, bool) {
+	segments := strings.Split(text, policy.Separator)
+	if len(segments) != 3 && len(segments) != 5 {
+		return groupPattern{}, false
 	}
 
-	for _, seg := range p {
+	for _, seg := range segments {
 		if seg == "" || (seg != wildcard && strings.Contains(seg, wildcard)) {
-			return nil, false
+			return groupPattern{}, false
 		}
 	}
 
-	return p, true
+	last := len(segments) - 1
+
+	return groupPattern{scope: segments[0], thing: segments[1:last], role: segments[last]}, true
 }
 
 // matchesAny reports whether a group matches one of the patterns.
@@ -75,7 +101,7 @@ func matchesAny(patterns []string, group string) bool {
 }
 
 // Validate refuses a ceiling a loader should not accept: a group pattern
-// that is not `scope:thing:role` with whole-segment wildcards, a directory
+// that is not `scope:thing:role` (three segments or five) with whole-segment wildcards, a directory
 // or zone that is not a bare domain, an AWS account that is not 12 digits,
 // a client pattern that path.Match cannot read, an App permission that is
 // not read, write or admin, or an empty entry. The zero ceiling is valid
@@ -86,7 +112,7 @@ func (c Ceiling) Validate() error {
 
 	for _, p := range c.Groups {
 		if _, ok := splitPattern(p); !ok {
-			errs = append(errs, fmt.Errorf("groups: %q is not scope:thing:role with * for a whole segment", p))
+			errs = append(errs, fmt.Errorf("groups: %q is not scope:thing:role, three segments or five, with * for a whole segment", p))
 		}
 	}
 
@@ -150,11 +176,11 @@ func (c Ceiling) Scopes() []string {
 
 	for _, pattern := range c.Groups {
 		p, ok := splitPattern(pattern)
-		if !ok || p[0] == wildcard {
+		if !ok || p.scope == wildcard {
 			continue
 		}
 
-		out = append(out, p[0])
+		out = append(out, p.scope)
 	}
 
 	slices.Sort(out)

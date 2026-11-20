@@ -156,6 +156,13 @@ func (c Conventions) own(address string) bool {
 }
 
 // GroupName names a grant: `<scope>:<thing>:<role>`.
+//
+// The thing may itself hold colons: one word (`shop`) or exactly three,
+// `<vendor>:<project>:<customer>` (`finttech:landing:ie`), which makes the
+// grant five segments, `prod:finttech:landing:ie:deployer`. The name is
+// simply joined, so a thing of any other shape — two words, four, an empty
+// one — yields a name [policy.SplitGroup] refuses; [ValidThing] is the
+// check a caller makes before it builds one from a name it was handed.
 func GroupName(scope, thing, role string) string {
 	return scope + policy.Separator + thing + policy.Separator + role
 }

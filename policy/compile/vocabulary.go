@@ -120,57 +120,67 @@ func BuildVocabulary(m Model, c Conventions, hand *policy.Vocabulary, extra ...F
 // declares a viewer, each of the conventions' ViewerImpliedBy roles implies
 // it, but only where the coverage rule allows the edge.
 func vocabularyProjects(m Model, c Conventions, b *vocabularyBuilder) error {
-	for _, name := range sortedKeys(m.Projects) {
-		project := m.Projects[name]
+	for _, key := range sortedKeys(m.Projects) {
+		for _, name := range m.Projects[key].Things(key) {
+			if err := vocabularyProject(m, c, b, name, m.Projects[key]); err != nil {
+				return err
+			}
+		}
+	}
 
-		var thingScopes []string
+	return nil
+}
 
-		for _, scope := range project.AllScopes() {
+// vocabularyProject declares one project's thing, under one of the things
+// its groups are named by: its own, or its alias.
+func vocabularyProject(m Model, c Conventions, b *vocabularyBuilder, name string, project Project) error {
+	var thingScopes []string
+
+	for _, scope := range project.AllScopes() {
+		if m.hasKubernetes(scope) {
+			thingScopes = append(thingScopes, scope)
+		}
+	}
+
+	if len(thingScopes) == 0 {
+		return nil
+	}
+
+	roles := map[string]policy.RoleSpec{
+		ProjectDeployer: {},
+		ProjectApprover: {},
+	}
+
+	for _, level := range c.DatabaseLevelNames() {
+		if scopes := vocabularyDatabaseLevelScopes(m, c, project, level); len(scopes) > 0 {
+			roles[level] = restrictedRole(scopes, thingScopes)
+		}
+	}
+
+	if len(project.ViewerScopes) > 0 {
+		var viewer []string
+
+		for _, scope := range project.ViewerScopes {
 			if m.hasKubernetes(scope) {
-				thingScopes = append(thingScopes, scope)
+				viewer = append(viewer, scope)
 			}
 		}
 
-		if len(thingScopes) == 0 {
-			continue
+		if len(viewer) > 0 {
+			roles[ProjectViewer] = restrictedRole(viewer, thingScopes)
 		}
+	}
 
-		roles := map[string]policy.RoleSpec{
-			ProjectDeployer: {},
-			ProjectApprover: {},
+	for _, role := range c.MachineReaderRoles {
+		if scopes := vocabularyMachineReaderScopes(m, name, role); len(scopes) > 0 {
+			roles[role] = restrictedRole(scopes, thingScopes)
 		}
+	}
 
-		for _, level := range c.DatabaseLevelNames() {
-			if scopes := vocabularyDatabaseLevelScopes(m, c, project, level); len(scopes) > 0 {
-				roles[level] = restrictedRole(scopes, thingScopes)
-			}
-		}
+	addViewerImplies(roles, c.ViewerImpliedBy, thingScopes)
 
-		if len(project.ViewerScopes) > 0 {
-			var viewer []string
-
-			for _, scope := range project.ViewerScopes {
-				if m.hasKubernetes(scope) {
-					viewer = append(viewer, scope)
-				}
-			}
-
-			if len(viewer) > 0 {
-				roles[ProjectViewer] = restrictedRole(viewer, thingScopes)
-			}
-		}
-
-		for _, role := range c.MachineReaderRoles {
-			if scopes := vocabularyMachineReaderScopes(m, name, role); len(scopes) > 0 {
-				roles[role] = restrictedRole(scopes, thingScopes)
-			}
-		}
-
-		addViewerImplies(roles, c.ViewerImpliedBy, thingScopes)
-
-		if err := b.add(name, FamilyProjects, policy.ThingSpec{Scopes: sortedUnique(thingScopes), Roles: roles}); err != nil {
-			return err
-		}
+	if err := b.add(name, FamilyProjects, policy.ThingSpec{Scopes: sortedUnique(thingScopes), Roles: roles}); err != nil {
+		return err
 	}
 
 	return nil

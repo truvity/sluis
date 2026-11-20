@@ -28,7 +28,7 @@
 // another.
 //
 // The package adds no concept to the policy. A group is still
-// `<scope>:<thing>:<role>` ([policy.SplitGroup]), and a ceiling pattern is
-// that shape with `*` for one segment. Examples use the neutral owners acme
+// `<scope>:<thing>:<role>` ([policy.SplitGroup], three segments or five), and
+// a ceiling pattern is that shape with `*` for one segment. Examples use the neutral owners acme
 // and globex.
 package tenant
