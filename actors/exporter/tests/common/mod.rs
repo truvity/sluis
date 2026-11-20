@@ -851,6 +851,73 @@ impl<D: Destination> Destination for Hang<D> {
     }
 }
 
+// ---------------------------------------------------------------- a destination that records the call context
+
+/// What a call to a destination was made in: its operation, the correlation id and the time left of its deadline, as the client of
+/// the driver's socket would put them on the wire (`Sluis-Correlation-Id`, `Connect-Timeout-Ms`).
+pub type Seen = (&'static str, Option<String>, Option<Duration>);
+
+/// A destination that answers as `inner` does and records, for each call, the [`atoom_socket::call::Call`] it was made in.
+#[derive(Clone)]
+pub struct Spy<D> {
+    pub inner: D,
+    pub seen: Arc<Mutex<Vec<Seen>>>,
+}
+
+impl<D> Spy<D> {
+    pub fn new(inner: D) -> Self {
+        Self {
+            inner,
+            seen: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    fn note(&self, op: &'static str) {
+        let c = atoom_socket::call::current();
+        let left = c
+            .deadline
+            .map(|d| d.saturating_duration_since(std::time::Instant::now()));
+        self.seen.lock().unwrap().push((op, c.correlation, left));
+    }
+}
+
+impl<D: Destination> Destination for Spy<D> {
+    async fn put(
+        &self,
+        doc: atoom_destination_conformance::Document,
+    ) -> Result<atoom_destination_conformance::Written, atoom_destination_conformance::Error> {
+        self.note("put");
+        self.inner.put(doc).await
+    }
+    async fn delete(&self, address: &str) -> Result<bool, atoom_destination_conformance::Error> {
+        self.note("delete");
+        self.inner.delete(address).await
+    }
+    async fn list(
+        &self,
+        prefix: &str,
+        page: Option<&str>,
+        page_size: usize,
+    ) -> Result<atoom_destination_conformance::Page, atoom_destination_conformance::Error> {
+        self.note("list");
+        self.inner.list(prefix, page, page_size).await
+    }
+    async fn purge(
+        &self,
+        addresses: &[String],
+    ) -> Result<atoom_destination_conformance::Purged, atoom_destination_conformance::Error> {
+        self.note("purge");
+        self.inner.purge(addresses).await
+    }
+    async fn read_back(
+        &self,
+        address: &str,
+    ) -> Result<atoom_destination_conformance::Fetched, atoom_destination_conformance::Error> {
+        self.note("read_back");
+        self.inner.read_back(address).await
+    }
+}
+
 // ---------------------------------------------------------------- a put that lands and says it did not
 
 /// A destination whose `put`, while `lose_answer` is set, takes the document and then fails: the call timed out after the

@@ -14,6 +14,12 @@ use atoom_destination_dir::{Directory, Until, suite};
 use connectrpc::error::ErrorCode;
 use sluis_kit::{Allow, Identities, ServerConfig, dial};
 
+/// The destination client of atoom over atoom's dial, which is how exporter@ reaches a driver.
+fn client(socket: &Path) -> Client<atoom_socket::Transport> {
+    let dial = atoom_socket::dial(socket);
+    Client::new(dial.transport(), dial.config())
+}
+
 fn serve(socket: &Path, d: Directory, me_is: &'static str) -> tokio::sync::oneshot::Sender<()> {
     let me = rustix::process::geteuid().as_raw();
     let ids = Identities::with(0, move |uid| (uid == me).then_some((me_is, 0)));
@@ -72,7 +78,7 @@ async fn the_atoom_driver_smoke_one_put_and_one_list_through_the_guarded_socket(
         "exporter",
     );
     up(&sock).await;
-    let client = Client::new(&atoom_socket::dial(&sock));
+    let client = client(&sock);
     let put = client
         .put(doc("jwks.json", br#"{"keys":[1]}"#))
         .await
@@ -107,10 +113,7 @@ async fn another_caller_is_refused() {
         "signer",
     );
     up(&sock).await;
-    let e = Client::new(&atoom_socket::dial(&sock))
-        .put(doc("x", b"{}"))
-        .await
-        .unwrap_err();
+    let e = client(&sock).put(doc("x", b"{}")).await.unwrap_err();
     assert!(matches!(e, Error::Unavailable(_)), "{e:?}");
     assert!(std::fs::read_dir(root.path()).unwrap().next().is_none());
     let _ = stop.send(());

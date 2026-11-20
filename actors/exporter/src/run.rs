@@ -37,9 +37,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
-use crate::driver_client::Client as DriverClient;
 use anyhow::bail;
 use atoom_destination::Destination;
+use atoom_destination::client::Client as DriverClient;
+use atoom_socket::Transport;
 use clap::{Arg, Command};
 use sluis_audit::Config as AuditConfig;
 use sluis_kit::cli::{Commands, Flags, Refused, shutdown_signal};
@@ -686,6 +687,14 @@ pub struct Settings {
     pub reconcile: Duration,
 }
 
+/// The client of the destination driver behind `socket`, dialled at the first call. atoom's client over atoom's dial: it sends the
+/// deadline and the correlation id of the [`call::scope`](atoom_socket::call::scope) a call is made in ([`crate::publish`] states one for
+/// each call to a destination).
+fn driver_client(socket: &Path) -> DriverClient<Transport> {
+    let dial = atoom_socket::dial(socket);
+    DriverClient::new(dial.transport(), dial.config())
+}
+
 fn load(file: Option<&Path>) -> anyhow::Result<config::Loaded> {
     match file {
         Some(f) => config::load(f).map_err(|e| Refused(e.to_string()).into()),
@@ -707,7 +716,7 @@ pub async fn serve(s: Settings, shutdown: impl Future<Output = ()>) -> anyhow::R
         .destinations
         .into_iter()
         .map(|d| Target {
-            driver: DriverClient::new(&dial(&s.sockets.driver(&d.dtype))),
+            driver: driver_client(&s.sockets.driver(&d.dtype)),
             name: d.name,
             documents: d.documents,
         })
