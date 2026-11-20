@@ -318,7 +318,7 @@ func TestAV1ServeDocumentConvertsWithItsFiles(t *testing.T) {
 	writeIn(t, policyDir, "access.yaml", "version: 1\naccess:\n  groups:\n    - name: all:shop:viewer\n      emails: [ada@example.com]\n")
 	clusters := writeIn(t, dir, "clusters.yaml", "clusters:\n  - {name: devel, issuer: 'https://k.example'}\n")
 	aws := writeIn(t, dir, "aws.yaml", "audience: x\nmaxAge: 5m\naccounts:\n  - {account: '111122223333', name: apps, issuer: 'https://i.example'}\n")
-	gh := writeIn(t, dir, "gh.yaml", "apps:\n  - {id: renovate, org: example-org, permissions: {contents: read}, "+
+	gh := writeIn(t, dir, "gh.yaml", "apps:\n  - {id: renovate, org: example-org, permissions: {contents: read, members: write, organization_administration: read}, "+
 		"grants: [{group: 'all:sluis:operator', repositories: ['*'], permissions: {contents: read}}]}\n")
 	sl := writeIn(t, dir, "slack.yaml", "apps:\n  - {id: alerts, workspace: example, botScopes: ['chat:write']}\n")
 	overlay := writeIn(t, dir, "overlay.yaml", "workspaces:\n  - {backend: google, admin: a@example.com, keySecret: directory/acme/key}\n")

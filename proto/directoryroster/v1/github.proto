@@ -334,6 +334,11 @@ message GitHubApp {
   // secrets in. Unset where nothing says: `secret` then still names a
   // Kubernetes Secret when there is one.
   SecretPlace secret_place = 37;
+  // whether the controller also manages the organisation's members and teams
+  // through this App, besides its own purpose: a catalogue App that
+  // `controllers.github.appRefs` names for the organisation is one row with
+  // both roles, judged against its catalogue declaration alone.
+  bool manages_teams = 38;
 }
 
 // SecretPlace is where a deployment keeps an item's secret: the secrets

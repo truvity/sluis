@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/truvity/sluis/internal/githubapp"
 	"github.com/truvity/sluis/internal/githubapp/catalogue"
 	"github.com/truvity/sluis/internal/githubroster/appid"
 	"github.com/truvity/sluis/internal/githubroster/orgconfig"
@@ -323,7 +324,10 @@ func (d *PolicyDocument) validateAppNames() []error {
 }
 
 // validateAppRefs holds `controllers.github.appRefs` to the list: an
-// organisation the policy binds names a catalogue App declared for it.
+// organisation the policy binds names a catalogue App declared for it, and the
+// declaration covers what the roster needs of an App (members write,
+// organization_administration read or higher: [githubapp.RosterNeeds]), since
+// the roster's App is then judged against that declaration alone.
 func (d *PolicyDocument) validateAppRefs() []error {
 	if d.Controllers == nil || d.Controllers.GitHub == nil {
 		return nil
@@ -346,6 +350,14 @@ func (d *PolicyDocument) validateAppRefs() []error {
 			errs = append(errs, fmt.Errorf("controllers.github.appRefs: %s names %q, which is not a catalogue App in apps.github.apps", org, ref))
 		case !strings.EqualFold(found.Org, org):
 			errs = append(errs, fmt.Errorf("controllers.github.appRefs: %s names %q, which is created under %s", org, ref, found.Org))
+		default:
+			// The roster acts through this App and is judged against its
+			// declaration alone, so the declaration must give the roster what
+			// its own manifest would have.
+			if gaps := githubapp.RosterGaps(found.Permissions); len(gaps) > 0 {
+				errs = append(errs, fmt.Errorf("controllers.github.appRefs: %s names %q, whose declared permissions do not cover what the roster needs (%s); "+
+					"declare them on the App in apps.github.apps", org, ref, strings.Join(gaps, "; ")))
+			}
 		}
 	}
 	return errs

@@ -160,6 +160,36 @@ func OrganisationAppNamed(org, configured string) catalogue.App {
 	}
 }
 
+// RosterNeeds is the least the roster asks of the App it acts through in an
+// organisation: members write, and organization_administration at read or
+// higher. [OrganisationAppNamed] declares exactly this; a catalogue App that
+// `controllers.github.appRefs` names for an organisation may declare more, and
+// no less.
+func RosterNeeds() map[string]string {
+	return map[string]string{"members": catalogue.LevelWrite, "organization_administration": catalogue.LevelRead}
+}
+
+// RosterGaps says, one sentence each in the order of the permissions' names,
+// what a declaration of permissions does not give the roster: a permission it
+// lacks, or holds at a lower level than the roster needs. Empty when the
+// declaration covers the roster.
+func RosterGaps(declared map[string]string) []string {
+	needs := RosterNeeds()
+	var out []string
+	for _, name := range slices.Sorted(maps.Keys(needs)) {
+		have := declared[name]
+		if catalogue.Covers(have, needs[name]) {
+			continue
+		}
+		if have == "" {
+			out = append(out, fmt.Sprintf("%s: %s is not declared", name, needs[name]))
+			continue
+		}
+		out = append(out, fmt.Sprintf("%s is declared %s and the roster needs %s or higher", name, have, needs[name]))
+	}
+	return out
+}
+
 // NewManifest is [OrganisationApp]'s manifest: redirect and setup are the
 // two callbacks, after Create and after Install.
 func NewManifest(org, homepage, redirect, setup string) Manifest {

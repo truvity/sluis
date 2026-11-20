@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Fixed
+
+- **An App named by `controllers.github.appRefs` is one row in the console, judged against its catalogue declaration alone.** After an organisation switched to the catalogue App `appRefs` names, the GitHub Apps tab showed that one App twice: as a tokens App checked against the catalogue declaration, and as the organisation's controller App checked against the built-in roster manifest (members write, organisation administration read). Whatever the App held on GitHub one of the rows reported drift, and an operator who followed the controller row removed the write permissions the organisation-settings pass needs. The roster's App is now judged against the catalogue declaration only, and the console shows one row with both roles (the new `manages_teams` field of the App's view) and one drift verdict. A declaration that does not give the roster what it needs (members write, organization_administration read or higher) is refused when the configuration loads, with the permissions it lacks named. An organisation without an `appRefs` entry keeps its own App's controller row and the built-in manifest. Upgrade notes: an `appRefs` App declared without `members: write` and `organization_administration` now fails to load; add them to its declaration in `apps.github.apps` (the App on GitHub already holds them when the organisation uses it). Refs #1928.
+
 ## v1.85.1
 
 A patch release: a GitHub App declared in `controllers.github.appRefs` now takes effect for an organisation that was connected earlier with an App of its own (#1924); the audit catalogue moves to 1.25.0 with the new action `roster.github_org.app_switched`. Upgrade notes: none; the audit installation registers catalogue 1.25.0 when the service starts.

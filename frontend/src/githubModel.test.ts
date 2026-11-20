@@ -181,6 +181,15 @@ describe("summaryOf", () => {
     expect(summaryOf(app({ id: "lonely", state: AppState.NOT_CREATED }))).toBe("No internal group may mint tokens of it in example-org; not created yet.");
   });
 
+  it("says that a token App also manages the organisation's teams, in one row", () => {
+    const both = app({ id: "roster", managesTeams: true, grants: [{ group: "all:platform", repositories: ["*"] }] });
+    expect(purposeWords(both)).toBe("tokens \u00b7 manages teams");
+    expect(summaryOf(both)).toBe(
+      "The controller manages example-org's members and teams through it. Mints tokens for 1 internal group on every repository in example-org; installed, matches its declaration.",
+    );
+    expect(purposeWords(app({ id: "plain" }))).toBe("tokens");
+  });
+
   it("says what a preset App is for, and never claims a match nobody checked", () => {
     expect(summaryOf(app({ id: "r", purpose: AppPurpose.RUNNERS, origin: AppOrigin.PRESET, tier: "standard" }))).toBe(
       "The standard runners register with example-org through it; installed, matches its declaration.",

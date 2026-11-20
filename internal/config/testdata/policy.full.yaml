@@ -105,7 +105,7 @@ apps:
         name: example-org-renovate
         description: Dependency updates
         public: false
-        permissions: {contents: write, pull_requests: write}
+        permissions: {contents: write, members: write, organization_administration: read, pull_requests: write}
         events: [push]
         installation: selected
         grants:
