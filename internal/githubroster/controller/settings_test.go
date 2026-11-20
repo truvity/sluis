@@ -1099,7 +1099,8 @@ func TestTheDocumentMakesAConfigurationTheDefaultForNewRepositories(t *testing.T
 		t.Errorf("did %v, want the default set", r.github.Did())
 	}
 
-	if row, ok := changeFor(r.settings(t).Changes, status.KindSecurityConfiguration, "baseline:default_for_new_repos", status.SettingUpdate); !ok || row.State != status.SettingApplied {
+	row, ok := changeFor(r.settings(t).Changes, status.KindSecurityConfiguration, "baseline:default_for_new_repos", status.SettingUpdate)
+	if !ok || row.State != status.SettingApplied {
 		t.Errorf("changes = %+v, want the default applied", r.settings(t).Changes)
 	}
 
@@ -1132,7 +1133,8 @@ func TestReportModeSaysTheDefaultForNewRepositoriesWithoutSettingIt(t *testing.T
 		}
 	}
 
-	if row, ok := changeFor(r.settings(t).Changes, status.KindSecurityConfiguration, "baseline:default_for_new_repos", status.SettingUpdate); !ok || row.State != status.SettingDrift {
+	row, ok := changeFor(r.settings(t).Changes, status.KindSecurityConfiguration, "baseline:default_for_new_repos", status.SettingUpdate)
+	if !ok || row.State != status.SettingDrift {
 		t.Errorf("changes = %+v, want the default as drift", r.settings(t).Changes)
 	}
 }
