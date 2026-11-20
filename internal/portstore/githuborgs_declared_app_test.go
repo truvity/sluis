@@ -21,7 +21,9 @@ func connectedWithItsOwnApp(t *testing.T, set port.Set) (declared, stored *ports
 	v5 := secretstore.FromStoreV5(memory.New(), "")
 	plain := portstore.New(set).WithV5(v5)
 	stored, apps = portstore.NewGitHubOrgs(plain), portstore.NewGitHubCatalogueApps(plain)
-	rec := connection.Record{Org: "acme", AppID: 8, AppSlug: "acme-access-roster", InstallationID: 11, ConnectedAt: appsAt, ConnectedBy: "ada@acme.example", Owner: "ws1"}
+	rec := connection.Record{
+		Org: "acme", AppID: 8, AppSlug: "acme-access-roster", InstallationID: 11, ConnectedAt: appsAt, ConnectedBy: "ada@acme.example", Owner: "ws1",
+	}
 	if err := stored.Put(ctx, rec, connection.Credential{Org: "acme", AppID: 8, InstallationID: 11, PrivateKey: "OWN-KEY"}); err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +98,8 @@ func TestAnAlreadyConnectedOrganisationSwitchesToTheDeclaredAppOnceItIsInstalled
 			t.Errorf("the second AdoptDeclaredApp switched again: %v, %v", switched, err)
 		}
 		written, err := stored.List(ctx)
-		if err != nil || len(written) != 1 || written[0].AppRef != "acme-declared" || written[0].AppID != 9 || written[0].InstallationID != 12 || written[0].Owner != "ws1" {
+		if err != nil || len(written) != 1 || written[0].AppRef != "acme-declared" || written[0].AppID != 9 ||
+			written[0].InstallationID != 12 || written[0].Owner != "ws1" {
 			t.Fatalf("the stored record after the switch = %+v, %v", written, err)
 		}
 

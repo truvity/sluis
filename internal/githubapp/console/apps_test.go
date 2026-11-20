@@ -149,7 +149,10 @@ func (n *notingConn) DeclaredAppNote(context.Context, string) (string, error) { 
 // to say.
 func TestAnOrganisationsAppSaysWhyItsDeclaredAppIsNotInUse(t *testing.T) {
 	record := connection.Record{Org: "globex", AppID: 1, AppSlug: "g", InstallationID: 2}
-	store := &notingConn{memConn: memConn{records: map[string]connection.Record{"globex": record}}, note: "the App globex-declared is created and not installed in it yet"}
+	store := &notingConn{
+		memConn: memConn{records: map[string]connection.Record{"globex": record}},
+		note:    "the App globex-declared is created and not installed in it yet",
+	}
 	svc := New(Deps{Orgs: store})
 	specs, err := svc.controllerAppSpecs(context.Background(), nil, map[string]bool{})
 	if err != nil || len(specs) != 1 || specs[0].note != store.note {
