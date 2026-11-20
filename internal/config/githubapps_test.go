@@ -23,7 +23,8 @@ func policyWith(t *testing.T, sections string) (*config.PolicyDocument, error) {
 	return config.Load[config.PolicyDocument](file)
 }
 
-const renovate = "      - {id: renovate, purpose: catalogue, org: example-org, export: true, labels: {team: platform}, permissions: {contents: read, members: write, organization_administration: write}}\n"
+const renovate = "      - {id: renovate, purpose: catalogue, org: example-org, export: true, labels: {team: platform}, " +
+	"permissions: {contents: read, members: write, organization_administration: write}}\n"
 
 func TestTheListGivesEveryViewAndLabel(t *testing.T) {
 	d, err := policyWith(t, `apps:
