@@ -106,6 +106,9 @@ sync() {
         go mod edit -require="$mod@$tag"
     done < <(atoom_modules)
     go mod tidy
+    # The packages tool is a module of its own that requires this one, so the versions that atoom's modules raise (golang.org/x/...) must
+    # be raised there too, or its build and its lint refuse ("updates to go.mod needed").
+    (cd tools/release/packages && go mod tidy)
     local crate
     while IFS= read -r crate; do
         cargo update -p "$crate"
