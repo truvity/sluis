@@ -71,6 +71,11 @@ type (
 		Scope string `yaml:"scope"`
 		// Repositories are the repositories, by name, when Scope is `selected`.
 		Repositories []string `yaml:"repositories"`
+		// DefaultForNewRepos says which repositories created from now on get
+		// the configuration: `all`, `public`, `private_and_internal` or `none`.
+		// Empty leaves the organisation's default as it is and does not touch
+		// it.
+		DefaultForNewRepos string `yaml:"default_for_new_repos"`
 	}
 
 	// OrgCeiling is how far an owner's org section may reach. The installation
@@ -101,6 +106,19 @@ const (
 	ScopeAll      = "all"
 	ScopeSelected = "selected"
 )
+
+// The values of an attachment's default for new repositories, which are
+// GitHub's own words for it.
+const (
+	DefaultAll                = "all"
+	DefaultPublic             = "public"
+	DefaultPrivateAndInternal = "private_and_internal"
+	DefaultNone               = "none"
+)
+
+// Defaults are the values of default_for_new_repos, besides the empty one that
+// leaves the default alone.
+var Defaults = []string{DefaultAll, DefaultPublic, DefaultPrivateAndInternal, DefaultNone}
 
 // SecuritySettings are the settings of a code security configuration the
 // section may state, each with the values GitHub accepts.
@@ -252,6 +270,7 @@ func (c *checker) orgSection(s OrgSection) {
 	}
 
 	c.attachmentOverlap(s.SecurityConfigurations)
+	c.defaultOverlap(s.SecurityConfigurations)
 }
 
 // foldedCollisions refuses two names that GitHub reads as one.
@@ -309,6 +328,37 @@ func (c *checker) attachmentOverlap(configs map[string]SecurityConfiguration) {
 				"a configuration attached to every repository overlaps this one")
 		}
 	}
+}
+
+// defaultOverlap refuses two configurations that are both the default for one
+// kind of repository: GitHub keeps one, so the two would take it from each
+// other on every pass.
+func (c *checker) defaultOverlap(configs map[string]SecurityConfiguration) {
+	holder := map[string]string{}
+
+	for _, name := range sortedKeys(configs) {
+		for _, kind := range defaultKinds(configs[name].Attach.DefaultForNewRepos) {
+			if other, taken := holder[kind]; taken && other != name {
+				c.add(OwnerOrg, key("org.security_configurations", name)+".attach.default_for_new_repos",
+					"two configurations are both the default for new %s repositories", strings.ReplaceAll(kind, "_", " "))
+			}
+
+			holder[kind] = name
+		}
+	}
+}
+
+// defaultKinds are the kinds of repository a value of default_for_new_repos
+// makes a configuration the default for.
+func defaultKinds(value string) []string {
+	switch value {
+	case DefaultAll:
+		return []string{DefaultPublic, DefaultPrivateAndInternal}
+	case DefaultPublic, DefaultPrivateAndInternal:
+		return []string{value}
+	}
+
+	return nil
 }
 
 func (c *checker) orgVariable(p, name string, v OrgVariable) {
@@ -436,5 +486,9 @@ func (c *checker) securityConfiguration(p, name string, s SecurityConfiguration)
 		c.repositories(p+".attach.repositories", s.Attach.Repositories)
 	default:
 		c.add(OwnerOrg, p+".attach.scope", "not all or selected")
+	}
+
+	if d := s.Attach.DefaultForNewRepos; d != "" && !slices.Contains(Defaults, d) {
+		c.add(OwnerOrg, p+".attach.default_for_new_repos", "not one of %s", strings.Join(Defaults, ", "))
 	}
 }

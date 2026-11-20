@@ -45,6 +45,33 @@ func TestCheckOrg_AcceptsASectionInsideItsCeiling(t *testing.T) {
 	if vs := tenant.CheckOrg(orgOwner(), tenant.OrgSection{}); len(vs) != 0 {
 		t.Fatalf("an empty section was refused: %v", vs)
 	}
+
+	// Each word GitHub has for the default of new repositories is accepted, and
+	// two configurations may split the kinds between them.
+	for _, value := range append([]string{""}, tenant.Defaults...) {
+		section := goodOrg()
+		c := section.SecurityConfigurations["baseline"]
+		c.Attach.DefaultForNewRepos = value
+		section.SecurityConfigurations["baseline"] = c
+
+		if vs := tenant.CheckOrg(orgOwner(), section); len(vs) != 0 {
+			t.Errorf("default_for_new_repos %q was refused: %v", value, vs)
+		}
+	}
+
+	split := goodOrg()
+	split.SecurityConfigurations["baseline"] = tenant.SecurityConfiguration{
+		Description: "Public.", Settings: map[string]string{"secret_scanning": "enabled"},
+		Attach: tenant.Attachment{Scope: "selected", Repositories: []string{"shop"}, DefaultForNewRepos: "public"},
+	}
+	split.SecurityConfigurations["private"] = tenant.SecurityConfiguration{
+		Description: "Private.", Settings: map[string]string{"secret_scanning": "enabled"},
+		Attach: tenant.Attachment{Scope: "selected", Repositories: []string{"web"}, DefaultForNewRepos: "private_and_internal"},
+	}
+
+	if vs := tenant.CheckOrg(orgOwner(), split); len(vs) != 0 {
+		t.Errorf("two configurations splitting the kinds of repository were refused: %v", vs)
+	}
 }
 
 func TestCheckOrg_Refuses(t *testing.T) {
@@ -156,6 +183,27 @@ func TestCheckOrg_Refuses(t *testing.T) {
 				s.SecurityConfigurations["baseline"] = c
 			},
 			tenant.OwnerOrg, "org.security_configurations[baseline].attach.scope",
+		},
+		"a default for new repositories GitHub does not have": {
+			func(s *tenant.OrgSection) {
+				c := s.SecurityConfigurations["baseline"]
+				c.Attach.DefaultForNewRepos = "new"
+				s.SecurityConfigurations["baseline"] = c
+			},
+			tenant.OwnerOrg, "org.security_configurations[baseline].attach.default_for_new_repos",
+		},
+		"two configurations that are the default for one kind of repository": {
+			func(s *tenant.OrgSection) {
+				s.SecurityConfigurations["baseline"] = tenant.SecurityConfiguration{
+					Description: "Scanning on.", Settings: map[string]string{"secret_scanning": "enabled"},
+					Attach: tenant.Attachment{Scope: "selected", Repositories: []string{"shop"}, DefaultForNewRepos: "all"},
+				}
+				s.SecurityConfigurations["public"] = tenant.SecurityConfiguration{
+					Description: "Public.", Settings: map[string]string{"secret_scanning": "enabled"},
+					Attach: tenant.Attachment{Scope: "selected", Repositories: []string{"web"}, DefaultForNewRepos: "public"},
+				}
+			},
+			tenant.OwnerOrg, "org.security_configurations[public].attach.default_for_new_repos",
 		},
 		"selected attachment with no repository": {
 			func(s *tenant.OrgSection) {

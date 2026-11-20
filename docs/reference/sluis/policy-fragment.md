@@ -93,4 +93,4 @@ It reads two YAML or JSON files, uses no network and writes nothing.
 |---|---|
 | `variables.<NAME>` | `value`, `visibility` (`all`, `private`, `selected`), `repositories` |
 | `secrets.<NAME>` | `parameter`, `visibility`, `repositories`; no value |
-| `security_configurations.<name>` | `description`, `settings` (GitHub's own names and values), `attach.scope` (`all`, `selected`), `attach.repositories` |
+| `security_configurations.<name>` | `description`, `settings` (GitHub's own names and values), `attach.scope` (`all`, `selected`), `attach.repositories`, `attach.default_for_new_repos` (`all`, `public`, `private_and_internal`, `none`; absent leaves the default alone) |

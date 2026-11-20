@@ -41,8 +41,10 @@ org:
     baseline:
       description: Scanning on for every repository.
       settings: {secret_scanning: enabled}
-      attach: {scope: all}
+      attach: {scope: all, default_for_new_repos: all}
 ```
+
+`scope: all` skips archived repositories. `default_for_new_repos` (`all`, `public`, `private_and_internal`, `none`) sets the default for new ones; left out, it is not touched.
 
 ## 3. Declare the organisation
 

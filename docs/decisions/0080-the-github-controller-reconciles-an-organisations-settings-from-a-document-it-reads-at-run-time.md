@@ -5,6 +5,11 @@
 [0079](0079-a-company-fragment-carries-its-app-grants-and-its-gates.md) (a company fragment carries its App grants and
 its gates).
 **Date:** 2026-11-18
+**Amended (2026-11-20):** an attachment may state `default_for_new_repos` (`all`, `public`, `private_and_internal` or
+`none`), which the controller sets with `PUT /orgs/{org}/code-security/configurations/{id}/defaults`; absent, it leaves
+the organisation's default alone. `scope: all` means every repository that is not archived: the controller attaches
+them as a selected set, because GitHub's own scope `all` includes archived repositories, which hold no configuration. An
+archived repository that holds a configuration is reported and never detached.
 
 ## Context
 
