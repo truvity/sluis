@@ -1063,3 +1063,178 @@ org:
 		t.Errorf("changes = %+v, want four removals held", r.settings(t).Changes)
 	}
 }
+
+const defaultDocument = `
+org:
+  security_configurations:
+    baseline:
+      description: Scanning on everywhere.
+      settings: {secret_scanning: enabled}
+      attach: {scope: all, default_for_new_repos: all}
+`
+
+// changeFor is the row of a kind and name, or false.
+func changeFor(changes []status.SettingChange, kind, name, action string) (status.SettingChange, bool) {
+	for _, c := range changes {
+		if c.Kind == kind && c.Name == name && c.Action == action {
+			return c, true
+		}
+	}
+
+	return status.SettingChange{}, false
+}
+
+// A recreated configuration keeps the organisation's default for new
+// repositories when the document says so: the configuration is made the
+// default once, and a settled organisation is not written to again.
+func TestTheDocumentMakesAConfigurationTheDefaultForNewRepositories(t *testing.T) {
+	r := newSettingsRig(t, settingsConfig(orgconfig.ModeEnforce), defaultDocument)
+	r.pass()
+
+	if cfg := r.github.Configuration("baseline"); cfg == nil || cfg.Default() != "all" {
+		t.Fatalf("baseline = %+v, want it the default for every new repository", cfg)
+	}
+
+	if !slices.Contains(r.github.Did(), "set-default baseline all") {
+		t.Errorf("did %v, want the default set", r.github.Did())
+	}
+
+	if row, ok := changeFor(r.settings(t).Changes, status.KindSecurityConfiguration, "baseline:default_for_new_repos", status.SettingUpdate); !ok || row.State != status.SettingApplied {
+		t.Errorf("changes = %+v, want the default applied", r.settings(t).Changes)
+	}
+
+	before := len(r.github.Did())
+	r.pass()
+
+	if after := r.github.Did()[before:]; len(after) != 0 {
+		t.Errorf("a settled organisation was written to again: %v", after)
+	}
+
+	// Somebody makes another configuration the default; the controller takes
+	// it back, since the configuration is its own.
+	r.github.AddConfiguration("handmade", map[string]string{})
+	r.github.SetDefault("handmade", "all")
+	r.pass()
+
+	if cfg := r.github.Configuration("baseline"); cfg.Default() != "all" || r.github.Configuration("handmade").Default() != "none" {
+		t.Errorf("baseline default %q, handmade default %q, want the controller's back", cfg.Default(), r.github.Configuration("handmade").Default())
+	}
+}
+
+// Report mode says the default would be set and sets nothing.
+func TestReportModeSaysTheDefaultForNewRepositoriesWithoutSettingIt(t *testing.T) {
+	r := newSettingsRig(t, settingsConfig(orgconfig.ModeReport), defaultDocument)
+	r.pass()
+
+	for _, did := range r.github.Did() {
+		if strings.Contains(did, "set-default") || strings.Contains(did, "attach-config") {
+			t.Errorf("report mode wrote: %v", r.github.Did())
+		}
+	}
+
+	if row, ok := changeFor(r.settings(t).Changes, status.KindSecurityConfiguration, "baseline:default_for_new_repos", status.SettingUpdate); !ok || row.State != status.SettingDrift {
+		t.Errorf("changes = %+v, want the default as drift", r.settings(t).Changes)
+	}
+}
+
+// A document that says nothing about the default leaves it as it is, whoever
+// holds it; a configuration the controller did not write is a conflict that the
+// default does not change.
+func TestADocumentWithoutADefaultLeavesTheDefaultAlone(t *testing.T) {
+	r := newSettingsRig(t, settingsConfig(orgconfig.ModeEnforce), strings.ReplaceAll(defaultDocument, ", default_for_new_repos: all", ""))
+	r.github.AddConfiguration("handmade", map[string]string{})
+	r.github.SetDefault("handmade", "all")
+	r.pass()
+	r.pass()
+
+	if got := r.github.Configuration("handmade").Default(); got != "all" {
+		t.Errorf("handmade default = %q, want it untouched", got)
+	}
+
+	if cfg := r.github.Configuration("baseline"); cfg.Default() != "none" {
+		t.Errorf("baseline default = %q, want none: the document says nothing", cfg.Default())
+	}
+
+	for _, did := range r.github.Did() {
+		if strings.Contains(did, "set-default") {
+			t.Errorf("the default was written: %v", r.github.Did())
+		}
+	}
+}
+
+func TestADefaultIsNotSetOnAConfigurationTheControllerDidNotWrite(t *testing.T) {
+	r := newSettingsRig(t, settingsConfig(orgconfig.ModeEnforce), defaultDocument)
+	r.github.AddConfiguration("baseline", map[string]string{"secret_scanning": "enabled"})
+	r.pass()
+
+	if cfg := r.github.Configuration("baseline"); cfg.Default() != "none" {
+		t.Errorf("baseline default = %q, want it untouched: the controller did not write it", cfg.Default())
+	}
+
+	if _, ok := changeFor(r.settings(t).Changes, status.KindSecurityConfiguration, "baseline", status.SettingUpdate); !ok {
+		t.Errorf("changes = %+v, want a conflict on the configuration", r.settings(t).Changes)
+	}
+}
+
+// GitHub's own scope `all` takes archived repositories too, and the fake does
+// as GitHub does: a pass that asked for it would attach one. The controller
+// attaches the live repositories as a selected set.
+func TestScopeAllNeverAttachesAnArchivedRepository(t *testing.T) {
+	r := newSettingsRig(t, settingsConfig(orgconfig.ModeEnforce), `
+org:
+  security_configurations:
+    baseline:
+      description: Scanning on everywhere.
+      settings: {secret_scanning: enabled}
+      attach: {scope: all}
+`)
+	r.github.Archive("docs")
+	r.pass()
+
+	cfg := r.github.Configuration("baseline")
+	if _, archived := cfg.Attached[r.github.RepositoryID("docs")]; archived || len(cfg.Attached) != 2 {
+		t.Fatalf("attached = %v, want the two live repositories and not docs", cfg.Attached)
+	}
+
+	if !slices.Contains(r.github.Did(), "attach-config baseline selected") || slices.Contains(r.github.Did(), "attach-config baseline all") {
+		t.Errorf("did %v, want a selected attachment", r.github.Did())
+	}
+}
+
+// An archived repository that an earlier release attached is reported and
+// never detached, pass after pass, without being audited again.
+func TestAnArchivedRepositoryAttachedEarlierIsReportedAndNeverDetached(t *testing.T) {
+	r := newSettingsRig(t, settingsConfig(orgconfig.ModeEnforce), `
+org:
+  security_configurations:
+    baseline:
+      description: Scanning on everywhere.
+      settings: {secret_scanning: enabled}
+      attach: {scope: all}
+`)
+	r.pass()
+	r.github.Archive("docs")
+
+	before := len(r.github.Did())
+	r.pass()
+
+	if after := r.github.Did()[before:]; len(after) != 0 {
+		t.Errorf("an archived repository was written to: %v", after)
+	}
+
+	row, ok := changeFor(r.settings(t).Changes, status.KindSecurityConfiguration, "baseline", status.SettingDetach)
+	if !ok || row.State != status.SettingHeld || !strings.Contains(row.Reason, "docs") {
+		t.Fatalf("changes = %+v, want a held row naming docs", r.settings(t).Changes)
+	}
+
+	if _, attached := r.github.Configuration("baseline").Attached[r.github.RepositoryID("docs")]; !attached {
+		t.Error("the archived repository was detached")
+	}
+
+	first := len(r.settingRecords())
+	r.pass()
+
+	if again := len(r.settingRecords()); again != first {
+		t.Errorf("a standing report was audited again: %d records, then %d", first, again)
+	}
+}

@@ -87,3 +87,4 @@ org:
         enforcement: unenforced
       attach:
         scope: all
+        default_for_new_repos: all

@@ -199,6 +199,9 @@ type run struct {
 	vars     map[string]githubapp.Variable
 	secs     map[string]githubapp.Secret
 	cfgs     map[string]githubapp.SecurityConfiguration
+	// defaults are the configurations that are the organisation's default for
+	// new repositories, by id, read when the document states one.
+	defaults map[int64]string
 	// written is the version of the parameter the last secret written was
 	// read from.
 	written int64
@@ -246,6 +249,12 @@ func (r *run) read(ctx context.Context) error {
 		r.cfgs[c.Name] = c
 	}
 
+	if r.statesDefault() {
+		if r.defaults, err = r.org().ConfigurationDefaults(ctx, r.tok()); err != nil {
+			return err //nolint:wrapcheck // the client names the call
+		}
+	}
+
 	if r.usesRepositories() {
 		if r.repos, err = r.org().Repositories(ctx, r.tok()); err != nil {
 			return err //nolint:wrapcheck // the client names the call
@@ -261,6 +270,19 @@ func (r *run) read(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// statesDefault says whether a configuration of the document states what is the
+// default for new repositories. One that does not leaves the default alone, so
+// the pass does not even read it.
+func (r *run) statesDefault() bool {
+	for _, c := range r.in.Desired.Configs {
+		if c.Attach.DefaultForNewRepos != "" {
+			return true
+		}
+	}
+
+	return false
 }
 
 // usesRepositories says whether the pass needs the organisation's
@@ -531,8 +553,8 @@ func (r *run) configurations(ctx context.Context) {
 		}
 
 		if exists && !r.wrote.cfgs[name] {
-			missingIDs, extra, err := r.attachmentDiff(ctx, got.ID, true, want, ids)
-			if err != nil || configurationDiffers(got, want) || len(missingIDs) > 0 || len(extra) > 0 {
+			missingIDs, extra, _, err := r.attachmentDiff(ctx, got.ID, true, want, ids)
+			if err != nil || configurationDiffers(got, want) || len(missingIDs) > 0 || len(extra) > 0 || r.defaultDiffers(got.ID, want) {
 				r.record(status.KindSecurityConfiguration, name, status.SettingUpdate, status.SettingConflict, conflict)
 			}
 
@@ -567,7 +589,43 @@ func (r *run) configurations(ctx context.Context) {
 		}
 
 		r.attachment(ctx, name, id, exists, want, ids)
+		r.defaultForNew(ctx, name, id, want)
 	}
+}
+
+// defaultSuffix names the row of a configuration's default for new
+// repositories beside the rows of the configuration itself.
+const defaultSuffix = ":default_for_new_repos"
+
+// defaultDiffers says whether the document states a default for new
+// repositories that GitHub does not hold for the configuration. One the
+// document leaves out never differs.
+func (r *run) defaultDiffers(id int64, want tenant.SecurityConfiguration) bool {
+	value := want.Attach.DefaultForNewRepos
+	if value == "" {
+		return false
+	}
+
+	live := r.defaults[id]
+	if live == "" {
+		live = tenant.DefaultNone
+	}
+
+	return live != value
+}
+
+// defaultForNew makes the configuration the default for new repositories, as
+// the document says, when GitHub holds another. It is reached only for a
+// configuration the controller wrote, as every write of the pass is. A document
+// that says nothing leaves the default as it is.
+func (r *run) defaultForNew(ctx context.Context, name string, id int64, want tenant.SecurityConfiguration) {
+	if !r.defaultDiffers(id, want) {
+		return
+	}
+
+	r.act(status.KindSecurityConfiguration, name+defaultSuffix, status.SettingUpdate, func() error {
+		return r.org().SetConfigurationDefault(ctx, r.tok(), id, want.Attach.DefaultForNewRepos) //nolint:wrapcheck // the client names the call
+	})
 }
 
 func configurationDiffers(got githubapp.SecurityConfiguration, want tenant.SecurityConfiguration) bool {
@@ -597,9 +655,10 @@ func attached(status string) bool {
 
 // attachmentDiff is the repositories a configuration is missing from and the
 // ones it holds that the document does not name. An archived repository is
-// neither: GitHub takes no configuration for it and gives none back, so
-// asking for it every pass would never end.
-func (r *run) attachmentDiff(ctx context.Context, id int64, exists bool, want tenant.SecurityConfiguration, ids []int64) (missing, extra []int64, err error) {
+// neither: it is never asked for, so asking would not end, and never detached,
+// since the controller did not choose it. The archived ones that hold the
+// configuration are the third answer, for the report.
+func (r *run) attachmentDiff(ctx context.Context, id int64, exists bool, want tenant.SecurityConfiguration, ids []int64) (missing, extra, archived []int64, err error) {
 	wanted := ids
 	if want.Attach.Scope == tenant.ScopeAll {
 		live := make([]githubapp.Repo, 0, len(r.repos))
@@ -617,12 +676,16 @@ func (r *run) attachmentDiff(ctx context.Context, id int64, exists bool, want te
 	if exists {
 		rows, err := r.org().ConfigurationRepositories(ctx, r.tok(), id)
 		if err != nil {
-			return nil, nil, err //nolint:wrapcheck // the client names the call
+			return nil, nil, nil, err //nolint:wrapcheck // the client names the call
 		}
 
 		for _, row := range rows {
 			if attached(row.Status) {
 				have = append(have, row.ID)
+
+				if r.archived[row.ID] {
+					archived = append(archived, row.ID)
+				}
 			}
 		}
 
@@ -634,14 +697,16 @@ func (r *run) attachmentDiff(ctx context.Context, id int64, exists bool, want te
 	missing = difference(wanted, have)
 	extra = slices.DeleteFunc(difference(have, wanted), func(id int64) bool { return r.archived[id] })
 
-	return missing, extra, nil
+	slices.Sort(archived)
+
+	return missing, extra, archived, nil
 }
 
 // attachment brings the repositories a configuration is attached to to the
 // document's: it attaches what is missing and, for a selected attachment,
 // detaches what the document no longer names.
 func (r *run) attachment(ctx context.Context, name string, id int64, exists bool, want tenant.SecurityConfiguration, ids []int64) {
-	missing, extra, err := r.attachmentDiff(ctx, id, exists, want, ids)
+	missing, extra, archived, err := r.attachmentDiff(ctx, id, exists, want, ids)
 	if err != nil {
 		r.record(status.KindSecurityConfiguration, name, status.SettingAttach, status.SettingHeld, err.Error())
 
@@ -649,9 +714,16 @@ func (r *run) attachment(ctx context.Context, name string, id int64, exists bool
 	}
 
 	if len(missing) > 0 {
+		// Always as a selected set, even for scope all: GitHub's own scope
+		// `all` takes archived repositories too, and the document's `all` is
+		// every repository that is not archived.
 		r.act(status.KindSecurityConfiguration, name, status.SettingAttach, func() error {
-			return r.org().AttachSecurityConfiguration(ctx, r.tok(), id, want.Attach.Scope, missing) //nolint:wrapcheck // the client names the call
+			return r.org().AttachSecurityConfiguration(ctx, r.tok(), id, tenant.ScopeSelected, missing) //nolint:wrapcheck // the client names the call
 		})
+	}
+
+	if len(archived) > 0 {
+		r.record(status.KindSecurityConfiguration, name, status.SettingDetach, status.SettingHeld, r.archivedHolding(archived))
 	}
 
 	if len(extra) > 0 {
@@ -660,6 +732,38 @@ func (r *run) attachment(ctx context.Context, name string, id int64, exists bool
 		})
 	}
 }
+
+// archivedHolding says which archived repositories hold a configuration that
+// the document does not attach to them: an earlier pass attached them with
+// GitHub's scope `all`. The controller leaves them, and the row stays until
+// somebody detaches them or unarchives them.
+func (r *run) archivedHolding(ids []int64) string {
+	names := make([]string, 0, len(ids))
+
+	for _, repo := range r.repos {
+		if slices.Contains(ids, repo.ID) {
+			names = append(names, repo.Name)
+		}
+	}
+
+	slices.Sort(names)
+
+	shown := names
+	if len(shown) > maxArchivedNamed {
+		shown = shown[:maxArchivedNamed]
+	}
+
+	text := strings.Join(shown, ", ")
+	if len(names) > len(shown) {
+		text += fmt.Sprintf(" and %d more", len(names)-len(shown))
+	}
+
+	return fmt.Sprintf("archived repositories hold it (%s): the controller does not attach an archived repository and does not detach one; "+
+		"detach them on GitHub to clear this row", text)
+}
+
+// maxArchivedNamed is how many archived repositories a row names.
+const maxArchivedNamed = 5
 
 // difference is the ids in a that are not in b, both sorted.
 func difference(a, b []int64) []int64 {

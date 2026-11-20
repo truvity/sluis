@@ -341,9 +341,65 @@ func (o Org) ConfigurationRepositories(ctx context.Context, token string, id int
 	return out, nil
 }
 
+// ConfigurationDefaults reads which configurations are the organisation's
+// default for repositories created from now on, by configuration id: `all`,
+// `public` or `private_and_internal`. A configuration that is nobody's default
+// is not in the map. GitHub answers with one row per kind of repository, and a
+// configuration that is both rows' is `all`.
+func (o Org) ConfigurationDefaults(ctx context.Context, token string) (map[int64]string, error) {
+	kinds := map[int64]map[string]bool{}
+	err := pages(ctx, o.HTTP, o.url("/code-security/configurations/defaults"), token, func(page *[]struct {
+		Default       string `json:"default_for_new_repos"`
+		Configuration struct {
+			ID int64 `json:"id"`
+		} `json:"configuration"`
+	}) {
+		for _, row := range *page {
+			if kinds[row.Configuration.ID] == nil {
+				kinds[row.Configuration.ID] = map[string]bool{}
+			}
+			switch row.Default {
+			case "all":
+				kinds[row.Configuration.ID]["public"], kinds[row.Configuration.ID]["private_and_internal"] = true, true
+			case "public", "private_and_internal":
+				kinds[row.Configuration.ID][row.Default] = true
+			}
+		}
+	})
+	if err != nil {
+		return nil, fmt.Errorf("github: read %s's code security defaults: %w", o.Login, err)
+	}
+	out := map[int64]string{}
+	for id, held := range kinds {
+		switch {
+		case held["public"] && held["private_and_internal"]:
+			out[id] = "all"
+		case held["public"]:
+			out[id] = "public"
+		case held["private_and_internal"]:
+			out[id] = "private_and_internal"
+		}
+	}
+	return out, nil
+}
+
+// SetConfigurationDefault makes a configuration the organisation's default for
+// repositories created from now on: `all`, `public` or `private_and_internal`,
+// or, with `none`, the default for none. GitHub takes the kinds of repository it
+// now covers from the configuration that held them.
+func (o Org) SetConfigurationDefault(ctx context.Context, token string, id int64, value string) error {
+	endpoint := o.url("/code-security/configurations/" + strconv.FormatInt(id, 10) + "/defaults")
+	if err := send(ctx, o.HTTP, http.MethodPut, endpoint, token, map[string]any{"default_for_new_repos": value}, http.StatusOK, nil); err != nil {
+		return fmt.Errorf("github: set %s's code security configuration %d as the default: %w", o.Login, id, err)
+	}
+	return nil
+}
+
 // AttachSecurityConfiguration attaches a configuration to every repository
 // (scope `all`) or to the given ones (scope `selected`). GitHub does it
-// asynchronously and answers 202.
+// asynchronously and answers 202. Scope `all` includes archived repositories,
+// which hold no configuration of use: the controller attaches the live
+// repositories as a selected set instead.
 func (o Org) AttachSecurityConfiguration(ctx context.Context, token string, id int64, scope string, repositories []int64) error {
 	body := map[string]any{"scope": scope}
 	if scope == "selected" {

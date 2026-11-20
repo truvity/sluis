@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -20,7 +21,7 @@ import (
 // logged in [Org.Actions] as "create-variable NAME", "update-variable NAME",
 // "delete-variable NAME", "put-secret NAME", "delete-secret NAME",
 // "create-config NAME", "update-config NAME", "delete-config NAME",
-// "attach-config NAME scope", and "detach-config ID,ID".
+// "attach-config NAME scope", "detach-config ID,ID" and "set-default NAME value".
 
 // Variable is an Actions variable.
 type Variable struct {
@@ -51,6 +52,38 @@ type SecurityConfiguration struct {
 	Settings    map[string]string
 	// Attached are the repositories it is attached to, by id, with their status.
 	Attached map[int64]string
+	// DefaultFor are the kinds of repository, `public` and
+	// `private_and_internal`, that a repository created from now on gets this
+	// configuration for; empty is nobody's default.
+	DefaultFor map[string]bool
+}
+
+// Default is the configuration's default for new repositories in the words of
+// the API: `all`, `public`, `private_and_internal` or `none`.
+func (c *SecurityConfiguration) Default() string {
+	switch {
+	case c.DefaultFor["public"] && c.DefaultFor["private_and_internal"]:
+		return "all"
+	case c.DefaultFor["public"]:
+		return "public"
+	case c.DefaultFor["private_and_internal"]:
+		return "private_and_internal"
+	}
+
+	return "none"
+}
+
+// defaultKinds are the kinds of repository a value of default_for_new_repos
+// covers.
+func defaultKinds(value string) []string {
+	switch value {
+	case "all":
+		return []string{"public", "private_and_internal"}
+	case "public", "private_and_internal":
+		return []string{value}
+	}
+
+	return nil
 }
 
 // Repository is a repository of the organisation.
@@ -240,12 +273,43 @@ func (o *Org) Configuration(name string) *SecurityConfiguration {
 func cloneConfig(c *SecurityConfiguration) *SecurityConfiguration {
 	out := *c
 	out.Attached = map[int64]string{}
+	out.DefaultFor = maps.Clone(c.DefaultFor)
 
 	for k, v := range c.Attached {
 		out.Attached[k] = v
 	}
 
 	return &out
+}
+
+// SetDefault makes a configuration the default for new repositories, as another
+// writer would: `all`, `public`, `private_and_internal` or `none`.
+func (o *Org) SetDefault(config, value string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	for _, c := range o.settings.Configs {
+		if c.Name == config {
+			o.makeDefault(c, value)
+		}
+	}
+}
+
+// makeDefault takes the kinds of repository value covers from whichever
+// configuration held them, and gives them to c; none gives c up.
+func (o *Org) makeDefault(c *SecurityConfiguration, value string) {
+	kinds := defaultKinds(value)
+
+	for _, other := range o.settings.Configs {
+		for _, kind := range kinds {
+			delete(other.DefaultFor, kind)
+		}
+	}
+
+	c.DefaultFor = map[string]bool{}
+	for _, kind := range kinds {
+		c.DefaultFor[kind] = true
+	}
 }
 
 // Attach attaches a repository to a configuration directly, as another
@@ -279,6 +343,8 @@ func (o *Org) settingsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE "+secretsRoute+"/{name}", o.deleteSecret)
 	mux.HandleFunc("GET "+secretsRoute+"/{name}/repositories", o.secretRepos)
 	mux.HandleFunc("GET /orgs/{org}/code-security/configurations", o.listConfigs)
+	mux.HandleFunc("GET /orgs/{org}/code-security/configurations/defaults", o.listDefaults)
+	mux.HandleFunc("PUT /orgs/{org}/code-security/configurations/{id}/defaults", o.putDefault)
 	mux.HandleFunc("POST /orgs/{org}/code-security/configurations", o.createConfig)
 	mux.HandleFunc("DELETE /orgs/{org}/code-security/configurations/detach", o.detachConfigs)
 	mux.HandleFunc("PATCH /orgs/{org}/code-security/configurations/{id}", o.updateConfig)
@@ -759,12 +825,12 @@ func (o *Org) attachConfig(w http.ResponseWriter, r *http.Request) {
 	targets := body.Selected
 
 	if body.Scope == "all" {
+		// As GitHub does: every repository, archived ones too. A caller that
+		// wants the live ones alone names them as a selected set.
 		targets = nil
 
 		for _, repo := range o.settings.Repositories {
-			if !repo.Archived {
-				targets = append(targets, repo.ID)
-			}
+			targets = append(targets, repo.ID)
 		}
 	}
 
@@ -779,6 +845,61 @@ func (o *Org) attachConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusAccepted, map[string]string{"message": "Accepted"})
+}
+
+func (o *Org) listDefaults(w http.ResponseWriter, r *http.Request) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	if !o.authorised(w, r) {
+		return
+	}
+
+	rows := []map[string]any{}
+
+	for _, id := range slices.Sorted(maps.Keys(o.settings.Configs)) {
+		c := o.settings.Configs[id]
+		if c.Default() != "none" {
+			rows = append(rows, map[string]any{"default_for_new_repos": c.Default(), "configuration": c.view()})
+		}
+	}
+
+	writeJSON(w, http.StatusOK, rows)
+}
+
+func (o *Org) putDefault(w http.ResponseWriter, r *http.Request) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	if !o.authorised(w, r) {
+		return
+	}
+
+	c := o.configByID(w, r)
+	if c == nil {
+		return
+	}
+
+	var body struct {
+		Default string `json:"default_for_new_repos"`
+	}
+
+	if !decodeBody(w, r, &body) {
+		return
+	}
+
+	if !slices.Contains([]string{"all", "public", "private_and_internal", "none"}, body.Default) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"message": "Invalid default_for_new_repos"})
+
+		return
+	}
+
+	if !o.act(w, "set-default "+c.Name+" "+body.Default) {
+		return
+	}
+
+	o.makeDefault(c, body.Default)
+	writeJSON(w, http.StatusOK, map[string]any{"default_for_new_repos": body.Default, "configuration": c.view()})
 }
 
 func (o *Org) detachConfigs(w http.ResponseWriter, r *http.Request) {

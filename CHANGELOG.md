@@ -1,8 +1,14 @@
 ## Unreleased
 
+### Added
+
+- **A code security configuration can be the organisation's default for new repositories.** The `attach` of a configuration in an organisation's settings document (ADR 0080) takes an optional `default_for_new_repos`: `all`, `public`, `private_and_internal` or `none`. The controller sets it with `PUT /orgs/{org}/code-security/configurations/{id}/defaults` on a configuration it wrote, reports drift when GitHub holds another, and does nothing in `report` mode. Absent, the organisation's default is left as it is. A recreated configuration no longer loses the default a hand-made one had: state it in the document. The row is `security_configuration` `<name>:default_for_new_repos`, action `update`, in the report and the existing per-change audit record (no new audit action; the catalogue stays 1.25.0). Two configurations that are both the default for one kind of repository are refused. Refs #1929.
+
 ### Fixed
 
 - **An App named by `controllers.github.appRefs` is one row in the console, judged against its catalogue declaration alone.** After an organisation switched to the catalogue App `appRefs` names, the GitHub Apps tab showed that one App twice: as a tokens App checked against the catalogue declaration, and as the organisation's controller App checked against the built-in roster manifest (members write, organisation administration read). Whatever the App held on GitHub one of the rows reported drift, and an operator who followed the controller row removed the write permissions the organisation-settings pass needs. The roster's App is now judged against the catalogue declaration only, and the console shows one row with both roles (the new `manages_teams` field of the App's view) and one drift verdict. A declaration that does not give the roster what it needs (members write, organization_administration read or higher) is refused when the configuration loads, with the permissions it lacks named. An organisation without an `appRefs` entry keeps its own App's controller row and the built-in manifest. Upgrade notes: an `appRefs` App declared without `members: write` and `organization_administration` now fails to load; add them to its declaration in `apps.github.apps` (the App on GitHub already holds them when the organisation uses it). Refs #1928.
+
+- **`attach: {scope: all}` no longer attaches archived repositories.** The controller asked GitHub for its own scope `all`, which includes archived repositories, although it lists only the live ones as missing. It now attaches the live repositories as a selected set (GitHub has no scope that leaves archived ones out). An archived repository that a pass of v1.85.1 attached is reported, as a held `detach` row of the configuration naming it, and is never detached. The fake GitHub used in the tests now includes archived repositories in `scope: all`, as GitHub does. Refs #1929.
 
 ## v1.85.1
 

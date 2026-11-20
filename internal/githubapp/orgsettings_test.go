@@ -87,6 +87,28 @@ func TestVariablesAndConfigurationsRoundTrip(t *testing.T) {
 		t.Fatalf("configurations = %+v, %v; want the organisation's own and not GitHub's", configs, err)
 	}
 
+	// The default for new repositories is read back as the API words it, and
+	// setting it takes the kinds from whichever configuration held them.
+	if defaults, err := org.ConfigurationDefaults(ctx, fake.Token); err != nil || len(defaults) != 0 {
+		t.Fatalf("defaults = %v, %v, want none", defaults, err)
+	}
+
+	if err = org.SetConfigurationDefault(ctx, fake.Token, id, "all"); err != nil {
+		t.Fatal(err)
+	}
+
+	if defaults, err := org.ConfigurationDefaults(ctx, fake.Token); err != nil || defaults[id] != "all" || len(defaults) != 1 {
+		t.Fatalf("defaults = %v, %v, want the configuration for all", defaults, err)
+	}
+
+	if err = org.SetConfigurationDefault(ctx, fake.Token, id, "none"); err != nil {
+		t.Fatal(err)
+	}
+
+	if defaults, err := org.ConfigurationDefaults(ctx, fake.Token); err != nil || len(defaults) != 0 {
+		t.Fatalf("defaults = %v, %v, want none after none", defaults, err)
+	}
+
 	attached, err := org.ConfigurationRepositories(ctx, fake.Token, id)
 	if err != nil || len(attached) != 1 || attached[0].Name != "shop" {
 		t.Fatalf("attached = %+v, %v", attached, err)
@@ -106,6 +128,7 @@ func TestVariablesAndConfigurationsRoundTrip(t *testing.T) {
 
 	want := []string{
 		"create-variable EXAMPLE", "update-variable EXAMPLE", "create-config baseline", "attach-config baseline selected",
+		"set-default baseline all", "set-default baseline none",
 		"detach-config " + itoa(shop), "delete-config baseline", "delete-variable EXAMPLE",
 	}
 	if did := fake.Did(); !slices.Equal(did, want) {

@@ -47,6 +47,16 @@
       "additionalProperties": false,
       "description": "The repositories a configuration is attached to.",
       "properties": {
+        "default_for_new_repos": {
+          "description": "Which repositories created from now on get the configuration. Absent leaves the organisation's default as it is; none makes it the default for no repository.",
+          "enum": [
+            "all",
+            "public",
+            "private_and_internal",
+            "none"
+          ],
+          "type": "string"
+        },
         "repositories": {
           "description": "The repositories, by name, when scope is selected.",
           "items": {
