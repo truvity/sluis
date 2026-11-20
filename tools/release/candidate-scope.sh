@@ -16,7 +16,7 @@ tagre='^2\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-alpha\.(0|[1-9][0-9]*))?$'
 no() { echo "run=false"; echo "reason=$*"; exit 0; }
 
 # The first section heading of CHANGELOG.md at a commit.
-head_of() { git show "$1:CHANGELOG.md" 2>/dev/null | awk '/^## / { print; exit }'; }
+head_of() { git show "$1:CHANGELOG.md" 2>/dev/null | awk '/^## / && !h { print; h = 1 }'; }
 
 git cat-file -e "$after^{commit}" 2>/dev/null || { echo "candidate-scope: $after is not a commit of this clone" >&2; exit 1; }
 [[ "$before" =~ ^0+$ ]] && no "the push has no commit before it to compare with"
