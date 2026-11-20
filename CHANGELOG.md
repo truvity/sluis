@@ -1,5 +1,19 @@
 ## Unreleased
 
+## v1.86.0
+
+A minor release: a grant is three segments or five, `<scope>:<thing>:<role>` or `<env>:<vendor>:<project>:<customer>:<kind>`, and a project row can carry an `alias` so the move from the one-word thing to the long form has a dual period (#1935, closes #1934; [ADR 0081](docs/decisions/0081-a-grant-is-three-segments-or-five.md)); the audit catalogue stays at 1.25.0. Upgrade notes: a three-word entry in a client's `groups:` is now checked against the declared vocabulary (it used to pass as an entry with a separator), so declare the thing or the entry is refused; a relying party that compares `thing` with a single word sees no match for the long form.
+
+### Added
+
+- **A grant can have five segments.** `policy.SplitGroup` keeps its signature and reads three segments or five, none empty: the scope is the first segment, the role the last, and the thing is everything between them, `<vendor>:<project>:<customer>` for the long form (`prod:finttech:landing:ie:deployer`). Four segments, six or more and any empty segment are not a grant. A thing is one word or exactly three (`ValidThing`); `GroupName` joins a thing with colons. The audit module keeps its own copy of the reader and moves with this one. Cluster groups (`<cluster>:k8s:<kind>`) stay three segments. Refs #1934.
+- **A project row can carry an `alias`, its old one-word thing.** The roster emits every group of the project under both things with the same members, the vocabulary declares both, and a client's `requires` and `groups:` accept either. `ValidateProjects` holds a project's key and alias to the shape. Without an alias nothing changes, and dropping it drops the old groups. A company ceiling accepts five-segment patterns, and a `*` thing in a three-segment pattern stands for any thing, one word or three.
+
+### Changed
+
+- **A three-word `groups:` entry of a client is checked against the vocabulary.** `groupsScoping` matches the entry against the whole thing, so `truvity:dms:generic` is valid, and with a declared vocabulary it must be a declared thing. Before, an entry with a separator was valid either way. The entry is read by `groupsScoping` (`off`, `report` or `enforce`), as the one-word entries are.
+- The policy tenant check indexes the project rows instead of copying them; no change in behaviour (#1935).
+
 ## v1.85.2
 
 A patch release: the console shows an App named by `controllers.github.appRefs` as one row judged against its catalogue declaration, and refuses at load an `appRefs` App declared without `members: write` and `organization_administration` (#1928); a code security configuration can be the organisation's default for new repositories with `attach.default_for_new_repos`, and `scope: all` no longer attaches archived repositories (#1929). Upgrade notes: declare those two permissions on an `appRefs` App; the audit catalogue stays at 1.25.0.
