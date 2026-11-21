@@ -13,7 +13,6 @@ d /run/sluis/key/dev/exchange 2750 sluis-key-dev sluis-keyc-003-dev -
 d /run/sluis/key/dev/exporter 2750 sluis-key-dev sluis-keyc-013-dev -
 d /run/sluis/key/dev/indexer 2750 sluis-key-dev sluis-keyc-017-dev -
 d /run/sluis/key/dev/policy 2750 sluis-key-dev sluis-keyc-005-dev -
-d /run/sluis/key/dev/quota 2750 sluis-key-dev sluis-keyc-008-dev -
 d /run/sluis/key/dev/reader 2750 sluis-key-dev sluis-keyc-018-dev -
 d /run/sluis/key/dev/session 2750 sluis-key-dev sluis-keyc-001-dev -
 d /run/sluis/key/dev/signer 2750 sluis-key-dev sluis-keyc-004-dev -

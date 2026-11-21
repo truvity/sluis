@@ -19,7 +19,7 @@ const { error, load, adr, adrHref, claim, heading } = g;
 const reg = load(SOURCE);
 const actorReg = load(ACTORS);
 const kinds = Array.isArray(reg?.kinds) ? reg.kinds : [];
-const actorNames = new Set([...(actorReg?.actors ?? []), ...(actorReg?.platform ?? [])].map((a) => a.name));
+const actorNames = new Set([...(actorReg?.actors ?? []), ...(actorReg?.audit_pieces ?? []), ...(actorReg?.platform ?? [])].map((a) => a.name));
 const kindNames = new Set(kinds.map((k) => k.name));
 const CLASSES = ['config', 'secret', 'durable', 'temp'];
 const CLASS_TEXT = {
@@ -61,8 +61,10 @@ if (reg) {
 function kindSection(k) {
   const out = [heading(3, code(k.name)), ''];
   if (k.notes) out.push(md(k.notes), '');
-  const moduleName = k.layer_module ?? 'core';
-  out.push(`- **Class:** ${k.class}; scope ${k.scope}; ${k.treatment}; profile ${profile(k)}; module ${moduleName}; serves the ${k.serves} family.${k.personal ? ' Holds personal data.' : ''}${k.status ? ` Status: ${k.status}.` : ''}`);
+  const layerName = k.product_layer ?? 'core';
+  const servesText = k.serves === 'audit' ? "used by audit's pieces" : `serves the ${k.serves} family`;
+  out.push(`- **Class:** ${k.class}; scope ${k.scope}; ${k.treatment}; profile ${profile(k)}; product layer ${layerName}; ${servesText}.${k.personal ? ' Holds personal data.' : ''}${k.status ? ` Status: ${k.status}.` : ''}`);
+  if (k.owned_by) out.push(`- **Owner:** ${k.owned_by}, not sluis. Audit declares the kind through [atoom's \`state\` registry](https://github.com/truvity/atoom/blob/master/docs/decisions/0008-blocks.md) once its code moves (planned); until then the kind is declared here, because audit's pieces still run from this repository.`);
   out.push(`- **Writer:** ${k.self_scoped ? 'every actor, under ids that start with its own name (self-scoped)' : who(k.writer)}${k.create_only ? ', create only (the kind only grows: no update, delete or apply)' : ''}.`);
   out.push(`- **Readers:** ${list(k.readers.map(who))}${k.backed_up === 'yes' ? '; plus the backup job of [`exporter@`](/reference/actors/#exporter), which reads the kind as ciphertext' : ''}.`);
   out.push(`- **Exportable:** ${yn(k.exportable)}; **backed up:** ${yn(k.backed_up)}.`);
@@ -80,8 +82,8 @@ function render() {
   const out = [];
   const by = (f) => kinds.reduce((m, k) => m.set(f(k), (m.get(f(k)) ?? 0) + 1), new Map());
   const cls = by((k) => k.class);
-  const mods = by((k) => k.layer_module ?? 'core');
-  out.push(`${kinds.length} kinds (registry checked ${reg.checked}): ${CLASSES.map((c) => `${cls.get(c) ?? 0} ${c}`).join(', ')}. By module: ${[...mods].map(([m, n]) => `${n} ${m}`).join(', ')}. ${kinds.filter((k) => k.backed_up === 'yes').length} are backed up and ${kinds.filter((k) => k.exportable === 'yes').length} are exportable.`, '');
+  const mods = by((k) => k.product_layer ?? 'core');
+  out.push(`${kinds.length} kinds (registry checked ${reg.checked}): ${CLASSES.map((c) => `${cls.get(c) ?? 0} ${c}`).join(', ')}. By product layer: ${[...mods].map(([m, n]) => `${n} ${m}`).join(', ')}. ${kinds.filter((k) => k.backed_up === 'yes').length} are backed up and ${kinds.filter((k) => k.exportable === 'yes').length} are exportable.`, '');
   out.push(heading(2, 'Kinds by class'), '');
   out.push(...table(['Class', 'What it is', 'Kinds'], CLASSES.map((c) => [code(c), CLASS_TEXT[c], `${cls.get(c) ?? 0}`])), '');
   out.push(`The classes, scopes, treatments and profiles are explained in ${adr('0004', 'storage-classes', 'ADR 0004')}; one writer per kind in ${adr('0004', 'one-writer-per-kind', 'one writer per kind')}.`, '');

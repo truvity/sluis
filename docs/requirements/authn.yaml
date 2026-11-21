@@ -174,7 +174,7 @@ requirements:
     issues: [774]
     verification:
       - {kind: conformance-suite, ref: "OIDF suite v5.3.4: Config OP is red for one condition, RS256 (ADR 0006); public client, not the certification profile (docs/standards/conformance.md)"}
-      - {kind: test-vectors, ref: "own golden (actors/entry/tests/testdata/discovery.json): no request_uri, iss on every redirect, the public subject type; entry, session and signer tests read it"}
+      - {kind: test-vectors, ref: "own golden (actors/entry/tests/testdata/discovery.json): no request_uri, iss on every redirect, the public subject type; entry, signin and signer tests read it"}
   - id: REQ-AUTHN-029
     area: AUTHN
     split_from: REQ-AUTHN-006
@@ -362,7 +362,7 @@ requirements:
       - {id: ST-23, section: "2", depth: Partial}
     issues: [885]
     verification:
-      - {kind: integration-test, ref: "a request with a claims object reaches session as the request without it, by GET and by POST"}
+      - {kind: integration-test, ref: "a request with a claims object reaches signin as the request without it, by GET and by POST"}
   - id: REQ-AUTHN-035
     area: AUTHN
     split_from: REQ-AUTHN-011
@@ -835,14 +835,14 @@ requirements:
   - id: REQ-AUTHN-101
     area: AUTHN
     split_from: REQ-AUTHN-021
-    statement: "When an authorization request carries a listed value in acr_values, session MUST either authenticate the person to one of the listed values or refuse with unmet_authentication_requirements."
-    rationale: "A step-up that names the level it needs must not be answered with a lower one that session passed off as met (RFC 9470), and met is the upstream's word until the per-connection ceiling of REQ-AUTHN-010 exists."
+    statement: "When an authorization request carries a listed value in acr_values, signin MUST either authenticate the person to one of the listed values or refuse with unmet_authentication_requirements."
+    rationale: "A step-up that names the level it needs must not be answered with a lower one that signin passed off as met (RFC 9470), and met is the upstream's word until the per-connection ceiling of REQ-AUTHN-010 exists."
     level: MUST
     source: stakeholder-ciam
     status: done
     milestone: core
     runtimes: all
-    actors: [session]
+    actors: [signin]
     standards:
       - {id: ST-24, section: "3", depth: Full}
     issues: [885]
@@ -1680,7 +1680,7 @@ requirements:
 
   - id: REQ-AUTHN-109
     area: AUTHN
-    statement: "session MUST take the nonce in place of PKCE only for a client of kind confidential that names its secret, whatever its document says."
+    statement: "signin MUST take the nonce in place of PKCE only for a client of kind confidential that names its secret, whatever its document says."
     rationale: "The loader refuses the setting for any other client, and this is the same rule where the setting is used, in case a document got past it."
     level: MUST
     source: design-decision

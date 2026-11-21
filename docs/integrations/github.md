@@ -6,7 +6,7 @@ sidebar:
   order: 2
 ---
 
-GitHub plays the most kinds of integration. A verifier driver of `exchange` checks Actions identity tokens. `adapter-github@<boundary>` holds no credential at rest; it opens the sealed credential of each tenant's GitHub App at key@ for each call, supplies team facts, mints installation tokens and reconciles team membership.
+GitHub plays the most kinds of integration, and it is the GitHub add-on ([0044](/decisions/0044-sluis-is-a-core-and-add-ons/#the-add-ons)). A verifier driver of `exchange` checks Actions identity tokens, and it is built in part. `adapter-github@<boundary>` is planned: it holds no credential at rest, opens the sealed credential of each tenant's GitHub App at key@ for each call, supplies team facts, mints installation tokens and reconciles team membership.
 
 ## What it's for
 
@@ -19,11 +19,11 @@ GitHub plays the most kinds of integration. A verifier driver of `exchange` chec
 
 | Kind | What it does for GitHub |
 |---|---|
-| `WorkloadVerifier` | The `github-oidc` verifier driver of `exchange` checks an Actions identity token against GitHub's key set and returns attributes: `repository`, `ref`, `job_workflow_ref`, `environment`, `visibility`, owner and repository ids. It holds no secret. It is part of the GitHub add-on, not of the core (it left the first working version on 2026-11-07), and the workload exchange that the KV slice needs does not depend on it. It serves the callers of the signing API ([0022](/decisions/0022-workload-identity-and-host-enrolment/#proofs-and-the-exchange)). |
+| `WorkloadVerifier` | The `github-oidc` verifier driver of `exchange` checks an Actions identity token against GitHub's key set and returns attributes: `repository`, `ref`, `job_workflow_ref`, `environment`, `visibility`, owner and repository ids. It holds no secret. It is part of the add-on, not of the core, and the workload exchange that KV needs does not depend on it. It serves the callers of the signing API ([0022](/decisions/0022-workload-identity-and-host-enrolment/#proofs-and-the-exchange)). |
 | `FactsSource` | `adapter-github` reports organisation members, team members and maintainers, as the directory facts of the tenant ([0019](/decisions/0019-person-and-upstream-link/#directory-facts-parity)). |
 | `CredentialMinter` | `adapter-github` mints an installation token for a catalogued App, for a mint grant that `policy` sealed. |
 | `Provisioner` | `adapter-github` makes the organisation's teams equal the desired state that the directory adapters wrote ([0026](/decisions/0026-reconcilers/#the-desired-state)): invites, adds, promotes and removes. |
-| Key sync | `adapter-github` puts the company keys of each person's active bindings on the person's own account, and removes them when the person leaves. It is a job of the adapter and not a reconciler, because it manages keys and not membership ([0042](/decisions/0042-sluis-syncs-company-issued-openpgp-keys-to-staff-github-accounts/#the-sync-loop)). It is in Backlog, not in the core, parity or customer identity ([Roadmap](/roadmap/#later)). |
+| Key sync | `adapter-github` puts the company keys of each person's active bindings on the person's own account, and removes them when the person leaves. It is a job of the adapter and not a reconciler, because it manages keys and not membership ([0042](/decisions/0042-sluis-syncs-company-issued-openpgp-keys-to-staff-github-accounts/#the-sync-loop)). [0042](/decisions/0042-sluis-syncs-company-issued-openpgp-keys-to-staff-github-accounts/) is a proposal and waits in the backlog. |
 
 A person's GitHub account is linked to their directory identity through a separate **link App**, so a team can be filled from a directory group. The link App is a `GitHubApp` of the operator's own tenant, and the link it makes is a `GitHubAccountLink` of its own, not an `UpstreamLink`.
 
@@ -58,23 +58,22 @@ Each App asks for the least its job needs, and one App does one job ([per organi
 
 ## Staff signing keys
 
-The key App is authorised once by each person, as part of joining. `adapter-github` then keeps the person's user token and refresh token sealed in a durable item of the tenant, refreshes them under a lease, and adds, replaces and removes the company-issued keys of that person's active bindings on the person's account. A key that is not a company key is never changed. A person who revokes the authorisation is detected from GitHub's event or from a refused call, and the operator is alerted ([0042](/decisions/0042-sluis-syncs-company-issued-openpgp-keys-to-staff-github-accounts/)).
-
-GitHub's Verified badge shows that a signature matches some key on the author's account. It does not show that the company issued the key. Enforcement is a later check of commit signers against the staff keyring.
+Proposed, in the backlog ([0042](/decisions/0042-sluis-syncs-company-issued-openpgp-keys-to-staff-github-accounts/)). Each person authorises the key App once, as part of joining. `adapter-github` then keeps the person's user token and refresh token sealed, and adds, replaces and removes the company-issued keys of that person's active bindings on the person's account. A key that is not a company key is never changed. GitHub's Verified badge shows that a signature matches some key on the author's account, not that the company issued the key; enforcement is a later check of commit signers against the staff keyring ([0042](/decisions/0042-sluis-syncs-company-issued-openpgp-keys-to-staff-github-accounts/#why-verified-is-not-company-enforcement)).
 
 The verifier reads only the public key set of Actions tokens. The adapter's egress is limited to `api.github.com` and GitHub's token issuer, and the App private keys are sealed in their `GitHubApp` items.
 
 ## What policy controls
 
 - **Who may mint what.** A grant names a group, the repositories (names or globs) and the permissions. A token never exceeds one grant, and grants are not added together. What a minter may mint at all is bounded by `MinterBounds`, and each catalogue App is a `MinterTarget` that is checked against it when the App is registered ([0025](/decisions/0025-integrations/#credential-minters)).
-- **Which jobs count as which group.** Matchers on the verified attributes: repository, ref, `job_workflow_ref`, event, environment, visibility. Pin a grant to one reviewed workflow file, not every job in a repository. For the signing API the attributes are `repository`, `ref`, `ref_type`, `workflow`, `environment` and `event` ([policy reference](/reference/policy/#entity-types)). A job of a pull request cannot sign, whatever the policy permits: the built-in layer refuses `artifact.sign` to a ref under `refs/pull/` and to the events `pull_request` and `pull_request_target` (and the other `pull_request_*` events), because a pull request runs the files its author proposes, and pinning the repository or the workflow file does not stop that. The same layer refuses the events `issue_comment`, `workflow_run` and `merge_group` (owner decision W1 A, 2026-11-06): the first two run on the default branch and can run code a pull request proposes, and a `merge_group` run includes the changes of the pull requests in the queue. Still pin `event` (for a release, `push`) in every grant, and remember that a pin of `refs/heads/*` protects nothing against anyone with write access, who can push a branch of that name (pin a tag, an environment with required reviewers and one reviewed workflow instead). The trusted-owner list of the config kind `ExchangeTrust` is the trust boundary: an empty list verifies nothing.
+- **Which jobs count as which group.** Matchers on the verified attributes: repository, ref, `job_workflow_ref`, event, environment, visibility. Pin a grant to one reviewed workflow file, not every job in a repository. For the signing API the attributes are `repository`, `ref`, `ref_type`, `workflow`, `environment` and `event`.
+- **A job of a pull request cannot sign, whatever the policy permits.** A built-in layer refuses `artifact.sign` for a pull request and for the events that can run code a pull request proposes; the list is on the [policy reference](/reference/policy/#entity-types). Still pin `event` (for a release, `push`) in every grant. A pin of `refs/heads/*` protects nothing against anyone with write access, who can push a branch of that name; pin a tag, an environment with required reviewers and one reviewed workflow instead. The trusted-owner list of the config kind `ExchangeTrust` is the trust boundary: an empty list verifies nothing.
 - **Which teams hold which groups**, as members and maintainers.
-- **Caps and rate limits**, enforced by `policy` and the limit check before the adapter is called. The adapter enforces only GitHub's own limits.
+- **Caps and rate limits**, enforced by `policy` and the limit check on the request path before the adapter is called ([0046](/decisions/0046-limits-on-the-request-path-and-usage-in-audit/)). The adapter enforces only GitHub's own limits.
 - **Safety in the reconciler:** dry run until the target is enabled, a seat check, and a breaker that holds a pass which would remove over half of the members ([0026](/decisions/0026-reconcilers/#safety)).
 
 ## What is audited
 
-- Every token request: outcome, the verified subject, the App, the grant, the repositories and permissions, the installation and the expiry. **The token is never recorded**, not in the audit record, not in a log line and not in a kind ([0025](/decisions/0025-integrations/#credential-minters)).
+- Every token request: outcome, the verified subject, the App, the grant, the repositories and permissions, the installation and the expiry. **The token is never recorded**, not in an audit record, not in a log line and not in a kind ([0025](/decisions/0025-integrations/#credential-minters)).
 - Every membership change, including each change held for an operator, and each organisation owner the directory does not know.
 - The lifecycle of an App (created, installed, disconnected) and each account link made, narrowed or lost.
 

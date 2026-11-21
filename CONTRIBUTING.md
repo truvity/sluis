@@ -28,6 +28,8 @@ Accepted features are tracked on the public [sluis v2](https://github.com/orgs/t
 
 Before you change anything, read the page for what you are about to do. The table of pages is in [docs/contributing.md](docs/contributing.md#the-pages).
 
+sluis shares its design with [atoom](https://github.com/truvity/atoom) (ports, drivers and blocks), [audit](https://github.com/truvity/audit) and [session](https://github.com/truvity/session). A change to their design is a proposal in their repository.
+
 ## Licence
 
 sluis is MIT licensed. By sending a contribution you agree that it is licensed under the [LICENSE](LICENSE).

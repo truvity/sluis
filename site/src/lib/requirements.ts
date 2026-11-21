@@ -14,7 +14,9 @@ export interface Req {
   standards: StandardRef[]; features: ('parity' | 'design')[]; issues?: number[]; milestone?: string; tests?: string[]; verification: Verification[]; actors?: string[];
   gap?: string; manual_reason?: string; superseded_by?: string[]; moved_to?: string;
 }
-export interface Area { code: string; title: string; file: string; retired: boolean; reqs: Req[] }
+// `file` is relative to docs/requirements/: <area>.yaml, or archive/<area>.yaml for a retired area. `archive` is the file that holds the
+// withdrawn rows of an area that also has live rows; `archived` is the set of ids that come from an archive file (all of `reqs` for a retired area).
+export interface Area { code: string; title: string; file: string; archive?: string; retired: boolean; reqs: Req[]; archived: Set<string> }
 export interface Standard { id: string; name: string; group: string; register: boolean; url?: string }
 
 export const ISSUES = 'https://github.com/truvity/sluis/issues/';
@@ -49,10 +51,18 @@ let cached: Catalogue | undefined;
 export function catalogue(): Catalogue {
   if (cached) return cached;
   const { catalogue: c } = read('index.yaml');
-  const areas: Area[] = Object.entries<{ title: string; file: string; retired?: boolean }>(c.areas).map(([code, a]) => {
+  const areas: Area[] = Object.entries<{ title: string; file: string; archive?: string; retired?: boolean }>(c.areas).map(([code, a]) => {
     // features is optional in the YAML (issue numbers live in issues); the pages and requirements.json always see a list.
-    const reqs: Req[] = read(a.file).requirements.map((r: Req) => ({ ...r, features: r.features ?? [] }));
-    return { code, title: a.title, file: a.file, retired: a.retired === true, reqs };
+    // The live rows come first, then the rows of the archive file: an archived row is a withdrawn row that resolves like any other.
+    const load = (file: string): Req[] => read(file).requirements.map((r: Req) => ({ ...r, features: r.features ?? [] }));
+    const live = load(a.file);
+    const archived = a.archive ? load(a.archive) : [];
+    const retired = a.retired === true;
+    return {
+      code, title: a.title, file: a.file, archive: a.archive, retired,
+      reqs: [...live, ...archived],
+      archived: new Set((retired ? live : archived).map((r) => r.id)),
+    };
   });
   const reqs = areas.flatMap((a) => a.reqs);
   const standards: Standard[] = read('standards.yaml').standards;
@@ -67,6 +77,8 @@ export function catalogue(): Catalogue {
 export const areaPath = (code: string) => `/requirements/${code.toLowerCase()}/`;
 export const reqPath = (r: Req) => `${areaPath(r.area)}#${r.id}`;
 // The issues that deliver a record (`issues`), linked at build time; no live state is fetched.
+// Where a withdrawn record went, from its `moved_to`: the product and a short label for the link.
+export const movedTo = (url: string) => (url.includes('/truvity/audit/') ? { product: 'audit', label: url.replace('https://github.com/truvity/', '') } : { product: 'ritueel', label: url.replace('https://github.com/', '') });
 export const issueUrl = (n: number) => `${ISSUES}${n}`;
 export const runtimesOf = (r: Req) => (r.runtimes === 'all' ? 'all' : r.runtimes.join(' '));
 
@@ -91,7 +103,7 @@ export function exportJson() {
       status: Object.fromEntries(count(c.reqs, (r) => r.status)),
       source: Object.fromEntries(count(c.reqs, (r) => r.source)),
     },
-    areas: c.areas.map((a) => ({ code: a.code, title: a.title, retired: a.retired, requirements: a.reqs.length })),
+    areas: c.areas.map((a) => ({ code: a.code, title: a.title, retired: a.retired, requirements: a.reqs.length, archived: a.archived.size })),
     standards: c.standards,
     // `evidence`: the tests that carry `verifies: <id>` and the attestations (docs/requirements/README.md); `milestone` is the slug.
     requirements: c.reqs.map((r) => ({ ...r, evidence: (evidenceMap().get(r.id) ?? []) satisfies Evidence[], url: `https://sluis.id${reqPath(r)}` })),

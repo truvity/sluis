@@ -332,16 +332,16 @@ mod tests {
                 .all(|(_, v)| v.windows(2).all(|w| w[0] < w[1]))
         );
         // the numbers the Go test asserts of the same tables (kits/go/registry/registry_test.go)
-        assert_eq!(KINDS.len(), 114);
-        assert_eq!(ACTORS.len(), 20);
-        assert_eq!(STORE_RULES.len(), 491);
-        assert_eq!(KEY_RULES.len(), 63);
+        assert_eq!(KINDS.len(), 110);
+        assert_eq!(ACTORS.len(), 19);
+        assert_eq!(STORE_RULES.len(), 473);
+        assert_eq!(KEY_RULES.len(), 62);
         let verbs: u32 = STORE_RULES.iter().map(|r| (r.2 & 0x7f).count_ones()).sum();
         let self_marks: u32 = STORE_RULES
             .iter()
             .map(|r| (r.2 >> SELF_SHIFT).count_ones())
             .sum();
         let ops: u32 = KEY_RULES.iter().map(|r| r.3.count_ones()).sum();
-        assert_eq!((verbs, self_marks, ops), (1774, 704, 92));
+        assert_eq!((verbs, self_marks, ops), (1706, 675, 91));
     }
 }

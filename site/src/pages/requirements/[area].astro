@@ -11,6 +11,9 @@ const c = catalogue();
 const area = c.areaByCode.get(Astro.props.code)!;
 const title = area.title;
 const n = (f: (r: (typeof area.reqs)[number]) => boolean) => area.reqs.filter(f).length;
+// The rows of the file of the area come first; the withdrawn rows of its archive file follow under their own heading.
+const live = area.retired ? [] : area.reqs.filter((r) => !area.archived.has(r.id));
+const archived = area.reqs.filter((r) => area.archived.has(r.id));
 const index = c.activeAreas.findIndex((a) => a.code === area.code);
 const prev = index > 0 ? c.activeAreas[index - 1] : undefined;
 const next = index >= 0 ? c.activeAreas[index + 1] : undefined;
@@ -25,12 +28,15 @@ const next = index >= 0 ? c.activeAreas[index + 1] : undefined;
     {area.reqs.length} requirements: {n((r) => r.level === 'MUST')} MUST, {n((r) => r.level === 'SHOULD')} SHOULD,
     {' '}{n((r) => r.level === 'MAY')} MAY. {n((r) => r.status === 'done')} done, {n((r) => r.status === 'planned')} planned,
     {' '}{n((r) => r.status === 'partial')} partial, {n((r) => r.status === 'open')} open.
-    Source: <a href={`${SOURCE}${area.file}`}><code>docs/requirements/{area.file}</code></a>.
+    Source: <a href={`${SOURCE}${area.file}`}><code>docs/requirements/{area.file}</code></a>{area.archive && <>, withdrawn rows in <a href={`${SOURCE}${area.archive}`}><code>docs/requirements/{area.archive}</code></a></>}.
     A clause cut from a longer record sits under it and says "Split from".
     An accent-coloured <code>#N</code> chip links an issue that delivers the record.
   </p>
-  {area.retired && <p>This area is retired: every record is withdrawn and names the records that replace it. The file and the ids stay.</p>}
-  <ReqTable reqs={area.reqs} detail />
+  {area.retired && <p>This area is retired: every record is withdrawn and names the records that replace it, or the product it moved to. The file is in the archive and the ids stay.</p>}
+  {live.length > 0 && <ReqTable reqs={live} detail />}
+  {live.length > 0 && archived.length > 0 && <h2 id="archive">Withdrawn rows in the archive</h2>}
+  {live.length > 0 && archived.length > 0 && <p>{archived.length} withdrawn records. Each names the records that replace it, or the product it moved to. The ids stay reserved and keep resolving.</p>}
+  {archived.length > 0 && <ReqTable reqs={archived} detail />}
   <nav class="rq-pager" aria-label="Areas">
     {prev ? <a href={areaPath(prev.code)}>&larr; {prev.code}</a> : <span></span>}
     <a href="/requirements/#areas">All areas</a>

@@ -39,7 +39,6 @@ services:
       - key-exporter:/v/key-exporter
       - key-indexer:/v/key-indexer
       - key-policy:/v/key-policy
-      - key-quota:/v/key-quota
       - key-reader:/v/key-reader
       - key-session:/v/key-session
       - key-signer:/v/key-signer
@@ -689,7 +688,6 @@ services:
       - key-exporter:/run/sluis/key/dev/exporter
       - key-indexer:/run/sluis/key/dev/indexer
       - key-policy:/run/sluis/key/dev/policy
-      - key-quota:/run/sluis/key/dev/quota
       - key-reader:/run/sluis/key/dev/reader
       - key-session:/run/sluis/key/dev/session
       - key-signer:/run/sluis/key/dev/signer
@@ -1001,7 +999,6 @@ volumes:
   key-exporter: {}
   key-indexer: {}
   key-policy: {}
-  key-quota: {}
   key-reader: {}
   key-session: {}
   key-signer: {}

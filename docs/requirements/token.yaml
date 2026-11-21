@@ -151,7 +151,7 @@ requirements:
       - {id: ST-08, section: "2", depth: Full}
     issues: [776, 791]
     verification:
-      - {kind: integration-test, ref: "negative test: the ID token audience is the client alone, and a resource indicator on the sign-in or on the code and refresh grants is refused before session sees it"}
+      - {kind: integration-test, ref: "negative test: the ID token audience is the client alone, and a resource indicator on the sign-in or on the code and refresh grants is refused before signin sees it"}
   - id: REQ-TOKEN-005
     area: TOKEN
     statement: "sluis MUST issue an access token for a specific resource only when the request names it with the resource parameter."
@@ -559,7 +559,7 @@ requirements:
     issues: [776, 788, 1815]
     verification:
       - {kind: integration-test, ref: "hold grants on two things: the token for the first audience carries only that thing's grants"}
-      - {kind: test-vectors, ref: "kits/conformance/token/groups-vectors.json, narrowing: kits/go/groupsclaim holds the rule, and session and exchange take their claim from it"}
+      - {kind: test-vectors, ref: "kits/conformance/token/groups-vectors.json, narrowing: kits/go/groupsclaim holds the rule, and signin and exchange take their claim from it"}
   - id: REQ-TOKEN-034
     area: TOKEN
     statement: "sluis MUST NOT issue a claim that is not in the declared claim set of its token type."
@@ -688,7 +688,7 @@ requirements:
   - id: REQ-TOKEN-043
     area: TOKEN
     statement: "signer MUST sign the ID token of an audience whose signing_alg is RS256 with RS256, and every other token with ES384, by the audience's declaration alone."
-    rationale: "The audience decides and the caller cannot, so a compromised session or exchange cannot pick a weaker or a different key, and the bearer check of session, which takes ES384 access tokens alone, never meets an RS256 one (ADR 0006)."
+    rationale: "The audience decides and the caller cannot, so a compromised signin or exchange cannot pick a weaker or a different key, and the bearer check of signin, which takes ES384 access tokens alone, never meets an RS256 one (ADR 0006)."
     level: MUST
     source: design-decision
     status: done
@@ -700,7 +700,7 @@ requirements:
     tests: [actors/signer/tests/sign.rs]
     verification:
       - {kind: test-vectors, ref: "kits/conformance/token/signing-alg-vectors.json, tokens: an RS256 audience's ID token is RS256 while its key is active; every other token is ES384 in every state of the key"}
-      - {kind: integration-test, ref: "session and exchange get the same answers; go-jose verifies the RS256 ID token and the ES384 tokens (an_id_token_is_rs256_when_the_audience_says_so_and_every_other_token_stays_es384)"}
+      - {kind: integration-test, ref: "signin and exchange get the same answers; go-jose verifies the RS256 ID token and the ES384 tokens (an_id_token_is_rs256_when_the_audience_says_so_and_every_other_token_stays_es384)"}
   - id: REQ-TOKEN-044
     area: TOKEN
     statement: "signer MUST refuse an ID token for an RS256 audience when no RS256 key is active, and sign it with no other key."
@@ -789,12 +789,12 @@ requirements:
     issues: [776, 786, 1817]
     tests: [kits/go/lifetime/lifetime_test.go, actors/session/internal/sessiond/token_ttlcap_test.go, actors/signer/src/claims.rs]
     verification:
-      - {kind: test-vectors, ref: "kits/conformance/token/lifetime-vectors.json, expiry: issuer, client cap, maximum, chain and proof ends; session and exchange use kits/go/lifetime, signer holds exp minus iat to the same cap"}
+      - {kind: test-vectors, ref: "kits/conformance/token/lifetime-vectors.json, expiry: issuer, client cap, maximum, chain and proof ends; signin and exchange use kits/go/lifetime, signer holds exp minus iat to the same cap"}
       - {kind: integration-test, ref: "four clients with caps of 5 minutes, 2 minutes, 30 minutes and none: ID token, access token and expires_in follow each cap at sign-in and refresh; the chain is as long for all"}
   - id: REQ-TOKEN-050
     area: TOKEN
     statement: "sluis config check MUST refuse a TokenLifetime in which a token lifetime is above 1 hour, the absolute session limit is above 24 hours, the idle limit is above the absolute limit or a token lifetime is above the absolute limit, naming the field."
-    rationale: "A file that session would cut to its maximum at run time is a file that does not say what it means; the check says so when the configuration loads (ADR 0018, ADR 0020; v1: the absolute limit is at least the token lifetime)."
+    rationale: "A file that signin would cut to its maximum at run time is a file that does not say what it means; the check says so when the configuration loads (ADR 0018, ADR 0020; v1: the absolute limit is at least the token lifetime)."
     level: MUST
     source: v1-parity
     status: done

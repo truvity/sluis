@@ -12,11 +12,20 @@ The pages on this site describe the **target state** of sluis v2: what it is mea
 
 Docs live next to the thing they describe: the format of the decision records is in `docs/decisions/`, the format of the requirements in `docs/requirements/`, and a page about a part of sluis sits in that part's section of the site. When the thing changes, its docs change in the same pull request.
 
-A fact is stated once, on the page that owns it, and the other pages link there ([Design principles](/principles/), [How we design](/contributing/design/#state-each-rule-once)). The terms of the model are defined once in [`docs/glossary.yaml`](https://github.com/truvity/sluis/blob/main/docs/glossary.yaml) and shown at [the vocabulary](/concepts/). The words that sluis shares with [ritueel](https://ritueel.id) are in [`docs/shared-terms.yaml`](https://github.com/truvity/sluis/blob/main/docs/shared-terms.yaml), one wording in both repositories with one owner for each word: change a word you own there and in ritueel's copy together, and never edit the wording of a word the other product owns (`just check-shared-terms` compares the file with the pinned copy in `third_party/ritueel/`, offline). State the design as plain fact and link the decision record for the reasoning; history stays in git and the records. v1 behaviour is described only on the [v1 parity checklist](/features/).
+A fact is stated once, on the page that owns it, and the other pages link there ([Design principles](/principles/), [How we design](/contributing/design/#state-each-rule-once)). The owner of a fact is the repository that owns the thing:
+
+| Repository | Owns |
+|---|---|
+| [atoom](https://github.com/truvity/atoom) | Ports, drivers, blocks and kits: the store API and its loading, signed configuration documents, the card driver, driver packaging and conformance, the signed policy bundle, and the mechanics of sealing, signing and export |
+| [audit](https://github.com/truvity/audit) | The audit log, its records and classes, meters, the writer, witness, indexer and reader, the audit front and `audit verify` |
+| [session](https://github.com/truvity/session) | Browser sessions for websites |
+| sluis (this repository) | Actors, boundaries and tenants, issuers, tokens and claims, sign-in, clients, workload identity, grants, integrations, customer identity, KV, the add-ons, its installations and release train, and its console |
+
+A page here says what sluis adds as a host or a consumer and links the owner's page. A link to another repository is an absolute URL on its default branch: `https://github.com/truvity/<repo>/blob/master/<path>` for atoom, audit and session, and `main` for sluis. Where the owner has no page yet, link the record or its plan and write "Open:" with what is missing; never invent a page. Estate details (who runs what where) are not written here at all. The terms of the model are defined once in [`docs/glossary.yaml`](https://github.com/truvity/sluis/blob/main/docs/glossary.yaml) and shown at [the vocabulary](/concepts/). The words that sluis shares with [ritueel](https://ritueel.id) are in [`docs/shared-terms.yaml`](https://github.com/truvity/sluis/blob/main/docs/shared-terms.yaml), one wording in both repositories with one owner for each word: change a word you own there and in ritueel's copy together, and never edit the wording of a word the other product owns (`just check-shared-terms` compares the file with the pinned copy in `third_party/ritueel/`, offline). State the design as plain fact and link the decision record for the reasoning; history stays in git and the records. v1 behaviour is described only on the [v1 parity checklist](/features/).
 
 ### Moving a page
 
-Moving or renaming a page needs a line in the `redirects` map of `site/astro.config.mjs` in the same pull request, pointing at the final page. Without it the old address becomes a 404, and a link on another site breaks. Check after the deploy that the old address answers 301 to the new one ([After every deploy](/contributing/tools/#after-every-deploy)). A decision record that is merged or renumbered is recorded in `docs/decisions/renumbered.json` instead, and the redirects follow from it ("Design phase" in `docs/decisions/README.md`).
+Moving or renaming a page needs a line in the `redirects` map of `site/astro.config.mjs` in the same pull request, pointing at the final page. Without it the old address becomes a 404, and a link on another site breaks. Check after the deploy that the old address answers 301 to the new one ([After every deploy](/contributing/tools/#after-every-deploy)). A decision record that is merged or renumbered is recorded in `docs/decisions/renumbered.json` instead, and the redirects follow from it ([Changing a decision](/contributing/decisions/#changing-a-decision)).
 
 ### Home pages
 
@@ -24,7 +33,7 @@ A home page, or the top of a section, starts from the reader's pain: what goes w
 
 ## Page format
 
-Pages are Markdown (`.md`). A page is MDX (`.mdx`) only when it places components, which today is the home page (`docs/index.mdx`) and the two explorer pages. The reasons: `.md` renders readably on GitHub and in other tools, reviews stay text-only, and a broken component in `.mdx` breaks the whole build. Starlight's Markdown already has asides, code blocks, tables and links, so a page that wants any of those stays `.md`. `just check-mdx-pages` fails an `.mdx` file that imports no component or places none ("use .md: MDX only for pages that place components").
+Pages are Markdown (`.md`). A page is MDX (`.mdx`) only when it places components, which today is the home page (`docs/index.mdx`) and the identity explorer (`docs/architecture/identity-explorer.mdx`). The reasons: `.md` renders readably on GitHub and in other tools, reviews stay text-only, and a broken component in `.mdx` breaks the whole build. Starlight's Markdown already has asides, code blocks, tables and links, so a page that wants any of those stays `.md`. `just check-mdx-pages` fails an `.mdx` file that imports no component or places none ("use .md: MDX only for pages that place components").
 
 The "Edit page" link of each page opens the file in `docs/` (`docs/<page>.md`, or `.mdx`). `site/src/route-middleware.ts` builds it, because Starlight alone would use the path of the symlink under `site/src/content/docs/`; the generated decision and requirements pages set their own source file, and the other generated pages have no edit link. `check-built.sh` fails when a link does not point at a file in the repository.
 
@@ -75,6 +84,11 @@ Write for an engineer who has not followed the discussion.
 - Use plain words and short sentences. Prefer the active voice: "the writer seals the batch", not "the batch is sealed".
 - Use a table to compare options, versions or numbers, not a paragraph.
 - One idea per paragraph. Cut a word that adds nothing.
+
+### Terms
+
+- Write the product as a **core**, **add-ons** and **customer identity** ([0044](/decisions/0044-sluis-is-a-core-and-add-ons/)). Do not call them building blocks, modules or phases; a step of the roadmap is a milestone.
+- Use the names of the glossary and the registries. A driver, a port or a block that atoom owns is called by atoom's name.
 
 ### Dated and checkable
 

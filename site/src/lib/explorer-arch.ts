@@ -26,7 +26,7 @@ export type ShapeModel = MapModel & {
 
 const LANES = ['Edge and node', 'Actors', 'Drivers', 'Backing stores', 'Integrations', 'Outside'];
 
-const ROLE_ORDER = ['session', 'exchange', 'console', 'policy', 'signer', 'ca', 'ssh-ca', 'quota', 'writer', 'witness', 'indexer', 'reader'];
+const ROLE_ORDER = ['signin', 'exchange', 'console', 'policy', 'signer', 'ca', 'ssh-ca', 'writer', 'witness', 'indexer', 'reader'];
 const INT_ORDER = ['int-upstream', 'int-workload', 'int-facts', 'int-minter', 'int-provisioner', 'int-notifier'];
 const PORT_ROW: Record<string, number> = { keys: 1.4, state: 3.8, blob: 6.2, transport: 8.4 };
 

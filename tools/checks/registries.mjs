@@ -3,8 +3,8 @@
 //
 //   docs/architecture/kinds.yaml   every kind of data: scope, class, treatment, profile, layer, writer, readers, lifetime
 //   docs/architecture/keys.yaml    every key purpose: algorithm, AWS key spec, card slot, using actors
-//   docs/architecture/actors.yaml  read here for the names of the actors and their key purposes
-//                                  (its own shape is tools/checks/actors.mjs's)
+//   docs/architecture/actors.yaml  read here for the names of the actors, audit's pieces (`audit_pieces`) and their key
+//                                  purposes (its own shape is tools/checks/actors.mjs's)
 //
 //   - kinds: closed fields; a class, a scope, a treatment and a profile of the known values; ONE
 //     writer per kind, except the declared self-scoped kinds (`writer: self` with `self_scoped: true`);
@@ -15,7 +15,8 @@
 //     scope, is plain, and has no expiry; a kind flagged `personal: true` is never plain; only the console's two kinds are written by the console; a
 //     kind the exporter watches is readable by it; every `backed_up: yes` kind is read by exporter@'s
 //     backup job as ciphertext (a read rule implied by the field, not listed in `readers`), so exporter@
-//     must be a data-family actor with the data port; layered groups and the kinds in their layers agree;
+//     must be a data-family actor with the data port; layered groups and the kinds in their layers agree; a kind's
+//     `product_layer` is core, add-on or customer identity, and `owned_by: audit` marks audit's kinds (serves audit);
 //     linked kinds exist; DataKeyWrap lists the data key purposes of keys.yaml;
 //   - keys: closed fields; every algorithm declared; the AWS baseline of one symmetric key, four P-384
 //     keys and the audit log's one P-256 key; a signing or key-agreement key has exactly one using actor; the card slot plan has no
@@ -50,9 +51,9 @@ const CLASSES = ['config', 'secret', 'durable', 'temp'];
 const SCOPES = ['boundary', 'boundary+tenant'];
 const TREATMENTS = ['hashed', 'sealed', 'plain'];
 const PROFILES = ['Fixed', 'Operable', 'Tenant-adjustable', '-'];
-const MODULES = ['core', 'CIAM module', 'quota module'];
+const PRODUCT_LAYERS = ['core', 'add-on', 'customer identity'];
 const KIND_FIELDS = ['name', 'serves', 'scope', 'class', 'treatment', 'profile', 'layer', 'links', 'writer', 'readers', 'exportable', 'backed_up',
-  'ttl', 'indexes', 'purposes', 'self_scoped', 'create_only', 'status', 'layer_module', 'watched_by', 'personal', 'notes'];
+  'ttl', 'indexes', 'purposes', 'self_scoped', 'create_only', 'status', 'product_layer', 'owned_by', 'watched_by', 'personal', 'notes'];
 const KIND_REQUIRED = ['name', 'serves', 'scope', 'class', 'treatment', 'profile', 'writer', 'readers', 'exportable', 'backed_up'];
 const KIND_TOP = ['schema', 'checked', 'writers_outside_sluis', 'combine_rules', 'layered_groups', 'built_in', 'not_kinds', 'kinds'];
 const OUTSIDE = ['IaC', 'pipeline'];
@@ -107,7 +108,7 @@ if (!kindsDoc || !keysDoc || !actorsDoc) finish(0, 'registries');
 
 // ---- the actors, as far as this check needs them
 const actors = new Map();
-for (const a of [...(actorsDoc.actors ?? []), ...(actorsDoc.platform ?? [])]) {
+for (const a of [...(actorsDoc.actors ?? []), ...(actorsDoc.audit_pieces ?? []), ...(actorsDoc.platform ?? [])]) {
   if (typeof a?.name === 'string') actors.set(a.name, { ...a, family: a.family ?? 'platform' });
 }
 const adapters = [...actors.values()].filter((a) => a.name.startsWith('adapter-'));
@@ -285,7 +286,8 @@ for (const [i, k] of list.entries()) {
   if (!TREATMENTS.includes(k.treatment)) error(`${at}: treatment must be one of ${TREATMENTS.join(', ')}`);
   if (!PROFILES.includes(k.profile)) error(`${at}: profile must be one of ${PROFILES.join(', ')}`);
   if (!['yes', 'no'].includes(k.exportable) || !['yes', 'no'].includes(k.backed_up)) error(`${at}: exportable and backed_up must be yes or no`);
-  if ('layer_module' in k && !MODULES.includes(k.layer_module)) error(`${at}: layer_module must be one of ${MODULES.join(', ')}`);
+  if ('product_layer' in k && !PRODUCT_LAYERS.includes(k.product_layer)) error(`${at}: product_layer must be one of ${PRODUCT_LAYERS.join(', ')} (record 0044)`);
+  if ('owned_by' in k && (k.owned_by !== 'audit' || k.serves !== 'audit')) error(`${at}: owned_by is audit, for a kind that serves audit`);
   if ('links' in k && !isStrList(k.links)) error(`${at}: links must be a list of kinds`);
   if ('indexes' in k && !isStrList(k.indexes)) error(`${at}: indexes must be a list of strings`);
   if ('notes' in k && typeof k.notes !== 'string') error(`${at}: notes must be a string`);

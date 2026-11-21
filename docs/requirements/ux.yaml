@@ -447,7 +447,7 @@ requirements:
   - id: REQ-UX-033
     area: UX
     statement: "The console actor MUST NOT serve HTML."
-    rationale: "The bundle is static and the sign-in and refusal pages belong to session, so the console has no markup to inject into (ADR 0027)."
+    rationale: "The bundle is static and the sign-in and refusal pages belong to signin, so the console has no markup to inject into (ADR 0027)."
     level: MUST
     source: design-decision
     status: planned

@@ -270,7 +270,7 @@ fn check_doc(dtype: &str, d: &ExportedDocument) -> Result<Doc, &'static str> {
         return Err("not_exportable");
     }
     // A directory and a bucket receive public material only; a sealed kind never goes there (REQ-EXPORT-011).
-    if dtype == DIRECTORY && kind.name == "ClientSecretExport" {
+    if dtype == DIRECTORY && kind.treatment == "sealed" {
         return Err("sealed_to_public_destination");
     }
     if kind.name != SIGNING_RING {
@@ -450,15 +450,15 @@ mod tests {
             }
         }
         assert_eq!(
-            exportable, 7,
-            "ADR 0009: exactly seven kinds are exportable"
+            exportable, 6,
+            "ADR 0009: exactly six kinds are exportable, all public material"
         );
         // The marked kinds that this build cannot turn into a document are refused as not built, never published as
-        // something else; a sealed kind never goes to a directory.
+        // something else. A secret is never exported: the retired sealed copy of a client secret is not marked.
         assert_eq!(refused(&json!({"kind": "TrustBundle"})), Some("not_built"));
         assert_eq!(
             refused(&json!({"kind": "ClientSecretExport"})),
-            Some("sealed_to_public_destination")
+            Some("not_exportable")
         );
         assert_eq!(refused(&json!({"kind": "SigningRing"})), None);
         assert_eq!(

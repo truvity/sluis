@@ -646,7 +646,7 @@ requirements:
 
   - id: REQ-CLIENT-043
     area: CLIENT
-    statement: "session MUST read the declaration of a client and fetch its secret exactly once for each token or revocation request whose credentials it can read, whether the client is unknown, public, exchange or confidential."
+    statement: "signin MUST read the declaration of a client and fetch its secret exactly once for each token or revocation request whose credentials it can read, whether the client is unknown, public, exchange or confidential."
     rationale: "The same work for every client keeps the answer from telling a caller which client ids exist or which have a secret."
     level: MUST
     source: design-decision
@@ -660,7 +660,7 @@ requirements:
 
   - id: REQ-CLIENT-044
     area: CLIENT
-    statement: "session MUST NOT write a log line or an audit record that holds a client secret, an Authorization header or a request body."
+    statement: "signin MUST NOT write a log line or an audit record that holds a client secret, an Authorization header or a request body."
     rationale: "A secret in a log is a secret in every place the log is copied to."
     level: MUST
     source: design-decision

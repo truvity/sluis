@@ -91,18 +91,22 @@ func LoadImages(p string) ([]ImageEntry, error) {
 // Actor is a row of the actor registry that the plan needs: docs/architecture/actors.yaml is its source, and the Go registry
 // of kits/go/registry is generated from it. This tool is a Go module of its own and reads the source.
 type Actor struct {
-	Name   string `yaml:"name"`
-	Family string `yaml:"family"`
+	Name       string `yaml:"name"`
+	Executable string `yaml:"executable"`
+	Family     string `yaml:"family"`
 }
 
-// LoadActors reads the actors of the registry file.
+// LoadActors reads the actors of the registry file, then audit's pieces that still run from this repository (`audit_pieces`). An
+// actor whose row says `executable:` is named by it: the executable, the unit and the package keep the old name until the planned
+// rename.
 func LoadActors(p string) ([]Actor, error) {
 	raw, err := os.ReadFile(p) //nolint:gosec // the repository's own file
 	if err != nil {
 		return nil, err
 	}
 	var r struct {
-		Actors []Actor `yaml:"actors"`
+		Actors      []Actor `yaml:"actors"`
+		AuditPieces []Actor `yaml:"audit_pieces"`
 	}
 	if err := yaml.Unmarshal(raw, &r); err != nil {
 		return nil, fmt.Errorf("%s: %w", p, err)
@@ -110,7 +114,13 @@ func LoadActors(p string) ([]Actor, error) {
 	if len(r.Actors) == 0 {
 		return nil, fmt.Errorf("%s lists no actor", p)
 	}
-	return r.Actors, nil
+	all := append(r.Actors, r.AuditPieces...)
+	for i, a := range all {
+		if a.Executable != "" {
+			all[i].Name = a.Executable
+		}
+	}
+	return all, nil
 }
 
 // FoundationWork are the work actors that are part of the foundation and so are in the package `sluis` with the CLI (decision 11 of
