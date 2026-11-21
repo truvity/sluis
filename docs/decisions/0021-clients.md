@@ -1,6 +1,6 @@
 # 0021 — Clients: installation clients are config, tenant clients are durable, and a self-described client is admitted only from allow-listed hosts
 
-**Status:** Accepted
+**Status:** Accepted; partly superseded by 0051
 **Date:** 2026-11-21
 
 Proposal: [issue #789](https://github.com/truvity/sluis/issues/789).

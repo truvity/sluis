@@ -1,6 +1,6 @@
 # 0048 — Customers sign in at the group's identity provider, product APIs take its tokens, and sluis exchanges one only for calls down to infrastructure
 
-**Status:** Accepted; partly superseded by 0050
+**Status:** Accepted; partly superseded by 0051
 **Date:** 2026-11-21
 
 Proposal: [issue #1023](https://github.com/truvity/sluis/issues/1023).

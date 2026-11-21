@@ -140,7 +140,7 @@ Served at the root of the public host, for example `https://sluis.example.com`.
 
 #### Token exchange and mint
 
-Both are `POST /token` with `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` (RFC 8693). The `subject_token` is a Kubernetes ServiceAccount token from any known cluster, a GitHub Actions token (the GitHub add-on), an AWS web-identity token, a token from a peer sluis, a token of the installation's trusted context realm (only for an infrastructure audience, [0048](/decisions/0048-product-apis-take-the-identity-providers-tokens/)), or the access token of a live sign-in presented by a client that is allowed to re-audience it. The `actor_token` is refused.
+Both are `POST /token` with `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` (RFC 8693). The `subject_token` is a Kubernetes ServiceAccount token from any known cluster, a GitHub Actions token (the GitHub add-on), an AWS web-identity token, a token from a peer sluis, a token of the installation's trusted context realm (only for a resource client, [0051](/decisions/0051-exchange-targets-resource-clients-only-and-policy-decides-who-gets-what/)), or the access token of a live sign-in presented by a client that is allowed to re-audience it. The `actor_token` is refused.
 
 | Result | Selected by | Notes |
 | ------ | ----------- | ----- |

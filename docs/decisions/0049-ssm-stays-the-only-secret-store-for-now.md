@@ -1,6 +1,6 @@
 # 0049 — SSM stays the only secret store for now, and External Secrets reading sluis KV is a later option
 
-**Status:** Accepted
+**Status:** Accepted; partly superseded by 0051
 **Date:** 2026-11-21
 
 Proposal: [issue #798](https://github.com/truvity/sluis/issues/798).

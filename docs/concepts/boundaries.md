@@ -37,7 +37,7 @@ Each boundary declares a level, and each level includes the ones below it. A ten
 
 ## Tenants
 
-A **tenant** is a scope inside a boundary with its own settings, clients and five data keys: `data`, `pseudonym`, `evidence`, `chain` and `credential` ([Keys](/concepts/keys/#data-keys)). It is the second address dimension, used by durable and temp kinds only. By default a tenant has no authority key and no wrapping key (a tenant declared to keep its keys in a customer account has them there, [ADR 0006](/decisions/0006-keys-and-sealing/#where-a-tenants-keys-live)), and it may exist in several boundaries, each holding its own copy with its own data keys.
+A **tenant** is a scope inside a boundary with its own settings, clients (resource clients only, [ADR 0051](/decisions/0051-exchange-targets-resource-clients-only-and-policy-decides-who-gets-what/)) and five data keys: `data`, `pseudonym`, `evidence`, `chain` and `credential` ([Keys](/concepts/keys/#data-keys)). It is the second address dimension, used by durable and temp kinds only. By default a tenant has no authority key and no wrapping key (a tenant declared to keep its keys in a customer account has them there, [ADR 0006](/decisions/0006-keys-and-sealing/#where-a-tenants-keys-live)), and it may exist in several boundaries, each holding its own copy with its own data keys.
 
 Tenants of one boundary share its actors, its authority keys and its fate: a flaw in shared code reaches every tenant of the boundary. That is the accepted L0 risk, and a tenant that cannot accept it is **promoted** to a boundary of its own. Promotion moves the tenant's kinds to the new boundary and rewraps its data keys for the new boundary's wrapping key; the tenant keeps its name, its clients' names and its settings ([ADR 0008](/decisions/0008-boundaries-and-tenants/#promotion)). Until the runbook that tests it has run, no installation relies on a promotion.
 
@@ -52,6 +52,8 @@ sluis maps a boundary to an audit scope, in audit's neutral terms (log, project,
 - **A three-board installation** is one boundary. Its tenants are L0 scopes, its keys are wrapped for each board's card and for the backup recovery key, and its engine is one rqlite cluster over the boards.
 - **An installation with a development, a staging and a production boundary** has three environment boundaries, each at L4, with its own cloud account or cluster, keys, store, issuer and audit scope. The companies that work there are tenants of every boundary, and their people sign in once at the front.
 - **A customer installation with one boundary per regulated customer plus one shared customer boundary** has customer boundaries at L3: a regulated customer has an engine, a bucket and a queue of its own, and the shared boundary serves the other customers as tenants, each with its own data keys. A customer that outgrows the shared boundary is promoted.
+
+A boundary stays the unit of keys, policy and audit for a customer's infrastructure. Customers get no sign-in session in sluis: a customer's token reaches it only as the subject of an exchange for a resource client ([ADR 0051](/decisions/0051-exchange-targets-resource-clients-only-and-policy-decides-who-gets-what/)).
 
 L3 for a regulated customer is a cost choice, not a requirement: the public texts ask for separation, key control, a segregated restore and an exit, and the price of L3 is low ([ADR 0008](/decisions/0008-boundaries-and-tenants/#example-installations) has the texts and the pricing).
 

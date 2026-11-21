@@ -16,7 +16,7 @@ sluis is for engineers who run the identity layer of a small organisation, a pla
 
 sluis v2 is a **core** and **add-ons** ([ADR 0044](/decisions/0044-sluis-is-a-core-and-add-ons/)).
 
-- The **core** is what every installation runs: sign-in and tokens, the exchange of a context realm's token for calls down to infrastructure ([ADR 0048](/decisions/0048-product-apis-take-the-identity-providers-tokens/)), grants, the hosts of atoom's blocks, KV, the console and the hardening of the issuer. It installs and runs without any add-on.
+- The **core** is what every installation runs: sign-in and tokens, the exchange of a subject's token for a resource client ([ADR 0051](/decisions/0051-exchange-targets-resource-clients-only-and-policy-decides-who-gets-what/)), grants, the hosts of atoom's blocks, KV, the console and the hardening of the issuer. It installs and runs without any add-on.
 - **Add-ons** are optional, and no core actor calls one: PKI with SSH and database access first, then Cloudflare and GitHub.
 
 ```mermaid
@@ -37,7 +37,7 @@ flowchart TB
 
 The console is part of the core and is built with parity. The `ca` actor is built and stays off until the PKI add-on turns the token certificate on. The order in which the layers are built is on the [roadmap](/roadmap/).
 
-An installation serves one boundary. Its staff and operators sign in with sluis's own passkeys; customers sign in at the group's identity provider, whose tokens the products use. sluis takes such a token only as the subject of an exchange for a call down to infrastructure, and it issues no token with a customer, an organisation or a product ([ADR 0048](/decisions/0048-product-apis-take-the-identity-providers-tokens/)).
+An installation serves one boundary. Its staff and operators sign in with sluis's own passkeys; customers sign in at the group's identity provider, whose tokens the products use. sluis takes such a token only as the subject of an exchange for a resource client (an AWS role, Kubernetes, a database, SSH, a minter or KV), gives customers no sign-in session, and issues no token with a customer, an organisation or a product ([ADR 0048](/decisions/0048-product-apis-take-the-identity-providers-tokens/), [ADR 0051](/decisions/0051-exchange-targets-resource-clients-only-and-policy-decides-who-gets-what/)).
 
 The people who work with an installation are these.
 
@@ -75,7 +75,7 @@ sluis shares its design with three products, each with a repository and records 
 
 ## v1 and v2
 
-v1 is the sluis in production use today, a set of AWS Lambda functions on the `master` branch. v2 is a rewrite on `main` that shares no history with v1; its first alpha, `v2.0.0-alpha.1`, was published on 2026-11-08. v2 is delivered in this order: the core, the exchange for infrastructure calls and the limit check, parity with v1 (the [features page](/features/) lists what that means), and the PKI, SSH and database add-on. The two lines coexist until v2 covers every required parity row and the relying parties have moved, one at a time ([ADR 0001](/decisions/0001-v1-and-v2-lines/)). The milestones and their exit tests are on the [roadmap](/roadmap/), and [Project status](/status/) shows how far each has got. The v1 documentation is at [/v1/](/v1/).
+v1 is the sluis in production use today, a set of AWS Lambda functions on the `master` branch. v2 is a rewrite on `main` that shares no history with v1; its first alpha, `v2.0.0-alpha.1`, was published on 2026-11-08. v2 is delivered in this order: the core, the exchange for resource clients and the limit check, parity with v1 (the [features page](/features/) lists what that means), and the PKI, SSH and database add-on. The two lines coexist until v2 covers every required parity row and the relying parties have moved, one at a time ([ADR 0001](/decisions/0001-v1-and-v2-lines/)). The milestones and their exit tests are on the [roadmap](/roadmap/), and [Project status](/status/) shows how far each has got. The v1 documentation is at [/v1/](/v1/).
 
 ## Map of the documentation
 

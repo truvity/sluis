@@ -1,6 +1,6 @@
 # 0018 — Sign-in sessions have two classes with limits per class, and session chains are temp kinds
 
-**Status:** Accepted
+**Status:** Accepted; partly superseded by 0051
 **Date:** 2026-11-21
 
 Proposal: [issue #998](https://github.com/truvity/sluis/issues/998).

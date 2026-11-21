@@ -58,7 +58,7 @@ requirements:
   - id: REQ-QUOTA-097
     area: QUOTA
     statement: "sluis MUST check a limit on the request path against a counter of usage."
-    rationale: "A limit needs a fast check beside the policy decision, while plans, prices and balances stay in the product, and what the counter is keyed by is open (ADR 0046, ADR 0048)."
+    rationale: "A limit needs a fast check beside the policy decision, while plans, prices and balances stay in the product, and the counter is keyed by the customer and the product of the subject token (ADR 0046, ADR 0051)."
     level: MUST
     source: design-decision
     status: planned
@@ -81,3 +81,16 @@ requirements:
     issues: [1846]
     verification:
       - {kind: integration-test, ref: "a request under a limit that is reached is refused beside an allowed policy decision, and a request under a limit that is not reached is allowed"}
+  - id: REQ-QUOTA-099
+    area: QUOTA
+    statement: "The limit check MUST read the customer and the product from the subject token's context realm and its audience or claims, and never from a parameter of the request."
+    rationale: "The caller must not be able to name the counter that it is counted against, and no sluis token carries the customer or the product (ADR 0051, ADR 0048)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: quota
+    runtimes: all
+    standards: []
+    issues: [841]
+    verification:
+      - {kind: integration-test, ref: "a request that names another customer or product as a parameter is counted against the customer and the product of its subject token"}

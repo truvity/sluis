@@ -1,4 +1,4 @@
-# KV: the key-value secret service of the core (ADR 0047). Rows are planned: nothing is built yet.
+# KV: the key-value secret service of the core (ADR 0047), built before parity and without the External Secrets facade (ADR 0049, ADR 0051). Rows are planned: nothing is built yet.
 schema: 1
 area: KV
 requirements:
@@ -507,3 +507,16 @@ requirements:
     issues: [798]
     verification:
       - {kind: integration-test, ref: "the job syncs an ExternalSecret, a find and a PushSecret, and asserts a kv.read record per read"}
+  - id: REQ-KV-039
+    area: KV
+    statement: "KV MUST be a resource client, so that a token for its audience is obtained by exchange and never by sign-in."
+    rationale: "Staff and workloads reach KV under the one rule of exchange targets, and policy decides who reads which path (ADR 0051)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: all
+    standards: []
+    issues: [798]
+    verification:
+      - {kind: integration-test, ref: "a token for the audience kv comes from an exchange of a sluis sign-in token and of a workload token, and a sign-in request for that audience is refused"}

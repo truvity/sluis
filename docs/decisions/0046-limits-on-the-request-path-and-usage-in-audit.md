@@ -1,6 +1,6 @@
 # 0046 — Limits are checked on the request path, balances live in the product, and usage records go to audit
 
-**Status:** Accepted; partly superseded by 0048
+**Status:** Accepted; partly superseded by 0051
 **Date:** 2026-11-21
 
 Proposal: [issue #841](https://github.com/truvity/sluis/issues/841).

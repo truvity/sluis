@@ -62,10 +62,10 @@ terms:
     notes: "KV is part of the core, not an add-on."
 
   - term: customer identity
-    definition: "A layer of sluis that its records once named, for a customer's sign-in. Withdrawn: customers sign in at the group's identity provider and the products use its tokens, and sluis takes such a token only as the subject of an exchange for a call down to infrastructure, which is core work."
+    definition: "A layer of sluis that its records once named, for a customer's sign-in. Withdrawn: customers sign in at the group's identity provider and the products use its tokens, and sluis takes such a token only as the subject of an exchange for a resource client, which is core work."
     category: structure
     see: ["0048-product-apis-take-the-identity-providers-tokens", "0032-customer-identity-installations"]
-    notes: "Superseded by ADR 0048. Not used in new text, except for the name of the roadmap milestone and of the records that carry the old layer."
+    notes: "Superseded by ADR 0048 and ADR 0051. Not used in new text, except for the name of the roadmap milestone and of the records that carry the old layer."
 
   - term: block
     definition: "atoom's term: a contract built from other ports and blocks, with no backend code of its own, whose host supplies the rules. atoom has four, `seal`, `state`, `token` and `export`. `store@`, `key@` and `exporter@` are the hosts of `state`, `seal` and `export` in sluis."
@@ -876,6 +876,20 @@ terms:
     see: ["0017-identity-and-sign-in#subjects", "0019-person-and-upstream-link"]
     avoid: ["user id", "e-mail as a key"]
 
+  - term: resource client
+    definition: "A client that a token is obtained for by exchange: an AWS role, Kubernetes, a database (including the roles used for row-level security), SSH, a vendor minter or KV. `exchange` issues tokens only for resource clients, whatever the subject token is, and policy decides who gets which resource. A tenant's clients are resource clients only."
+    category: identity
+    see: ["0051-exchange-targets-resource-clients-only-and-policy-decides-who-gets-what"]
+    avoid: ["infrastructure audience"]
+    notes: "A property of the client, not of the person. Not the client `kind` (`public`, `confidential`, `exchange`) of ADR 0021, which says how a client authenticates."
+
+  - term: sign-in client
+    definition: "A client that a token is obtained for by sign-in only, never by exchange: a staff web tool or the console. No subject gets a sign-in client's token by exchange, so a product API or an application never receives a sluis token."
+    category: identity
+    see: ["0051-exchange-targets-resource-clients-only-and-policy-decides-who-gets-what"]
+    avoid: ["application client (as a kind of client)"]
+    notes: "Only staff and operators sign in to sluis. A customer's token reaches sluis only as the subject of an exchange."
+
   - term: trust domain
     definition: "The SPIFFE name of a boundary, such as `prod.example.com`. Each boundary has its own trust domain, trust bundle and CA intermediate."
     category: identity
@@ -906,7 +920,7 @@ terms:
     avoid: ["environment (as the general term)", "company boundary", "product boundary"]
 
   - term: tenant
-    definition: "A division inside a boundary with its own data keys (data, pseudonym, evidence, chain, credential), settings and clients; the second scope dimension, used only by durable and temp kinds. A tenant may exist in several boundaries, with separate data keys in each."
+    definition: "A division inside a boundary with its own data keys (data, pseudonym, evidence, chain, credential), settings and clients (resource clients only); the second scope dimension, used only by durable and temp kinds. A tenant may exist in several boundaries, with separate data keys in each."
     category: boundaries
     see: ["0008-boundaries-and-tenants#tenants"]
     avoid: ['key-less tenant', 'company (as a scope)']

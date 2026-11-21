@@ -76,7 +76,7 @@ The records were rewritten once, cleanly, so each states the current design. Fro
 
 ## Milestones are an order
 
-The product is a core and add-ons ([0044](/decisions/0044-sluis-is-a-core-and-add-ons/)). The roadmap puts the work in an order of milestones, and a milestone opens when the one before it is done: the core first (cut as `v2.0.0-alpha.2` before the installations), then the exchange for infrastructure calls and the limit check, a re-plan that decides what parity needs, parity with v1, the cutover from v1 ([0001](/decisions/0001-v1-and-v2-lines/)), and then the PKI, SSH and database add-ons. The milestones and their exit tests are on the [roadmap](/roadmap/).
+The product is a core and add-ons ([0044](/decisions/0044-sluis-is-a-core-and-add-ons/)). The roadmap puts the work in an order of milestones, and a milestone opens when the one before it is done: the core first (cut as `v2.0.0-alpha.2` before the installations), then the exchange for resource clients and the limit check, a re-plan that decides what parity needs, parity with v1, the cutover from v1 ([0001](/decisions/0001-v1-and-v2-lines/)), and then the PKI, SSH and database add-ons. The milestones and their exit tests are on the [roadmap](/roadmap/).
 
 ```mermaid
 flowchart LR

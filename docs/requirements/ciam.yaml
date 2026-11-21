@@ -286,3 +286,29 @@ requirements:
     issues: [1716]
     verification:
       - {kind: integration-test, ref: "connector catalogue negative test"}
+  - id: REQ-CIAM-020
+    area: CIAM
+    statement: "sluis MUST accept a token of a customer's identity provider only as the subject token of an exchange, so that no customer gets a sluis sign-in session."
+    rationale: "Only staff and operators sign in to sluis, and the group's identity provider keeps the customer's session (ADR 0051, ADR 0048)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: customer-identity
+    runtimes: all
+    standards: []
+    issues: [793, 961]
+    verification:
+      - {kind: integration-test, ref: "a token of the trusted realm presented to the authorization, token and refresh endpoints outside an exchange is refused and creates no session chain"}
+  - id: REQ-CIAM-021
+    area: CIAM
+    statement: "A tenant client MUST be a resource client, so that it signs nobody in and has no redirect, sign-in profile or login domain."
+    rationale: "A tenant client is registered for a resource of the tenant, and a boundary stays the unit of keys, policy and audit for a customer's infrastructure (ADR 0051, ADR 0032)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: customer-identity
+    runtimes: all
+    standards: []
+    issues: [1716]
+    verification:
+      - {kind: integration-test, ref: "the store refuses a TenantClient that declares a redirect, a sign-in profile or a login domain, and accepts one that names only a resource"}

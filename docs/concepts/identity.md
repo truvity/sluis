@@ -73,9 +73,20 @@ Each kind of proof is a **verifier** inside `exchange`. A verifier holds public 
 
 ## Customers sign in at the group's identity provider
 
-sluis signs in its staff and operators itself. A customer signs in at the group's identity provider, a Keycloak installation with a realm per context, and the products use its tokens: a product API never accepts a sluis token, and the identifier of a person is pairwise per boundary. sluis hosts no customer account, page or registration ([ADR 0048](/decisions/0048-product-apis-take-the-identity-providers-tokens/)).
+sluis signs in its staff and operators itself, and only them. A customer signs in at the group's identity provider, a Keycloak installation with a realm per context, and the products use its tokens: a product API never accepts a sluis token, and the identifier of a person is pairwise per boundary. sluis hosts no customer account, page, registration or sign-in session ([ADR 0048](/decisions/0048-product-apis-take-the-identity-providers-tokens/), [ADR 0051](/decisions/0051-exchange-targets-resource-clients-only-and-policy-decides-who-gets-what/)).
 
-A token of the group's identity provider enters sluis in one way only. `exchange` takes it as the subject token (RFC 8693) and issues a sluis token for a call down to infrastructure, such as KV or a minted credential. One installation trusts one context realm, which the `ExchangeTrust` config kind declares, and never the central realm above the context realms, so a token of another realm is refused. The token that comes out carries no `customer`, `org` or `product`.
+A token of the group's identity provider enters sluis in one way only. `exchange` takes it as the subject token (RFC 8693) and issues a sluis token for a resource client, such as KV, a database role or a minted credential. One installation trusts one context realm, which the `ExchangeTrust` config kind declares, and never the central realm above the context realms, so a token of another realm is refused. The token that comes out carries no `customer`, `org` or `product`.
+
+### Two kinds of client
+
+The rule that decides what `exchange` may issue is a property of the client that a token is for, and not of the person or machine that asks.
+
+| Kind | Examples | How a token is obtained |
+|---|---|---|
+| **Resource client** | An AWS role, Kubernetes, a database (including the roles used for row-level security), SSH, a vendor minter, KV | By exchange |
+| **Sign-in client** (an application) | A staff web tool, the console | By sign-in only, never by exchange |
+
+`exchange` issues tokens only for resource clients, whatever the subject token is: sluis's own sign-in (vendor staff), a token of the group's identity provider from a customer realm (customer staff or end users), or a workload's token (robots). No subject gets a sign-in client's token by exchange, so a product API or an application never receives a sluis token. sluis makes no formal distinction between a vendor's employee, a customer's employee, an end user and a robot: an engineer can assume a robot's role for testing, and a customer's token is exchanged to give fine-grained access inside a system, such as row-level security. A Cedar policy decides who gets which resource and with what scope, on facts of the subject token: its issuer and realm, its subject, and the customer and the product. A tenant's clients are resource clients only, and a boundary stays the unit of keys, policy and audit for a customer's infrastructure ([ADR 0051](/decisions/0051-exchange-targets-resource-clients-only-and-policy-decides-who-gets-what/)).
 
 ```mermaid
 flowchart LR
@@ -83,11 +94,12 @@ flowchart LR
   realm -->|"token"| prod["product API<br/>takes the realm's token"]
   realm -->|"token as subject"| xchg["exchange<br/>RFC 8693"]
   trust["ExchangeTrust<br/>declares the realm"] -.-> xchg
-  xchg -->|"sluis token<br/>for infrastructure"| infra["infrastructure call"]
+  xchg -->|"sluis token<br/>for a resource client"| res["resource client"]
+  xchg -.->|"refused"| app["sign-in client"]
   other["token of another realm"] -.->|"refused"| xchg
 ```
 
-`exchange` verifies a token of a trusted issuer today and then refuses it as a subject token. Accepting it for an infrastructure audience is planned ([ADR 0048](/decisions/0048-product-apis-take-the-identity-providers-tokens/)). A person who works for several vendors keeps one identity per tenant and holds several sessions in parallel on the client, not one subject shared across tenants ([#1894](https://github.com/truvity/sluis/issues/1894)).
+`exchange` verifies a token of a trusted issuer today and then refuses it as a subject token. Accepting it for a resource client is planned ([ADR 0051](/decisions/0051-exchange-targets-resource-clients-only-and-policy-decides-who-gets-what/)). A person who works for several vendors keeps one identity per tenant and holds several sessions in parallel on the client, not one subject shared across tenants ([#1894](https://github.com/truvity/sluis/issues/1894)).
 
 ## How an actor reaches a cloud
 
