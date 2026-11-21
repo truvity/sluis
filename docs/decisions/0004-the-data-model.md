@@ -88,7 +88,7 @@ Every kind is in **exactly one storage class**. The classes are mutually exclusi
 ### Built-in
 
 - **Built-in is what the binary carries,** and it is not a storage class. It changes only with a release, and it is the lowest layer of every layered kind.
-- **It holds:** the baseline policies and the predefined policies (break-glass among them); the hard caps (token and session lifetimes, the agent chain at 90 d, the maximum TTL of every temp kind, the maximum cache TTL of key@); the default tunables, log levels, sampling and retention floors; the sign-in methods, algorithms and their floors that a release supports (a software key refuses production, [0006](/decisions/0006-keys-and-sealing/)); the allowance modes; the client template defaults; the default slot plan per card model; the audit action table; and the kind registry itself.
+- **It holds:** the baseline policies and the predefined policies (break-glass among them); the hard caps (token and session lifetimes, the agent chain at 90 d, the maximum TTL of every temp kind, the maximum cache TTL of key@); the default tunables, log levels, sampling and retention floors; the sign-in methods, algorithms and their floors that a release supports (a software key refuses production, [0006](/decisions/0006-keys-and-sealing/)); the client template defaults; the default slot plan per card model; the audit action table; and the kind registry itself.
 
 ### Treatment
 
@@ -98,7 +98,7 @@ Every kind has one treatment. **Sealed** is the default, and a kind is declared 
 |---|---|---|---|
 | **hashed** | A compare-only secret: it is verified, never read back | The hash. The value never reaches key@ | `SessionChain` (the hash of the current refresh token), `AuthCode`, `ClientSecret` |
 | **sealed** | A value that is read back: a provider token, personal data, free text | The ciphertext. The writing actor sealed it at key@ | `Person`, `GitHubApp`, `IssuedCertificate` |
-| **plain** | A value that is neither secret nor personal: a switch, a mint target, a counter | The value as it is | `Switch`, `Allowance`, `MinterTarget` |
+| **plain** | A value that is neither secret nor personal: a switch, a mint target, a counter | The value as it is | `Switch`, `MinterTarget` |
 
 - **Treatment follows the data.** A kind that holds personal data or free text (names, SSH principals, vendor user ids, the reason of a hold, a requester) is sealed, or hashed when it is compare-only. Plain is only for values that are neither secret nor personal. Each kind declares whether it holds personal data (`personal` in the [kind registry](/reference/kinds/)); a personal kind is never plain. The rule covers what sluis stores, durable and temp. Config is the operator's reviewed, signed document and may name people, as the first-admin allow-list, the people bindings of a policy and the operators' break-glass passkeys do, because recovery and the first sign-in must work without the store.
 - **A hashed kind may hold a sealed value beside its hash.** The `SessionChain` ([0018](/decisions/0018-sign-in-sessions/)) holds the hash of the current refresh token, a generation, and the salt that the tags of its refresh tokens are made over. The salt is never in the clear: it is sealed with the chain's facts under the tenant's `chain` key ([0006](/decisions/0006-keys-and-sealing/)), so the store keeps ciphertext and a hash, and a tenant's exit takes the salt with the facts.

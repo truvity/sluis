@@ -71,7 +71,7 @@ An earlier design made sluis a broker: a customer-identity product owned the acc
 
 ## Roads not taken
 
-- **Keep sluis as a broker with a customer-identity module.** It builds a second identity layer beside the upstream that already owns the accounts.
+- **Keep sluis as a broker with its own customer-identity layer.** It builds a second identity layer beside the upstream that already owns the accounts.
 - **A realm per customer.** Realms follow boundaries: a product that is not regulated shares the generic realm, and only a regulated boundary needs a segregation of its own.
 - **One installation that trusts every realm.** A token of one boundary's realm could then reach another boundary's relying parties.
 - **One customer boundary for the whole customer base.** All products would share an issuer and an audience space, so a token for one product would be a candidate for another's relying parties.

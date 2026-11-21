@@ -185,5 +185,4 @@ The design is described at three levels, and the output of each is the input of 
 ## Follow-ups
 
 - Open: the step that renames the executable of `signin`; no issue yet.
-- Open: the actor registry (`docs/architecture/actors.yaml`) and the reference generated from it still list an audit family and a `quota` actor; they follow this record.
 - Moving `store@`, `key@` and `exporter@` onto atoom's `state`, `seal` and `export` blocks: atoom's [plan](https://github.com/truvity/atoom/blob/master/docs/plan.md).

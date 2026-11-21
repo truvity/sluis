@@ -159,7 +159,7 @@ Most records kept their number. These did not, or left the list:
 | 0018 sessions | [0018](0018-sign-in-sessions.md), renamed (the actor is `signin`) |
 | 0031, 0033, 0034, 0035 | archived; [0032](0032-customer-identity-installations.md) holds the customer-identity design |
 | 0039 quota allowance | archived; [0046](0046-limits-on-the-request-path-and-usage-in-audit.md) |
-| 0044 sluis v2 is a core, building blocks and add-ons | [0044](0044-sluis-is-a-core-and-add-ons.md) |
+| 0044 sluis v2 is a core and add-ons | [0044](0044-sluis-is-a-core-and-add-ons.md) |
 | 0045 customers sign in upstream | claim set in [0020](0020-grant-vocabulary-and-token-claims.md), the rest in [0032](0032-customer-identity-installations.md) |
 | 0046 usage records are never dropped | [0046](0046-limits-on-the-request-path-and-usage-in-audit.md); the usage class moved to audit |
 | 0047 KV is an add-on | [0047](0047-kv-is-a-core-service-of-stores-that-no-tenant-owns.md), renamed |

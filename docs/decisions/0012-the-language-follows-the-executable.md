@@ -75,7 +75,6 @@ The table lists sluis's own executables. A Rust row keeps its gate (see [The spi
 | `exchange` | Go | The proof verifiers, HPKE and the OpenID Connect provider; its HPKE key and the cookie sealing stay behind key@ | None | Built |
 | `console` (the single-page application is TypeScript) | Rust, unless a serious trade-off is named | Smallest board; Connect for Rust serves its streaming | S1, S10 | Planned |
 | `kv` | Rust | Smallest board; it holds no credential at rest | S1, S10 | Planned |
-| `limits` | Rust, by the smallest-board rule | Smallest board | S1, S10 | Planned |
 | `ca` | Go | The X.509 CA and its issuance log | None | Built; off in the core |
 | `ssh-ca` | Rust | Smallest board | S1, S10 | Planned |
 | Adapters: `adapter-upstream-oidc`, `adapter-github`, `adapter-slack`, and every further `adapter-<vendor>`, one executable each | Go | The vendor SDKs, and the OpenID Connect client of `adapter-upstream-oidc` | None | `adapter-upstream-oidc` built; the others planned |
