@@ -346,7 +346,7 @@ requirements:
   - id: REQ-SUPPLY-025
     area: SUPPLY
     statement: "The contract vectors of the previous release of the same major version MUST pass against the actors of the current release."
-    rationale: "A rolling deployment runs two neighbouring releases at once (ADR 0015)."
+    rationale: "A rolling deployment runs two neighbouring releases at once (ADR 0001)."
     level: MUST
     source: design-decision
     status: planned
@@ -359,7 +359,7 @@ requirements:
   - id: REQ-SUPPLY-026
     area: SUPPLY
     statement: "A field of a stored kind MUST NOT be removed in the release that stops writing it."
-    rationale: "A rollback and a mixed window both need the previous release to read what the current one wrote (ADR 0015)."
+    rationale: "A rollback and a mixed window both need the previous release to read what the current one wrote (ADR 0001)."
     level: MUST
     source: design-decision
     status: planned
@@ -372,7 +372,7 @@ requirements:
   - id: REQ-SUPPLY-027
     area: SUPPLY
     statement: "The contract vectors of the current release MUST pass against the artifacts of the previous release of the same major version."
-    rationale: "A newer writer must stay readable by an older reader during a rollout and a rollback (ADR 0015)."
+    rationale: "A newer writer must stay readable by an older reader during a rollout and a rollback (ADR 0001)."
     level: MUST
     source: design-decision
     status: planned

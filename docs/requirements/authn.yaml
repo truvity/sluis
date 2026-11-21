@@ -435,7 +435,7 @@ requirements:
     rationale: "Pushing parameters on the back channel protects integrity and confidentiality of the request."
     level: SHOULD
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-AUTHN-113: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-AUTHN-113]
@@ -454,7 +454,7 @@ requirements:
     rationale: "A foreign client must not redeem another client's request."
     level: SHOULD
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-AUTHN-114: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-AUTHN-114]
@@ -472,7 +472,7 @@ requirements:
     rationale: "A short lifetime limits replay."
     level: SHOULD
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-AUTHN-115: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-AUTHN-115]
@@ -490,7 +490,7 @@ requirements:
     rationale: "A client that requires PAR must not fall back to an unprotected request."
     level: SHOULD
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-CLIENT-052: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-CLIENT-052]
@@ -508,7 +508,7 @@ requirements:
     rationale: "Message signing needs non-repudiable requests."
     level: MAY
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -1711,7 +1711,7 @@ requirements:
   - id: REQ-AUTHN-112
     area: AUTHN
     statement: "sluis MUST NOT offer its own sign-in to anyone but staff and operators."
-    rationale: "Customers sign in through the upstream identity provider, and the customer-facing pieces are the upstream's (ADR 0045)."
+    rationale: "Customers sign in through the upstream identity provider, and the customer-facing pieces are the upstream's (ADR 0032)."
     level: MUST
     source: design-decision
     status: planned

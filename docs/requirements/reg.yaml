@@ -783,7 +783,7 @@ requirements:
     rationale: "Operators must be able to review the lifecycle."
     level: MUST
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -798,7 +798,7 @@ requirements:
     rationale: "An orphaned subject is a standing credential."
     level: MUST
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -827,7 +827,7 @@ requirements:
     rationale: "The person's rights must be exercisable."
     level: MUST
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all

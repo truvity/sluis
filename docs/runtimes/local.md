@@ -153,7 +153,7 @@ The chain a browser sees is `root` (ritueel's software test root), `edge` (an in
 
 ## The first start
 
-The core local installation leaves the token certificate off, so its key set carries no `x5c` chain and it needs no intermediate and no test certifier (decisions X1 A and W2 A of 2026-11-18, [0006](/decisions/0006-keys-and-sealing/#amendment-of-2026-11-18-the-token-certificate-is-optional-and-off-in-the-core)). Steps 4 to 6 below, the hand-off of sluis's own intermediate to the test certifier, the `x5c` check and the slot `9c` entry of the key plan belong to an opt-in `certificate` preset. The steps for the forwarder's own chain (the root, the `edge` intermediate and the leaf) are the harness's and stay.
+The core local installation leaves the token certificate off, so its key set carries no `x5c` chain and it needs no intermediate and no test certifier (decisions X1 A and W2 A of 2026-11-18, [0006](/decisions/0006-keys-and-sealing/#the-token-certificate)). Steps 4 to 6 below, the hand-off of sluis's own intermediate to the test certifier, the `x5c` check and the slot `9c` entry of the key plan belong to an opt-in `certificate` preset. The steps for the forwarder's own chain (the root, the `edge` intermediate and the leaf) are the harness's and stay.
 
 :::note[Proposed]
 Today `local-up` still runs the hand-off by default and signs `token_certificate: true`. Moving it behind the `certificate` preset is a code change that the documentation does not make: [#1897](https://github.com/truvity/sluis/issues/1897).

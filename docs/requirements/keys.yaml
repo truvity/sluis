@@ -584,7 +584,7 @@ requirements:
     rationale: "The wrap is the only route to the key, so every value sealed for the tenant stops opening (ADR 0006)."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -1141,7 +1141,7 @@ requirements:
     rationale: "A move must change no subject (ADR 0032)."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all

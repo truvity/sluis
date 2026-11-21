@@ -93,7 +93,7 @@ flowchart LR
   pki -.-> ext["Block<br/>extraction<br/>(unscheduled)"]
 ```
 
-Design is finished phase by phase, and the code for a phase starts after its design is. Nothing after customer identity and quota is planned in detail before the re-plan. Inside the core, the installations (local, boards, Lambda and Kubernetes) are built in the order of the roadmap's [Delivery order](/roadmap/#delivery-order), and [ADR 0011](/decisions/0011-runtimes-and-installations/#delivery-order) records any change to it.
+Design is finished phase by phase, and the code for a phase starts after its design is. Nothing after customer identity and quota is planned in detail before the re-plan. Inside the core, the installations (local, boards, Lambda and Kubernetes) are built in the order of the roadmap's [Delivery order](/roadmap/#delivery-order), and [ADR 0011](/decisions/0011-runtimes-and-installations/) records any change to it.
 
 ## Do not make a later screen harder
 

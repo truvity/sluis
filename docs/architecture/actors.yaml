@@ -299,7 +299,7 @@ actors:
     egress: []
     key_purposes:
       - { purpose: pseudonym, ops: [mac] }
-    adrs: ['0002', '0012', '0039', '0040']
+    adrs: ['0002', '0012', '0046', '0040']
     requirement_areas: [QUOTA]
     standards: [NC-15]
     label: actor:quota

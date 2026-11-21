@@ -386,7 +386,7 @@ requirements:
     rationale: "Sender-constrained tokens cannot be replayed by a thief."
     level: SHOULD
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-TOKEN-052: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-TOKEN-052]
@@ -405,7 +405,7 @@ requirements:
     rationale: "The cnf claim lets a resource server check the binding."
     level: SHOULD
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-TOKEN-054: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-TOKEN-054]
@@ -422,7 +422,7 @@ requirements:
     rationale: "Silently issuing a bearer token to a client that asked for binding is a downgrade."
     level: MUST
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-TOKEN-055: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-TOKEN-055]
@@ -505,7 +505,7 @@ requirements:
     rationale: "Pairwise subjects prevent cross-service tracking, while single sign-on follows the sluis session and does not depend on the subject."
     level: MAY
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: pairwise subjects per sector are cancelled.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: pairwise subjects per sector are cancelled.
     status: withdrawn
     superseded_by: [REQ-TOKEN-045]
     runtimes: all
@@ -644,7 +644,7 @@ requirements:
     rationale: "The profile demands bound tokens (ADR 0038)."
     level: MUST
     source: standard
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-TOKEN-052: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-TOKEN-052]
@@ -661,7 +661,7 @@ requirements:
     rationale: "The profile does not allow ES384."
     level: MUST
     source: standard
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-TOKEN-056: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-TOKEN-056]
@@ -720,7 +720,7 @@ requirements:
   - id: REQ-TOKEN-045
     area: TOKEN
     statement: "A sluis token issued by an exchange of an upstream token MUST carry the customer, the organisation and the product that exchange set from the claims of that token."
-    rationale: "Services call each other with the sluis token and need the three claims, and the request must never name them (ADR 0045, ADR 0020)."
+    rationale: "Services call each other with the sluis token and need the three claims, and the request must never name them (ADR 0032, ADR 0020)."
     level: MUST
     source: design-decision
     status: planned
@@ -908,7 +908,7 @@ requirements:
   - id: REQ-TOKEN-058
     area: TOKEN
     statement: "A sluis token that did not come from an exchange of an upstream token MUST carry none of the claims customer, org and product."
-    rationale: "An absent claim stays absent, so a staff sign-in never claims a customer (ADR 0045)."
+    rationale: "An absent claim stays absent, so a staff sign-in never claims a customer (ADR 0032)."
     level: MUST
     source: design-decision
     status: planned

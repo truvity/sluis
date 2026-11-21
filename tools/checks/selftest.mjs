@@ -607,7 +607,10 @@ expect('nothing in the scope', 'terms', { 'docs/glossary.yaml': glossary(), 'REA
 
 // ---- C11 generated pages: the glossary, kind, rule and key pages of the repository, then one change each.
 // The fixtures are the registries, the pages and the decision records the pages link.
-const pageRecords = Object.fromEntries(readdirSync(join(repo, 'docs/decisions')).filter((f) => /^[0-9]{4}-.*\.md$/.test(f) && !f.startsWith('0000')).map((f) => [`docs/decisions/${f}`, real(`docs/decisions/${f}`)]));
+const pageRecords = Object.fromEntries([
+  ...readdirSync(join(repo, 'docs/decisions')).filter((f) => /^[0-9]{4}-.*\.md$/.test(f) && !f.startsWith('0000')).map((f) => `docs/decisions/${f}`),
+  ...readdirSync(join(repo, 'docs/decisions/archive')).filter((f) => /^[0-9]{4}-.*\.md$/.test(f)).map((f) => `docs/decisions/archive/${f}`),
+].map((p) => [p, real(p)]));
 const pageFiles = (names) => ({ ...Object.fromEntries(names.map((p) => [p, real(p)])), ...pageRecords });
 const pageEdit = (files, path, from, to) => {
   if (!files[path].includes(from)) throw new Error(`selftest fixture: ${path} lacks ${from}`);
@@ -621,8 +624,8 @@ expect('a definition changed, the page not rewritten', 'glossary-page', pageEdit
 expect('a retired term added, the page not rewritten', 'glossary-page', pageEdit(glossaryPage, GLOSSARY, '  - term: Pkl\n', '  - term: Pkl2\n'), 'fail', { has: ['generated block is stale'] });
 expect('a term in a category that is not declared', 'glossary-page', pageEdit(glossaryPage, GLOSSARY, 'category: families\n    see: ["0002-families-of-actors"]', 'category: families2\n    see: ["0002-families-of-actors"]'), 'fail', { has: ['category families2 is not in categories'] });
 expect('a term defined twice', 'glossary-page', pageEdit(glossaryPage, GLOSSARY, '  - term: work actor\n', '  - term: family\n'), 'fail', { has: ['the term is defined twice'] });
-expect('a see that names a record that does not exist', 'glossary-page', pageEdit(glossaryPage, GLOSSARY, '"0002-families-of-actors#the-four-families", "/concepts/families/"', '"0099-gone#the-four-families", "/concepts/families/"'), 'fail', { has: ['there is no record 0099'] });
-expect('a see that names a heading the record does not have', 'glossary-page', pageEdit(glossaryPage, GLOSSARY, '"0002-families-of-actors#the-four-families", "/concepts/families/"', '"0002-families-of-actors#nowhere", "/concepts/families/"'), 'fail', { has: ['has no heading #nowhere'] });
+expect('a see that names a record that does not exist', 'glossary-page', pageEdit(glossaryPage, GLOSSARY, '"0002-families-of-actors#the-families", "/concepts/families/"', '"0099-gone#the-families", "/concepts/families/"'), 'fail', { has: ['there is no record 0099'] });
+expect('a see that names a heading the record does not have', 'glossary-page', pageEdit(glossaryPage, GLOSSARY, '"0002-families-of-actors#the-families", "/concepts/families/"', '"0002-families-of-actors#nowhere", "/concepts/families/"'), 'fail', { has: ['has no heading #nowhere'] });
 expect('a shared word the shared file lacks', 'glossary-page', pageEdit(glossaryPage, 'docs/shared-terms.yaml', '  - term: holder\n', '  - term: holders\n'), 'fail', { has: ['shared, but docs/shared-terms.yaml has no such term'] });
 expect('a vocabulary page without its markers', 'glossary-page', { ...glossaryPage, 'docs/concepts/index.md': '---\ntitle: Concepts\n---\n\nText.\n' }, 'fail', { has: ['markers are missing'] });
 expect('no vocabulary page', 'glossary-page', { ...glossaryPage, 'docs/concepts/index.md': undefined }, 'fail', { has: ['docs/concepts/index.md is missing'] });

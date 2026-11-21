@@ -15,7 +15,7 @@ A **boundary** is the unit of keys and policy in sluis: what one compromised or 
 | **Environment** | The machine plane of one environment (clusters, hosts, workloads, certificates, SSH and workload identity) and the identity plane of the companies that work in it, as tenants | Yes |
 | **Customer** | The keys, issuer or failure domain of a party that needs its own, such as a regulated customer | Yes, its own |
 
-A **company is a tenant** of an environment boundary, not a boundary. Its directory, chat workspace, code host and provider accounts, its upstream, people and operator delegation are kinds of that tenant. A party that needs authority keys is a customer boundary and never a tenant. Production never shares a key or a store with development. One installation serves one boundary and trusts one realm for its customers ([0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)); the broker of the cancelled CIAM layer is not built, and [0032](/decisions/0032-customer-identity-installations/) stands only as its amendment says.
+A **company is a tenant** of an environment boundary, not a boundary. Its directory, chat workspace, code host and provider accounts, its upstream, people and operator delegation are kinds of that tenant. A party that needs authority keys is a customer boundary and never a tenant. Production never shares a key or a store with development. One installation serves one boundary and trusts one realm for its customers ([0045](/decisions/0032-customer-identity-installations/)); the broker of the cancelled CIAM layer is not built, and [0032](/decisions/0032-customer-identity-installations/) stands only as its amendment says.
 
 ## The ladder
 

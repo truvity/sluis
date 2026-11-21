@@ -149,7 +149,7 @@ The types follow the [actor registry](/reference/actors/) and the [kinds](/refer
 | `Boundary` | A boundary, and the place a link is made in | The asker, from the `Boundary` config kind | The boundary's name |
 | `Workload` | A workload that proved its identity: in the core a Kubernetes ServiceAccount token (the slice that KV needs), and with the GitHub add-on a GitHub Actions job, checked by the `github-oidc` verifier | `exchange`, from the verified proof | `<verifier>/<proof subject>` |
 | `SigningKey` | A signing key of a boundary | `exchange` | The key's purpose, `release-signing` ([0024](/decisions/0024-root-custody-and-the-signing-api/#the-signing-api)) |
-| `AuditLog` | One log of a project of the boundary, `in` the `Boundary`, with its `project` and its `kind` (`audit` or `usage`) | `reader`, from the `AuditLog` config kind | `<project>/<kind>`, such as `sluis/audit` ([0028](/decisions/0028-audit-pieces/#access)) |
+| `AuditLog` | One log of a project of the boundary, `in` the `Boundary`, with its `project` and its `kind` (`audit` or `usage`) | `reader`, from the `AuditLog` config kind | `<project>/<kind>`, such as `sluis/audit` ([0028](https://github.com/truvity/audit/blob/master/docs/decisions/0013-access.md)) |
 
 - **A person is named by an account, because an operator cannot know a subject.** The subject is 128 random bits assigned at the first sign-in, so a binding or a link written before it names the account that will be linked. A binding never names an e-mail address, which does not identify ([0019](/decisions/0019-person-and-upstream-link/#what-policy-sees)).
 - **`org` is the tenant the person belongs to,** the tenant of the client the person signs in to ([0019](/decisions/0019-person-and-upstream-link/#the-records)). The upstream's organisation id is not copied into `org`: the asker reads `org` from the person's item, and no policy document sets it. `Account.org` is, in the same way, the tenant of the sign-in that linked the account; a config `Upstream` names no tenant.
@@ -179,7 +179,7 @@ Each of these is added by the record or pull request that first asks about it, a
 | `token.issue` | `Person` | `Client` | `session` | Whether this person may have a token for this client, at a code exchange or a refresh |
 | `token.exchange` | `Person` | `Client` | `exchange` | Whether this person's token may become a token for this client, as when `sluis login` exchanges the token of the front issuer at a boundary |
 | `artifact.sign` | `Workload` | `SigningKey` | `exchange` | Whether this workload may have this key sign this content ([0024](/decisions/0024-root-custody-and-the-signing-api/#the-signing-api)) |
-| `audit.read` | `Actor` or `Person` | `AuditLog` | `reader` | Whether this reader may have a grant to open this tenant's evidence in this log of this project. The reader asks once for each log and tenant a call names ([0028](/decisions/0028-audit-pieces/#access)) |
+| `audit.read` | `Actor` or `Person` | `AuditLog` | `reader` | Whether this reader may have a grant to open this tenant's evidence in this log of this project. The reader asks once for each log and tenant a call names ([0028](https://github.com/truvity/audit/blob/master/docs/decisions/0013-access.md)) |
 | `policy.link` | `Person` (the one who asks) | `Boundary` | `exchange`, for a write that `console` routed | Whether this person may link this template, with these slot values, in this boundary |
 
 There is no separate action for step-up. A request that needs a fresher or stronger authentication is denied by a policy that says so ([below](#step-up)), which keeps the one question "may this person have this token" in one place.
@@ -296,9 +296,9 @@ A template is policy declared in a `Policy` document, with `?principal` and `?re
 
 ### How links reach `policy`
 
-- **`policy` reads the effective policy set,** `EffectivePolicySet(boundary, tenant)`, through the store: the four layers composed by union with Cedar forbid-wins, each part with the version it came from ([0004](/decisions/0004-the-data-model/#layered-and-linked-kinds)). The links are part of it. `policy` recompiles when the set changes, by watch, or by a re-read with an ETag on Lambda ([0005](/decisions/0005-the-store/#watch-and-the-resume-point)).
+- **`policy` reads the effective policy set,** `EffectivePolicySet(boundary, tenant)`, through the store: the four layers composed by union with Cedar forbid-wins, each part with the version it came from ([0004](/decisions/0004-the-data-model/#layered-and-linked-kinds)). The links are part of it. `policy` recompiles when the set changes, by watch, or by a re-read with an ETag on Lambda ([0005](https://github.com/truvity/atoom/blob/master/store/docs/store-port.md)).
 - **The request names the tenant,** and the asker sends only facts. `policy` links the templates in memory, validates the result, and evaluates. The digest of the set is in the audit record.
-- **A link that cannot be applied denies the request.** An unknown template, a slot of the wrong type or a grant name the vocabulary no longer has means the layers have drifted, and ignoring the link could drop a `forbid`. The store refuses the write of such a link, and it refuses a config snapshot that removes a template a link names ([0005](/decisions/0005-the-store/#the-snapshot)), so the denial is the last line. It is audited with the link id.
+- **A link that cannot be applied denies the request.** An unknown template, a slot of the wrong type or a grant name the vocabulary no longer has means the layers have drifted, and ignoring the link could drop a `forbid`. The store refuses the write of such a link, and it refuses a config snapshot that removes a template a link names ([0005](/decisions/0005-the-store/#configuration-loading)), so the denial is the last line. It is audited with the link id.
 
 ### The grants of one tenant
 

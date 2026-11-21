@@ -10,9 +10,20 @@ export const TEMPLATE_ID = '0000-template';
 export async function listDecisions(): Promise<Decision[]> {
   const entries = await getCollection('decisions');
   return entries
-    .filter((entry) => !entry.id.startsWith('_') && entry.id !== TEMPLATE_ID)
+    .filter((entry) => !entry.id.startsWith('_') && entry.id !== TEMPLATE_ID && !entry.id.startsWith('archive/'))
     .sort((a, b) => a.id.localeCompare(b.id));
 }
+
+// The superseded records of docs/decisions/archive/, under their own numbers. They get a page
+// and a row of the archive table, and they are not in /data/repo.json or on the status page.
+export async function listArchivedDecisions(): Promise<Decision[]> {
+  const entries = await getCollection('decisions');
+  return entries.filter((entry) => entry.id.startsWith('archive/')).sort((a, b) => a.id.localeCompare(b.id));
+}
+
+// A record in docs/decisions/archive/ has the id `archive/NNNN-slug`.
+export const isArchived = (entry: Decision): boolean => entry.id.startsWith('archive/');
+const bareId = (entry: Decision): string => entry.id.replace(/^archive\//, '');
 
 // The title of an ADR: its front matter, else its first level-one heading,
 // else its file name.
@@ -60,7 +71,7 @@ export function decisionFacts(entry: Decision): DecisionFacts {
   const date = field(body, 'Date');
   return {
     id: entry.id,
-    number: entry.id.slice(0, 4),
+    number: bareId(entry).slice(0, 4),
     title: decisionTitle(entry).replace(/^\d{4}\s+[—-]\s+/, ''),
     status: entry.data.status ?? field(body, 'Status') ?? 'Unknown',
     date: date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null,
