@@ -44,13 +44,14 @@ func readActors(t *testing.T) []actorRow {
 		t.Fatal(err)
 	}
 	var f struct {
-		Actors   []actorRow `yaml:"actors"`
-		Platform []actorRow `yaml:"platform"`
+		Actors      []actorRow `yaml:"actors"`
+		AuditPieces []actorRow `yaml:"audit_pieces"`
+		Platform    []actorRow `yaml:"platform"`
 	}
 	if err := yaml.Unmarshal(raw, &f); err != nil {
 		t.Fatal(err)
 	}
-	return append(f.Actors, f.Platform...)
+	return append(append(f.Actors, f.AuditPieces...), f.Platform...)
 }
 
 // A credential that opens a key: a card PIN, or a permission on the cloud key service (KMS).

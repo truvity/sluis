@@ -33,6 +33,7 @@ type rulesDocs struct {
 
 type actorEntry struct {
 	Name       string   `yaml:"name"`
+	Executable string   `yaml:"executable"`
 	Family     string   `yaml:"family"`
 	Ports      []string `yaml:"ports"`
 	KeyPurpose []struct {
@@ -73,18 +74,43 @@ func readRulesDocs(t *testing.T) rulesDocs {
 		t.Fatal(err)
 	}
 	d.purposes, d.data = k.Purposes, k.DataKeys
+	// The registries name an actor by its registry name (signin); the generated registry and the sockets use the name of
+	// its executable (session) until the planned rename. The expectation is built in the executable's names.
+	exe := map[string]string{}
 	raw, err = os.ReadFile("../../../../docs/architecture/actors.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	var a struct {
-		Actors   []actorEntry `yaml:"actors"`
-		Platform []actorEntry `yaml:"platform"`
+		Actors      []actorEntry `yaml:"actors"`
+		AuditPieces []actorEntry `yaml:"audit_pieces"`
+		Platform    []actorEntry `yaml:"platform"`
 	}
 	if err := yaml.Unmarshal(raw, &a); err != nil {
 		t.Fatal(err)
 	}
-	d.actors = append(a.Actors, a.Platform...)
+	d.actors = append(append(a.Actors, a.AuditPieces...), a.Platform...)
+	for i, e := range d.actors {
+		if e.Executable != "" {
+			exe[e.Name] = e.Executable
+			d.actors[i].Name = e.Executable
+		}
+	}
+	mapNames := func(users []string) {
+		for i, u := range users {
+			if x, ok := exe[u]; ok {
+				users[i] = x
+			}
+		}
+	}
+	for i := range d.purposes {
+		mapNames(d.purposes[i].Users)
+	}
+	for _, scope := range d.data {
+		for _, e := range scope {
+			mapNames(e.Users)
+		}
+	}
 	return d
 }
 
@@ -406,8 +432,8 @@ func TestEveryCallerPurposeAndOperationNotInTheFilesIsRefused(t *testing.T) {
 	t.Logf("%d cells given by the files; key@ called %d refused cells, %d succeeded and %d reached the check after the rule", expectedAllowed, refusedCells, succeeded, reached)
 	// The counts are the registry's today. A change to the files changes them, in the same pull request: the numbers are
 	// the sweep's evidence that it called what it says, and not a smaller set.
-	if expectedAllowed != 85 || succeeded != 61 || reached != 17 || refusedCells != 3912 {
-		t.Fatalf("cells given by the files %d (want 85), succeeded %d (61), reached the check %d (17), refused %d (3912): "+
+	if expectedAllowed != 84 || succeeded != 60 || reached != 17 || refusedCells != 3703 {
+		t.Fatalf("cells given by the files %d (want 84), succeeded %d (60), reached the check %d (17), refused %d (3703): "+
 			"if the registry changed on purpose, change these numbers with it", expectedAllowed, succeeded, reached, refusedCells)
 	}
 }
