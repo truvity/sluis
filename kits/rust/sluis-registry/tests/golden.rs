@@ -224,8 +224,8 @@ fn kinds_and_actors() {
             k.name
         );
     }
-    assert_eq!(kinds().len(), 114);
-    assert_eq!(actors().len(), 20);
+    assert_eq!(kinds().len(), 110);
+    assert_eq!(actors().len(), 19);
     let adapter = actor_by_name("adapter-github");
     assert!(adapter.is_some_and(|a| a.family == "work" && a.language == "Go" && !a.holder));
     assert!(actor_by_name("sluis-node").is_some_and(|a| a.family == "platform"));
