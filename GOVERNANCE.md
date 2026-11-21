@@ -60,7 +60,7 @@ Roadmap, features, architecture and decisions are public. Internal reasoning and
 
 **Agents.** An agent working for the maintainer may merge its own pull request when checks are green and review is done. It never decides scope, never merges another author's pull request, and never changes governance files without the maintainer.
 
-**Later.** The rules tighten before sluis serves customer-identity use (CIAM profiles) in production, and before 1.0 in production. The bar is:
+**Later.** The rules tighten before sluis serves customers' infrastructure calls in production, and before 1.0 in production. The bar is:
 
 - a `CODEOWNERS` file;
 - two approvals on a pull request;

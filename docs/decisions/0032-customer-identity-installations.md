@@ -1,6 +1,6 @@
 # 0032 — Customers sign in through the upstream identity provider, realms follow boundaries, and a customer-identity installation serves one boundary whose tenants each have their own data keys
 
-**Status:** Accepted
+**Status:** Accepted; partly superseded by 0048
 **Layer:** customer identity
 **Date:** 2026-11-18
 

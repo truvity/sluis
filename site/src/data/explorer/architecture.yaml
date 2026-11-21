@@ -867,7 +867,7 @@ flows:
       - title: The limit is checked
         nodes: [exchange, drv-state]
         edges: ["exchange>drv-state"]
-        text: A limit check compares a usage counter per customer, organisation and product with a limit that the product writes, and refuses at the limit. It is built right after the core (ADR 0046), and which actor serves it is decided with its first caller. sluis keeps no allowance or balance. Caps and rate limits live in core.
+        text: A limit check compares a usage counter with a limit that the product writes, and refuses at the limit. It is built right after the core (ADR 0046), and which actor serves it is decided with its first caller. sluis keeps no allowance or balance. Caps and rate limits live in core.
       - title: signer signs the token
         nodes: [exchange, signer, drv-keys, store-keys]
         edges: ["exchange>signer", "signer>drv-keys", "drv-keys>store-keys"]

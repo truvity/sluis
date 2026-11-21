@@ -138,7 +138,7 @@ sluis needs two separate credentials from Google: an OAuth client for **sign-in*
 In a Google Cloud project, create an OAuth client of type *Web application*, with the sign-in callback sluis prints (and, for admin consent, the connect callback) as redirect URIs. The consent screen asks for `openid`, `email` and `profile` only. For one organisation it can be *Internal*; for several tenants it must be *In production*, because in testing a second tenant gets an access error and refresh tokens expire after seven days.
 
 - **The operator's client is an `Upstream`:** config, with its client secret in a secret source (`UpstreamSecret`).
-- **A tenant's own identity provider is not connected to sluis.** In a customer installation it is configured in the trusted realm, which is the one upstream ([0032](/decisions/0032-customer-identity-installations/#realms-follow-boundaries)).
+- **A tenant's own identity provider is not connected to sluis.** In a customer installation it is configured in the trusted context realm, which is the one upstream ([0032](/decisions/0032-customer-identity-installations/#realms-follow-boundaries), [0048](/decisions/0048-product-apis-take-the-identity-providers-tokens/)).
 
 ### The directory: three methods
 

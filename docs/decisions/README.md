@@ -18,14 +18,14 @@ A v2 record that replaces a v1 decision says so in its context.
 
 A record is `NNNN-short-title-in-kebab-case.md`. A new record takes the number after the highest one in use, archived records included. A decision that is planned but not written has an issue and no number: prose names the issue, never a future number.
 
-A superseded record is moved to [archive/](archive/) under its own number and name and is never edited again. It is not an index row; the [archive table](#archive) lists it.
+A superseded record is moved to [archive/](archive/) under its own number and name and is never edited again. It is not an index row; the [archive table](#archive) lists it. A record that is superseded only in part stays where it is, and its status says which record supersedes it (`Accepted; partly superseded by NNNN`); the new record names the superseded parts exactly.
 
 ## Format
 
 Every record has these parts, in this order:
 
-- **Status.** One of `Proposed`, `Accepted`, `Rejected`, `Superseded by NNNN`, or `Accepted; amended by NNNN`.
-- **Layer.** Optional. One of `core`, `add-on` or `customer identity`: the layer of the product the decision belongs to ([0044](0044-sluis-is-a-core-and-add-ons.md)). A record with no Layer line is core, and so is a record that spans the layers, such as the runtimes or the release train.
+- **Status.** One of `Proposed`, `Accepted`, `Rejected`, `Superseded by NNNN`, `Accepted; amended by NNNN` or `Accepted; partly superseded by NNNN`.
+- **Layer.** Optional. One of `core` or `add-on`: the layer of the product the decision belongs to ([0044](0044-sluis-is-a-core-and-add-ons.md)). A record with no Layer line is core, and so is a record that spans the layers, such as the runtimes or the release train. The layer `customer identity` was withdrawn by [0048](0048-product-apis-take-the-identity-providers-tokens.md); a record that carries it keeps it as decided (`customer identity`), and no new record takes it.
 - **Date.** The day of the latest decision the record states.
 - **Context.** The forces at play. What problem, what constraints, what the reader needs to know.
 - **Decision.** What we do, in the active voice.
@@ -37,7 +37,7 @@ Under the status and the date, one line links the proposal issue: `Proposal: [is
 
 ## Rules
 
-- **Records are append-only.** The records were rewritten once, cleanly, so that each one states the current design and stands alone; from that rewrite on, a record is not edited to change a decision. A changed mind gets a new record that supersedes the old one. The old record's status line changes to point at the new one and the record moves to the archive. Its body stays.
+- **Records are append-only.** The records were rewritten once, cleanly, so that each one states the current design and stands alone; from that rewrite on, a record is not edited to change a decision. A changed mind gets a new record that supersedes the old one. The old record's status line changes to point at the new one and the record moves to the archive. Its body stays. When only a part is superseded, the record stays in place with the status line that says so, and the new record lists the parts.
 - **Typos, links and built-or-planned marks** may be fixed in place. A record says what is built and what is planned; when something is built, the mark changes and nothing else.
 - **One decision per record.** Keep it short. A page of reasoning is better than ten. A rule is stated in one record; the others link to it.
 - **Accepted means decided.** An `Accepted` record has no open part: it does not say "not decided" or that another record will decide it. What it leaves out is under Follow-ups, with its issue, or as an `Open:` line. A record with an open decision at its centre is `Proposed`.
@@ -56,7 +56,7 @@ The records, grouped in reading order. The Layer column is the record's own `Lay
 | ADR | Decision | Layer | Status |
 |-----|----------|-------|--------|
 | [0001](0001-v1-and-v2-lines.md) | v1 and v2 are two lines, releases of one major version work with the one before, and v2 replaces v1 by a parallel switch | core | Accepted |
-| [0044](0044-sluis-is-a-core-and-add-ons.md) | sluis is a core and add-ons, and no core actor calls an add-on | core | Accepted |
+| [0044](0044-sluis-is-a-core-and-add-ons.md) | sluis is a core and add-ons, and no core actor calls an add-on | core | Accepted; partly superseded by 0048 |
 | [0002](0002-families-of-actors.md) | Actors form three families: work actors hold no credential at rest, and only the data and keys families hold credentials | core | Accepted |
 | [0003](0003-units-transports-and-fusion.md) | One model, many transports: a unit per actor, the same calls over sockets, invokes and pods, and fusion only by explicit choice | core | Accepted |
 
@@ -76,7 +76,7 @@ The records, grouped in reading order. The Layer column is the record's own `Lay
 |-----|----------|-------|--------|
 | [0017](0017-identity-and-sign-in.md) | Each boundary has its own issuer, a token has one audience, staff sign in with passkeys and step-up, and break-glass recovery uses passkeys held in config | core | Accepted |
 | [0019](0019-person-and-upstream-link.md) | A person is tied to an upstream account by issuer and subject claim | core | Accepted |
-| [0020](0020-grant-vocabulary-and-token-claims.md) | Grant names come from a declared vocabulary, and a token carries fixed claims for one audience | core | Accepted |
+| [0020](0020-grant-vocabulary-and-token-claims.md) | Grant names come from a declared vocabulary, and a token carries fixed claims for one audience | core | Accepted; partly superseded by 0048 |
 | [0018](0018-sign-in-sessions.md) | Sign-in sessions have two classes with limits per class, and session chains are temp kinds | core | Accepted |
 | [0021](0021-clients.md) | Clients: installation clients are config, tenant clients are durable, and a self-described client is admitted only from allow-listed hosts | core | Accepted |
 | [0038](0038-fapi-2-profile.md) | FAPI 2.0 is a profile a client declares, with PAR, DPoP, private-key client authentication and its own signing algorithm, and sender constraint is declared per audience | core | Accepted |
@@ -84,11 +84,12 @@ The records, grouped in reading order. The Layer column is the record's own `Lay
 | [0022](0022-workload-identity-and-host-enrolment.md) | Workload identity follows SPIFFE, and hosts enrol the same way | core | Accepted |
 | [0041](0041-a-compromised-key-is-revoked-then-replaced.md) | A compromised key is revoked, then replaced: it leaves at once, its replacement signs at once, and only a person declares | core | Accepted |
 
-### Customer identity
+### Customers and the group's identity provider
 
 | ADR | Decision | Layer | Status |
 |-----|----------|-------|--------|
-| [0032](0032-customer-identity-installations.md) | Customers sign in through the upstream identity provider, realms follow boundaries, and a customer-identity installation serves one boundary whose tenants each have their own data keys | customer identity | Accepted |
+| [0048](0048-product-apis-take-the-identity-providers-tokens.md) | Customers sign in at the group's identity provider, product APIs take its tokens, and sluis exchanges one only for calls down to infrastructure | core | Accepted |
+| [0032](0032-customer-identity-installations.md) | Customers sign in through the upstream identity provider, realms follow boundaries, and a customer-identity installation serves one boundary whose tenants each have their own data keys | customer identity | Accepted; partly superseded by 0048 |
 
 ### Integrations and the console
 
@@ -104,8 +105,9 @@ The records, grouped in reading order. The Layer column is the record's own `Lay
 |-----|----------|-------|--------|
 | [0009](0009-export.md) | exporter@ publishes the kinds marked exportable to destinations outside sluis, never to a secret source | core | Accepted |
 | [0010](0010-backup-and-recovery.md) | A backup is a logical archive of the authoritative kinds through the store; a regional outage is accepted and a drill measures recovery | core | Accepted |
-| [0047](0047-kv-is-a-core-service-of-stores-that-no-tenant-owns.md) | KV is a core service of stores that no tenant owns: policy decides by path, each store has its own data key, and External Secrets reads it through a Vault KV v2 subset | core | Accepted |
-| [0046](0046-limits-on-the-request-path-and-usage-in-audit.md) | Limits are checked on the request path, balances live in the product, and usage records go to audit | core | Accepted |
+| [0047](0047-kv-is-a-core-service-of-stores-that-no-tenant-owns.md) | KV is a core service of stores that no tenant owns: policy decides by path, each store has its own data key, and External Secrets reads it through a Vault KV v2 subset | core | Accepted; partly superseded by 0049 |
+| [0049](0049-ssm-stays-the-only-secret-store-for-now.md) | SSM stays the only secret store for now, and External Secrets reading sluis KV is a later option | core | Accepted |
+| [0046](0046-limits-on-the-request-path-and-usage-in-audit.md) | Limits are checked on the request path, balances live in the product, and usage records go to audit | core | Accepted; partly superseded by 0048 |
 
 ### Runtimes, release, telemetry and the site
 

@@ -330,8 +330,9 @@ requirements:
     rationale: "A service that decides on them reads facts that sluis set, not parameters of the call (ADR 0032; ADR 0007)."
     level: MUST
     source: design-decision
-    status: planned
-    milestone: customer-identity
+    # Withdrawn 2026-11-21: ADR 0048 (customers sign in at the group's identity provider; products use its tokens; a sluis token never carries customer, org or product).
+    status: withdrawn
+    superseded_by: [REQ-TOKEN-058]
     runtimes: all
     standards: []
     issues: [1843]

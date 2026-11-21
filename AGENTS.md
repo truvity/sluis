@@ -26,7 +26,7 @@ The full method is `docs/contributing/design.md`. In short:
 - Nothing without a consumer: it arrives with its first real caller; until then it is a planned line and an issue.
 - State each rule once, in a record or a reference page, and link to it. A fact has one home: the repository that owns it. atoom owns ports, drivers and blocks, audit owns the audit log, session owns browser sessions; link their pages instead of restating them.
 - Records are append-only: a changed mind is a new record that supersedes the old one, and the old one moves to the archive. A decision is written in one repository only.
-- Keep records, requirements, the roadmap and the issues in step. The milestones are an order, and `docs/roadmap.md` owns it. The product is a core, add-ons and customer identity.
+- Keep records, requirements, the roadmap and the issues in step. The milestones are an order, and `docs/roadmap.md` owns it. The product is a core and add-ons.
 
 ## Keys, roots and ceremonies
 

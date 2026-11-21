@@ -1,6 +1,6 @@
 # 0044 — sluis is a core and add-ons, and no core actor calls an add-on
 
-**Status:** Accepted
+**Status:** Accepted; partly superseded by 0048
 **Date:** 2026-11-21
 
 Proposal: [issue #1017](https://github.com/truvity/sluis/issues/1017).

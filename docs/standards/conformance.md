@@ -75,7 +75,7 @@ The core runs the suite in CI against the local installation, as a **public clie
 
 Passing the suite on your own and **certification** are different things. In the OpenID Foundation's certification programme an implementer submits the suite's results for a **specific version** and **profile**, with a statement, and the Foundation lists the implementation as certified for it. A logout submission must include RP-Initiated Logout plus one other logout profile.
 
-Certification is not a security audit, not a FIPS validation (sluis v2.0 has no FIPS build; see the [register](/standards/#crypto-and-compliance)), and not a promise about the next release. An external penetration test and a certification are conditions for calling a customer-identity profile production-ready.
+Certification is not a security audit, not a FIPS validation (sluis v2.0 has no FIPS build; see the [register](/standards/#crypto-and-compliance)), and not a promise about the next release. An external penetration test and a certification are conditions for calling a profile that serves customers' infrastructure calls production-ready.
 
 The submission package and the self-certification statement are assembled by a script from a release's archived results, so a submission is a by-product of a release, not a separate project.
 
