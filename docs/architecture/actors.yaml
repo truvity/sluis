@@ -1,39 +1,50 @@
 # The actor registry: one row per actor of sluis, the source of truth for which actors exist.
 #
 # An actor is a program with one responsibility, run as its own unit in each boundary it serves
-# (`actor@boundary`). Every actor belongs to one of four families. This file names each actor and
-# says what no other file says about it in one place: its family, whether it holds a credential at
-# rest, its ports, the actors it calls, the outside hosts it may reach (egress), the key purposes it
-# uses, its language, where it runs, the records that govern it, the requirement areas and standards
-# it implements, and the GitHub label and open issues that track its build.
+# (`actor@boundary`). Every actor belongs to one of three families: work, data or keys (record 0002).
+# This file names each actor and says what no other file says about it in one place: its family, its
+# layer, whether it is built, whether it holds a credential at rest, its ports, the actors it calls, the
+# outside hosts it may reach (egress), the key purposes it uses, its language, where it runs, the records
+# that govern it, the requirement areas and standards it implements, and the GitHub label and open issues
+# that track its build.
 #
-# With the kind registry (docs/architecture/kinds.yaml) and the key registry
-# (docs/architecture/keys.yaml) this file generates every enforcement layer: the store's rules
-# (actor x kind x verb), the key policies, the unit's socket and uid permissions, and the per-uid
-# egress rules. `tools/checks/actors.mjs` (`just check-actors`) checks this file and writes the
-# generated tables on docs/reference/actors.md (`just actors-write`); `tools/checks/registries.mjs`
-# (`just check-registries`) checks the three registries against each other.
+# With the kind registry (docs/architecture/kinds.yaml) and the key registry (docs/architecture/keys.yaml)
+# this file generates every enforcement layer: the store's rules (actor x kind x verb), the key policies,
+# the unit's socket and uid permissions, and the per-uid egress rules. `tools/checks/actors.mjs`
+# (`just check-actors`) checks this file and writes the generated tables on docs/reference/actors.md
+# (`just actors-write`); `tools/checks/registries.mjs` (`just check-registries`) checks the three
+# registries against each other.
 #
-# Families:
-#   work     entry, console, session, exchange, policy, signer, ca, ssh-ca, quota and the adapters.
-#            A work actor holds no storage, key or audit credential at rest. It has exactly a `data`
-#            port, a `keys` port and an `audit-emit` port, and the ports of its job.
-#   data     store and exporter. store holds the storage credentials and has four ports downward, one
-#            per storage class; exporter holds the credentials of its export destinations.
-#   keys     key: holds the card PIN or the KMS permission; seals, opens, signs and makes keyed hashes.
-#   audit    writer, witness, indexer and reader. They read their documents (AuditLog, AuditWitnesses,
-#            AuditCatalogue) through the data port, like every other family's actors; the blob, the
-#            transport and the index are their own ports.
+# Families (record 0002):
+#   work   entry, signin, console, exchange, policy, signer, ca, ssh-ca and the adapters. A work actor holds
+#          no storage, key or audit credential at rest. It has exactly a `data` port, a `keys` port and an
+#          `audit-emit` port, and the ports of its job.
+#   data   store and exporter. store holds the storage credentials and has four ports downward, one per
+#          storage class; exporter holds the credentials of its export destinations.
+#   keys   key: holds the card PIN or the KMS permission; seals, opens, signs and makes keyed hashes.
 #
-# The foundation and the modules: the data and keys families (store, exporter, key) are the foundation
-# every installation runs. The identity module (the work actors except quota, adapters included), the
-# audit module (the four audit pieces) and the quota module (quota) are sets of actors on top of it;
-# an installation runs the modules it needs, and the foundation's binaries do not change.
+# Layers (record 0044): `core` or `add-on`. A layer says what an installation may leave out; it is not a
+# fourth family. The data and keys families (store, exporter, key) are the foundation every installation
+# runs, and their binaries do not change with what runs above them.
+#
+# Audit is not a family of sluis. It is the product of truvity/audit. Its pieces (writer, witness, indexer
+# and reader) still run from this repository, so the generators need their rules; they are listed in the
+# separate section `audit_pieces` below, and they move to truvity/audit with their code. Nothing else here
+# treats them as sluis's.
+#
+# The actor `signin` is the sign-in actor (O1). Its program, binary, unit and uid are still called
+# `session` until a planned step renames the executable; the field `executable` carries that name, and the
+# generators use it wherever they name the actor, so the generated files do not change. Everywhere in the
+# docs the actor is `signin`. The product `session` is truvity/session, a different thing.
 #
 # Fields of an actor:
 #   name               lower-case kebab-case; the label is `actor:<name>`. The actor named `store` is
 #                      written `store@` in the kind registry, and so on for `key` and `exporter`
-#   family             work | data | keys | audit
+#   executable         optional: the name of the program, binary, unit and uid when it is not `name`
+#                      (`signin` runs as `session`)
+#   family             work | data | keys  (audit_pieces: audit)
+#   layer              core | add-on: the layer of record 0044 the actor belongs to. Not for audit_pieces
+#   built              true when the actor's code exists in this repository, false while it is planned
 #   holder             true for a credential holder: store, exporter, key and the four audit pieces;
 #                      false for every work actor
 #   holds              holders only: what the credential is
@@ -41,30 +52,28 @@
 #   aka                other words the records use for it
 #   contracts          adapters only: the integration contracts the adapter implements
 #   language           Go or Rust
-#   language_rule      the rule (R1 to R11) of the language record that picks the language
-#   language_row       the text that finds its row in the language record's table, when not `name` in
-#                      backticks
+#   language_gate      the spikes that gate a Rust row in the language record (record 0012): a list such as
+#                      [S1, S10], or [] for none. The check compares it with the Gate column of that table
 #   language_note      optional: a gate or an exception
-#   placement          scope (per-boundary | front | per-node | per-tenant | beside-sluis), instances
-#                      (any | exactly-1), runtimes (where it may run), and an optional note
+#   placement          scope (per-boundary | front | per-node | per-tenant | beside-sluis), instances (any |
+#                      exactly-1), runtimes (where it may run), and an optional note
 #   ports              the ports it has, of `ports` below
-#   calls              the actors it calls over its transport, besides the data, keys and audit-emit
-#                      ports (those reach store, key and the audit transport). `adapter-<vendor>`
-#                      means any adapter
-#   egress             the outside host classes its unit may reach, of `egress_classes` below; [] is
-#                      none. Local sockets are not egress
+#   calls              the actors it calls over its transport, besides the data, keys and audit-emit ports
+#                      (those reach store, key and the audit transport). `adapter-<vendor>` means any adapter
+#   egress             the outside host classes its unit may reach, of `egress_classes` below; [] is none.
+#                      Local sockets are not egress
 #   key_purposes       the key purposes it uses, of docs/architecture/keys.yaml: purpose and ops
-#                      (seal | open | sign | mac | public-key | wrap | unwrap)
+#                      (seal | open | sign | mac | public-key | wrap | unwrap | certify)
 #   adrs               the four-digit numbers of the records that govern it; each names the actor
 #   requirement_areas  area codes of docs/requirements/index.yaml
 #   standards          ids of docs/requirements/standards.yaml
 #   label              actor:<name>
 #   issues             open issues of truvity/sluis that build it; the labels script applies the label
 #
-# Platform pieces are programs an installation runs that are not actors of any family: the node agent
-# is the one that uses a key purpose, so it is listed under `platform`. The edge connector has a uid and a group
-# in tools/gen/registry/uids.yaml (`edge-connector`, beside the harness's `harness-forwarder`) and nothing else here; the card
-# service and the engine processes take no part in the registry.
+# Platform pieces are programs an installation runs that are not actors of any family: the node agent is the
+# one that uses a key purpose, so it is listed under `platform`. The edge connector has a uid and a group in
+# tools/gen/registry/uids.yaml (`edge-connector`, beside the harness's `harness-forwarder`) and nothing else
+# here; the card service and the engine processes take no part in the registry.
 schema: 1
 
 # The ports of a unit. A port with `family` is private to that family; a port with `shared: true` is
@@ -108,14 +117,16 @@ actors:
   # ---- work (ADR 0002, "Work actors")
   - name: entry
     family: work
+    layer: core
+    built: true
     holder: false
     purpose: "Parses each request, validates it against closed parameter lists generated from the contracts, and routes it to the actor that owns the step; it holds nothing."
     language: Rust
-    language_rule: R2
-    language_note: "Gated by spikes S1, S3 and S10; the fallback candidate is Go first."
+    language_gate: [S1, S3, S10]
+    language_note: "The fallback candidate, if a gate fails, is Go first."
     placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "The only actor reachable from outside: a Unix socket on bare-metal and Kubernetes, loopback TCP on serverless." }
     ports: [data, keys, audit-emit, listener]
-    calls: [session, exchange, console, ssh-ca, quota, adapter-<vendor>]
+    calls: [signin, exchange, console, ssh-ca, adapter-<vendor>]
     egress: []
     key_purposes:
       - { purpose: mac, ops: [mac] }
@@ -126,12 +137,15 @@ actors:
     label: actor:entry
     issues: [958, 941, 796]
 
-  - name: session
+  - name: signin
+    executable: session
     family: work
+    layer: core
+    built: true
     holder: false
-    purpose: "Sign-in, session chains, the session cookie and the freshness of each person's authentication per boundary (step-up)."
+    purpose: "Sign-in, sign-in sessions, the session cookie and the freshness of each person's authentication per boundary (step-up)."
     language: Go
-    language_rule: R4
+    language_gate: []
     placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes] }
     ports: [data, keys, audit-emit, fetch]
     calls: [policy, signer, exchange, adapter-upstream-oidc]
@@ -146,19 +160,21 @@ actors:
     adrs: ['0002', '0012', '0017', '0018', '0019']
     requirement_areas: [AUTHN, SESS, TOKEN, FED, SUBJ]
     standards: [ST-28, ST-29, ST-03, ST-24, ST-34, ST-59, ST-30, ST-31]
-    label: actor:session
+    label: actor:signin
     issues: [959, 775, 776, 777, 778, 885, 979, 1081, 793]
 
   - name: console
     family: work
+    layer: core
+    built: false
     holder: false
     purpose: "The operator API, as the browser's backend: it checks the operator's delegation and routes each write to the actor that owns the kind."
     language: Rust
-    language_rule: R11
+    language_gate: [S1, S10]
     language_note: "Rust unless its design names a serious trade-off; the single-page application is TypeScript."
     placement: { scope: front, instances: any, runtimes: [bare-metal, serverless, kubernetes] }
     ports: [data, keys, audit-emit]
-    calls: [session, exchange, policy, quota, reader, adapter-<vendor>]
+    calls: [signin, exchange, policy, reader, adapter-<vendor>]
     egress: []
     key_purposes:
       - { purpose: data, ops: [open] }
@@ -171,13 +187,15 @@ actors:
 
   - name: exchange
     family: work
+    layer: core
+    built: true
     holder: false
     purpose: "Token exchange (RFC 8693), enrolment of hosts and workloads, the front of the signing API, the verifiers of proofs, and the owner of what a tenant has configured."
     language: Go
-    language_rule: R4
+    language_gate: []
     placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes] }
     ports: [data, keys, audit-emit, fetch]
-    calls: [policy, quota, signer, ca, adapter-<vendor>]
+    calls: [policy, signer, ca, adapter-<vendor>]
     egress: [proof-issuer-keys]
     key_purposes:
       - { purpose: chain, ops: [open] }
@@ -192,11 +210,13 @@ actors:
 
   - name: signer
     family: work
+    layer: core
+    built: true
     holder: false
     purpose: "Signs tokens under a signing policy with the token-signing key, checking the issuer, the audience, the lifetime and the algorithm, and signs artifacts with the release-signing key for a grant that policy sealed."
     language: Rust
-    language_rule: R11
-    language_note: "Rust unless its design names a serious trade-off; gated by spikes S1 and S10."
+    language_gate: [S1, S10]
+    language_note: "Rust unless its design names a serious trade-off."
     placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "Never fused with entry (the fusion rule)." }
     ports: [data, keys, audit-emit]
     calls: []
@@ -219,10 +239,12 @@ actors:
 
   - name: policy
     family: work
+    layer: core
+    built: true
     holder: false
     purpose: "The decision point: a declared Cedar policy maps facts to grants; it keeps no state, has no outbound network, and has key seal the grants it mints."
     language: Rust
-    language_rule: R4
+    language_gate: [S1, S10]
     placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes] }
     ports: [data, keys, audit-emit]
     calls: []
@@ -239,10 +261,12 @@ actors:
 
   - name: ca
     family: work
+    layer: add-on
+    built: true
     holder: false
     purpose: "The X.509 certificate authority: host and workload SVIDs, sluis's own mutual-TLS certificates and database client certificates, each logged in its issuance log. Until the PKI add-on it makes the token certificate only, which is not logged, and that is optional and off in the core (ADR 0023, ADR 0006)."
     language: Go
-    language_rule: R4
+    language_gate: []
     placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "Never fused with entry (the fusion rule)." }
     ports: [data, keys, audit-emit]
     calls: []
@@ -266,10 +290,12 @@ actors:
 
   - name: ssh-ca
     family: work
+    layer: add-on
+    built: false
     holder: false
     purpose: "The SSH certificate authority, for user and host certificates that carry identity only."
     language: Rust
-    language_rule: R11
+    language_gate: [S1, S10]
     language_note: "Rust unless its design names a serious trade-off."
     placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "Never fused with entry (the fusion rule)." }
     ports: [data, keys, audit-emit]
@@ -286,35 +312,17 @@ actors:
     label: actor:ssh-ca
     issues: [925, 1072]
 
-  - name: quota
-    family: work
-    holder: false
-    purpose: "Reserved for the allowance engine of ADR 0039, which ADR 0046 superseded; not built, and sluis keeps no balance. Which actor serves the limit check of ADR 0046 is decided with its first caller."
-    language: Rust
-    language_rule: R11
-    language_note: "Rust unless its design names a serious trade-off."
-    placement: { scope: beside-sluis, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "Reserved with the allowance engine; not built." }
-    ports: [data, keys, audit-emit]
-    calls: [policy]
-    egress: []
-    key_purposes:
-      - { purpose: pseudonym, ops: [mac] }
-    adrs: ['0002', '0012', '0046', '0040']
-    requirement_areas: [QUOTA]
-    standards: [NC-15]
-    label: actor:quota
-    issues: [915, 1026]
-
   # ---- adapters: the work actors of the integrations, one per vendor, opening each tenant's connection credential at key@ for each call (ADR 0025)
   - name: adapter-upstream-oidc
     family: work
+    layer: core
+    built: true
     holder: false
     aka: ["upstream adapter"]
     contracts: [Upstream, FactsSource]
-    purpose: "Federates sign-in from an upstream identity provider: it does the code exchange at the upstream and returns the verified assertion to session, and it never decides. It also reads the directory of Google Workspace and Entra that a tenant connected, as a facts source."
+    purpose: "Federates sign-in from an upstream identity provider: it does the code exchange at the upstream and returns the verified assertion to signin, and it never decides. It also reads the directory of Google Workspace and Entra that a tenant connected, as a facts source."
     language: Go
-    language_rule: R4
-    language_row: Integrations
+    language_gate: []
     placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes] }
     ports: [data, keys, audit-emit, provider-api]
     calls: [policy]
@@ -330,13 +338,14 @@ actors:
 
   - name: adapter-github
     family: work
+    layer: add-on
+    built: false
     holder: false
     aka: ["github adapter"]
     contracts: [FactsSource, CredentialMinter, Provisioner]
     purpose: "Reads directory facts from GitHub, mints short-lived GitHub credentials for a grant that policy sealed, and reconciles team membership to a desired state."
     language: Go
-    language_rule: R4
-    language_row: Integrations
+    language_gate: []
     placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "A background job (the reconciler, a scheduled re-sync) takes a lease, so one runs at a time." }
     ports: [data, keys, audit-emit, provider-api]
     calls: [policy]
@@ -354,13 +363,14 @@ actors:
 
   - name: adapter-slack
     family: work
+    layer: core
+    built: false
     holder: false
     aka: ["slack adapter"]
     contracts: [Provisioner, Notifier]
     purpose: "Sends notifications such as an enrolment waiting for approval, and reconciles chat channels to a desired state."
     language: Go
-    language_rule: R4
-    language_row: Integrations
+    language_gate: []
     placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "A background job (the reconciler) takes a lease, so one runs at a time." }
     ports: [data, keys, audit-emit, provider-api]
     calls: [policy]
@@ -377,12 +387,14 @@ actors:
   # ---- data (ADR 0002, "Credential holders"; ADR 0005; ADR 0009)
   - name: store
     family: data
+    layer: core
+    built: true
     holder: true
     holds: ["the engine login of the durable and temp classes", "the access to the config source and the secret source", "the restore identity, whose role alone may decrypt an archive key on AWS"]
     purpose: "The only holder of storage credentials: one generic store service over four ports, one per storage class, that decodes and validates each value against the kind registry and applies the rules of the actor registry."
     language: Rust
-    language_rule: R11
-    language_note: "Rust on the smallest board tier unless a serious trade-off is named; the row for store in the language record is set with that record's edit."
+    language_gate: [S1, S10]
+    language_note: "Rust on the smallest board tier unless a serious trade-off is named. The host of atoom's `state` block."
     placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "A boundary of level L2 or higher has its own store; below L2 the parent's store serves it under its prefix." }
     ports: [config-source, secret-source, durable, temp, keys, audit-emit]
     calls: []
@@ -398,12 +410,14 @@ actors:
 
   - name: exporter
     family: data
+    layer: core
+    built: true
     holder: true
     holds: ["the credentials of its export destinations, with a narrow edge-purge credential for the public addresses it publishes", "a write-only credential for the backup bucket"]
     purpose: "Publishes the kinds marked exportable to destinations outside sluis and runs the backup job; it never writes to a secret source."
     language: Rust
-    language_rule: R11
-    language_note: "Rust on the smallest board tier unless a serious trade-off is named; the row for exporter in the language record is set with that record's edit."
+    language_gate: [S1, S10]
+    language_note: "Rust on the smallest board tier unless a serious trade-off is named. The host of atoom's `export` block."
     placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "The backup job takes a lease, so one runs at a time." }
     ports: [data, keys, audit-emit, destination]
     calls: [policy]
@@ -420,12 +434,14 @@ actors:
   # ---- keys (ADR 0002; ADR 0006)
   - name: key
     family: keys
+    layer: core
+    built: true
     holder: true
     holds: ["the card PIN, or the permission to use the cloud key service"]
     purpose: "Holds a boundary's keys: it seals, opens, signs and makes keyed hashes in place, caches opened data keys in memory with a time to live per entry, and writes the wrapped data keys and the key certificates."
     language: Go
-    language_rule: R4
-    language_note: "Go with piv-go, the named exception to R3; the row for key in the language record is set with that record's edit."
+    language_gate: []
+    language_note: "Go, with `piv-go` in the card driver: the named exception to the trusted-base rule. The host of atoom's `seal` block."
     placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "From level L1. On boards one per node, with exclusive access to the node's card; with a cloud key service the key policy limits each purpose to one actor." }
     ports: [data, key-store, audit-emit]
     calls: []
@@ -440,7 +456,12 @@ actors:
     label: actor:key
     issues: [951, 1067, 914]
 
-  # ---- audit (ADR 0028)
+# Audit's pieces that still run from this repository (records 0028 and 0029 say what moved to truvity/audit). They are
+# read like actors: the generators emit their store rules, key rules and call graph, so the generated files do not change
+# while the code is here. They are audit's, not a fourth family of sluis, and they move to truvity/audit with their code.
+# Their `family` value stays `audit` because the generated files carry it. A piece has no layer, and its language is the
+# one audit's records give.
+audit_pieces:
   - name: writer
     family: audit
     holder: true
@@ -448,7 +469,6 @@ actors:
     purpose: "Seals the records it takes from the transport into its audit log and usage log in the blob, and has key sign each checkpoint."
     aka: ["audit writer"]
     language: Go
-    language_rule: R4
     placement: { scope: per-boundary, instances: exactly-1, runtimes: [bare-metal, serverless, kubernetes], note: "One writer per project; exactly one writer per log; a cluster keeps one log per node and project." }
     ports: [data, keys, blob, transport]
     calls: [policy]
@@ -458,7 +478,7 @@ actors:
       - { purpose: audit-log-second, ops: [sign, public-key] }
       - { purpose: issuance-log, ops: [sign, public-key] }
       - { purpose: evidence, ops: [seal] }
-    adrs: ['0002', '0012', '0028', '0029']
+    adrs: ['0012', '0028', '0029']
     requirement_areas: [AUDIT]
     standards: [ST-71, ST-72, ST-73, ST-75, ST-114]
     label: actor:writer
@@ -470,14 +490,13 @@ actors:
     holds: ["read and write access to its cosignatures in the audit blob"]
     purpose: "Cosigns each new checkpoint the writer sends once it is consistent with the last one it cosigned, and has key sign each cosignature; optional everywhere."
     language: Go
-    language_rule: R4
     placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "On the boards the other nodes are a node's peer witnesses, through the audit blob." }
     ports: [data, keys, blob, transport]
     calls: []
     egress: [audit-blob]
     key_purposes:
       - { purpose: witness, ops: [sign, public-key] }
-    adrs: ['0002', '0012', '0029']
+    adrs: ['0012', '0028', '0029']
     requirement_areas: [AUDIT]
     standards: [ST-73, ST-74]
     label: actor:witness
@@ -489,7 +508,6 @@ actors:
     holds: ["read access to the audit blob", "write access to the search index"]
     purpose: "Follows each audit log of its boundary by signed checkpoint and applies the entries to the search index; the index's only writer."
     language: Rust
-    language_rule: R11
     language_note: "Rust unless its design names a serious trade-off."
     placement: { scope: per-boundary, instances: exactly-1, runtimes: [bare-metal, serverless, kubernetes] }
     ports: [data, keys, blob, transport, index, audit-emit]
@@ -497,7 +515,7 @@ actors:
     egress: [audit-blob, search-index]
     key_purposes:
       - { purpose: evidence, ops: [open] }
-    adrs: ['0002', '0012', '0028']
+    adrs: ['0012', '0028']
     requirement_areas: [AUDIT]
     standards: [ST-72, ST-75]
     label: actor:indexer
@@ -509,7 +527,6 @@ actors:
     holds: ["read access to the audit blob and the search index"]
     purpose: "Answers audit queries from the search index, filtered by the caller's grant, and records each read."
     language: Rust
-    language_rule: R11
     language_note: "Rust unless its design names a serious trade-off."
     placement: { scope: per-boundary, instances: any, runtimes: [bare-metal, serverless, kubernetes], note: "With a sqlite index on a cluster it runs on the indexer's node." }
     ports: [data, keys, blob, index, audit-emit]
@@ -518,7 +535,7 @@ actors:
     key_purposes:
       - { purpose: pseudonym, ops: [mac] }
       - { purpose: evidence, ops: [open] }
-    adrs: ['0002', '0012', '0028', '0029']
+    adrs: ['0012', '0028', '0029']
     requirement_areas: [AUDIT]
     standards: [ST-114]
     label: actor:reader
@@ -528,9 +545,10 @@ actors:
 # purpose, so only it is listed.
 platform:
   - name: sluis-node
+    built: false
     purpose: "The node agent: issues each local actor a short-lived workload token, from its uid by peer credentials, signed through key with the node's workload-issuer key."
     language: Rust
-    language_rule: R3
+    language_gate: [S1, S10]
     placement: { scope: per-node, instances: exactly-1, runtimes: [bare-metal], note: "On Kubernetes only as a fallback; none on serverless." }
     binary: node/sluis-node
     ports: [keys]
@@ -538,7 +556,7 @@ platform:
     egress: []
     key_purposes:
       - { purpose: workload-issuer, ops: [sign, public-key] }
-    adrs: ['0002', '0003', '0006', '0012', '0022']
+    adrs: ['0002', '0006', '0012', '0022']
     requirement_areas: [WORKLOAD]
     standards: [ST-110, ST-46]
     label: actor:sluis-node
@@ -558,5 +576,7 @@ external_callers:
 
 # Names that look like actors and are not, with the reason. The check refuses them as actors.
 not_actors:
-  cloud-cloudflare: "A driver, private to its owner; it is not an actor."
+  cloud-cloudflare: "A driver of atoom's, run by the host that needs it; it is not an actor."
+  actor: "The placeholder of an instance name in prose (`actor@boundary`), not an actor."
+  bind-challenge: "The name of a notation in an OpenPGP signature (record 0043), not an instance."
   WorkloadVerifier: "A verifier of exchange with public material only, not a process."

@@ -401,8 +401,8 @@ requirements:
       - {kind: integration-test, ref: "the same over the generated driver units, which carry [Install] today (REQ-DEPLOY-044 change of the units). Not met until the units drop it"}
   - id: REQ-SUPPLY-029
     area: SUPPLY
-    statement: "A host that runs the foundation and the audit module MUST install no identity actor."
-    rationale: "Audit alone is the foundation plus the audit module and nothing more (ADR 0013)."
+    statement: "A host that runs the foundation and audit's pieces MUST install no identity actor."
+    rationale: "Audit alone is the foundation plus audit's pieces and nothing more (ADR 0013)."
     level: MUST
     source: design-decision
     status: done

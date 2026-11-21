@@ -26,14 +26,29 @@ func TestMatchesRulesPage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	contracts := adapterContracts(t)
+	contracts, executables := registryActors(t)
+	// The page names an actor as the docs do (`signin`); the generated tables name it as its executable (`session`).
+	exe := func(actor string) string {
+		if e, ok := executables[actor]; ok {
+			return e
+		}
+		return actor
+	}
+	pageName := func(executable string) string {
+		for a, e := range executables {
+			if e == executable {
+				return a
+			}
+		}
+		return executable
+	}
 	createOnly := createOnlyKinds(t)
 	if !createOnly["KeyRevocation"] {
 		t.Fatal("the kind registry no longer marks KeyRevocation create_only")
 	}
 	want := parseRulesPage(t, string(page), contracts)
-	if len(want.names) != 19 {
-		t.Fatalf("the page names %d actors, want 19", len(want.names))
+	if len(want.names) != 18 {
+		t.Fatalf("the page names %d actors, want 18", len(want.names))
 	}
 
 	var problems []string
@@ -53,7 +68,7 @@ func TestMatchesRulesPage(t *testing.T) {
 				{"get", p.read || p.write}, {"list", p.read || p.write},
 				{"watch", p.watch},
 			} {
-				got := StoreAllows(actor, k.Segment, v.verb)
+				got := StoreAllows(exe(actor), k.Segment, v.verb)
 				checked++
 				if got != v.page {
 					bad(actor, k.Name, v.verb, got)
@@ -71,13 +86,13 @@ func TestMatchesRulesPage(t *testing.T) {
 				if k.BackedUp && actor == "exporter" && (verb == "get" || verb == "list") {
 					continue
 				}
-				if !StoreSelfScopedFor(actor, k.Segment, verb) {
+				if !StoreSelfScopedFor(exe(actor), k.Segment, verb) {
 					problems = append(problems, fmt.Sprintf("actor %s, kind %s, verb %s: the page says own ids only, the tables do not", actor, k.Name, verb))
 				}
 			}
 		}
 	}
-	if checked < 19*111*7 {
+	if checked < 18*110*7 {
 		t.Fatalf("only %d verb checks ran", checked)
 	}
 	// the tables name no actor or kind the page does not have
@@ -88,7 +103,7 @@ func TestMatchesRulesPage(t *testing.T) {
 			}
 			continue
 		}
-		if !slices.Contains(want.names, a.Name) {
+		if !slices.Contains(want.names, pageName(a.Name)) {
 			t.Errorf("actor %s is not on the page", a.Name)
 		}
 	}
@@ -156,7 +171,7 @@ func (p *rulesPage) set(actor, kind, group string) {
 
 var (
 	kindLinkRe = regexp.MustCompile("\\[`([A-Za-z]+)`\\]")
-	actorRowRe = regexp.MustCompile("^\\| \\[`([a-z-]+)`\\]\\(#[a-z-]+\\) \\| (\\w+) \\| (\\d+) / (\\d+) \\| (\\d+) / (\\d+) \\| (\\d+) / (\\d+) \\| (\\d+) / (\\d+) \\| \\d+ \\|$")
+	actorRowRe = regexp.MustCompile("^\\| \\[`([a-z-]+)`\\]\\(#[a-z-]+\\) \\| ([a-z ]+) \\| (\\d+) / (\\d+) \\| (\\d+) / (\\d+) \\| (\\d+) / (\\d+) \\| (\\d+) / (\\d+) \\| \\d+ \\|$")
 	sectionRe  = regexp.MustCompile("^### `([a-z-]+)`$")
 )
 
@@ -186,26 +201,35 @@ func createOnlyKinds(t *testing.T) map[string]bool {
 	return out
 }
 
-func adapterContracts(t *testing.T) map[string][]string {
+// registryActors reads actors.yaml as the page does: the actors and audit's pieces, by their names in the docs. The first map
+// gives each one's integration contracts; the second maps the actors that run under another name to that executable.
+func registryActors(t *testing.T) (map[string][]string, map[string]string) {
 	t.Helper()
 	b, err := os.ReadFile("../../../docs/architecture/actors.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
+	type row struct {
+		Name       string   `yaml:"name"`
+		Executable string   `yaml:"executable"`
+		Contracts  []string `yaml:"contracts"`
+	}
 	var doc struct {
-		Actors []struct {
-			Name      string   `yaml:"name"`
-			Contracts []string `yaml:"contracts"`
-		} `yaml:"actors"`
+		Actors      []row `yaml:"actors"`
+		AuditPieces []row `yaml:"audit_pieces"`
 	}
 	if err := yaml.Unmarshal(b, &doc); err != nil {
 		t.Fatal(err)
 	}
-	out := map[string][]string{}
-	for _, a := range doc.Actors {
-		out[a.Name] = a.Contracts
+	contracts := map[string][]string{}
+	executables := map[string]string{}
+	for _, a := range append(doc.Actors, doc.AuditPieces...) {
+		contracts[a.Name] = a.Contracts
+		if a.Executable != "" {
+			executables[a.Name] = a.Executable
+		}
 	}
-	return out
+	return contracts, executables
 }
 
 func parseRulesPage(t *testing.T, page string, contracts map[string][]string) *rulesPage {

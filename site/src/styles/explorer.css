@@ -1,4 +1,4 @@
-/* Shared by the two explorers. Everything uses Starlight's colour variables, so
+/* Shared by the explorer pages. Everything uses Starlight's colour variables, so
    both themes work. */
 :root { --ex-gap: 1rem; --ex-font: var(--sl-font, system-ui, -apple-system, 'Segoe UI', sans-serif); --ex-mono: var(--sl-font-mono, ui-monospace, Menlo, Consolas, monospace); }
 

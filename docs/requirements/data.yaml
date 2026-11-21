@@ -509,7 +509,8 @@ requirements:
     rationale: "A link to a missing template would carry authority that no reviewer saw (ADR 0004)."
     level: MUST
     source: design-decision
-    status: planned
+    status: partial
+    gap: proved-in-atoom
     milestone: parity
     runtimes: all
     actors: [store]
@@ -727,7 +728,7 @@ requirements:
     source: design-decision
     status: partial
     milestone: core
-    gap: partly-built
+    gap: proved-in-atoom
     runtimes: all
     actors: [store]
     standards: []
@@ -1422,7 +1423,7 @@ requirements:
     source: design-decision
     status: partial
     milestone: core
-    gap: partly-built
+    gap: proved-in-atoom
     runtimes: all
     actors: [store]
     standards: []
@@ -1784,7 +1785,7 @@ requirements:
     source: design-decision
     status: partial
     milestone: core
-    gap: partly-built
+    gap: proved-in-atoom
     runtimes: all
     actors: [store]
     standards: []
@@ -1929,7 +1930,8 @@ requirements:
     rationale: "The Kubernetes installation keeps its state in PostgreSQL through CloudNativePG, not in DynamoDB (ADR 0005, the amendment of 2026-11-18, decision K2 B)."
     level: MUST
     source: design-decision
-    status: planned
+    status: partial
+    gap: proved-in-atoom
     milestone: core
     runtimes: [kubernetes]
     standards: []
@@ -1942,7 +1944,8 @@ requirements:
     rationale: "Watch, the resume point, every exporter and every reader depend on the change log (ADR 0005, Watch and the resume point; the amendment of 2026-11-18)."
     level: MUST
     source: design-decision
-    status: planned
+    status: partial
+    gap: proved-in-atoom
     milestone: core
     runtimes: [kubernetes]
     standards: []

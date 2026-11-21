@@ -22,7 +22,9 @@ const { error, load, adr, adrHref, heading } = g;
 const kreg = load(KINDS);
 const areg = load(ACTORS);
 const kinds = Array.isArray(kreg?.kinds) ? kreg.kinds : [];
-const actors = Array.isArray(areg?.actors) ? areg.actors : [];
+// The actors, then audit's pieces that still run from this repository: both have rules.
+const actors = [...(Array.isArray(areg?.actors) ? areg.actors : []), ...(Array.isArray(areg?.audit_pieces) ? areg.audit_pieces : [])];
+const familyText = (a) => (a.family === 'audit' ? 'audit piece' : a.family);
 const platform = Array.isArray(areg?.platform) ? areg.platform : [];
 const portDefs = areg?.ports ?? {};
 const names = new Set(actors.map((a) => a.name));
@@ -93,7 +95,7 @@ function render() {
   out.push(...table(['Verb', 'Given to', 'What it allows'], [
     ['create, update, delete', 'the kind\'s one writer', 'Changing the kind\'s items. The store also checks the schema, the version, the bounds and the links on a write.'],
     ['get, list', 'each reader', 'Reading items. A sealed value opens only at key@, with a grant sealed for its tenant.'],
-    ['watch', 'each watcher: a reader that the kind names in `watched_by`, exporter@ for an exportable kind, and every reader of a config kind', 'A change feed from a resume point. A kind that nobody watches, such as an allowance or a rate window, has none.'],
+    ['watch', 'each watcher: a reader that the kind names in `watched_by`, exporter@ for an exportable kind, and every reader of a config kind', 'A change feed from a resume point. A kind that nobody watches, such as a rate window, has none.'],
   ]), '');
   out.push('A config or secret kind has no actor as its writer: infrastructure as code or the publishing pipeline writes it. The store reads the config bounds of a layered kind itself.', '');
 
@@ -119,7 +121,7 @@ function render() {
       return `${w} / ${r}`;
     };
     const touched = new Set(mine.map((r) => r.kind.name)).size;
-    return [`[${code(a.name)}](#${a.name})`, a.family, ...CLASSES.map(cell), `${nKinds - touched}`];
+    return [`[${code(a.name)}](#${a.name})`, familyText(a), ...CLASSES.map(cell), `${nKinds - touched}`];
   });
   out.push(...table(['Actor', 'Family', 'Config (w / r)', 'Secret (w / r)', 'Durable (w / r)', 'Temp (w / r)', 'Denied kinds'], rows), '');
   out.push(`The full deny matrix is generated from the same registries and tested: for every pair of actors, X is denied Y's kinds, keys and sockets ([registries generate the enforcement](${adrHref('0002', 'registries-generate-the-enforcement')})).`, '');
@@ -133,7 +135,7 @@ function render() {
       for (const r of mine.filter((x) => x.verb === verb)) m.set(r.kind.name, r.qual);
       return [...m].map(([n, q]) => `${kindLink(n)}${q ? ` (${md(q)})` : ''}`);
     };
-    out.push(heading(3, code(a.name)), '', `${a.family} family. ${a.holder ? 'A credential holder.' : 'Holds no credential at rest.'}`, '');
+    out.push(heading(3, code(a.name)), '', `${a.family === 'audit' ? "A piece of audit, not a family of sluis." : `${a.family} family.`} ${a.holder ? 'A credential holder.' : 'Holds no credential at rest.'}`, '');
     out.push(`- **Writes** (create, update, delete): ${list(lines('write'))}.`);
     out.push(`- **Reads** (get, list): ${list(lines('read'))}.`);
     out.push(`- **Watches** (change feed): ${list(lines('watch'))}.`, '');

@@ -1,11 +1,12 @@
 # sluis requirements catalogue: index. Declares the vocabularies and the areas.
 # One file per area sits beside this file (<area>.yaml, lower case). Ids are stable and never reused.
 # No person, company, estate or ticket names appear in these files; the site lint enforces it.
-# An area with `retired: true` has only withdrawn records: it keeps its file and its ids, and the site leaves it out of the area lists.
+# An area with `retired: true` has only withdrawn records. Its file sits in archive/, it keeps its ids, and the site leaves it out of the area lists.
+# An area with live and withdrawn records may name an `archive` file (archive/<area>.yaml): the withdrawn rows are moved there and stay resolvable by id.
 schema: 1
 catalogue:
   title: "sluis requirements"
-  checked: "2026-11-18"
+  checked: "2026-11-21"
   vocabulary:
     level: [MUST, SHOULD, MAY]
     source: [v1-parity, stakeholder-ciam, stakeholder-integrator, security-review, design-decision, standard]
@@ -17,7 +18,7 @@ catalogue:
     AUTHN: {title: "Authentication and authorization endpoint", file: authn.yaml}
     TOKEN: {title: "Tokens and token endpoint", file: token.yaml}
     EXCH: {title: "Token exchange", file: exch.yaml}
-    SESS: {title: "Sessions, refresh and logout", file: sess.yaml}
+    SESS: {title: "Sign-in sessions, refresh and logout", file: sess.yaml}
     FED: {title: "Federation (sluis as a relying party)", file: fed.yaml}
     CLIENT: {title: "Clients and client authentication", file: client.yaml}
     WORKLOAD: {title: "Workload identity", file: workload.yaml}
@@ -26,10 +27,10 @@ catalogue:
     PKI: {title: "Internal PKI: intermediates and certificates", file: pki.yaml}
     SSH: {title: "SSH certificates", file: ssh.yaml}
     DB: {title: "Database access", file: db.yaml}
-    AUDIT: {title: "Audit log", file: audit.yaml}
-    QUOTA: {title: "Quota and metering", file: quota.yaml}
+    AUDIT: {title: "Audit: what sluis emits and embeds", file: audit.yaml, archive: archive/audit.yaml}
+    QUOTA: {title: "Limits", file: quota.yaml, archive: archive/quota.yaml}
     DATA: {title: "The data model and the store", file: data.yaml}
-    SECRETS: {title: "Secrets", file: secrets.yaml, retired: true}
+    SECRETS: {title: "Secrets", file: archive/secrets.yaml, retired: true}
     EXPORT: {title: "Export", file: export.yaml}
     BACKUP: {title: "Backup and restore", file: backup.yaml}
     OBS: {title: "Observability", file: obs.yaml}
@@ -43,14 +44,14 @@ catalogue:
     SUPPLY: {title: "Release and supply chain", file: supply.yaml}
     TEST: {title: "Conformance and test strategy", file: test.yaml}
     CIAM: {title: "Customer account hosting: scope and boundaries", file: ciam.yaml}
-    ACCT: {title: "Customer accounts", file: acct.yaml}
+    ACCT: {title: "Customer accounts", file: acct.yaml, archive: archive/acct.yaml}
     SUBJ: {title: "Subjects and sectors", file: subj.yaml}
-    VAULT: {title: "Fallback credential vault", file: vault.yaml, retired: true}
-    REG: {title: "Registration, recovery and lifecycle", file: reg.yaml}
-    KV: {title: "KV secrets (a building block of the core)", file: kv.yaml}
+    VAULT: {title: "Fallback credential vault", file: archive/vault.yaml, retired: true}
+    REG: {title: "Registration, recovery and lifecycle", file: reg.yaml, archive: archive/reg.yaml}
+    KV: {title: "KV secrets (part of the core)", file: kv.yaml}
   # The slug a record names in `milestone:` -> the name of the option of the board's Product milestone field. The only place
   # that holds the names: a renamed option is one edit here.
-  # The order is the order of the roadmap phases (roadmap.md, "Phases"): the status page lists the options in the order of the board.
+  # The order is the order of the roadmap milestones (roadmap.md): the status page lists the options in the order of the board.
   milestones:
     core: "Core"
     customer-identity: "Customer identity"
@@ -64,4 +65,4 @@ catalogue:
     attestation-missing: "Its verification includes a manual check, and no attestation records that check yet."
     external-suite-not-run: "The external conformance suite or vector set named in its verification does not run in CI yet; the tests that do run are tagged as evidence."
     smoke-not-in-ci: "Covered only by a smoke program that does not run in CI."
-    proved-in-atoom: "The behaviour is atoom's: atoom's conformance kit proves it for the driver in atoom's CI (decision D4 A of atoom's extraction), and sluis runs only a smoke test of its host. The proof is in truvity/atoom, not in a test of this repository."
+    proved-in-atoom: "The behaviour is atoom's: atoom's conformance kit for the port, or its kit for the block (a block that is not built yet is planned), proves it in atoom's CI, and sluis runs only a smoke test of its host. The proof is in truvity/atoom, not in a test of this repository."

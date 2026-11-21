@@ -74,7 +74,7 @@
         "gap": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "description": "Key into catalogue.gaps. Required for an open or partial record." },
         "manual_reason": { "type": "string", "minLength": 12, "maxLength": 300, "description": "Required for a MUST whose verification is manual only." },
         "superseded_by": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/reqId" }, "description": "A withdrawn record needs this or moved_to." },
-        "moved_to": { "type": "string", "pattern": "^https://github\\.com/truvity/ritueel/issues/[0-9]+$", "description": "A withdrawn record that moved to another product: the issue there that carries it. A withdrawn record needs this or superseded_by." }
+        "moved_to": { "type": "string", "pattern": "^https://github\\.com/truvity/(ritueel/issues/[0-9]+|audit/blob/master/docs/requirements/audit\\.yaml(#REQ-AUDIT-[0-9]{3})?)$", "description": "A withdrawn record that moved to another product: the ritueel issue that carries it, or the requirements file of audit (optionally with the id of the row there). A withdrawn record needs this or superseded_by." }
       }
     },
     "attestation": {
@@ -143,8 +143,9 @@
                 "required": ["title", "file"],
                 "properties": {
                   "title": { "type": "string", "minLength": 3 },
-                  "file": { "type": "string", "pattern": "^[a-z0-9]+\\.yaml$" },
-                  "retired": { "type": "boolean", "description": "true when every record of the area is withdrawn: the area keeps its file and ids and the site leaves it out of the area lists." }
+                  "file": { "type": "string", "pattern": "^(archive/)?[a-z0-9]+\\.yaml$", "description": "The file of the area, relative to docs/requirements/: <area>.yaml, or archive/<area>.yaml for a retired area." },
+                  "archive": { "type": "string", "pattern": "^archive/[a-z0-9]+\\.yaml$", "description": "Optional: the file that holds the withdrawn rows of an area that also has live rows. Same shape as an area file; every row in it is withdrawn." },
+                  "retired": { "type": "boolean", "description": "true when every record of the area is withdrawn: the area's file sits in archive/, its ids keep resolving and the site leaves it out of the area lists." }
                 }
               }
             },

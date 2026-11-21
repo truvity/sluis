@@ -97,7 +97,7 @@ export const principles: { n: number; name: string; href: string; who: 'shared' 
   { n: 2, name: 'Trust is layered, and redundancy is not a defence against compromise', href: '#2-trust-is-layered-and-redundancy-is-not-a-defence-against-compromise', who: 'shared' },
   { n: 3, name: 'Keys are shared, rotated and given to tenants by rule', href: '#3-keys-are-shared-rotated-and-given-to-tenants-by-rule', who: 'part' },
   { n: 4, name: 'Verify; never trust a claim', href: '#4-verify-never-trust-a-claim', who: 'shared' },
-  { n: 5, name: 'Open standards, as their consumers implement them', href: '#5-open-standards-as-their-consumers-implement-them', who: 'part' },
+  { n: 5, name: 'Open standards, as their consumers implement them', href: '#5-open-standards-as-their-consumers-implement-them', who: 'shared' },
   { n: 6, name: 'Generic products, joined by a contract', href: '#6-generic-products-joined-by-a-contract', who: 'shared' },
   { n: 7, name: 'A person only where a person adds safety', href: '#7-a-person-only-where-a-person-adds-safety', who: 'shared' },
   { n: 8, name: 'Nothing without a consumer', href: '#8-nothing-without-a-consumer', who: 'shared' },
@@ -133,7 +133,7 @@ export const band = {
     text: 'For certificates and SSH access, few small setups can say where the root key lives and who can use it.',
     chain: [
       { name: 'ritueel', role: 'the root of custody' },
-      { name: 'sluis', role: 'identity, tokens, audit, later certificates' },
+      { name: 'sluis', role: 'identity, tokens, later certificates' },
       { name: 'Your systems', role: 'cloud, git, chat, CI, databases, SSH' },
     ],
   },

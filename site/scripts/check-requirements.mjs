@@ -22,15 +22,20 @@
 //   L17 an out-of-scope record is a MUST NOT or a MAY and has a verification
 //   L18 `tests`, when a record lists it, holds repository paths, each a file that exists inside the repository and
 //       that names the record's id. It is an index for the reader; what counts as evidence is L21
-//   L19 an area with `retired: true` in index.yaml has only withdrawn records; it keeps its file and its ids
+//   L19 an area with `retired: true` in index.yaml has only withdrawn records; its file is archive/<area>.yaml and it keeps
+//       its ids. A retired area's file is archive/<area>.yaml (a warning if it is not). An `archive` file of an area
+//       (archive/<area>.yaml) holds only withdrawn records. A file under archive/ is declared by an area, as its `file`
+//       (retired) or its `archive`; a live area's `file` is <area>.yaml
 //   L20 `milestone` names a key of catalogue.milestones (index.yaml); a live record without one is an error
 //       (MILESTONE_REQUIRED is true; --require-milestone forces it on). With a board
 //       (--board file, or GH_TOKEN/GITHUB_TOKEN to read it) a record whose issues are none of them in its milestone
 //       is a warning
 //   L21 the evidence of a status: a `done` record needs evidence (a test that carries `verifies: REQ-...`, or an
 //       attestation, see site/scripts/collect-evidence.mjs); evidence on a planned, open or withdrawn record is a
-//       warning naming it; a tag that names an unknown id is an error
-//   L22 attestations.yaml: each entry names a live record that has a manual verification, with who, when and what
+//       warning naming it (not for a row that moved to audit: its tests stay here until the code moves); a tag that
+//       names an unknown id is an error
+//   L22 attestations.yaml: each entry names a live record (or a row that moved to audit) that has a manual verification,
+//       with who, when and what
 //   ISS a planned or partial record links the issues that deliver it (one warning with the count;
 //       the summary line gives the count per area). The schema checks the numbers themselves.
 //   COV the coverage figures are printed in the summary: the share of requirements (not withdrawn), and of MUSTs,
@@ -85,6 +90,10 @@ const denied = new Set(); // one error per record or file
 console.log(PRIVATE ? 'check-requirements: private deny-list loaded' : 'private deny-list not available, skipped');
 const TICKET = /(?<!REQ-)\b([A-Z][A-Z0-9]{1,9})-(\d{1,6})\b/g;
 const URLISH = /https?:\/\/(?![a-z0-9.-]*\.example\b)/i;
+
+// A row that moved to audit keeps its tests and its attestations here until the code moves too, so evidence on it is
+// no sign of a stale status and is not an error.
+const movedToAudit = (r) => r.status === 'withdrawn' && /^https:\/\/github\.com\/truvity\/audit\//.test(r.moved_to ?? '');
 
 const errors = [];
 const warnings = [];
@@ -142,11 +151,15 @@ function validate(node, value, path, out) {
 }
 
 // ---- load
-const files = new Map();
+const files = new Map(); // path relative to the catalogue directory -> document
 const index = load('index.yaml');
 files.set('index.yaml', index);
 for (const name of readdirSync(dir).filter((f) => f.endsWith('.yaml')).sort()) {
   if (name !== 'index.yaml' && name !== 'standards.yaml' && name !== 'attestations.yaml') files.set(name, load(name));
+}
+// archive/: the files of retired areas and the withdrawn rows of areas that have live rows too
+if (existsSync(join(dir, 'archive'))) {
+  for (const name of readdirSync(join(dir, 'archive')).filter((f) => f.endsWith('.yaml')).sort()) files.set(`archive/${name}`, load(`archive/${name}`));
 }
 // The attestations are optional; a file that exists but cannot be parsed is an error, never an empty list.
 let attestationsDoc = null;
@@ -185,12 +198,21 @@ for (const [key, def] of [['level', 'level'], ['source', 'source'], ['status', '
 // L2
 const reqs = [];
 const byId = new Map();
-const declared = new Set(Object.values(cat.areas).map((a) => a.file));
+const declared = new Set(Object.values(cat.areas).flatMap((a) => [a.file, ...(a.archive ? [a.archive] : [])]));
 for (const [code, a] of Object.entries(cat.areas)) {
-  if (a.file !== `${code.toLowerCase()}.yaml`) E(`L2 area ${code}: its file must be ${code.toLowerCase()}.yaml`);
-  const doc = files.get(a.file);
-  if (!doc) E(`L2 area ${code}: file ${a.file} is missing`);
-  else if (doc.area !== code) E(`L2 ${a.file}: area is ${doc.area}, expected ${code}`);
+  const lower = code.toLowerCase();
+  // a live area has <area>.yaml; a retired area has all its rows in archive/<area>.yaml; a live area may add an archive file
+  if (a.retired) {
+    if (a.file !== `archive/${lower}.yaml` && a.file !== `${lower}.yaml`) E(`L2 area ${code}: its file must be archive/${lower}.yaml (the area is retired)`);
+    else if (a.file === `${lower}.yaml`) W(`L19 area ${code}: retired, so its file belongs in archive/${lower}.yaml`);
+  } else if (a.file !== `${lower}.yaml`) E(`L2 area ${code}: its file must be ${lower}.yaml`);
+  if (a.archive && a.archive !== `archive/${lower}.yaml`) E(`L2 area ${code}: its archive file must be archive/${lower}.yaml`);
+  if (a.archive && a.retired) E(`L19 area ${code}: a retired area has its file in archive/ and takes no archive file`);
+  for (const f of [a.file, a.archive].filter(Boolean)) {
+    const doc = files.get(f);
+    if (!doc) E(`L2 area ${code}: file ${f} is missing`);
+    else if (doc.area !== code) E(`L2 ${f}: area is ${doc.area}, expected ${code}`);
+  }
 }
 for (const [name, doc] of files) {
   if (name === 'index.yaml') continue;
@@ -204,11 +226,12 @@ for (const [name, doc] of files) {
   }
 }
 
-// L19: a retired area keeps its file and its ids and has only withdrawn records
+// L19: a retired area has only withdrawn records, and so has the archive file of any area
 for (const [code, a] of Object.entries(cat.areas)) {
-  if (!a.retired) continue;
-  const live = (files.get(a.file)?.requirements ?? []).filter((r) => r.status !== 'withdrawn');
-  if (live.length) E(`L19 area ${code}: retired, but ${live.length} record(s) are not withdrawn (${live.slice(0, 3).map((r) => r.id).join(', ')})`);
+  for (const f of a.retired ? [a.file] : a.archive ? [a.archive] : []) {
+    const live = (files.get(f)?.requirements ?? []).filter((r) => r.status !== 'withdrawn');
+    if (live.length) E(`L19 ${f}: ${a.retired ? 'the area is retired' : 'an archive file'}, but ${live.length} record(s) are not withdrawn (${live.slice(0, 3).map((r) => r.id).join(', ')})`);
+  }
 }
 
 // ---- per-record rules
@@ -365,7 +388,7 @@ for (const [i, a] of (attestationsDoc?.attestations ?? []).entries()) {
   const where = `L22 attestations.yaml entry ${i + 1} (${a.req})`;
   const r = byId.get(a.req);
   if (!r) { E(`${where}: no such requirement`); continue; }
-  if (r.status === 'withdrawn') E(`${where}: the requirement is withdrawn`);
+  if (r.status === 'withdrawn' && !movedToAudit(r)) E(`${where}: the requirement is withdrawn`);
   if (!r.verification.some((v) => v.kind === 'manual')) E(`${where}: the requirement has no manual verification, so it takes no attestation`);
   if (a.on > new Date().toISOString().slice(0, 10)) E(`${where}: the date ${a.on} is in the future`);
   for (const text of [a.checked]) {
@@ -390,7 +413,7 @@ for (const r of reqs) {
     if ([...kinds].some((k) => k !== 'manual') && tagged === 0) E(`L21 ${r.id}: a done record has no evidence for its ${[...kinds].filter((k) => k !== 'manual').join(', ')} verification: no test carries "verifies: ${r.id}"`);
     if (kinds.has('manual') && !attested.has(r.id)) E(`L21 ${r.id}: a done record has no evidence for its manual verification: no attestation names it`);
   }
-  if (n > 0 && ['planned', 'open', 'withdrawn'].includes(r.status)) W(`L21 ${r.id}: ${n} piece(s) of evidence, but the status is ${r.status}; set it to done or partial`);
+  if (n > 0 && ['planned', 'open', 'withdrawn'].includes(r.status) && !movedToAudit(r)) W(`L21 ${r.id}: ${n} piece(s) of evidence, but the status is ${r.status}; set it to done or partial`);
 }
 console.log(`check-requirements: evidence for ${[...evidence.keys()].filter((k) => byId.has(k)).length} requirements (${scan.tests} tagged tests in ${scan.files} files, ${attestationsDoc?.attestations?.length ?? 0} attestations)`);
 
@@ -433,6 +456,6 @@ function finish(n) {
     console.error('check-requirements: no requirement was checked; an empty sweep proves nothing');
     process.exit(1);
   }
-  console.log(`check-requirements: ${n} requirements in ${files.size - 1} areas, ${warnings.length} warnings, no errors${perArea}`);
+  console.log(`check-requirements: ${n} requirements in ${Object.keys(index.catalogue.areas).length} areas, ${warnings.length} warnings, no errors${perArea}`);
   process.exit(0);
 }

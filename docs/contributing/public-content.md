@@ -10,7 +10,7 @@ This repository is public, and so is everything around it: code, docs, the CHANG
 
 ## Use example names
 
-Nothing names a real organisation account, hostname, cluster, ticket, secret path, customer, private installation or person other than the maintainer. Write the example instead:
+Nothing names a real organisation account, hostname, cluster, ticket, secret path, customer, private installation, private repository or person other than the maintainer. Write the example instead:
 
 | Instead of a real | Write |
 |---|---|
@@ -20,6 +20,8 @@ Nothing names a real organisation account, hostname, cluster, ticket, secret pat
 | cloud account id | `123456789012` |
 | ticket or issue key of an internal tracker | nothing; link a public issue of this repository instead |
 | person | a role: "the operator", "an administrator", "the relying party" |
+| private repository, or a record number of a private project | nothing; describe the behaviour, or link a public page |
+| how an operator's own estate is deployed (which accounts, boards or clusters run what) | nothing; say what the product does and show an example installation |
 
 Internal reasoning that needs real names stays internal; only the final, generic text is public ([GOVERNANCE.md](https://github.com/truvity/sluis/blob/main/GOVERNANCE.md), "From internal reasoning to a public ADR").
 

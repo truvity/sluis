@@ -6,7 +6,7 @@ sidebar:
   order: 1
 ---
 
-**No release artifact is signed in the core or in v1 parity** (the maintainer decided on 2026-11-07, [0013](/decisions/0013-release-train-packaging-and-distribution/#signing-and-checksums)). A release carries checksums and SBOMs, and the maintainer signs each tag by hand. The signing of release artifacts, keyless or OpenPGP, is in Backlog with the staff key and GPG work ([Roadmap](/roadmap/#later)). The rest of this page is the design for when it returns, and a row marked Backlog is made by no release yet.
+**No release artifact is signed** ([0013](/decisions/0013-release-train-packaging-and-distribution/#signing-and-checksums)). A release carries checksums and SBOMs, and its tag is signed by hand. The signing of release artifacts, keyless or OpenPGP, is in Backlog with the staff key and GPG work ([Roadmap](/roadmap/#later)). The rest of this page is the design for when it returns, and a row marked Backlog is made by no release yet.
 
 The design: releases carry GitHub build-provenance attestations and keyless cosign signatures on images, made by the CI build with no stored key. Nothing is signed with a sluis key or with OpenPGP until [ritueel](https://ritueel.id) has held its first ceremony and its drill, because a signature that a later root does not vouch for teaches users to trust a key that is then thrown away. From then on, releases are signed through sluis's own signing API with a release subkey held in a cloud key service: detached signatures first, then signed apt and dnf metadata ([0024](/decisions/0024-root-custody-and-the-signing-api/#signed-releases)).
 
@@ -18,13 +18,13 @@ The design: releases carry GitHub build-provenance attestations and keyless cosi
 | Backlog | GitHub build provenance attestations for every artifact and image digest, and SBOM attestations bound to them | `gh attestation verify` |
 | The first release | An SPDX JSON SBOM per archive and per image, made by syft | Any SPDX reader |
 | Backlog | A keyless cosign signature on each image digest | `cosign verify` |
-| The first release | A git tag for the release, signed with the maintainer's own OpenPGP key until the signing API signs tags | `git verify-tag` |
+| The first release | A git tag for the release, signed with the signer's own OpenPGP key until the signing API signs tags | `git verify-tag` |
 | Backlog, once the roots exist | `SHA256SUMS.asc`, a detached ASCII-armoured OpenPGP signature over `SHA256SUMS` | `gpgv` or `sqv` with the release keyring |
 | Backlog | Signed apt metadata (`InRelease`, `Release.gpg`) and dnf metadata (`repomd.xml.asc`) ([#1074](https://github.com/truvity/sluis/issues/1074)) | apt with `signed-by`, dnf with `repo_gpgcheck=1` |
 | Later | A header signature on each rpm package | dnf with `gpgcheck=1` |
 | Later | The release tag signed by the release subkey, through a stand-in for `gpg` that git calls ([#1075](https://github.com/truvity/sluis/issues/1075)) | `git verify-tag` with the release keyring |
 
-R2 serves the files and GitHub Releases is the immutable record; when they differ, the release is right. A provenance attestation says which workflow built a file. It is GitHub's statement, not a signature by a sluis key.
+The distribution site serves the same files, and GitHub Releases is the immutable record; when they differ, the release is right. The drivers' packages, tarballs and images are atoom's and are verified against atoom's own release ([atoom release](https://github.com/truvity/atoom/blob/master/docs/release.md)). A provenance attestation says which workflow built a file. It is GitHub's statement, not a signature by a sluis key.
 
 Sigstore says how a file was built, not who vouches for it: its trust rests on GitHub's OIDC identity and the public Sigstore instance, so it does not replace the OpenPGP release key ([0013](/decisions/0013-release-train-packaging-and-distribution/#signing-and-checksums)). GHCR has no OCI referrers API, so the attestations and signatures of an image are found through the fallback tag `sha256-<digest>`; a registry mirror must copy those tags too.
 
@@ -78,7 +78,7 @@ A Helm chart pins its images by digest, so verifying the chart and installing it
 
 ## How a release is verified
 
-This is the rule for when release provenance exists (Backlog); until then a verifier checks the checksums and the tag that the maintainer signed. A verifier that accepts a sluis release requires both of these, and either one alone is not enough ([0042](/decisions/0042-sluis-syncs-company-issued-openpgp-keys-to-staff-github-accounts/)):
+This is the rule for when release provenance exists (Backlog); until then a verifier checks the checksums and the signed tag. A verifier that accepts a sluis release requires both of these, and either one alone is not enough ([0042](/decisions/0042-sluis-syncs-company-issued-openpgp-keys-to-staff-github-accounts/)):
 
 1. **The signed release tag.** `git verify-tag` passes against the signer's key. A tag says who vouches for the release.
 2. **The build provenance that names the tag's commit.** `gh attestation verify` passes for the artifact, and the commit it names is the commit the tag points to (`git rev-parse <tag>^{commit}`). The provenance says which workflow built the file from that commit.
@@ -88,7 +88,7 @@ This is the rule for when release provenance exists (Backlog); until then a veri
 | The signed tag | A tag made by someone who is not the signer | A build of a different commit under the tag's name |
 | The provenance that names the tag's commit | A file built by another workflow or from another commit | Who vouches for the commit: a build of an unsigned commit has valid provenance |
 
-- **Tags are signed by the release subkey once the signing API signs them.** That is the stand-in for `gpg` that git calls, the later stage of [0024](/decisions/0024-root-custody-and-the-signing-api/#the-signing-api) ([#1075](https://github.com/truvity/sluis/issues/1075)). Until it exists, the maintainer signs the tag with their own key, so the tag does not yet carry the trust of the release subkey. That is why the provenance is required beside it, and why a tag signed with the maintainer's key is replaced by one signed by the subkey when the gate exists.
+- **Tags are signed by the release subkey once the signing API signs them.** That is the stand-in for `gpg` that git calls, the later stage of [0024](/decisions/0024-root-custody-and-the-signing-api/#the-signing-api) ([#1075](https://github.com/truvity/sluis/issues/1075)). Until it exists, the tag is signed with the signer's own key, so it does not yet carry the trust of the release subkey. That is why the provenance is required beside it, and why that tag is replaced by one signed by the subkey when the gate exists.
 - **The signature of the tag and the signature of the files are different.** The tag covers the commit. The files are covered by `SHA256SUMS` and its signature once the roots exist ([A release, once it is signed](#a-release-once-it-is-signed)).
 - **A pull request cannot make either.** The signing API refuses to sign for a workload that comes from a pull request, and a workflow lint refuses `id-token: write` in any job that a pull-request trigger reaches, also through `workflow_call` ([REQ-SUPPLY-044](/requirements/supply/#REQ-SUPPLY-044)).
 
@@ -120,16 +120,7 @@ Measured on 2026-10-29 and 2026-10-31 with `gpg` and `gpgv` 2.2.27 to 2.4.8, `sq
 
 ## How CI uploads
 
-CI has no static upload key and no release signing key.
-
-1. The release workflow gets a GitHub OIDC token.
-2. It exchanges that token with sluis.
-3. sluis mints a short-lived Cloudflare R2 token scoped to the distribution bucket.
-4. CI uploads the files with that token, and the token expires.
-
-Only the workflow identity that the policy names can obtain the token, so a fork or a pull request can't publish.
-
-This path needs the GitHub add-on (the `github-oidc` verifier) and the Cloudflare add-on (the R2 minter on the shared Cloudflare client), and neither exists yet. Until they do, CI publishes to GitHub Releases and GHCR with the workflow's own token.
+CI has no static upload key and no release signing key. Planned: the release workflow exchanges its GitHub OIDC token with sluis for a short-lived upload token for the distribution site, so only the workflow identity that the policy names can publish, and a fork or a pull request cannot. That needs two add-ons that do not exist yet, the GitHub add-on (the `github-oidc` verifier) and the Cloudflare add-on. Until then CI publishes to GitHub Releases and GHCR with the workflow's own token ([Packages](/distribution/packages/#releasing)).
 
 ## What a check does not prove
 

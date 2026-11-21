@@ -7,6 +7,10 @@
 # card slot plan and the generated reference page are made from it, together with
 # docs/architecture/actors.yaml (who uses what) and docs/architecture/kinds.yaml (DataKeyWrap).
 #
+# The purposes `audit-log`, `audit-log-second`, `evidence` and `witness` are used by audit's pieces, which still
+# run from this repository (`audit_pieces` in actors.yaml). They are declared here until the pieces move to
+# truvity/audit.
+#
 # `tools/checks/registries.mjs` (`just check-registries`) keeps it true: the closed fields below, every
 # algorithm declared, the AWS baseline of one symmetric key, four P-384 keys and the audit log's P-256 key, the slot plan without a
 # collision, exactly one using actor for each signing or key-agreement key, the data key purposes equal
@@ -315,7 +319,7 @@ data_keys:
   tenant:
     data:
       ops: [seal, open]
-      users: [session, console, exchange, policy, signer, ca, ssh-ca, adapter-upstream-oidc, adapter-github, adapter-slack, exporter]
+      users: [signin, console, exchange, policy, signer, ca, ssh-ca, adapter-upstream-oidc, adapter-github, adapter-slack, exporter]
       erased: "tenant exit"
       notes: "Personal and operational data of the tenant."
     pseudonym:
@@ -330,14 +334,14 @@ data_keys:
       notes: "Audit and usage records. Evidence never shares a key with personal data and outlives it."
     chain:
       ops: [seal, open]
-      users: [session, exchange]
+      users: [signin, exchange]
       erased: "tenant exit"
-      notes: "Seals the facts of a session chain (the person's accounts): session seals and opens them, exchange opens them, and no other actor does either. Checked by rule alone, with no grant, once the key exists, because policy needs these facts to decide at a refresh; the tenant's first key is made only under a grant that names the tenant (REQ-KEYS-260). A generation is kept for the longest time to live of a chain (90 days) after it last sealed (ADR 0006)."
+      notes: "Seals the facts of a session chain (the person's accounts): signin seals and opens them, exchange opens them, and no other actor does either. Checked by rule alone, with no grant, once the key exists, because policy needs these facts to decide at a refresh; the tenant's first key is made only under a grant that names the tenant (REQ-KEYS-260). A generation is kept for the longest time to live of a chain (90 days) after it last sealed (ADR 0006)."
     credential:
       ops: [seal, open]
-      users: [session]
+      users: [signin]
       erased: "tenant exit"
-      notes: "Seals the StaffPasskey kind and nothing else: the public key, the counter, the class and the accounts of a passkey. Only session uses it. Checked by rule alone, with no grant, once the tenant has the key (its first key is made only under a grant that names the tenant, REQ-KEYS-260), because a sign-in with a passkey has to open the credential before it knows whose it is, and the decision of policy that a grant comes from needs the person's accounts, which the credential holds. key@ refuses the purpose for any kind but staff-passkey. A generation is kept as long as one of `data` (ADR 0006)."
+      notes: "Seals the StaffPasskey kind and nothing else: the public key, the counter, the class and the accounts of a passkey. Only signin uses it. Checked by rule alone, with no grant, once the tenant has the key (its first key is made only under a grant that names the tenant, REQ-KEYS-260), because a sign-in with a passkey has to open the credential before it knows whose it is, and the decision of policy that a grant comes from needs the person's accounts, which the credential holds. key@ refuses the purpose for any kind but staff-passkey. A generation is kept as long as one of `data` (ADR 0006)."
   boundary:
     grant:
       ops: [seal, open]
@@ -346,12 +350,12 @@ data_keys:
       notes: "Seals the grants policy mints; the actors that carry a grant out open it. A grant is in flight only."
     cookie:
       ops: [seal, open]
-      users: [session]
+      users: [signin]
       erased: never
       notes: "Seals and opens the session cookie and the sign-in cookie, per request, batched."
     mac:
       ops: [mac]
-      users: [entry, session, ca, adapter-github]
+      users: [entry, signin, ca, adapter-github]
       erased: never
       notes: "The key behind key's Mac for link ids and index values: UpstreamLink and UpstreamSession ids, by_subject_hash, the directory indexes."
     data:
