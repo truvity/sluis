@@ -283,8 +283,8 @@ requirements:
       - {kind: conformance-suite, ref: "FAPI2-SP against the local installation, in the pull-request workflow"}
   - id: REQ-TEST-020
     area: TEST
-    statement: "CI MUST run a test realm whose token is exchanged for a sluis token for an infrastructure audience."
-    rationale: "The exchange is proved against a realm of the kind that an installation trusts (ADR 0048)."
+    statement: "CI MUST run a test realm whose token is exchanged for a sluis token for a resource client."
+    rationale: "The exchange is proved against a realm of the kind that an installation trusts (ADR 0048, ADR 0051)."
     level: MUST
     source: design-decision
     status: planned
@@ -293,7 +293,7 @@ requirements:
     standards: []
     issues: [1844]
     verification:
-      - {kind: integration-test, ref: "a Keycloak token is exchanged in CI for an infrastructure audience and the sluis token carries none of customer, org and product, and a token of a second realm is refused"}
+      - {kind: integration-test, ref: "a Keycloak token is exchanged in CI for a resource client and the sluis token carries none of customer, org and product, and a token of a second realm is refused"}
   - id: REQ-TEST-021
     area: TEST
     statement: "CI MUST run a smoke of the usage stream and the limit check against the local installation."

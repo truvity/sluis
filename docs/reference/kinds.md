@@ -117,7 +117,7 @@ Id is &lt;actor>[/&lt;module>]: timeouts, listener, TLS, egress hosts, batch siz
 
 ### `FrontHost`
 
-Login domain and rp_id per client (id: client or `default`); needs DNS and a certificate, so it is Fixed and shared by clients. Clients reference it; a tenant client may pick only from the entries config allows. Sign-in and passkey flows use the one shared sign-in domain.
+Login domain and rp_id per client (id: client or `default`); needs DNS and a certificate, so it is Fixed and shared by clients. Clients reference it; a tenant client is a resource client and has no login domain (ADR 0051). Sign-in and passkey flows use the one shared sign-in domain.
 
 - **Class:** config; scope boundary; plain; profile Fixed; product layer core; serves the work family.
 - **Writer:** `IaC`.
@@ -272,7 +272,7 @@ Which hosts a client metadata document may come from, what it requires, session 
 
 ### `ClientTemplate`
 
-Templates and bounds for tenant clients and tenant connections (rates, redirect hosts, profiles such as FAPI 2.0). store@ reads the bounds to refuse an out-of-bound write.
+Templates and bounds for tenant clients, which are resource clients (rates and the resources a client may name; ADR 0051). store@ reads the bounds to refuse an out-of-bound write.
 
 - **Class:** config; scope boundary; plain; profile Fixed; product layer core; serves the work family.
 - **Writer:** `IaC`.
@@ -679,7 +679,7 @@ A cloud instance identity document accepted once per instance.
 
 ### `TenantClient`
 
-A tenant's client and its settings, inside its template's bounds; written by a tenant admin through the console or by a product.
+A tenant's client and its settings, inside its template's bounds; written by a tenant admin through the console or by a product. A tenant client is a resource client: it signs nobody in (ADR 0051).
 
 - **Class:** durable; scope boundary+tenant; sealed; profile Tenant-adjustable; product layer core; serves the work family.
 - **Writer:** [`exchange`](/reference/actors/#exchange).

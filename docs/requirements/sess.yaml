@@ -578,8 +578,9 @@ requirements:
     rationale: "The upstream holds the long session and sluis keeps the 24-hour cap (ADR 0018)."
     level: MUST
     source: design-decision
-    status: planned
-    milestone: core
+    # Withdrawn 2026-11-21: ADR 0051 (only staff and operators sign in to sluis; a customer token reaches sluis only as the subject of an exchange).
+    status: withdrawn
+    superseded_by: [REQ-CIAM-020]
     runtimes: all
     standards: []
     issues: [793, 916]
@@ -591,8 +592,9 @@ requirements:
     rationale: "sluis hosts no end-user factors (ADR 0018)."
     level: MUST
     source: design-decision
-    status: planned
-    milestone: backlog
+    # Withdrawn 2026-11-21: ADR 0051 (only staff and operators sign in to sluis; a customer token reaches sluis only as the subject of an exchange).
+    status: withdrawn
+    superseded_by: [REQ-CIAM-020]
     runtimes: all
     standards: []
     issues: [916]
@@ -604,8 +606,9 @@ requirements:
     rationale: "sluis hosts no end-user accounts or factors (ADR 0018, REQ-CIAM-017)."
     level: MUST
     source: design-decision
-    status: planned
-    milestone: backlog
+    # Withdrawn 2026-11-21: ADR 0051 (only staff and operators sign in to sluis; a customer token reaches sluis only as the subject of an exchange).
+    status: withdrawn
+    superseded_by: [REQ-CIAM-020]
     runtimes: all
     standards: []
     issues: [916]

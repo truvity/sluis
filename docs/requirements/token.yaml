@@ -909,7 +909,7 @@ requirements:
   - id: REQ-TOKEN-058
     area: TOKEN
     statement: "A sluis token MUST NOT carry any of the claims customer, org and product."
-    rationale: "Products use the group's identity provider's tokens and never a sluis token, so no sluis token claims a customer (ADR 0048)."
+    rationale: "Products use the group's identity provider's tokens and never a sluis token, so no sluis token claims a customer, and policy reads the customer and the product from the subject token instead (ADR 0048, ADR 0051)."
     level: MUST
     source: design-decision
     status: planned

@@ -77,8 +77,8 @@ The records, grouped in reading order. The Layer column is the record's own `Lay
 | [0017](0017-identity-and-sign-in.md) | Each boundary has its own issuer, a token has one audience, staff sign in with passkeys and step-up, and break-glass recovery uses passkeys held in config | core | Accepted |
 | [0019](0019-person-and-upstream-link.md) | A person is tied to an upstream account by issuer and subject claim | core | Accepted |
 | [0020](0020-grant-vocabulary-and-token-claims.md) | Grant names come from a declared vocabulary, and a token carries fixed claims for one audience | core | Accepted; partly superseded by 0048 |
-| [0018](0018-sign-in-sessions.md) | Sign-in sessions have two classes with limits per class, and session chains are temp kinds | core | Accepted |
-| [0021](0021-clients.md) | Clients: installation clients are config, tenant clients are durable, and a self-described client is admitted only from allow-listed hosts | core | Accepted |
+| [0018](0018-sign-in-sessions.md) | Sign-in sessions have two classes with limits per class, and session chains are temp kinds | core | Accepted; partly superseded by 0051 |
+| [0021](0021-clients.md) | Clients: installation clients are config, tenant clients are durable, and a self-described client is admitted only from allow-listed hosts | core | Accepted; partly superseded by 0051 |
 | [0038](0038-fapi-2-profile.md) | FAPI 2.0 is a profile a client declares, with PAR, DPoP, private-key client authentication and its own signing algorithm, and sender constraint is declared per audience | core | Accepted |
 | [0036](0036-volumetric-abuse.md) | Volumetric abuse is stopped at the edge first, and sluis bounds what one client or source can cost with a token bucket kept as a temp kind | core | Accepted |
 | [0022](0022-workload-identity-and-host-enrolment.md) | Workload identity follows SPIFFE, and hosts enrol the same way | core | Accepted |
@@ -88,9 +88,10 @@ The records, grouped in reading order. The Layer column is the record's own `Lay
 
 | ADR | Decision | Layer | Status |
 |-----|----------|-------|--------|
-| [0048](0048-product-apis-take-the-identity-providers-tokens.md) | Customers sign in at the group's identity provider, product APIs take its tokens, and sluis exchanges one only for calls down to infrastructure | core | Accepted; partly superseded by 0050 |
+| [0048](0048-product-apis-take-the-identity-providers-tokens.md) | Customers sign in at the group's identity provider, product APIs take its tokens, and sluis exchanges one only for calls down to infrastructure | core | Accepted; partly superseded by 0051 |
 | [0050](0050-the-exchanged-token-carries-the-context-realms-pairwise-subject.md) | The token of an infrastructure exchange carries the context realm's pairwise subject, and any subject of sluis's own is derived per boundary | core | Accepted |
-| [0032](0032-customer-identity-installations.md) | Customers sign in through the upstream identity provider, realms follow boundaries, and a customer-identity installation serves one boundary whose tenants each have their own data keys | customer identity | Accepted; partly superseded by 0048 |
+| [0051](0051-exchange-targets-resource-clients-only-and-policy-decides-who-gets-what.md) | Exchange targets resource clients only, for every subject alike, and policy decides who gets what; only staff and operators sign in to sluis; the KV core is built now | core | Accepted |
+| [0032](0032-customer-identity-installations.md) | Customers sign in through the upstream identity provider, realms follow boundaries, and a customer-identity installation serves one boundary whose tenants each have their own data keys | customer identity | Accepted; partly superseded by 0051 |
 
 ### Integrations and the console
 
@@ -107,8 +108,8 @@ The records, grouped in reading order. The Layer column is the record's own `Lay
 | [0009](0009-export.md) | exporter@ publishes the kinds marked exportable to destinations outside sluis, never to a secret source | core | Accepted |
 | [0010](0010-backup-and-recovery.md) | A backup is a logical archive of the authoritative kinds through the store; a regional outage is accepted and a drill measures recovery | core | Accepted |
 | [0047](0047-kv-is-a-core-service-of-stores-that-no-tenant-owns.md) | KV is a core service of stores that no tenant owns: policy decides by path, each store has its own data key, and External Secrets reads it through a Vault KV v2 subset | core | Accepted; partly superseded by 0049 |
-| [0049](0049-ssm-stays-the-only-secret-store-for-now.md) | SSM stays the only secret store for now, and External Secrets reading sluis KV is a later option | core | Accepted |
-| [0046](0046-limits-on-the-request-path-and-usage-in-audit.md) | Limits are checked on the request path, balances live in the product, and usage records go to audit | core | Accepted; partly superseded by 0048 |
+| [0049](0049-ssm-stays-the-only-secret-store-for-now.md) | SSM stays the only secret store for now, and External Secrets reading sluis KV is a later option | core | Accepted; partly superseded by 0051 |
+| [0046](0046-limits-on-the-request-path-and-usage-in-audit.md) | Limits are checked on the request path, balances live in the product, and usage records go to audit | core | Accepted; partly superseded by 0051 |
 
 ### Runtimes, release, telemetry and the site
 

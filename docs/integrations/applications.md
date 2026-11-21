@@ -6,7 +6,7 @@ sidebar:
   order: 10
 ---
 
-These are **client profiles**: things that sign in to sluis or ask it for a token, and that sluis never calls. They have no adapter, no connection, no process and no credential of their own. Each is a client entry (and sometimes a resource entry): an `InstallationClient` in config for the installation's own clients, or a `TenantClient` that a tenant admin or a product registers for a tenant, inside the bounds of a client template ([0021](/decisions/0021-clients/#the-client-declaration)). `sluis config check` checks the configuration like the rest.
+These are **client profiles**: things that sign in to sluis or ask it for a token, and that sluis never calls. They have no adapter, no connection, no process and no credential of their own. Each is a client entry (and sometimes a resource entry): an `InstallationClient` in config for the installation's own clients, or a `TenantClient` that a tenant admin or a product registers for a tenant, inside the bounds of a client template ([0021](/decisions/0021-clients/#the-client-declaration)). A tenant client is a resource client and signs nobody in, so the consoles and applications below are installation clients. A console or an application is a **sign-in client**: a token for it comes from sign-in only and never from an exchange, so no subject gets one by exchange ([0051](/decisions/0051-exchange-targets-resource-clients-only-and-policy-decides-who-gets-what/)). `sluis config check` checks the configuration like the rest.
 
 ## What it's for
 

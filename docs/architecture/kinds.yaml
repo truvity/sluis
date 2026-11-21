@@ -242,7 +242,7 @@ kinds:
     readers: [entry, signin, signer, console]
     exportable: no
     backed_up: no
-    notes: "Login domain and rp_id per client (id: client or `default`); needs DNS and a certificate, so it is Fixed and shared by clients. Clients reference it; a tenant client may pick only from the entries config allows. Sign-in and passkey flows use the one shared sign-in domain."
+    notes: "Login domain and rp_id per client (id: client or `default`); needs DNS and a certificate, so it is Fixed and shared by clients. Clients reference it; a tenant client is a resource client and has no login domain (ADR 0051). Sign-in and passkey flows use the one shared sign-in domain."
 
   - name: UsageEmitter
     serves: audit
@@ -447,7 +447,7 @@ kinds:
     readers: [exchange, console]
     exportable: no
     backed_up: no
-    notes: "Templates and bounds for tenant clients and tenant connections (rates, redirect hosts, profiles such as FAPI 2.0). store@ reads the bounds to refuse an out-of-bound write."
+    notes: "Templates and bounds for tenant clients, which are resource clients (rates and the resources a client may name; ADR 0051). store@ reads the bounds to refuse an out-of-bound write."
 
   - name: InstallationClient
     serves: work
@@ -926,7 +926,7 @@ kinds:
     exportable: no
     backed_up: yes
     indexes: [by_client_id]
-    notes: "A tenant's client and its settings, inside its template's bounds; written by a tenant admin through the console or by a product."
+    notes: "A tenant's client and its settings, inside its template's bounds; written by a tenant admin through the console or by a product. A tenant client is a resource client: it signs nobody in (ADR 0051)."
 
   - name: ClientSecret
     serves: work

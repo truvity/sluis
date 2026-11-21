@@ -48,8 +48,8 @@ A record's `milestone` is the milestone of the [roadmap](../roadmap.md) in which
 
 | Slug | Board option | Layer | What belongs to it |
 |---|---|---|---|
-| `core` | Core | core | What every installation needs: the actors and flows, the hosts of atoom's blocks (store, key), policy, the limit check, KV (not its External Secrets facade, which is in `backlog`, ADR 0049), the security hardening, and the local, boards, Lambda and Kubernetes installations with release management. |
-| `customer-identity` | Customer identity | core | The exchange of a token of the trusted context realm for a sluis token for an infrastructure audience (ADR 0048). A sluis token never carries customer, org or product. Not the cancelled broker. |
+| `core` | Core | core | What every installation needs: the actors and flows, the hosts of atoom's blocks (store, key), policy, the limit check, KV, built before parity (not its External Secrets facade, which is in `backlog`, ADR 0049, ADR 0051), the security hardening, and the local, boards, Lambda and Kubernetes installations with release management. |
+| `customer-identity` | Customer identity | core | The exchange of a token of the trusted context realm, or of any other subject, for a sluis token for a resource client, with policy on the facts of the subject token (ADR 0048, ADR 0051). A sluis token never carries customer, org or product, and no customer signs in to sluis. Not the cancelled broker. |
 | `quota` | Quota | core | The limit check and its counters (ADR 0046). Usage records are audit's. Not an allowance or a balance. |
 | `parity` | Parity | core | What v1 does and the core does not yet: integrations, clients, the console, backup and restore, what sluis emits to audit. Re-planned after the core, customer identity and the limit check. |
 | `pki-ssh-db` | PKI, SSH and database | add-on | The certificate, SSH and database add-on: the intermediate hand-off, certificate profiles, SSH certificates, database client certificates. |
