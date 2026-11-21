@@ -6,7 +6,11 @@ sluis is an open-source identity and access broker for people, robots and extern
 
 ## Where it stands
 
-v2 is the line on the `main` branch. Its core is being built in the open: `v2.0.0-alpha.1` was published on 2026-11-08. Customer identity and quota, parity with v1, the switch of the maintainer's platform, and the PKI, SSH and database add-on come after it, in that order. v1 runs in production and lives on the `master` branch.
+v2 is the line on the `main` branch. Its core is being built in the open: `v2.0.0-alpha.1` was published on 2026-11-08. Customer identity and the limit check, parity with v1, and the PKI, SSH and database add-on come after it, in that order. v1 runs in production and lives on the `master` branch.
+
+## The family
+
+sluis shares its design with three products, each with a repository of its own, and [sluis.id](https://sluis.id) is the site of the family: [atoom](https://github.com/truvity/atoom) (ports, drivers and blocks), [audit](https://github.com/truvity/audit) (the audit log) and [session](https://github.com/truvity/session) (browser sessions for websites).
 
 ## Read more
 

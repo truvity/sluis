@@ -6,20 +6,20 @@ sidebar:
   order: 4
 ---
 
-The **generic OpenID Connect upstream** is the same kind of integration as Google sign-in, for any provider that publishes OIDC discovery: a customer's identity provider, a partner's, or a CIAM product. `adapter-upstream-oidc@<boundary>` serves it. The upstreams are fixed config that the operator declares: the internal installation sees three Google Workspace upstreams, and a customer installation trusts one realm, Keycloak in the tested installations; a customer's own identity provider is configured in that realm and never in sluis ([0045](/decisions/0032-customer-identity-installations/)). A **peer sluis** is the case where the provider is another sluis installation.
+The **generic OpenID Connect upstream** is the same kind of integration as Google sign-in, for any provider that publishes OIDC discovery: a customer's identity provider, a partner's, or a CIAM product. `adapter-upstream-oidc@<boundary>` serves it, and it is built for sign-in. The upstreams are fixed config that the operator declares. A customer installation trusts one realm, an upstream provider such as Keycloak; a customer's own identity provider is configured in that realm and never in sluis ([0032](/decisions/0032-customer-identity-installations/)). A **peer sluis** is the case where the provider is another sluis installation (planned).
 
 ## What it's for
 
 - **An organisation the operator has agreed with signs in with its own provider.** The operator declares it as an `Upstream`; sluis sends the person there and accepts the proof it returns.
 - **A person is routed by the domain of their e-mail address.** `person@partner.example` goes to the upstream that declares that domain, `person@example.org` to the company directory. The operator declares which upstream serves which domain, so there is nothing to prove ([0025](/decisions/0025-integrations/#the-upstream-contract)).
-- **A CIAM product plugs in as the trusted realm.** sluis hosts no customer accounts ([REQ-CIAM-017](/requirements/ciam/#REQ-CIAM-017)): a CIAM product that speaks OpenID Connect holds them, and `exchange` takes its token as the subject token and issues the sluis token with the customer, the organisation and the product ([0045](/decisions/0032-customer-identity-installations/#the-exchange/)), right after the core. The broker that [0031](/decisions/archive/0031-ciam-is-a-broker/) described is superseded.
+- **A CIAM product plugs in as the trusted realm.** sluis hosts no customer accounts ([REQ-CIAM-017](/requirements/ciam/#REQ-CIAM-017)): a CIAM product that speaks OpenID Connect holds them, and `exchange` takes its token as the subject token and issues the sluis token with the customer, the organisation and the product. This is the customer identity layer ([0032](/decisions/0032-customer-identity-installations/#the-exchange)); it is planned.
 - **One sluis trusts another.** An installation accepts people and robots vouched for by another installation, and the trust graph stays acyclic ([Boundaries](/concepts/boundaries/)).
 
 ## Integration kinds
 
 | Kind | What it does |
 |---|---|
-| `Upstream` | `adapter-upstream-oidc` begins and completes a sign-in as an OpenID relying party: it exchanges the code at the provider and returns the verified assertion to `session`. |
+| `Upstream` | `adapter-upstream-oidc` begins and completes a sign-in as an OpenID relying party: it exchanges the code at the provider and returns the verified assertion to `signin`. |
 | `WorkloadVerifier` | Peer sluis only: `exchange` verifies the peer's tokens inbound ([0022](/decisions/0022-workload-identity-and-host-enrolment/#proofs-and-the-exchange)). |
 
 ## Connections
@@ -28,7 +28,7 @@ The **generic OpenID Connect upstream** is the same kind of integration as Googl
 |---|---|---|---|
 | The operator's own (workforce, a partner the operator agreed with) | `Upstream` and `UpstreamSecret` | Config and secret | Hand or IaC |
 
-- **A tenant has no connection of its own here.** The upstreams are the operator's config, and a customer's own provider is configured in the trusted realm ([0045](/decisions/0032-customer-identity-installations/#realms-follow-boundaries/)).
+- **A tenant has no connection of its own here.** The upstreams are the operator's config, and a customer's own provider is configured in the trusted realm ([0032](/decisions/0032-customer-identity-installations/#realms-follow-boundaries)).
 - **The client secret is the operator's.** It is an `UpstreamSecret` in the secret source, and the adapter keeps nothing at rest. A `private_key_jwt` key is refused, because it would be an authority key ([0025](/decisions/0025-integrations/#the-upstream-contract)).
 
 ## What sluis asks the vendor for
@@ -37,22 +37,22 @@ Only to be a registered client. sluis asks for `openid email profile` and holds 
 
 Every returned ID token is checked strictly: issuer and audience match, `nonce` matches the one sent, the signature verifies against the provider's keys, the configured subject claim is present, and the claim matches the one pinned for the issuer. Anything else is refused with `INVALID`; there is no lenient fallback ([0025](/decisions/0025-integrations/#the-upstream-contract)).
 
-The subject claim is `sub` unless the connection says otherwise (`subject_claim`). Microsoft Entra needs `oid`, because its `sub` is different for each application. A person is found by the pair of the issuer and that claim's value, never by e-mail address ([0019](/decisions/0019-person-and-upstream-link/#linking-an-upstream-account)). The tests sign in through Keycloak on every pull request, and through Google Cloud Identity Free and Microsoft Entra ID Free every night.
+The subject claim is `sub` unless the connection says otherwise (`subject_claim`). Microsoft Entra needs `oid`, because its `sub` is different for each application. A person is found by the pair of the issuer and that claim's value, never by e-mail address ([0019](/decisions/0019-person-and-upstream-link/#linking-an-upstream-account)). The tests sign in through Keycloak on every pull request, and through Google Cloud Identity Free and Microsoft Entra ID Free every night ([0019](/decisions/0019-person-and-upstream-link/)).
 
 ## What a connection can do
 
 Beyond sign-in, a connection supports what a CIAM product or any strict provider needs:
 
-- **Claim mapping per connection**, from the allow-listed claims of the provider to the facts sluis uses ([0045](/decisions/0032-customer-identity-installations/#the-exchange/)).
+- **Claim mapping per connection**, from the allow-listed claims of the provider to the facts sluis uses ([0032](/decisions/0032-customer-identity-installations/#the-exchange)).
 - **`acr` and `amr` passthrough**, so policy sees how strongly a person signed in. A provider that sends them only on request, as Google does, needs a configured `claims` request parameter ([#1154](https://github.com/truvity/sluis/issues/1154)).
 - **Step-up (RFC 9470).** When a grant needs a stronger sign-in than the session has, sluis sends the person back with a challenge for a higher `acr`, or asks for a passkey ([0017](/decisions/0017-identity-and-sign-in/#step-up)).
 - **Sessions and step-up for customers.** The upstream holds the long single-sign-on session; sluis keeps the 24-hour limit of a human session and authenticates the person at the upstream again, silently while the upstream's session is valid. A customer's step-up is a re-authentication at the upstream with the `acr_values` and `max_age` that policy asked for, and sluis asks no customer for a passkey ([0018](/decisions/0018-sign-in-sessions/#customers)).
-- **Back-channel logout**: the upstream can end the session at sluis with a back-channel logout token, mapped by `sid`. It was designed in [0034](/decisions/archive/0034-end-users-and-upstream-signals/#inbound-back-channel-logout), which [0045](/decisions/0032-customer-identity-installations/) superseded with the end-user lifecycle, and no phase builds it.
+- **Back-channel logout** from the upstream is planned, with RP-initiated logout ([0017](/decisions/0017-identity-and-sign-in/#optional-openid-flows)).
 - **Rate limits** per connection, kept in sluis state ([0036](/decisions/0036-volumetric-abuse/#inside-sluis)).
 
-The sign-in-only slice of the generic connector is in the core ([#1106](https://github.com/truvity/sluis/issues/1106)); the rest of it, [#916](https://github.com/truvity/sluis/issues/916), is the exchange of an upstream token for a sluis token, built right after the core ([Roadmap](/roadmap/#customer-identity-and-quota)). A SAML identity provider and SCIM provisioning for AWS IAM Identity Center are Later ([#918](https://github.com/truvity/sluis/issues/918)).
+The sign-in-only slice of the generic connector is built ([#1106](https://github.com/truvity/sluis/issues/1106)). The rest of it, [#916](https://github.com/truvity/sluis/issues/916), is the exchange of an upstream token for a sluis token, in the customer identity layer ([0032](/decisions/0032-customer-identity-installations/#the-exchange)). A SAML identity provider and SCIM provisioning for AWS IAM Identity Center are Later ([#918](https://github.com/truvity/sluis/issues/918)).
 
-A customer installation trusts one realm, Keycloak in the tested installations, which holds the tenants' identity providers and brokers their social login and SAML ([0045](/decisions/0032-customer-identity-installations/#realms-follow-boundaries/)). If Keycloak cannot broker SAML for the organisations that need it, the SAML records ([REQ-FED-009](/requirements/fed/#REQ-FED-009)) are reopened.
+The trusted realm holds the tenants' identity providers and brokers their social login and SAML ([0032](/decisions/0032-customer-identity-installations/#realms-follow-boundaries)). If it cannot broker SAML for the organisations that need it, the SAML requirement ([REQ-FED-009](/requirements/fed/#REQ-FED-009)) is reopened.
 
 An upstream declares the e-mail domains it serves, carries a `trust` level (`internal`, `partner` or `customer`) that limits what a sign-in through it may reach, and an `assurance` policy that limits how strong it counts ([Kinds](/reference/kinds/#upstream)). Both are set by the operator under review. A client may send `idp_hint` to choose among the upstreams it is allowed.
 
@@ -65,7 +65,7 @@ An upstream declares the e-mail domains it serves, carries a `trust` level (`int
 
 ## What is audited
 
-- Each sign-in through a connection: the connection, the class of session and the outcome.
+- Each sign-in through a connection: the connection, the class of sign-in session and the outcome.
 - Each refusal, with its reason in the record (not shown to the caller): a missing subject claim, a contradicted pin, a bad `nonce`.
 - The connection's lifecycle: created, changed, disconnected.
 - For a peer, each inbound verification and outbound exchange.

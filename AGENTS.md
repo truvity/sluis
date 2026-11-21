@@ -24,16 +24,17 @@ The full method is `docs/contributing/design.md`. In short:
 - Generalise before detail: list the high-level questions of a milestone or topic first, then map issues and records under them.
 - Record the roads not taken, with the reason. Label claims READ, MEASURED or UNVERIFIED, and date them.
 - Nothing without a consumer: it arrives with its first real caller; until then it is a planned line and an issue.
-- State each rule once, in a record or a reference page, and link to it. Records are rewritable until the first release (keep `docs/decisions/renumbered.json`) and append-only after.
-- Keep records, requirements, the roadmap and the issues in step. Phases are an order, and `docs/roadmap.md` ("Phases") owns it: the core first, then customer identity and quota, a re-plan, parity, the switch, and the PKI, SSH and database add-on. Older records name phases P0 to P4; the roadmap maps those names to the phases.
+- State each rule once, in a record or a reference page, and link to it. A fact has one home: the repository that owns it. atoom owns ports, drivers and blocks, audit owns the audit log, session owns browser sessions; link their pages instead of restating them.
+- Records are append-only: a changed mind is a new record that supersedes the old one, and the old one moves to the archive. A decision is written in one repository only.
+- Keep records, requirements, the roadmap and the issues in step. The milestones are an order, and `docs/roadmap.md` owns it. The product is a core, add-ons and customer identity.
 
 ## Keys, roots and ceremonies
 
-- Roots and ceremonies (root keys, root transitions, root lists, CA bundles, keyrings, the ceremony CLI) live in the separate project ritueel: https://github.com/truvity/ritueel and https://ritueel.id. sluis holds intermediates only.
-- Use ritueel's names (ADR 0044, "Names"): a root key is one key; the CA bundle is ritueel's PEM file and the trust bundle is SPIFFE's; a ceremony is an act that uses a root key; `TrustAnchors` is sluis's own config kind.
+- Roots and ceremonies (root keys, root transitions, root lists, CA bundles, ritueel's OpenPGP keyring file, the ceremony CLI) live in the separate project ritueel: https://github.com/truvity/ritueel and https://ritueel.id. sluis holds intermediates only.
+- Use ritueel's names (ADR 0024, "The words"): a root key is one key; the CA bundle is ritueel's PEM file and the trust bundle is SPIFFE's; a ceremony is an act that uses a root key; `TrustAnchors` is sluis's own config kind.
 - Keys are generated in place, on a card or in a cloud key service, and are never extractable.
 - sluis has no two-person ceremonies, no air-gapped live CD and no YubiHSM in its design.
-- The source of truth is `docs/decisions/0024-root-custody-and-the-signing-api.md` (ADR 0024, "Intermediates and the hand-off to root custody").
+- The source of truth is `docs/decisions/0024-root-custody-and-the-signing-api.md` (ADR 0024, "sluis holds no root" and "The hand-off").
 
 ## Before you act, read the page
 

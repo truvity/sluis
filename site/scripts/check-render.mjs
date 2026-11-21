@@ -4,7 +4,7 @@
 // the page script threw before it drew the diagrams; this can.
 //
 // The pages are discovered, not listed: every built dist/**/index.html that holds
-// a `pre.mermaid`, plus the explorer pages. The sweep must find at least
+// a `pre.mermaid`, plus the explorer page. The sweep must find at least
 // MIN_DIAGRAM_PAGES pages, and the pages in REQUIRED, so an empty or shrunken
 // sweep fails instead of passing on nothing.
 //
@@ -16,7 +16,7 @@
 //     computed font size of each SVG label times the SVG's rendered scale is at
 //     least MIN_TEXT_PX), and on the first diagram a click on Expand opens the
 //     <dialog> with an <svg> in it, which Escape closes;
-//   - on the explorer pages, the explorer script ran (the root gets `ex-js`).
+//   - on the explorer page, the explorer script ran (the root gets `ex-js`).
 //
 // The status page and the decisions index are in the sweep too (no exception, no
 // console error), and their HTML is checked first, without the browser:
@@ -58,9 +58,9 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const dist = resolve(root, process.argv[2] ?? 'site/dist');
 const shots = process.argv[3] ? resolve(process.argv[3]) : null;
 
-// The explorer pages are listed: they have no diagram to find, and the explorer
-// script must have run on them.
-const EXPLORERS = ['/architecture/identity-explorer/', '/architecture/audit-explorer/'];
+// The explorer page is listed: it has no diagram to find, and the explorer
+// script must have run on it.
+const EXPLORERS = ['/architecture/identity-explorer/'];
 // Pages that must be in the sweep whatever else is found (a diagram on each).
 const REQUIRED = ['/concepts/boundaries/', '/concepts/identity/', '/architecture/', '/runtimes/',
   '/runtimes/kubernetes/', '/integrations/connecting/'];

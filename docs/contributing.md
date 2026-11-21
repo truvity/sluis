@@ -31,4 +31,6 @@ Read the page for what you are about to do, then do it.
 - `.claude/skills/` and `.claude/agents/`: task and role wrappers for Claude Code that point back to these pages. They hold no rules of their own.
 - `docs/decisions/README.md` and `docs/requirements/README.md`: the formats of the decision records and of the requirements catalogue.
 
+sluis shares its design with atoom (ports, drivers and blocks), audit and session. Each has its own records, and a decision lives in one repository ([Decisions, requirements and research](/contributing/decisions/)).
+
 When a repository file and a page disagree, the page is the rule and the file is fixed.

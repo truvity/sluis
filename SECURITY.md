@@ -36,7 +36,7 @@ If you want to propose a fix, say so in the advisory. The maintainer can invite 
 
 | Version | Branch | Support |
 |---------|--------|---------|
-| v1 | `master` (renamed `v1` at the v2 cutover) | Supported until the maintainers' production deployments run v2. Security fixes go to the latest release only. |
+| v1 | `master` (renamed `v1` at the v2 cutover) | Supported until v1 is switched off after the cutover. Security fixes go to the latest release only. |
 | v2 | `main` | Pre-release (`v2.0.0-alpha.N`). No support promise. Reports are welcome and handled the same private way. |
 
 Older v1 releases are not patched. Upgrade to the latest.

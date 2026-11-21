@@ -18,7 +18,7 @@
 #               definition here is exactly the shared one (`just check-shared-terms`); its owner and its `not` lines
 #               come from that file and are printed on /concepts/. Only the owner changes the shared wording.
 schema: 1
-checked: "2026-11-18"
+checked: "2026-11-21"
 
 categories:
   families: "Families of actors and the units that run them"
@@ -31,8 +31,7 @@ categories:
   shared: "Words shared with ritueel, one owner each (docs/shared-terms.yaml)"
   structure: "The layers of sluis v2 and the shapes of an installation"
   ciam: "Customer-identity installations (the account-hosting setup; superseded on 2026-11-12 by ADR 0032, kept because the withdrawn records use these words)"
-  audit: "Audit and usage evidence"
-  quota: "Quota and the allowance (the allowance engine is superseded by ADR 0046; sluis keeps usage records and a limit check)"
+  audit: "Audit (the product truvity/audit): what sluis emits, the usage it records and the limit it checks"
   integrations: "Upstreams and integrations"
 
 terms:
@@ -44,30 +43,41 @@ terms:
     notes: "Written in lower case, also at the start of a sentence."
 
   - term: core
-    definition: "The layer of sluis v2 that every installation needs: `entry`, `session`, `exchange` and `signer`. The console is in the core layer and is built in the Parity phase; `ca` is built and off by default. The core installs and runs without any add-on."
+    definition: "The layer of sluis v2 that every installation needs: sign-in and tokens (`entry`, `signin`, `exchange`, `policy` and `signer`), the hosts of atoom's blocks (`store@`, `key@` and `exporter@`), the console, KV and the limit check. `ca` is built and off by default. The core installs and runs without any add-on."
     category: structure
-    see: ["0044-sluis-is-a-core-and-add-ons", "/roadmap/#a-core-building-blocks-and-add-ons", "/overview/"]
+    see: ["0044-sluis-is-a-core-and-add-ons#the-core", "/overview/"]
     avoid: ["first working version (as the name of the core)"]
-    notes: "The core is also the first phase of the roadmap, which ends with `v2.0.0-alpha.2` before the installations are built."
+    notes: "The core is also the first milestone of the roadmap."
 
-  - term: building block
-    definition: "A module that a product may reuse beyond sluis, behind an interface: store, key, policy, audit with usage and limits, and KV. All are built in the core phase. The core uses them; a block holds no domain type of the core."
+  - term: shared clients
+    definition: "The Cloudflare, AWS and GitHub clients and minters that add-ons and drivers reuse. They are a place with a name and no layer: no core actor calls them, and each is written with its first consumer."
     category: structure
-    see: ["0044-sluis-is-a-core-and-add-ons", "/roadmap/#a-core-building-blocks-and-add-ons"]
-    avoid: ["core building block (as a separate term)", "library (for a block)"]
-    notes: "Not a shared building block, and not a module of actors (identity, audit)."
-
-  - term: shared building block
-    definition: "A client or a minter that add-ons and drivers reuse: the Cloudflare, AWS and GitHub clients. They form a named layer beside the building blocks. They are not core and no core actor calls them; each is built with its first consumer."
-    category: structure
-    see: ["0044-sluis-is-a-core-and-add-ons", "/roadmap/#a-core-building-blocks-and-add-ons"]
+    see: ["0044-sluis-is-a-core-and-add-ons#the-add-ons"]
 
   - term: add-on
-    definition: "An optional part with a scope of its own that the core does not depend on: PKI, SSH and database access first (after parity), then Cloudflare and GitHub."
+    definition: "An optional part with a scope of its own that the core does not depend on: PKI, SSH and database access, Cloudflare and GitHub. It brings its own actors, kinds, key purposes and routes into the registries, and only an installation that runs it has them."
     category: structure
-    see: ["0044-sluis-is-a-core-and-add-ons", "/roadmap/#a-core-building-blocks-and-add-ons"]
+    see: ["0044-sluis-is-a-core-and-add-ons#the-add-ons"]
     avoid: ["plugin", "extension (for an add-on)"]
-    notes: "KV is a building block, not an add-on, though its record's file name still says add-on."
+    notes: "KV is part of the core, not an add-on."
+
+  - term: customer identity
+    definition: "The layer of sluis for a customer's sign-in: the exchange of a customer's upstream token for a sluis token that carries the customer, the organisation and the product. Planned."
+    category: structure
+    see: ["0044-sluis-is-a-core-and-add-ons#the-layers", "0032-customer-identity-installations"]
+
+  - term: block
+    definition: "atoom's term: a contract built from other ports and blocks, with no backend code of its own, whose host supplies the rules. atoom has four, `seal`, `state`, `token` and `export`. `store@`, `key@` and `exporter@` are the hosts of `state`, `seal` and `export` in sluis."
+    category: structure
+    see: ["0002-families-of-actors#the-families", "0005-the-store#what-is-atooms", "0006-keys-and-sealing", "0009-export"]
+    avoid: ["building block"]
+    notes: "The mechanics are atoom's ([atoom 0008](https://github.com/truvity/atoom/blob/master/docs/decisions/0008-blocks.md)); what sluis adds is its rules and its placement. Not the keyring, which is ritueel's OpenPGP file."
+
+  - term: session
+    definition: "The product truvity/session: browser sessions for websites behind a proxy or a gateway, built on atoom's ports. It is not the sign-in session of `signin`."
+    category: structure
+    see: ["0018-sign-in-sessions"]
+    avoid: ["session (for the sign-in actor)"]
 
   - term: token certificate
     definition: "The certificate that `ca` issues for a token signing key, published as the `x5c` chain of its entry in the key set. It is optional per installation and off in the core; the PKI, SSH and database add-on turns it on, and it needs an intermediate under a root of ritueel."
@@ -78,20 +88,28 @@ terms:
   - term: Cloudflare edge
     definition: "Cloudflare in front of a production shape: proxied to an API Gateway custom domain with mutual TLS on Lambda, the cluster's own tunnel and gateway on Kubernetes, `cloudflared` on boards. It caches the key set and the discovery document for less than the key pre-publish time, and holds the rate limits and WAF rules. sluis holds no Cloudflare credential in the core."
     category: structure
-    see: ["0011-runtimes-and-installations", "/roadmap/#the-maintainers-decisions-of-2026-11-18"]
+    see: ["0011-runtimes-and-installations"]
 
   # ---------------------------------------------------------------- families
   - term: family
-    definition: "One of the four groups every actor belongs to: work, data, keys or audit. A port is never shared between two families."
+    definition: "One of the three groups every actor belongs to: work, data or keys. A port is never shared between two families. Audit is not a family: it is a product of its own, truvity/audit."
     category: families
     see: ["0002-families-of-actors#the-families", "/concepts/families/"]
-    avoid: ["layer (for a family)", "tier"]
+    avoid: ["layer (for a family)", "tier", "audit family"]
 
   - term: work actor
-    definition: "An actor that does one job of sluis (entry, console, session, exchange, policy, signer, ca, ssh-ca (a separate actor from ca), quota, or an adapter). It holds no storage, key or audit credential at rest; it reaches data, keys and audit only through its ports."
+    definition: "An actor that does one job of sluis (entry, signin, console, exchange, policy, signer, kv, ca, ssh-ca (a separate actor from ca), or an adapter). It holds no storage, key or audit credential at rest; it reaches data, keys and audit only through its ports."
     category: families
     see: ["0002-families-of-actors#work-actors"]
     avoid: ["role", "process role", "service (for an actor)"]
+
+  - term: signin
+    code: signin
+    definition: "The work actor of sign-in: it runs sign-in, sign-in sessions, the session cookie and the freshness of each person's authentication (step-up) per boundary."
+    category: families
+    see: ["0002-families-of-actors#the-families", "0017-identity-and-sign-in", "0018-sign-in-sessions", "/reference/actors/#signin"]
+    avoid: ["session actor", "session (for this actor)"]
+    notes: "A sign-in session is what it keeps; the session cookie is the cookie that proves one. `session` alone is the product truvity/session."
 
   - term: actor
     definition: "A program with one responsibility, run as its own unit in each boundary it serves. Every actor belongs to one family."
@@ -101,7 +119,7 @@ terms:
 
   - term: actor@boundary
     code: "<actor>@<boundary>"
-    definition: "The name of one actor in one boundary, for example `session@prod` or `store@prod`. The same name appears in every layer that enforces it: unit, user, socket, function, service account, key alias and the actor field of an audit record."
+    definition: "The name of one actor in one boundary, for example `ca@prod` or `store@prod`. The same name appears in every layer that enforces it: unit, user, socket, function, service account, key alias and the actor field of an audit record."
     category: families
     see: ["0002-families-of-actors#names"]
     avoid: ["actor instance (as a separate term)"]
@@ -125,21 +143,10 @@ terms:
     category: families
     see: ["0002-families-of-actors#the-families", "0006-keys-and-sealing"]
 
-  - term: audit family
-    definition: "The audit pieces: the emitter library in every actor, the audit transport, the writer, the witness, the indexer and the reader. Its pieces read their documents (the config kinds AuditLog, AuditWitnesses and AuditCatalogue) through the data port, like the actors of every other family; the blob, the transport and the index are their own ports."
-    category: families
-    see: ["0002-families-of-actors#the-families", "0028-audit-pieces"]
-
   - term: foundation
-    definition: "The data and keys families (store@, exporter@, key@): what every installation runs, whatever else runs above it. Its binaries do not change with the modules. A grouping, not a fifth family."
+    definition: "The data and keys families (store@, exporter@, key@): what every installation runs, whatever else runs above it. Its binaries do not change with what runs above it. A grouping, not a family."
     category: families
     see: ["0002-families-of-actors#the-foundation-and-the-layers"]
-
-  - term: module
-    definition: "A set of actors on top of the foundation, bringing its own kinds and key purposes into the registries: identity (the work actors other than quota, the adapters included), audit (the audit pieces) and quota (quota). An installation runs the foundation and the modules it needs, for example the foundation with the audit module only."
-    category: families
-    see: ["0002-families-of-actors#the-foundation-and-the-layers"]
-    notes: "Not the accounts module of a hub installation, and not the module part of a log id."
 
   - term: store@
     code: "store@<boundary>"
@@ -169,7 +176,7 @@ terms:
     avoid: ["state port", "lease port", "secrets port", "config-source port", "export port", "capability flag"]
 
   - term: driver
-    definition: "A separate binary behind one port of a holder, private to its owner (store@, key@ or exporter@; key@'s card and KMS driver included): only the owner can open its socket. Each port has one contract and one CLI (`serve`, `check`, `version`, `conformance`). On Lambda a driver is an extension in the holder's function; on Kubernetes a native sidecar container in the holder's pod."
+    definition: "A separate binary behind one port, from [atoom](https://github.com/truvity/atoom): sluis consumes atoom's drivers and writes none. The platform starts it beside the host that has the port (store@, key@ or exporter@; key@'s card and KMS driver included), and only that host opens its socket. Each port has one contract and one conformance kit. On Lambda a driver is an extension in the host's function, or a Go library linked into it; on Kubernetes a native sidecar container in the host's pod."
     category: store
     see: ["0005-the-store#drivers"]
     avoid: ["per-actor driver", "mediating driver", "shared driver instance"]
@@ -181,7 +188,7 @@ terms:
     notes: "Not the audit transport, which is the queue, spool or stream between the emitters and the writer."
 
   - term: audit transport
-    definition: "The queue, spool or stream that carries audit emits to the writer: a local spool on boards, SQS on Lambda, SQS or NATS JetStream on Kubernetes."
+    definition: "The queue, spool or stream that carries audit emits to the writer, through atoom's transport port: a local spool on boards, SQS on Lambda, SQS or NATS JetStream on Kubernetes."
     category: audit
     see: ["0028-audit-pieces"]
 
@@ -218,7 +225,7 @@ terms:
     category: families
     see: ["0002-families-of-actors#the-console", "0027-the-console"]
     avoid: ["admin API (as an actor)", "part of entry"]
-    notes: "Part of the core layer, and built in the Parity phase (decision A3 B, 2026-11-18)."
+    notes: "Part of the core layer; planned."
 
   # ---------------------------------------------------------------- data
   - term: kind
@@ -241,7 +248,7 @@ terms:
     avoid: ["record key", "path (for an address)", "prefix (as a scope)"]
 
   - term: id
-    definition: "The last part of an address. Actor, module, client and quota names are parts of the id, never scopes. An id never contains personal data: it is random, or a keyed hash of a natural key."
+    definition: "The last part of an address. Actor and client names are parts of the id, never scopes. An id never contains personal data: it is random, or a keyed hash of a natural key."
     category: data
     see: ["0004-the-data-model#the-address"]
 
@@ -282,7 +289,7 @@ terms:
     avoid: ["ephemeral state", "cache (as a class)"]
 
   - term: built-in
-    definition: "What the binary carries: defaults, hard limits, predefined policies and closed value sets such as the allowance modes. It is not a storage class and changes only with a release."
+    definition: "What the binary carries: defaults, hard limits, predefined policies and closed value sets. It is not a storage class and changes only with a release."
     category: data
     see: ["0004-the-data-model#built-in"]
     avoid: ["schema default", "floor in code (for all built-ins)"]
@@ -380,7 +387,7 @@ terms:
     avoid: ["operator-set"]
 
   - term: Tenant-adjustable
-    definition: "The profile of settings written by a tenant admin, or by a product for its tenant, inside bounds declared in config, only in its own tenant and with a sealed grant: security limits, sign-in requirements, policies, clients, branding and the allowance."
+    definition: "The profile of settings written by a tenant admin, or by a product for its tenant, inside bounds declared in config, only in its own tenant and with a sealed grant: security limits, sign-in requirements, policies, clients and branding."
     category: layers
     see: ["0004-the-data-model#profiles"]
     avoid: ["issued instance", "tenant override"]
@@ -508,7 +515,7 @@ terms:
     avoid: ["installation scope", "shared config source"]
 
   - term: KV store
-    definition: "A named, boundary-wide container of versioned static secrets, declared in signed config and owned by no tenant. Its paths form a hierarchy for policy, and its values are sealed under a data key of the store. What Vault calls a mount; it is not store@. KV, served by the `kv` actor, is a building block built in the core phase, not an add-on."
+    definition: "A named, boundary-wide container of versioned static secrets, declared in signed config and owned by no tenant. Its paths form a hierarchy for policy, and its values are sealed under a data key of the store. What Vault calls a mount; it is not store@. KV, served by the `kv` actor, is part of the core, not an add-on."
     category: data
     see: ["0047-kv-is-a-core-service-of-stores-that-no-tenant-owns"]
     avoid: ["vault (except in the wire paths of the compatibility front)", "mount"]
@@ -537,6 +544,7 @@ terms:
     category: keys
     see: ["0006-keys-and-sealing#seal-and-open"]
     avoid: ["wrap (for a value)", "encrypt in the port library"]
+    notes: "Not the `seal` block of atoom, which key@ hosts: the block is the mechanics (purposes, Seal, Open, Mac, wrap), and this is the operation it offers."
 
   - term: open
     definition: "key@'s operation `Open(address, sealed, grant)`: check the grant and the caller's rules, then decrypt; the plaintext exists only in the calling actor."
@@ -606,7 +614,7 @@ terms:
     avoid: ["grants (for the vocabulary)"]
 
   - term: spent marker
-    definition: "A temp kind that holds a hash so that a one-shot thing cannot happen twice: the hash of a sealed grant used for an irreversible action (kind `SpentGrant`), or the hash of an allowance push's request id (kind `SpentPush`)."
+    definition: "A temp kind that holds a hash so that a one-shot thing cannot happen twice: the hash of a sealed grant used for an irreversible action (kind `SpentGrant`)."
     category: keys
     see: ["0007-policy-and-sealed-grants#sealed-grants"]
 
@@ -801,7 +809,7 @@ terms:
     category: shared
     shared: true
     see: ["0024-root-custody-and-the-signing-api#the-hand-off"]
-    notes: "ritueel makes the file; a reader only reads it."
+    notes: "ritueel makes the file; a reader only reads it. Not atoom's block: that is `seal`."
 
   - term: hand-off contract
     definition: "The versioned contract through which a requester and ritueel meet in standard formats and files. It has three request types, `x509-intermediate`, `openpgp-subkey` and `ssh-ca-key`. A request is answered by an answer, which always holds a result file."
@@ -897,10 +905,10 @@ terms:
     avoid: ["environment (as the general term)", "company boundary", "product boundary"]
 
   - term: tenant
-    definition: "A division inside a boundary with its own data keys (data, pseudonym, evidence, chain, credential), settings, clients and allowance; the second scope dimension, used only by durable and temp kinds. A tenant may exist in several boundaries, with separate data keys in each."
+    definition: "A division inside a boundary with its own data keys (data, pseudonym, evidence, chain, credential), settings and clients; the second scope dimension, used only by durable and temp kinds. A tenant may exist in several boundaries, with separate data keys in each."
     category: boundaries
     see: ["0008-boundaries-and-tenants#tenants"]
-    avoid: ["key-less tenant", "company (as a scope)", "audit tenant", "quota tenant"]
+    avoid: ['key-less tenant', 'company (as a scope)']
 
   - term: ladder
     definition: "The cumulative levels of separation: L0 a tenant (the store's rules and its own data keys), L1 own keys, L2 own processes, L3 own engine, L4 own runtime. Each level includes the ones below it."
@@ -1002,7 +1010,7 @@ terms:
     notes: "Superseded: customers sign in through the upstream identity provider ([ADR 0032](/decisions/0032-customer-identity-installations/)), and the account-hosting setup is cancelled (maintainer decisions of 2026-11-12). Not used in new text."
 
   - term: accounts module
-    definition: "The module of a hub installation that holds the account registry and runs the registration, passkey and recovery flows."
+    definition: "The part of a hub installation that holds the account registry and runs the registration, passkey and recovery flows."
     category: ciam
     see: ["/requirements/acct/", "/requirements/reg/"]
     notes: "Superseded: customers sign in through the upstream identity provider ([ADR 0032](/decisions/0032-customer-identity-installations/)), and the account-hosting setup is cancelled (maintainer decisions of 2026-11-12). Not used in new text."
@@ -1027,9 +1035,9 @@ terms:
 
   # ---------------------------------------------------------------- audit
   - term: emitter
-    definition: "The library in every actor that builds an audit record and sends it on the audit emit port."
+    definition: "audit's library in every sluis process: it builds an audit record and hands it to audit's transport on the audit emit port."
     category: audit
-    see: ["0028-audit-pieces"]
+    see: ["0028-audit-pieces#what-sluis-keeps", "0002-families-of-actors#ports-of-a-work-actor"]
 
   - term: writer
     definition: "The audit piece that seals records from the audit transport into its one log in the blob; its own state lives in the blob, written by conditional writes. One writer per log."
@@ -1064,7 +1072,7 @@ terms:
     avoid: ["usage event (for a billed statement)", "finance export"]
 
   - term: audit log
-    definition: "The tamper-evident, tiled log that a project's writer seals into the project's bucket: one writer per log, and a log per log kind and node."
+    definition: "The tamper-evident, tiled log that one project's writer seals in its bucket: one log of each log kind (audit or usage) and node, one writer per log."
     category: audit
     see: ["0029-the-audit-log", "/concepts/audit/"]
     avoid: ["audit trail (as a component)"]
@@ -1080,7 +1088,7 @@ terms:
     definition: "The check on the request path that compares a counter of usage for a customer, organisation and product in the current period with a limit that the product writes, and answers allow or refuse, next to the policy decision."
     category: audit
     see: ["0046-limits-on-the-request-path-and-usage-in-audit#limits-and-balances"]
-    avoid: ["quota check (for the allowance engine)", "balance check"]
+    avoid: ['quota check', 'balance check']
     notes: "sluis holds the counter, never a plan, a price or a balance; those live in the product."
 
   - term: usage stream
@@ -1089,30 +1097,15 @@ terms:
     see: ["0030-audit-records-and-the-usage-stream"]
 
   - term: project
-    definition: "A unit of ownership that emits to a boundary's audit: sluis itself, the infrastructure, or a product. Each project has its own bucket with a prefix per log kind (audit, usage, billing), its own log signing keys and its own writer; its team reads its own logs, its auditor reads them read-only, and the boundary's auditor reads every project."
+    definition: "audit's unit of emission inside a scope: a product, or the infrastructure the scope runs on. Each project has its own bucket with a prefix per log kind (audit and usage), its own log keys and its own writer. sluis is a project of each scope it runs in."
     category: audit
-    see: ["0002-families-of-actors#the-families", "0029-the-audit-log"]
+    see: ["0028-audit-pieces#what-sluis-keeps", "0029-the-audit-log"]
 
-  # ---------------------------------------------------------------- quota
-  - term: allowance
-    definition: "The durable kind that holds, per tenant and quota, a mode (prepaid, limited or unlimited) and the units left. A product pushes it; the quota actor counts it down and refuses at zero."
-    category: quota
-    see: ["0039-quota-allowance"]
-    avoid: ["balance", "billing account", "plan"]
-    notes: "Superseded: the allowance and balance engine of ADR 0039 is not built, and balances live in the product ([ADR 0046](/decisions/0046-limits-on-the-request-path-and-usage-in-audit/)). Not used in new text."
-
-  - term: allowance push
-    definition: "A product's call that changes an allowance. It carries a request id, an operation (add, set or write-off) and, optionally, the expected version. It is idempotent by request id (a hashed `SpentPush` marker), is applied with a conditional update, and is an audit fact."
-    category: quota
-    see: ["0039-quota-allowance"]
-    avoid: ["top-up (as a separate mechanism)", "balance update"]
-    notes: "Superseded: the allowance and balance engine of ADR 0039 is not built, and balances live in the product ([ADR 0046](/decisions/0046-limits-on-the-request-path-and-usage-in-audit/)). Not used in new text."
-
-  - term: allowance mode
-    definition: "One of three built-in modes of an allowance: prepaid and limited are counted down and refused at zero; unlimited is only recorded."
-    category: quota
-    see: ["0039-quota-allowance"]
-    notes: "Superseded: the allowance and balance engine of ADR 0039 is not built, and balances live in the product ([ADR 0046](/decisions/0046-limits-on-the-request-path-and-usage-in-audit/)). Not used in new text."
+  - term: audit scope
+    definition: "audit's unit of keys and policy, to which sluis maps a boundary. One audit serves one scope, and the evidence of one scope is never sealed, indexed or read with the keys of another."
+    category: audit
+    see: ["0028-audit-pieces#what-sluis-keeps", "0008-boundaries-and-tenants"]
+    notes: "A scope is audit's word; the scope of the data model is the boundary and the tenant."
 
   # ---------------------------------------------------------------- integrations
   - term: upstream
@@ -1201,7 +1194,7 @@ retired:
     notes: "The kind registry holds the rules over kinds; the actor registry holds calls, egress and key purposes."
   - term: "mediator, mediating driver, per-actor driver"
     id: mediator
-    replacement: "credential holder; driver (private to its owner)"
+    replacement: "credential holder; a driver of atoom's behind a port of a host"
     allowed_in: ["roads not taken"]
   - term: "state port, lease port, export port, config-source port"
     id: old-ports
@@ -1235,6 +1228,38 @@ retired:
     id: service-per-kind
     replacement: "the one generic store service and typed clients"
     allowed_in: ["roads not taken of the store record"]
+  - term: "session actor, the actor `session`"
+    id: session-actor
+    replacement: "signin (the sign-in actor); `session` alone is the product truvity/session"
+    allowed_in: ["the literal names that exist until the planned step that renames the executable: the program, unit and user `session`, `sluis-session@`, `actors/session/`, the audit action ids `session.*`", "session chain, session cookie and sign-in session"]
+  - term: "keyring block, the `keyring` block"
+    id: keyring-block
+    replacement: "the `seal` block (atoom's block that key@ hosts); `keyring` is ritueel's OpenPGP file"
+    allowed_in: []
+  - term: "building block"
+    id: building-block
+    replacement: "layer (core, add-on, customer identity) for the parts of sluis; block for atoom's `seal`, `state`, `token` and `export`"
+    allowed_in: []
+  - term: "identity module, audit module, quota module, CIAM module"
+    id: module
+    replacement: "layer (core, add-on, customer identity); audit is a product of its own, truvity/audit"
+    allowed_in: []
+  - term: "audit family"
+    id: audit-family
+    replacement: "audit's pieces (audit is a product of its own, not a family of sluis)"
+    allowed_in: ["the sentence that says there is no audit family"]
+  - term: "quota actor, limits actor"
+    id: quota-actor
+    replacement: "the limit check on the request path (record 0046); it adds no actor"
+    allowed_in: ["the sentence that says there is no such actor"]
+  - term: "allowance engine, allowance push, allowance mode"
+    id: allowance
+    replacement: "the limit check and the usage record; sluis keeps no balance"
+    allowed_in: ["the archived record 0039 and the sentences that say it is superseded"]
+  - term: "sluis-driver-<name>, `sluis-driver-*` (as the package of a driver)"
+    id: sluis-driver
+    replacement: "`atoom-driver-<port>-<driver>`: drivers are atoom's, and sluis writes none"
+    allowed_in: []
 
 # The retired-terms check: `just check-terms` (tools/checks/terms.mjs, error mode), run by `just check`.
 lint:
@@ -1244,12 +1269,13 @@ lint:
       - "docs/glossary.yaml"                 # this file names the retired terms
       - "docs/concepts/index.md"             # the generated vocabulary page prints the retired list and its replacements
       - "docs/decisions/renumbered.json"     # old slugs
+      - "docs/decisions/archive/**"          # superseded records are never edited again
       - "CHANGELOG.md"                       # history
       - "site/src/content/v1/**"             # v1 documentation keeps v1 words
   # Records that keep their old text for ever are skipped by record, not by file: a requirement record with
   # `status: withdrawn` is never rewritten (docs/requirements/README.md), so it would hit the lint for ever.
   skip_records:
-    - {files: "docs/requirements/*.yaml", where: {status: withdrawn}}
+    - {files: "docs/requirements/**/*.yaml", where: {status: withdrawn}}
   case_insensitive: true
   # Before matching, the check removes Markdown link targets `](...)`, bare URLs and old record slugs
   # (a slug is an address, not prose), so a link to a renamed page is not a hit.
@@ -1281,3 +1307,11 @@ lint:
     - {id: declared-issued,      pattern: '(\bdeclared configuration\b|\bissued (instance|record)s?\b|\b(declared|issued|learned|derived), (durable|ephemeral)\b|\bissued, (durable|ephemeral)\b)'}
     - {id: grant-key,            pattern: '\bgrant[- ](signing )?keys?\b'}
     - {id: service-per-kind,     pattern: '\b(one )?generated service per kind\b'}
+    - {id: session-actor,        pattern: '(\bsession actor\b|`session@|`session` actor\b|\bactor `session`)'}
+    - {id: keyring-block,        pattern: '(\bkeyring block\b|`keyring` block\b|\bblock `keyring`)'}
+    - {id: building-block,       pattern: '\bbuilding blocks?\b', context_allow: '(core, building blocks and add-ons|Do not call them building blocks)'}
+    - {id: module,               pattern: '\b(identity|audit|quota|CIAM) modules?\b', context_allow: '(the identity module|A module package|another module|customer-identity module)'}
+    - {id: audit-family,         pattern: '\baudit famil(y|ies)\b', context_allow: '(\bno audit famil|still list an audit family)'}
+    - {id: quota-actor,          pattern: '\b(quota|limits?) actors?\b', context_allow: '\bno (limits?|quota) actor'}
+    - {id: allowance,            pattern: '\ballowance (engine|push|mode)s?\b', context_allow: '(superseded|ADR 0039|\b0039\b|the allowance modes)'}
+    - {id: sluis-driver,         pattern: '\bsluis-driver-(\*|<)'}

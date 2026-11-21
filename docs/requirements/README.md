@@ -8,6 +8,7 @@ generates its pages from them and test tools read the same data.
 |---|---|
 | `index.yaml` | The vocabularies, the areas and the gap keys. The only place that declares them. |
 | `<area>.yaml` | The requirements of one area, named by the lower-case area code (`authn.yaml`). |
+| `archive/<area>.yaml` | The withdrawn rows of an area, or the whole file of a retired area (see "Ids" and "What moved"). |
 | `standards.yaml` | The standards register as data: the ids (`ST-nn`, `NC-nn`) that records cite. |
 | `attestations.yaml` | The records of manual checks: who checked a requirement, when, and what (see "Attestations"). |
 | `requirements.schema.json` | JSON Schema 2020-12 for `index.yaml`, every area file and `attestations.yaml`. Objects are closed. |
@@ -16,7 +17,7 @@ generates its pages from them and test tools read the same data.
 
 - [sluis.id/requirements/](https://sluis.id/requirements/): counts, the areas, and one table of all records with a filter by area,
   level, status, source and runtime.
-- `/requirements/<area>/`: one page per area, with standards, features, decisions and verification for each record.
+- `/requirements/<area>/`: one page per area, with standards, features, decisions and verification for each record. The withdrawn rows of the archive follow the live rows under their own heading.
 - `/requirements/matrix/`: requirement to standard, issue or feature, and verification, and back.
 - `/requirements/coverage/`: statistics, MUST records without a conformance suite or test vectors, open records by decision,
   and register rows that no requirement cites.
@@ -36,24 +37,37 @@ An id is `REQ-<AREA>-<nnn>`, for example `REQ-AUTHN-002`.
 - The area prefix equals the `area` field and the file it sits in.
 - A longer record that is cut into clauses keeps its id for the first clause. Each further clause gets the next free id in the same area
   and `split_from: <original id>`. Clauses sit next to their parent in the file, so ids are not always in order.
-- A rule that moves to another area is withdrawn in its old area and written as a new record in its new area, because the area prefix equals the file. The old record's `superseded_by` names the new one. The data model and the store moved to `DATA` this way (decisions 0004 and 0005).
-- An area whose records are all withdrawn is marked `retired: true` in `index.yaml`. It keeps its file and its ids, and the site leaves it out of the area lists. `SECRETS` and `VAULT` are retired. `just site-lint` refuses `retired: true` on an area that still has a record that is not withdrawn.
-- Records are not merged. A record that no longer applies gets `status: withdrawn` and `superseded_by: [ids]`. A record about a subject that moved to another product (root custody moved to ritueel on 2026-11-01) gets `status: withdrawn` and `moved_to` instead.
+- A rule that moves to another area is withdrawn in its old area and written as a new record in its new area, because the area prefix equals the file. The old record's `superseded_by` names the new one. The data model and the store moved to `DATA` this way (decisions [0004](../decisions/0004-the-data-model.md) and [0005](../decisions/0005-the-store.md)).
+- Records are not merged and never deleted. A record that no longer applies gets `status: withdrawn` and `superseded_by: [ids]`. A record about a subject that moved to another product (root custody moved to ritueel; the audit log moved to audit) gets `status: withdrawn` and `moved_to` instead.
+- **Archive.** A withdrawn row keeps its full text, so withdrawn rows leave the live file. An area whose records are all withdrawn is **retired**: `retired: true` in `index.yaml`, its file is `archive/<area>.yaml`, and the site leaves it out of the area lists. An area that also has live records names an `archive:` file in `index.yaml` (`archive/<area>.yaml`) and moves its withdrawn rows there. In both cases the ids keep resolving for tags, citations and links, and the counts stay the same. `just site-lint` refuses a retired area with a record that is not withdrawn, a retired area whose file is outside `archive/`, and an archive file with a record that is not withdrawn.
+- A test may keep its `verifies:` tag on a row that moved to audit until the code moves too. The lint accepts that evidence, and an attestation, on such a row without a warning.
 
 ## Milestones
 
-A record's `milestone` is the phase of the [roadmap](../roadmap.md#phases) in which its work is done. The slug is the key in `index.yaml`; the board option is the name that `index.yaml` maps it to, and the status page lists the options in the order of the board.
+A record's `milestone` is the milestone of the [roadmap](../roadmap.md) in which its work is done. The slug is the key in `index.yaml`; the board option is the name that `index.yaml` maps it to, and the status page lists the options in the order of the board. The product is a core, add-ons and customer identity ([0044](../decisions/0044-sluis-is-a-core-and-add-ons.md)); a milestone is a step of delivery, and a layer is a part of the product.
 
-| Slug | Board option | Phase of the roadmap | What belongs to it |
+| Slug | Board option | Layer | What belongs to it |
 |---|---|---|---|
-| `core` | Core | [Core](../roadmap.md#core) | What every installation needs: the actors and flows, the building blocks (store, key, policy, audit with usage and limits, KV), the security hardening, and the local, boards, Lambda and Kubernetes installations with release management. |
-| `customer-identity` | Customer identity | [Customer identity and quota](../roadmap.md#customer-identity-and-quota) | The exchange of a token of the trusted realm for a sluis token with customer, org and product (ADR 0032). Not the cancelled broker. |
-| `quota` | Quota | [Customer identity and quota](../roadmap.md#customer-identity-and-quota) | The usage stream and the limit check (ADR 0046). Not an allowance or a balance. |
-| `parity` | Parity | [Parity](../roadmap.md#parity) | What v1 does and the core does not yet: integrations, clients, the console, backup and restore, the rest of audit. Re-planned after the core, customer identity and quota. |
-| `pki-ssh-db` | PKI, SSH and database | [PKI, SSH and database](../roadmap.md#the-pki-ssh-and-database-add-on) | The certificate, SSH and database add-on: the intermediate hand-off, certificate profiles, SSH certificates, database client certificates. |
+| `core` | Core | core | What every installation needs: the actors and flows, the hosts of atoom's blocks (store, key), policy, the limit check, KV, the security hardening, and the local, boards, Lambda and Kubernetes installations with release management. |
+| `customer-identity` | Customer identity | customer identity | The exchange of a token of the trusted realm for a sluis token with customer, org and product (ADR 0032). Not the cancelled broker. |
+| `quota` | Quota | core | The limit check and its counters (ADR 0046). Usage records are audit's. Not an allowance or a balance. |
+| `parity` | Parity | core | What v1 does and the core does not yet: integrations, clients, the console, backup and restore, what sluis emits to audit. Re-planned after the core, customer identity and the limit check. |
+| `pki-ssh-db` | PKI, SSH and database | add-on | The certificate, SSH and database add-on: the intermediate hand-off, certificate profiles, SSH certificates, database client certificates. |
 | `backlog` | Backlog | not scheduled | Superseded designs that stay for the record, and later drivers and features. |
 
-The board still carries the earlier option names until the maintainer's script renames and orders them (First working version to Core, v1 parity to Parity, CIAM upstream to Customer identity, and a new PKI, SSH and database option). Until then `just check-requirements` warns, with a board at hand, that an option is missing, and the status page puts the records of a missing option under "Unassigned".
+The board may still carry earlier option names. Until it is renamed, `just check-requirements` warns, with a board at hand, that an option is missing, and the status page puts the records of a missing option under "Unassigned".
+
+## What moved
+
+The areas below changed home or shape. Ids are kept everywhere, so a link or a tag keeps working.
+
+| Area | What it is now |
+|---|---|
+| `AUDIT` | "Audit: what sluis emits and embeds". The audit log is [audit's](https://github.com/truvity/audit/blob/master/docs/requirements/README.md) now. Fourteen rows stay live, the ones audit marks `owner: sluis`: REQ-AUDIT-019, 078, 079, 081, 122, 123, 159, 160, 165, 180, 181, 182, 184 and 185. Every other row is `withdrawn` with `moved_to` audit's file, in `archive/audit.yaml`; its tests keep their tags here until the code moves. |
+| `QUOTA` | "Limits": the limit check and its counters ([0046](../decisions/0046-limits-on-the-request-path-and-usage-in-audit.md)). The withdrawn rows (allowance, balances, the usage stream) are in `archive/quota.yaml`. |
+| `SECRETS`, `VAULT` | Retired: all rows withdrawn, files in `archive/`. |
+| `ACCT`, `REG` | Not retired, because a few rows are live (a planned claims rule, the e-mail notifier, two done rows on factor changes). Their withdrawn rows are in `archive/acct.yaml` and `archive/reg.yaml`. |
+| `SESS` | The code stays `SESS`, because tests carry the ids. The title is "Sign-in sessions, refresh and logout" and the actor is `signin`. The executable is still named `session` until a planned step renames it; paths such as `actors/session/` follow the executable. |
 
 ## Record fields
 
@@ -67,7 +81,7 @@ The board still carries the earlier option names until the maintainer's script r
 | `runtimes` | `all`, or a list of `bare-metal`, `serverless`, `kubernetes`. |
 | `standards` | `{id, section, depth}`: an id from `standards.yaml`, the section, and `Full` or `Partial`. |
 | `features` | Optional: `parity` (part of v1 parity, no single issue) or `design` (specified, no issue yet). Issue numbers go in `issues`, never here. |
-| `milestone` | The Product milestone of the record: a key of `milestones` in `index.yaml` (`core`, `customer-identity`, `quota`, `parity`, `pki-ssh-db`, `backlog`; see [Milestones](#milestones)), which maps it to the name of an option of the board's `Product milestone` field. Required for every live record (a record that is not `withdrawn`): the switch below is on. |
+| `milestone` | The Product milestone of the record: a key of `milestones` in `index.yaml` (`core`, `customer-identity`, `quota`, `parity`, `pki-ssh-db`, `backlog`; see [Milestones](#milestones)), which maps it to the name of an option of the board's `Product milestone` field. Required for every live record (a record that is not `withdrawn`): the switch below is on. The slugs are tags that rows carry, so they stay when the roadmap changes its names. |
 | `issues` | Optional: the numbers of the truvity/sluis issues that deliver the record, for example `[915]`. Unique positive integers, at least one when present. They are the work; the `milestone` is where the record belongs. `just check-requirements` warns when a board is at hand and none of the issues is in the record's milestone. |
 | `tests` | Optional: the repository paths of the files that hold the tests, for example `[core/authn/authorize_test.go]`, as an index for the reader. Each path is relative to the repository root, names an existing file, and the file names the record's id. What counts as evidence is the tag, not this list. |
 | `actors` | Optional: the actors that implement the record, by their names in the [actor registry](../architecture/actors.yaml), for example `[policy]`. Each must be an actor whose requirement areas include the record's area; `just check-actors` checks it. A withdrawn record keeps no `actors`. |
@@ -75,7 +89,7 @@ The board still carries the earlier option names until the maintainer's script r
 | `gap` | Required for an `open` or `partial` record: a key of `gaps` in `index.yaml` that says what is missing. |
 | `manual_reason` | Required for a MUST verified by manual review only; forbidden otherwise. |
 | `superseded_by` | A `withdrawn` record needs this or `moved_to`: the ids of the records that replace it. |
-| `moved_to` | A `withdrawn` record that moved to another product: the URL of the truvity/ritueel issue that carries it. |
+| `moved_to` | A `withdrawn` record that moved to another product: the URL of the truvity/ritueel issue that carries it, or the URL of [audit's requirements file](https://github.com/truvity/audit/blob/master/docs/requirements/audit.yaml), optionally with `#REQ-AUDIT-nnn` (the id is the same there). The site shows "Moved to ritueel" or "Moved to audit". |
 
 ## How a test names a requirement
 
@@ -132,7 +146,7 @@ attestations:
     checked: "The sign-in page was read against the record in the browser and in the text-only view."
 ```
 
-`req` is a live record that has a `manual` verification; `by` is the commit e-mail of the person who checked, the address on their commits to this public repository (the maintainer's or a reviewer's own; a noreply address where they use one), never a login (owner decision QA1 A, 2026-11-06); `on` is the UTC date; `checked` is one sentence on what was checked. `agent_run: true` is optional and says that an agent ran the check; `by` is then the person who stands behind it and accepts what the agent reports, not the person who typed the commands. Leave it out when the person ran the check; it is never `false`. An entry for a record without a manual verification, for an unknown record, or dated in the future is an error. An attestation is not renewed by itself: when the behaviour changes, the pull request that changes it adds a new entry or moves the record back.
+`req` is a live record that has a `manual` verification; `by` is the commit e-mail of the person who checked, the address on their commits to this public repository (the maintainer's or a reviewer's own; a noreply address where they use one), never a login; `on` is the UTC date; `checked` is one sentence on what was checked. `agent_run: true` is optional and says that an agent ran the check; `by` is then the person who stands behind it and accepts what the agent reports, not the person who typed the commands. Leave it out when the person ran the check; it is never `false`. An entry for a record without a manual verification, for an unknown record, or dated in the future is an error. An attestation is not renewed by itself: when the behaviour changes, the pull request that changes it adds a new entry or moves the record back.
 
 ## Adding a requirement
 

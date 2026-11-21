@@ -8,26 +8,28 @@ sidebar:
 
 A decision record (ADR) says why sluis is shaped the way it is, a requirement says what sluis v2 must do, and a spike or research result is the evidence a decision is made on. Who decides is in [GOVERNANCE.md](https://github.com/truvity/sluis/blob/main/GOVERNANCE.md) ("How a decision is made"); this page is the order of work, and [How we design](/contributing/design/) is the order of thinking before it.
 
+A decision lives in one repository. [atoom](https://github.com/truvity/atoom/tree/master/docs/decisions) (ports, drivers and blocks), [audit](https://github.com/truvity/audit/tree/master/docs/decisions) and [session](https://github.com/truvity/session/tree/master/docs/decisions) have their own records. Write a decision where the thing it decides lives, and link it from the others; do not restate it.
+
 ## The maintainer decides
 
 A contributor or an agent presents the options, each with its pros and cons, and a recommendation. It does not pick. The maintainer decides: merging a record with status `Accepted` is the decision.
 
 ## Decision records
 
-The format, the numbering and the status values are in [docs/decisions/README.md](https://github.com/truvity/sluis/blob/main/docs/decisions/README.md).
+The format (status, an optional `Layer` line, date, context, decision, consequences, roads not taken, follow-ups), the numbering, the status values and the archive are in [docs/decisions/README.md](https://github.com/truvity/sluis/blob/main/docs/decisions/README.md).
 
 ### From proposal to record
 
 1. **Proposal.** Open an issue with the *Decision proposal* form: the question, the context, the options with pros and cons, and the options you would not take. The form labels it `type:decision`; give it a `Product milestone` on the project board, which places the planned record on the [project status](/status/) page.
-2. **Record.** When the direction is clear, copy [the template](https://github.com/truvity/sluis/blob/main/docs/decisions/0000-template.md) to `docs/decisions/NNNN-short-title-in-kebab-case.md`, with the next free number. Link the proposal issue in the context.
-3. **Index.** Add the record to the index table in `docs/decisions/README.md`, with its layer and status. Every record has a row, and every row has a record.
+2. **Record.** When the direction is clear, copy [the template](https://github.com/truvity/sluis/blob/main/docs/decisions/0000-template.md) to `docs/decisions/NNNN-short-title-in-kebab-case.md`, with the next free number (archived records count). Add a `Layer` line when the decision belongs to an add-on or to customer identity; a record with none is core ([0044](/decisions/0044-sluis-is-a-core-and-add-ons/)). Link the proposal issue under the date.
+3. **Index.** Add the record to the index table in `docs/decisions/README.md`, in reading order, with its layer and status. Every record has a row, and every row has a record.
 4. **Requirements.** A decision that creates an obligation adds a requirement or cites an existing one ([Requirements](#requirements)).
 5. **Pages.** The pages that the decision changes follow in the same pull request, or in the next one ([Pages and writing style](/contributing/pages/)).
 6. **Pull request.** At most five records per pull request. A larger batch is split.
 
 ### Accepted means fully decided
 
-A record is `Accepted` only when every part of it is decided. While a part is still open, the record stays `Proposed`, the open part is tracked in an issue, and the record lists it under Follow-ups with a link to that issue. An accepted record never says "not decided here" and never names a future record number: a planned decision has an issue, and the record links the issue.
+A record is `Accepted` only when every part of it is decided. While a decision at its centre is still open, the record stays `Proposed`. What an accepted record leaves out is a line under Follow-ups that starts `Open:`, with its issue. An accepted record never says "not decided here" and never names a future record number: a planned decision has an issue, and the record links the issue.
 
 ### Roads not taken
 
@@ -37,9 +39,14 @@ Every record keeps the options it did not take, one line each: the option in bol
 
 A rule lives in one place: a record, or a reference page with test vectors that the record links. A page with vectors can carry the rule in detail (the format of a token, a signed document, the bootstrap file) while the record keeps the reasoning and links the page. Do not restate the rule in a second record; link its heading.
 
-### Rewriting a record
+### Changing a decision
 
-Before the first v2 release the maintainer may have records rewritten, merged and renumbered in place; after it, a changed mind gets a new record. A rewritten record carries no history lines. When records are merged, split or renumbered, update `docs/decisions/renumbered.json` in the same pull request: the site turns each old address into a 301 to the record that took it over, and `just check-decisions` fails when an old slug is still a file or a new one is missing. The rules are in the "Design phase" section of `docs/decisions/README.md`; its last table maps old record numbers to their new records.
+The records were rewritten once, cleanly, so that each states the current design and stands alone. From that rewrite on, records are append-only:
+
+- **A changed mind is a new record** that supersedes the old one. The old record's status line points at the new one, and the record moves to `docs/decisions/archive/` under its own number. Its body is not edited again.
+- **A record is fixed in place** only for a typo, a link, or a built-or-planned mark: when something is built, the mark changes and nothing else.
+- **A subject that moves to another repository** keeps its number here as a short note that says where it went (the "moved to" records of [the index](https://github.com/truvity/sluis/blob/main/docs/decisions/README.md)). The decision itself lives in the other repository.
+- **An address that stops being a file** is recorded in `docs/decisions/renumbered.json`, which the site turns into a 301 to the record that took the content over. `just check-decisions` fails when an old slug is still a file or a new one is missing.
 
 v1 records stay on `master`. Refer to one as "v1 ADR NNNN" with a link to `master`; never copy or renumber it.
 
@@ -57,7 +64,7 @@ A decision that creates an obligation adds a requirement or cites an existing on
 
 ### Ids
 
-An id is `REQ-<AREA>-NNN`, for example `REQ-AUTHN-002`. It is never reused and never renumbered, not even for a withdrawn record, so a link or a test name keeps working. A record that no longer applies is withdrawn, not deleted.
+An id is `REQ-<AREA>-NNN`, for example `REQ-AUTHN-002`. It is never reused and never renumbered, not even for a withdrawn record, so a link or a test name keeps working. A record that no longer applies is withdrawn, not deleted. A row whose subject moved to another product (the audit rows, for example) is withdrawn with `moved_to`, and an area whose rows are all withdrawn is retired; [the requirements README](https://github.com/truvity/sluis/blob/main/docs/requirements/README.md) says how, and this page does not repeat it.
 
 ### Fields
 

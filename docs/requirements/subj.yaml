@@ -808,7 +808,7 @@ requirements:
     status: done
     milestone: core
     runtimes: all
-    actors: [session]
+    actors: [signin]
     standards: []
     issues: [1221]
     verification:
@@ -823,7 +823,7 @@ requirements:
     gap: partly-built
     milestone: core
     runtimes: all
-    actors: [session]
+    actors: [signin]
     standards: []
     issues: [1221]
     verification:

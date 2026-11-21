@@ -45,7 +45,7 @@ Claude Code skills in `.claude/skills/` are checklists that point back to these 
 | Skill | Use it to |
 |---|---|
 | `open-pr` | branch, commit, push, open, review and merge a pull request |
-| `new-decision` | write, rewrite or renumber a decision record |
+| `new-decision` | write a decision record, or supersede one |
 | `new-requirement` | add or change a requirement |
 | `spike-report` | run a spike and write up its result |
 | `docs-page` | create or edit a page of the site |

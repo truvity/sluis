@@ -27,7 +27,7 @@ v2 lives on `main`, an orphan branch that shares no history with v1. v1 lives on
 
 - Keep a pull request to one change.
 - Do not stack pull requests. Merging is by rebase only, so every merge changes the commits of the next pull request and forces it to be rebuilt. Put dependent work in one linear pull request, with one commit per part.
-- A change comes with its tests and its documentation in the same pull request. Changes to protocols and stored formats also keep the compatibility rules in [GOVERNANCE.md](https://github.com/truvity/sluis/blob/main/GOVERNANCE.md).
+- A change comes with its tests and its documentation in the same pull request. A change that also touches atoom, audit or session is one pull request in each repository; each links the others by absolute URL, and a decision is written only in the repository that owns it ([Decisions, requirements and research](/contributing/decisions/)). Changes to protocols and stored formats also keep the compatibility rules in [GOVERNANCE.md](https://github.com/truvity/sluis/blob/main/GOVERNANCE.md).
 - Open a draft pull request early if you want feedback. Mark it ready when the checks are green.
 - Rebase onto the current `main` before you ask for the merge. A green pull request on a stale base can still break `main`. The ruleset below requires it.
 - After someone has reviewed the branch, do not rewrite the commits they read. Add commits instead, and let the rebase merge tidy them; rebase only to catch up with `main`.

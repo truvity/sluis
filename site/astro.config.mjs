@@ -130,7 +130,11 @@ export default defineConfig({
     '/runtimes/boundaries/': '/concepts/boundaries/',
     '/architecture/processes/': '/architecture/components/',
     '/architecture/listeners/': '/architecture/deployment/#listeners',
-    '/tutorials/': '/tutorials/single-node-install/',
+    '/tutorials/': '/runtimes/local/',
+    '/tutorials/single-node-install/': '/runtimes/local/',
+    '/architecture/audit-explorer/': '/concepts/audit/',
+    '/reference/checkpoint-history/': '/concepts/audit/',
+    '/runtimes/rebuild-a-board/': '/runtimes/bare-metal/',
     '/distribution/platforms/': '/distribution/packages/',
     '/integrations/slack/': '/integrations/more/#slack',
     '/integrations/outline/': '/integrations/more/#wiki',
@@ -150,10 +154,6 @@ export default defineConfig({
     '/reference/vocabulary/': '/reference/policy/#the-grant-vocabulary',
     '/runtimes/installations/': '/runtimes/',
     '/distribution/': '/distribution/packages/',
-    '/integrations/aws/': '/integrations/cloud/#aws',
-    '/integrations/cloudflare/': '/integrations/cloud/#cloudflare',
-    '/integrations/postgresql/': '/integrations/infrastructure-access/#postgresql',
-    '/integrations/ssh/': '/integrations/infrastructure-access/#ssh',
     ...decisionRedirects,
   },
   ...(workers ? workersOptions : {}),
@@ -231,7 +231,7 @@ export default defineConfig({
         { label: 'Integrations', items: [{ autogenerate: { directory: 'integrations' } }] },
         {
           label: 'Install and release',
-          items: [{ slug: 'tutorials/single-node-install' }, { autogenerate: { directory: 'distribution' } }],
+          items: [{ autogenerate: { directory: 'distribution' } }],
         },
         { label: 'Standards and conformance', items: [{ autogenerate: { directory: 'standards' } }] },
         {
@@ -259,15 +259,15 @@ export default defineConfig({
         starlightLinksValidator({
           errorOnRelativeLinks: false,
           // The ADR pages and the v1 documentation are not Starlight content.
-          // The two explorer pages are MDX (they import components), and the
-          // validator collects no headings from an MDX page, so a link to one
-          // would always fail; the pages themselves are still built and checked.
+          // The explorer page is MDX (it imports components), and the
+          // validator collects no headings from an MDX page, so a link to it
+          // would always fail; the page itself is still built and checked.
           // The requirements pages are generated in src/pages from the catalogue
           // (custom pages the validator cannot see); lychee checks links to them.
           // So are the status page and /data/repo.json. The home page is MDX too, so a link to
           // it ('/') fails the same way.
           exclude: [
-            '/', '/v1/', '/v1/**', '/decisions/', '/decisions/**', '/architecture/identity-explorer/', '/architecture/audit-explorer/',
+            '/', '/v1/', '/v1/**', '/decisions/', '/decisions/**', '/architecture/identity-explorer/',
             '/requirements/', '/requirements/**', '/status/', '/data/**',
           ],
         }),

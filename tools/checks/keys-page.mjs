@@ -20,7 +20,7 @@ const reg = load(KEYS);
 const areg = load(ACTORS);
 const purposes = Array.isArray(reg?.purposes) ? reg.purposes : [];
 const algorithms = reg?.algorithms ?? {};
-const everyone = [...(areg?.actors ?? []), ...(areg?.platform ?? [])];
+const everyone = [...(areg?.actors ?? []), ...(areg?.audit_pieces ?? []), ...(areg?.platform ?? [])];
 const names = new Set(everyone.map((a) => a.name));
 
 const user = (u) => (names.has(u) ? `[${code(u)}](/reference/actors/#${u})` : /^adapter-</.test(u) ? code(u) : md(u));

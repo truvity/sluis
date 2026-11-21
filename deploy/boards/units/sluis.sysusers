@@ -12,7 +12,6 @@ g sluis-adapter-upstream-oidc-dev 61009
 g sluis-console-dev 61002
 g sluis-exchange-dev 61003
 g sluis-key-dev 61014
-g sluis-quota-dev 61008
 g sluis-session-dev 61001
 g sluis-ssh-ca-dev 61007
 g sluis-store-dev 61012

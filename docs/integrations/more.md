@@ -6,7 +6,7 @@ sidebar:
   order: 20
 ---
 
-These four integrations are part of v1 parity ([Roadmap](/roadmap/)); none is in the core. Each follows the [model](/integrations/): an adapter that holds no credential at rest and opens the tenant's sealed connection credential at key@ for each call, a desired state that the directory adapter writes, a dry run until enabled, and breakers against mass removals. A pass that no caller starts asks `policy` for a grant for one tenant at a time ([0025](/decisions/0025-integrations/#adapters-and-connections)). sluis does identity only: it does not read a wiki's documents or a channel's messages, and schedules and escalation stay in the on-call tool. What v1 does today is on the [v1 parity checklist](/features/).
+These four integrations are part of v1 parity ([roadmap](/roadmap/)). All of them are planned: the `Provisioner` and `Notifier` contracts and the reconcilers are not built ([0026](/decisions/0026-reconcilers/#built-and-planned)). Each follows the [model](/integrations/): an adapter that holds no credential at rest and opens the tenant's sealed connection credential at key@ for each call, a desired state that the directory adapter writes, a dry run until enabled, and breakers against mass removals. A pass that no caller starts asks `policy` for a grant for one tenant at a time ([0025](/decisions/0025-integrations/#adapters-and-connections)). sluis does identity only: it does not read a wiki's documents or a channel's messages, and schedules and escalation stay in the on-call tool. What v1 does today is on the [v1 parity checklist](/features/).
 
 ## Slack
 
@@ -56,4 +56,4 @@ A person links their Telegram account to their sluis identity once, with a singl
 
 ## Connecting
 
-Apart from Slack's manifest, each takes a key or token an administrator creates by hand ([Credentials without a ceremony](/integrations/connecting/#credentials-without-a-ceremony)). The credential is entered through the UI or the API, checked in a dry run and kept sealed in the tenant's connection; it is never inlined in a reviewed file and never recorded in the audit log.
+Apart from Slack's manifest, each takes a key or token an administrator creates by hand ([Credentials without a ceremony](/integrations/connecting/#credentials-without-a-ceremony)). The credential is entered through the UI or the API, checked in a dry run and kept sealed in the tenant's connection; it is never inlined in a reviewed file and never recorded in an audit record.
