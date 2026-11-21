@@ -1,4 +1,4 @@
-# 0016 — Telemetry is OpenTelemetry with fixed conventions, and a log level is raised at run time only with an expiry
+# 0016 — Telemetry follows the group's OpenTelemetry conventions; sluis fixes its own names, and a log level is raised at run time only with an expiry
 
 **Status:** Accepted
 **Date:** 2026-11-21
@@ -7,26 +7,20 @@ Proposal: [issue #1003](https://github.com/truvity/sluis/issues/1003).
 
 ## Context
 
-Thirty executables in two languages drift apart quickly unless the names of their telemetry are fixed once. A developer needs to know, before writing the first actor, whether telemetry goes through a port, what a log line looks like, which spans and metrics every actor and driver emits and under which names, how trace context crosses Unix sockets, how a log level is raised for a while, and how the allowlist is enforced.
+Thirty executables in two languages drift apart quickly unless the names of their telemetry are fixed once. The generic conventions are the group's telemetry rules, kept in the group's architecture, which every product of the group follows:
+- the OpenTelemetry SDK of each language, used directly, with exporters set only by the standard `OTEL_*` variables;
+- export that is best effort and never blocks a request;
+- JSON log lines on stderr in the OpenTelemetry log model, with a fixed body;
+- W3C Trace Context as the only propagation format, with parent-based sampling;
+- the standard resource attributes;
+- an allowlist of the attributes that may leave a process;
+- the practice of gauges, counters and alert rules.
 
-The limits are these. Exporters, endpoints and resources are configured only by the standard `OTEL_*` environment variables and exported as OTLP over HTTP with protobuf; the bootstrap file has no telemetry keys. A span or a metric never carries a personal, secret or free-text value: the treatment of a kind decides what may leave ([0004](/decisions/0004-the-data-model/)). Traces are still Beta in the Rust SDK, so the Rust kit carries sluis's own Connect instrumentation ([0012](/decisions/0012-the-language-follows-the-executable/)).
-
-v1 emitted OTLP metrics, traces without personal data and logs, with alert rules and a dashboard ([#836](https://github.com/truvity/sluis/issues/836)). Its alert rules paged falsely for days at a time until each failure was learned. The rules for gauges, counters and alerts below are those lessons, fixed before the first v2 metric exists.
+This record holds what is sluis's own: the names, the kinds that set log levels, where a trace starts, the correlation id, and the join between an audit record and a trace. The `REQ-OBS` rows state the rules that sluis tests.
 
 ## Decision
 
-What is built: the kinds `LogSettings` and `LogLevelOverride` are in the kind registry, and every request carries a correlation id. The OpenTelemetry conventions, the kit's instrumentation, the allowlist and the alert rules are planned (the `REQ-OBS` rows).
-
-### No port
-
-- **Every executable uses the OpenTelemetry SDK of its language directly,** through its kit. Telemetry is not a port and has no driver: an exporter choice is an `OTEL_*` setting, and the collector is the operator's. [Audit's](https://github.com/truvity/audit/blob/master/docs/decisions/0002-pieces-and-holders.md) emitter carries audit facts, never telemetry.
-- **Telemetry is best effort.** A failed export never fails a request, never blocks the request path and is never the audit channel (REQ-OBS-006). On serverless the kit flushes within a bounded deadline before the runtime freezes (REQ-OBS-004).
-
-### Logs
-
-- **A log line is one JSON object on stderr,** with the field names of the OpenTelemetry log data model: `timestamp`, `severity_text`, `severity_number`, `body`, `attributes`, and `trace_id` and `span_id` when a span is active (REQ-OBS-007). The runtime collects stderr; the OTLP log exporter is optional, set by `OTEL_LOGS_EXPORTER`.
-- **`body` is a fixed message chosen in code,** never a formatted value. Values go into `attributes`, and only allowlisted ones.
-- **A string that a caller supplied is logged only after the kit's helper has cleaned it:** one line, no control character and no bidirectional control, at most 256 characters ([REQ-OBS-019](/requirements/obs/#REQ-OBS-019)). A refusal at the authorization or token endpoint logs the error code, a closed reason and the declared client id, never the query, the state, a challenge, a code or a token, and a caller's own mistake is logged below error level (REQ-OBS-020 to REQ-OBS-022).
+What is built: the kinds `LogSettings` and `LogLevelOverride` are in the kind registry, and every request carries a correlation id. The kit's instrumentation, the allowlist and the alert rules are planned (the `REQ-OBS` rows).
 
 ### Log levels
 
@@ -36,79 +30,49 @@ What is built: the kinds `LogSettings` and `LogLevelOverride` are in the kind re
 - **An actor reads and watches its own ids only.** On Lambda nothing is pushed, so a function re-reads with an ETag.
 - **Every raise is authorised for a named person and audited.**
 
-### Traces
+### Where a trace starts, and span names
 
-- **W3C Trace Context (`traceparent`, `tracestate`) is the only propagation format,** on every hop: Connect over Unix sockets, Lambda invokes, in-cluster calls, HTTPS with mutual TLS between nodes and installations (REQ-OBS-002). Baggage is not propagated. Measured on 2026-11-02 in Go and Rust in both directions: a `baggage` header sent to the first hop reaches that hop and no further, and `tracestate` still travels.
-- **Only internal actors trust a remote parent.** `entry` starts a new trace for each request, a vendor's webhook to an adapter included, and keeps a caller's `traceparent`, if any, as a span link. At `entry`, in both languages, the server span has no parent, a new trace id and exactly one link to the caller's client span, and everything behind it is in the new trace (measured on 2026-11-02).
-- **Spans have fixed names:** one server span per RPC, named by the OpenTelemetry RPC conventions (`<package>.<Service>/<Method>`); one client span per call to another actor; one span per call through a port, named `<port>.<operation>` (for example `data.write` on a work actor's data port, `keys.seal` on its keys port), with `sluis.driver` naming the driver when the call goes to one. A key operation's span records the purpose and the outcome, never the input.
-- **Sampling is parent-based and always on by default,** and the ratio for an actor or a module comes from `LogSettings`.
+- **Only internal actors trust a remote parent.** `entry` starts a new trace for each request, a vendor's webhook to an adapter included, and keeps a caller's `traceparent`, if any, as a span link. At `entry`, in both languages, the server span has no parent, a new trace id and exactly one link to the caller's client span (measured on 2026-11-02).
+- **Spans have fixed names:** one server span per RPC, named by the OpenTelemetry RPC conventions (`<package>.<Service>/<Method>`); one client span per call to another actor; one span per call through a port, named `<port>.<operation>` (for example `data.write`, `keys.seal`), with `sluis.driver` naming the driver when the call goes to one. A key operation's span records the purpose and the outcome, never the input.
+- **The sampling ratio for an actor or a module comes from `LogSettings`.**
 
 ### The correlation id
 
 - **`entry` gives every request a correlation id** (a random UUID version 4), returns it to the caller in a response header, and passes it in the metadata of every internal call the request causes. A client cannot choose it. A support question with the id finds the records of the request.
 - **The header is `Atoom-Correlation-Id`.** The old name `Sluis-Correlation-Id` is accepted for one release. The wire change is planned in [atoom](https://github.com/truvity/atoom/blob/master/docs/call-context.md); until it lands the header keeps its old name.
 
-### Metrics
+### Metric names
 
-- **Metric names are `sluis.<area>.<thing>`, with units in UCUM as the semantic conventions say,** and the RPC and HTTP metrics take the names of the OpenTelemetry semantic conventions of the pinned SDK version instead, wherever one exists. Every RPC and every call through a port has a duration histogram and an outcome count.
-- **Named metrics that other records rely on:** `sluis.key.expiry` (seconds until a key's certificate or binding expires, attributes `purpose` and `boundary`; the expiry warnings of [0024](/decisions/0024-root-custody-and-the-signing-api/)), `sluis.audit.spool.depth` (records waiting in a local spool) and `sluis.directory.staleness` (seconds since the last good read of each upstream directory, [0017](/decisions/0017-identity-and-sign-in/)).
-- **Every executable sets the resource attributes** `service.name` (the executable), `service.instance.id` (`<actor>@<boundary>`), `service.version` (the release) and `deployment.environment.name` (the environment).
-
-### Gauges, counters and the alerts that read them
-
-- **An instance is not a process.** `service.instance.id` is `<actor>@<boundary>`, so on serverless every warm environment of a function exports a gauge with identical attributes, and the backend shows the series of whichever environment reported last. No alert reads the last value of a gauge that several instances export ([REQ-OBS-025](/requirements/obs/#REQ-OBS-025)).
-- **Each named gauge says how its series combine.** `sluis.key.expiry` is read as the minimum over instances, the soonest expiry. `sluis.audit.spool.depth` is the sum for the total waiting, and an alert on a single spool reads the maximum. `sluis.directory.staleness` is shown as the maximum and drives no alert: its alert reads the counter below.
-- **The freshness of a periodic job comes from a counter.** Every periodic job (a reconciler target, a directory refresh, a sweep) adds to the counter `sluis.job.ticks` for each pass, with the attributes `job` (bounded) and `outcome` (`ok` or `failed`) ([REQ-OBS-036](/requirements/obs/#REQ-OBS-036)). The age of a job is the time since the last increase with `outcome=ok`. Counters from many instances add up and none overwrites another.
-- **A counter that an alert reads exists at zero before its first event.** The kit adds zero to a counter when its scope first exists, for a new kind, target or vendor, because a series that starts at its first event makes `increase` miss that event and leaves a panel with no data (REQ-OBS-024).
-- **A stall and a stopped series are two alerts.** A job is live while a sample of its series arrived within the live window. A live job with no `ok` increase for `maxAge`, four of the job's own intervals, is a critical alert (REQ-OBS-027). A series seen within the look-back and silent for the live window is a warning that clears when the look-back passes, so a renamed or removed job does not page for a day (REQ-OBS-028). A job that is gone for good leaves only silence, which an `absent` rule sees (REQ-OBS-029). The starting values are v1's design figures, not measured on v2: a live window of 15 minutes and a look-back of 2 hours for every job, and a `maxAge` of four intervals, which is 1 hour for the default interval of 15 minutes and 4 hours for an hourly job, so a job is never at the alert boundary when it runs on time.
-- **A failure alert counts failures only.** The outcome of a port call is one of `ok`, `conflict`, `not_found` or `error`; the first three are ordinary and the failure share counts `error` alone (REQ-OBS-026).
-- **A label is for operators.** No behaviour, such as a maintenance freeze or an authorization, depends on a route name or any other metric label. v1 had a freeze keyed on a route name that the code named differently from its alert.
-- **Vendor calls have their own spans and their own latency class.** An adapter or driver that calls a vendor records a span for each API method and a child span for each attempt, with no account, token or URL in it (REQ-OBS-032, REQ-OBS-033). An exchange that mints at a vendor waits for seconds, so it has an alert of its own and the token endpoint alert leaves it out (REQ-OBS-034). A duration histogram has a bucket above the longest vendor call it waits for (REQ-OBS-035).
-- **Rules are tested like code.** Each alert rule has rule tests for a firing case, a quiet case and the regression of its last change, and every label value a rule selects is one the code emits (REQ-OBS-030, REQ-OBS-023).
-
-### The allowlist
-
-- **An attribute leaves a process only if it is on the allowlist.** The kit drops every other attribute before export, in spans, metrics and logs alike (REQ-OBS-003).
-- **The allowlist is generated** from the kind registry and the contracts, plus the conventions' own attribute names: a field of bounded cardinality that is neither secret nor personal may go in; a sealed or hashed value, a personal value and free text never (REQ-OBS-008, REQ-OBS-010, REQ-OBS-011).
-- **A metric attribute must have bounded cardinality.** A client id or a boundary may label a metric; a subject, a request id or a serial may not, even where a span may carry it.
+- **Metric names are `sluis.<area>.<thing>`,** and the RPC and HTTP metrics take the names of the OpenTelemetry semantic conventions of the pinned SDK version wherever one exists. Every RPC and every call through a port has a duration histogram and an outcome count; the outcome of a port call is one of `ok`, `conflict`, `not_found` or `error`.
+- **`service.instance.id` is `<actor>@<boundary>`.**
+- **Named metrics that other records rely on, and how their series combine:**
+  - `sluis.key.expiry`: seconds until a key's certificate or binding expires, attributes `purpose` and `boundary`, read as the minimum over instances. It drives the expiry warnings of [0024](/decisions/0024-root-custody-and-the-signing-api/).
+  - `sluis.directory.staleness`: seconds since the last good read of each upstream directory ([0017](/decisions/0017-identity-and-sign-in/)), shown as the maximum and driving no alert.
+  - `sluis.job.ticks`: the counter that every periodic job (a reconciler target, a directory refresh, a sweep) adds to on each pass, with the attributes `job` (bounded) and `outcome` (`ok` or `failed`) ([REQ-OBS-036](/requirements/obs/#REQ-OBS-036)). The age of a job, and its alerts, come from this counter.
 
 ### Pointing from audit to a trace
 
-[Audit](https://github.com/truvity/audit) is a product of its own, and its records are described in [its record format](https://github.com/truvity/audit/blob/master/docs/decisions/0004-the-record-format.md).
-
-- **An audit record carries the W3C trace id in OCSF's `metadata.correlation_uid`,** and nothing from the trace. A trace carries the audit record's `metadata.uid` as `sluis.audit.uid`, so the two can be joined by someone who may read both, and neither repeats the other.
+[Audit](https://github.com/truvity/audit) is a product of its own; its records are described in [its record format](https://github.com/truvity/audit/blob/master/docs/decisions/0004-the-record-format.md). A trace carries the audit record's `metadata.uid` as `sluis.audit.uid`, and the audit record carries the trace id, so the two can be joined by someone who may read both.
 
 ## Consequences
 
-- One log format and fixed names let a dashboard, an alert rule and a support question work on every executable in both languages. The Rust kit carries the conventions in sluis's own instrumentation crate, which must keep pace with the Go SDK; the conformance suite checks both against the same expected spans and metrics.
-- **The Rust kit costs more than first estimated.** Measured on 2026-11-02 on an x86_64 workstation, not a board: one hop pinned to 2 CPUs, 10,000 calls per repetition, the median of 5 repetitions, server CPU summed over all threads including the exporters. The server and client spans with the RPC histograms add 15.0 µs of CPU per call to a Rust leaf, against 5.1 µs estimated before. The full build of this record (allowlist, log line and OTLP log record, port span and metrics, gauges) adds 21.8 µs (10.9 µs without telemetry, 32.7 µs with it). The Go kit adds 10.1 and 16.8 µs on a base of 35.7 µs. Rust with the full build still uses less CPU at a leaf than Go with none. In an ablation about 10 of the 15 µs remain with no OpenTelemetry layer and no metrics; the cause was not profiled.
+- Fixed names let a dashboard, an alert rule and a support question work on every executable in both languages. The Rust kit carries the conventions in sluis's own instrumentation crate, which must keep pace with the Go SDK; the conformance suite checks both against the same expected spans and metrics.
+- **The Rust kit costs more than first estimated.** Measured on 2026-11-02 on an x86_64 workstation: one hop pinned to 2 CPUs, 10,000 calls per repetition, the median of 5 repetitions, server CPU summed over all threads including the exporters. The server and client spans with the RPC histograms add 15.0 µs of CPU per call to a Rust leaf, against 5.1 µs estimated before; the full set of conventions adds 21.8 µs (10.9 µs without telemetry, 32.7 µs with it). The Go kit adds 10.1 and 16.8 µs on a base of 35.7 µs. Rust with everything still uses less CPU at a leaf than Go with nothing.
 - Every data access crosses store@ and every seal or open crosses key@, so a request has a span for each hop. The two holders are the first place to look when a request is slow, and their histograms are the input to the capacity measurements ([0037](/decisions/0037-capacity-is-measured-before-it-is-promised/)).
-- Starting a new trace at `entry` means an outside caller's trace stops at sluis's edge and continues as a link. The operator still sees the whole request inside sluis, and a caller cannot plant trace ids or flood the sampler.
-- A raised log level costs log volume for at most a day and then ends by itself. An operator who forgets to lower it does not leave debug logging, which can carry more detail than normal, running.
-- The allowlist is enforced in the exporter path, so a developer who adds an attribute that is not allowlisted sees it dropped in tests, not leaked in production. The cost is one generated list kept in step with the registry, which CI checks.
-- Bounded metric attributes keep the collector's cost predictable; per-subject or per-request analysis needs traces or the audit log.
-- The audit-to-trace join is a correlation id only; deleting traces never weakens the audit log.
-- A job's age needs a counter and a gauge is only shown, so each periodic job adds one counter series per outcome. The cost is bounded by the number of jobs.
-- The dashboards show cold starts and the initialisation time of each function from the platform's report events, because no metric carries them ([REQ-OBS-031](/requirements/obs/#REQ-OBS-031)).
-- The `REQ-OBS` rows state these rules; the alert rules and the dashboard of v1 are rebuilt on these names in parity ([#836](https://github.com/truvity/sluis/issues/836)); see the [roadmap](/roadmap/).
+- Starting a new trace at `entry` means an outside caller's trace stops at sluis's edge and continues as a link. A caller cannot plant trace ids or flood the sampler.
+- A raised log level costs log volume for at most a day and then ends by itself.
+- The `REQ-OBS` rows state these rules; the alert rules and the dashboard of v1 are rebuilt on these names in parity ([#836](https://github.com/truvity/sluis/issues/836)).
 
 ## Roads not taken
 
-- **A telemetry port with drivers.** It would wrap an SDK that is already pluggable by `OTEL_*`, and add a hop to every span.
-- **Plain-text logs, or a log format of sluis's own.** Every collector would need a parser, and the trace id would be in a different place in each executable.
 - **Trusting a remote parent at `entry`.** An outside caller could choose trace ids and force sampling on every request it sends.
-- **B3 or vendor propagation formats beside W3C Trace Context.** Two formats on one hop double the parsing and the tests; every current SDK speaks W3C.
-- **A hand-written allowlist.** It drifts from the registry the first time a field is added.
-- **The audit record id as the trace id, or the trace inside the audit record.** Either makes one store depend on the other's retention and lets a trace say what the audit record says.
+- **The audit record id as the trace id, or the trace inside the audit record.** Either makes one store depend on the other's retention.
 - **A log level raised with no expiry.** A forgotten debug level would stay on, and nothing would tell an operator that the log is more detailed than config says.
-- **Alert on the age of a gauge that every instance exports.** On serverless the series flips between instances, and a healthy job pages because one old environment reported last.
-- **Create a counter at its first event.** `increase` over a series that starts at 1 misses the first event, and a panel reads no data until it happens.
-- **Look back a day for a stopped series, and page critical for it.** A renamed or removed target then pages for up to a day; a stall and a stopped series are two alerts.
 - **A log level per tenant.** The layers of the logging group are built-in, config and the operator's override, set per boundary, actor and module; none carries a tenant.
+- **Keeping the generic conventions in this record.** They bind every product of the group, so they are the group's rules; this record would repeat them and drift.
 
 ## Follow-ups
 
 - Telemetry, health probes, the alert rules and the dashboard for parity: [#836](https://github.com/truvity/sluis/issues/836).
 - The expiry warning that uses `sluis.key.expiry`: [#1068](https://github.com/truvity/sluis/issues/1068).
 - The Rust kit: where the 15 µs go, a client wrapper or transport that always injects `traceparent` (connect-rust has no client interceptor), OTLP over TLS, and the value of `server.address`: [#861](https://github.com/truvity/sluis/issues/861).
-- Open: the generic conventions of this record (no port, logs, log levels, traces, metrics, gauges and counters, the allowlist) may become group-wide rules, pending the maintainer. Until then they stay here, whole.

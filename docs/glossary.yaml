@@ -1309,9 +1309,9 @@ lint:
     - {id: service-per-kind,     pattern: '\b(one )?generated service per kind\b'}
     - {id: session-actor,        pattern: '(\bsession actor\b|`session@|`session` actor\b|\bactor `session`)'}
     - {id: keyring-block,        pattern: '(\bkeyring block\b|`keyring` block\b|\bblock `keyring`)'}
-    - {id: building-block,       pattern: '\bbuilding blocks?\b', context_allow: '(core, building blocks and add-ons|Do not call them building blocks)'}
-    - {id: module,               pattern: '\b(identity|audit|quota|CIAM) modules?\b', context_allow: '(the identity module|A module package|another module|customer-identity module)'}
-    - {id: audit-family,         pattern: '\baudit famil(y|ies)\b', context_allow: '(\bno audit famil|still list an audit family)'}
+    - {id: building-block,       pattern: '\bbuilding blocks?\b', context_allow: 'Do not call them building blocks'}
+    - {id: module,               pattern: '\b(identity|audit|quota|CIAM) modules?\b'}
+    - {id: audit-family,         pattern: '\baudit famil(y|ies)\b', context_allow: '\bno audit famil'}
     - {id: quota-actor,          pattern: '\b(quota|limits?) actors?\b', context_allow: '\bno (limits?|quota) actor'}
-    - {id: allowance,            pattern: '\ballowance (engine|push|mode)s?\b', context_allow: '(superseded|ADR 0039|\b0039\b|the allowance modes)'}
+    - {id: allowance,            pattern: '\ballowance (engine|push|mode)s?\b', context_allow: '(superseded|ADR 0039|\b0039\b)'}
     - {id: sluis-driver,         pattern: '\bsluis-driver-(\*|<)'}
