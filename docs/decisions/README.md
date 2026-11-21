@@ -88,7 +88,8 @@ The records, grouped in reading order. The Layer column is the record's own `Lay
 
 | ADR | Decision | Layer | Status |
 |-----|----------|-------|--------|
-| [0048](0048-product-apis-take-the-identity-providers-tokens.md) | Customers sign in at the group's identity provider, product APIs take its tokens, and sluis exchanges one only for calls down to infrastructure | core | Accepted |
+| [0048](0048-product-apis-take-the-identity-providers-tokens.md) | Customers sign in at the group's identity provider, product APIs take its tokens, and sluis exchanges one only for calls down to infrastructure | core | Accepted; partly superseded by 0050 |
+| [0050](0050-the-exchanged-token-carries-the-context-realms-pairwise-subject.md) | The token of an infrastructure exchange carries the context realm's pairwise subject, and any subject of sluis's own is derived per boundary | core | Accepted |
 | [0032](0032-customer-identity-installations.md) | Customers sign in through the upstream identity provider, realms follow boundaries, and a customer-identity installation serves one boundary whose tenants each have their own data keys | customer identity | Accepted; partly superseded by 0048 |
 
 ### Integrations and the console
