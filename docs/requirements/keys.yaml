@@ -2589,7 +2589,7 @@ requirements:
   - id: REQ-KEYS-183
     area: KEYS
     statement: "sluis MUST NOT require a customer to bind a key unless the policy of the tenant demands one for an action."
-    rationale: "A customer is not asked for a key by default (ADR 0043, REQ-SESS-037)."
+    rationale: "A customer is not asked for a key by default (ADR 0043)."
     level: MUST
     source: design-decision
     status: planned
@@ -2598,15 +2598,16 @@ requirements:
     standards: []
     features: [design]
     verification:
-      - {kind: integration-test, ref: "a customer who has bound no key signs in and uses every action whose policy does not demand a key; an action whose policy demands one is refused with a reason"}
+      - {kind: integration-test, ref: "a customer who has bound no key uses every action whose policy does not demand a key; an action whose policy demands one is refused with a reason"}
   - id: REQ-KEYS-184
     area: KEYS
     statement: "sluis MUST NOT use a customer's bound key to authenticate a sign-in."
     rationale: "A bound key is a signing key and never a factor, which REQ-SESS-037 forbids enrolling for a customer (ADR 0043)."
     level: MUST
     source: security-review
-    status: planned
-    milestone: backlog
+    # Withdrawn 2026-11-22: ADR 0052 (a customer has no sluis session, so 0043 binds the keys of staff and operators only; ADR 0051).
+    status: withdrawn
+    superseded_by: [REQ-CIAM-020]
     runtimes: all
     standards: []
     features: [design]
@@ -2618,8 +2619,9 @@ requirements:
     rationale: "A customer has no hardware step-up, so the upstream's step-up is the freshness that sluis can ask for (ADR 0043, REQ-SESS-036)."
     level: MUST
     source: security-review
-    status: planned
-    milestone: backlog
+    # Withdrawn 2026-11-22: ADR 0052 (a customer has no sluis session, so 0043 binds the keys of staff and operators only; ADR 0051).
+    status: withdrawn
+    superseded_by: [REQ-CIAM-020]
     runtimes: all
     standards: []
     features: [design]
@@ -2836,7 +2838,7 @@ requirements:
   - id: REQ-KEYS-203
     area: KEYS
     statement: "sluis MUST require, for a customer's further binding or change, approval by the tenant admin or a vouch signature from an active bound key of that customer."
-    rationale: "A stolen customer session must not add a key of its own (ADR 0043, BD2 B)."
+    rationale: "A customer's key is added or changed only by the approval of the tenant admin or by a vouch of a key the customer has already bound (ADR 0043, BD2 B)."
     level: MUST
     source: security-review
     status: planned
@@ -2852,8 +2854,9 @@ requirements:
     rationale: "Ending a lost key is the safe direction, and binding again needs the tenant admin (ADR 0043, REQ-SESS-036)."
     level: MUST
     source: security-review
-    status: planned
-    milestone: backlog
+    # Withdrawn 2026-11-22: ADR 0052 (a customer has no sluis session, so 0043 binds the keys of staff and operators only; ADR 0051).
+    status: withdrawn
+    superseded_by: [REQ-CIAM-020]
     runtimes: all
     standards: []
     features: [design]

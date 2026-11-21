@@ -1,6 +1,6 @@
 # 0043 — A person binds their own keys to their identity in sluis
 
-**Status:** Proposed
+**Status:** Proposed; partly superseded by 0052
 **Layer:** add-on
 **Date:** 2026-11-12
 
