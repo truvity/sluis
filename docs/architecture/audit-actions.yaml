@@ -12,6 +12,11 @@
 # row's schema (REQ-AUDIT-022, REQ-AUDIT-099). The CI check `just audit-check` fails while a generated file differs
 # from what this file makes (REQ-AUDIT-114).
 #
+# The product object `unmapped.sluis` is audit's `unmapped.<product>` with this product's name (O3), and the table is the
+# part of audit's catalogue that sluis supplies; audit's own record format, classes and catalogue are audit's
+# (truvity/audit). The actor named `session` below, with the action ids `session.*`, is the sign-in actor `signin`: these are
+# the literal names the code still emits, and they follow the executable until a planned step renames it.
+#
 # Rules for a change here (REQ-AUDIT-119): within a major version of sluis a member of `unmapped.sluis` is only
 # added, never removed or retyped, and a new member is optional.
 #

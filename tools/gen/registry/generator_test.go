@@ -285,7 +285,7 @@ func TestRealRegistries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(m.kinds) != 114 {
+	if len(m.kinds) != 110 {
 		t.Errorf("%d kinds", len(m.kinds))
 	}
 	joined := strings.Join(m.ttlNotes, "\n")
@@ -392,5 +392,74 @@ func TestRegistryRules(t *testing.T) {
 	var doc kindsDoc
 	if err := yaml.Unmarshal([]byte("kinds:\n  - {name: Two, writer: [session, entry]}\n"), &doc); err == nil {
 		t.Error("REQ-DATA-003: a kind with a list of writers was read")
+	}
+}
+
+// An actor whose row says `executable:` is named by it in every generated table, and audit's pieces join the actors: the
+// model built from `signin` (executable `session`) is the model built from `session`.
+func TestExecutableNamesTheActor(t *testing.T) {
+	want, err := build(fixture(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := fixture(t)
+	// The docs name the actor `signin`: its row, the calls to it, the kinds it writes and reads and the users of its keys.
+	in.actors.Actors[1].Name = "signin"
+	in.actors.Actors[1].Executable = "session"
+	in.actors.Actors[0].Calls = []string{"signin", "adapter-<vendor>"}
+	in.kinds.Kinds[1].Writer = "signin"
+	in.kinds.Kinds[3].Readers = []string{"the actor named in the id"}
+	in.keys.DataKeys.Tenant["data"] = dataKeyDoc{Ops: []string{"seal", "open"}, Users: []string{"signin", "exporter", "every work actor"}}
+	in.keys.DataKeys.Boundary["cookie"] = dataKeyDoc{Ops: []string{"seal", "open"}, Users: []string{"signin"}}
+	in.keys.DataKeys.Boundary["data"] = dataKeyDoc{Ops: []string{"seal", "open"}, Users: []string{"signin"}}
+	in.toExecutables()
+	got, err := build(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := emitGo(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := emitGo(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(a) != string(b) {
+		t.Error("the generated Go differs between the actor named session and the actor named signin with executable session")
+	}
+}
+
+// Audit's pieces are listed apart from the actors, and the generators read them as actors, after them.
+func TestAuditPiecesJoinTheActors(t *testing.T) {
+	in := fixture(t)
+	in.actors.AuditPieces = []actorDoc{{Name: "writer", Family: "audit", Holder: true, Language: "Go", Ports: []string{"data", "keys"}}}
+	in.uids.Names = append(in.uids.Names, "writer")
+	in.toExecutables()
+	m, err := build(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := m.actors[len(m.actors)-2] // the platform piece follows the actors
+	if last.Name != "writer" || last.Family != "audit" {
+		t.Errorf("the audit piece is %+v, want the writer after the actors", last)
+	}
+}
+
+// mapToken maps the name that starts a writer or reader token, and nothing else.
+func TestMapToken(t *testing.T) {
+	exe := map[string]string{"signin": "session"}
+	for in, want := range map[string]string{
+		"signin":                 "session",
+		"signin@":                "session@",
+		"signin (own id)":        "session (own id)",
+		"every actor (signin)":   "every actor (signin)",
+		"signin-x":               "signin-x",
+		"adapter-<vendor> (x)":   "adapter-<vendor> (x)",
+		"the actor named in the": "the actor named in the",
+	} {
+		if got := mapToken(in, exe); got != want {
+			t.Errorf("mapToken(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

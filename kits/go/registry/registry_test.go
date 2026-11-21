@@ -334,12 +334,12 @@ func TestActors(t *testing.T) {
 	if _, ok := ActorByName("product-emitter"); ok {
 		t.Error("an external caller is not an actor")
 	}
-	// The sizes of the registries of 2026-11-03, the same numbers as the Rust crate asserts.
-	if got := len(Kinds()); got != 114 {
-		t.Errorf("%d kinds, want 114", got)
+	// The sizes of the registries, the same numbers as the Rust crate asserts.
+	if got := len(Kinds()); got != 110 {
+		t.Errorf("%d kinds, want 110", got)
 	}
-	if got := len(Actors()); got != 20 {
-		t.Errorf("%d actors and platform pieces, want 20", got)
+	if got := len(Actors()); got != 19 {
+		t.Errorf("%d actors and platform pieces, want 19", got)
 	}
 }
 
@@ -370,7 +370,7 @@ func TestTableSizes(t *testing.T) {
 			}
 		}
 	}
-	if entries != 491 || verbs != 1774 || selfMarks != 704 || keyEntries != 63 || keyOps != 92 {
+	if entries != 473 || verbs != 1706 || selfMarks != 675 || keyEntries != 62 || keyOps != 91 {
 		t.Errorf("store entries %d, verbs %d, self marks %d, key entries %d, key ops %d", entries, verbs, selfMarks, keyEntries, keyOps)
 	}
 }
@@ -402,7 +402,7 @@ func TestKeyCallerGroup(t *testing.T) {
 
 // verifies: REQ-EXPORT-008
 func TestExportableKinds(t *testing.T) {
-	want := []string{"ClientSecretExport", "Crl", "KeyCertificate", "Krl", "SigningRing", "TrustAnchors", "TrustBundle"}
+	want := []string{"Crl", "KeyCertificate", "Krl", "SigningRing", "TrustAnchors", "TrustBundle"}
 	var got []string
 	for _, k := range Kinds() {
 		if k.Exportable {

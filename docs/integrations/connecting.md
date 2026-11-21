@@ -6,7 +6,7 @@ sidebar:
   order: 1
 ---
 
-Every vendor has its own ceremony for handing over a credential. The ceremonies repeat, so this page describes each once: what the vendor offers, who does what, and where the credential ends up. The commands are [illustrative](/integrations/#examples-are-illustrative).
+Every vendor has its own ceremony for handing over a credential. The ceremonies repeat, so this page describes each once: what the vendor offers, who does what, and where the credential ends up. The vendor pages say what sluis asks for, what policy controls and what is audited. The `Upstream` flow is built; the other flows are planned with their adapters ([0025](/decisions/0025-integrations/#built-and-planned)). The commands are [illustrative](/integrations/#examples-are-illustrative).
 
 ## Two paths: made by hand, or made in the UI
 
@@ -18,8 +18,7 @@ The path decides the storage class, not the vendor ([0004](/decisions/0004-the-d
 | A **connection** of a tenant to a provider | The UI or the API, with a browser round trip where the vendor needs one | **Durable**, per tenant, credential **sealed** | `GitHubApp`, `SlackConnection`, `EntraConnection`, `DirectoryConnection`, `MinterConnection` |
 | A **flow in progress** | The adapter that runs the flow | **Temp** | `SlackInstallState`, `GitHubManifestState`, `EntraConsentState` |
 
-- **Who connects decides.** An app the operator makes is config. A tenant's own connection to its directory or its account is durable data entered through the UI or the API, never config the operator commits ([0004](/decisions/0004-the-data-model/#who-connects-decides)).
-- **The operator's own company is a tenant,** so a connection the operator makes in the UI is durable too.
+- **Who connects decides.** An app the operator makes is config. A tenant's own connection to its directory or its account is durable data entered through the UI or the API, never config the operator commits ([0004](/decisions/0004-the-data-model/#who-connects-decides)). The operator's own company is a tenant, so a connection the operator makes in the UI is durable too.
 - **An IaC tool that calls the API makes durable data,** not config. Where a thing is written decides its class ([principle 17](/principles/#17-where-a-thing-is-written-decides-its-class)).
 
 ## The shape of every connection
@@ -49,7 +48,7 @@ A reviewed file never holds a secret. The secret of an app is an item of a secre
 | Disconnect | `sluis integrations disconnect <name>` |
 | Render vendor-side objects from the configuration | `sluis integrations render <name>` |
 
-The console and the command line run the ceremony through the same `entry` API, and a vendor redirect reaches the console's host, here `https://sluis-console.example.com`, so the operator's session cookie comes with it ([ADR 0027](/decisions/0027-the-console/#writes)).
+The console and the command line run the ceremony through the same `entry` API, and a vendor redirect reaches the console's host, here `https://sluis-console.example.com`, so the operator's session cookie comes with it ([0027](/decisions/0027-the-console/#writes)).
 
 ## GitHub App manifest flow
 
@@ -90,7 +89,7 @@ sequenceDiagram
 4. The owner picks the repositories on GitHub's install page. GitHub returns with the installation id, and sluis confirms with GitHub where the App is installed and writes a `GitHubInstallation`.
 5. `sluis integrations check github` shows no difference between asked and granted permissions.
 
-- **The state is single-use, lives at most one hour (the life of GitHub's code) and is bound to the session of the person who started the flow,** so someone holding a link cannot complete a connection another person began.
+- **The state is single-use, lives at most one hour (the life of GitHub's code) and is bound to the sign-in session of the person who started the flow,** so someone holding a link cannot complete a connection another person began.
 - **GitHub has no API to change an App's permissions.** To fix drift, an owner edits the App on GitHub (or you disconnect and recreate it), and the installation accepts the permission request. `metadata: read` is always present and is never drift.
 - **Webhooks** are one URL per App. sluis generates the secret and keeps it sealed; rotation is two steps, and the old secret is restored if the receiver does not accept the new one within minutes.
 - **`workflows: write`** is needed to push under `.github/workflows`.
@@ -139,7 +138,7 @@ sluis needs two separate credentials from Google: an OAuth client for **sign-in*
 In a Google Cloud project, create an OAuth client of type *Web application*, with the sign-in callback sluis prints (and, for admin consent, the connect callback) as redirect URIs. The consent screen asks for `openid`, `email` and `profile` only. For one organisation it can be *Internal*; for several tenants it must be *In production*, because in testing a second tenant gets an access error and refresh tokens expire after seven days.
 
 - **The operator's client is an `Upstream`:** config, with its client secret in a secret source (`UpstreamSecret`).
-- **A tenant's own identity provider is not connected to sluis.** In a customer installation it is configured in the trusted realm, which is the one upstream ([0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/#realms-follow-boundaries)).
+- **A tenant's own identity provider is not connected to sluis.** In a customer installation it is configured in the trusted realm, which is the one upstream ([0032](/decisions/0032-customer-identity-installations/#realms-follow-boundaries)).
 
 ### The directory: three methods
 
@@ -181,7 +180,7 @@ Cloudflare has no manifest or consent flow; a person creates the credential by h
 3. Create a **prototype token** for each kind of access (DNS write on one zone, bucket item write on one bucket) and then **disable** it by an update; creation ignores a disabled status.
 4. Declare a target with the prototype's id, a lifetime and the permission groups the prototype may hold. The adapter writes the `MinterTarget`, and the store refuses one outside `MinterBounds`, the config kind that says which target types and which longest lifetimes the installation allows.
 
-The minting credential can create any token the account owner could; the refusal list in the adapter is the guard ([Cloudflare](/integrations/cloud/#cloudflare)). Keep it out of ordinary secret stores and infrastructure-as-code inputs.
+The minting credential can create any token the account owner could; the refusal list in the adapter is the guard ([Cloudflare](/integrations/cloudflare/#what-sluis-asks-cloudflare-for)). Keep it out of ordinary secret stores and infrastructure-as-code inputs.
 
 ## AWS: OIDC provider and role trust
 
@@ -204,7 +203,7 @@ Accounts trust sluis as a web identity provider. Each account needs two kinds of
 3. Apply the template with your infrastructure tool.
 4. Check with `aws sts get-caller-identity` on a profile that `sluis aws-config` wrote. A mismatched `aud` fails as access denied on the assume call.
 
-For sluis's own actors the provider is the boundary's workload issuer ([Identity](/concepts/identity/)). AWS allows 100 providers per account and 100 EC keys in a key set. The reverse direction, AWS roles that prove themselves to sluis, is on [AWS](/integrations/cloud/#aws). AWS needs no connection: nothing of AWS is stored in sluis.
+For sluis's own actors the provider is the boundary's workload issuer ([Identity](/concepts/identity/)). AWS allows 100 providers per account and 100 EC keys in a key set. The reverse direction, AWS roles that prove themselves to sluis, is on [AWS](/integrations/aws/). AWS needs no connection: nothing of AWS is stored in sluis.
 
 ## Generic OIDC upstream
 
@@ -213,7 +212,7 @@ For any provider that publishes OpenID Connect discovery:
 1. Register sluis as a client at the provider, with the callback sluis prints.
 2. **For the operator's own upstream,** commit an `Upstream` (issuer, client id, subject claim, and the name of its client secret in `secret`) and put the client secret in the secret source under that name; store@ serves it as `UpstreamSecret` to `adapter-upstream-oidc` alone.
 3. **Declare the e-mail domains** the upstream serves in the `Upstream`, then run `sluis integrations check oidc partner`.
-4. Choose what the connection's claims are worth: map the allow-listed claims to facts; asserted groups and roles are never read ([0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/#the-exchange-and-the-claims)).
+4. Choose what the connection's claims are worth: map the allow-listed claims to facts; asserted groups and roles are never read ([0025](/decisions/0025-integrations/#what-an-integration-may-return)).
 
 The checks on every ID token are on [Generic OIDC and peer sluis](/integrations/oidc-upstream/).
 

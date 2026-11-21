@@ -1,6 +1,12 @@
 # The kind registry: every kind of data sluis keeps, with its scope, class, treatment, profile, layer,
-# writer, readers and lifetime. The design phase keeps it by hand here; once the code exists the YAML is
-# generated from the Protobuf kind options and CI checks the two for equality.
+# writer, readers and lifetime. It is kept by hand here, and the generators of tools/gen/registry make the
+# enforcement tables from it. The kind registry is an extension of atoom's `state` registry, which any
+# product extends (record 0004).
+#
+# Four kinds are audit's, not sluis's: Meter, AuditLog, AuditWitnesses and AuditCatalogue carry
+# `owned_by: audit`. Audit declares them through atoom's `state` registry once the code moves (planned);
+# until then they are declared here, because audit's pieces still run from this repository
+# (`audit_pieces` in actors.yaml) and the generators need their rules.
 #
 # One kind, one row. `tools/checks/registries.mjs` (`just check-registries`) keeps it true: the closed
 # fields below, one writer per kind (except the declared self-scoped kinds), every writer and reader an
@@ -9,8 +15,9 @@
 #
 # Fields of a kind:
 #   name        PascalCase; the address segment is its kebab-case form (DataKeyWrap -> data-key-wrap)
-#   serves      the family of the writer: work | data | keys | audit (config and secret kinds: the family
-#               of their main reader)
+#   serves      the family of the writer: work | data | keys (config and secret kinds: the family of their
+#               main reader). `audit` marks a kind that audit's pieces use; they are not a family of sluis
+#   owned_by    optional: `audit` for a kind that is audit's (see above)
 #   scope       boundary | boundary+tenant   (tenant never appears on config or secret kinds)
 #               Every connection of a tenant to a provider is tenant-scoped and durable, with its
 #               credential sealed: its directory (DirectoryConnection, EntraConnection), its code host
@@ -61,7 +68,7 @@
 #               The store writes a change-log row in the same transaction only for a kind that some
 #               actor may watch (exporter@ watches the exportable kinds, key@ watches DataKeyWrap, policy
 #               watches the policy kinds, and so on); a kind that nobody watches, a hot counter such as
-#               Allowance or RateWindow, is one conditional update with no change-log row. A get, list rule
+#               RateWindow, is one conditional update with no change-log row. A get, list rule
 #               comes from `readers`; a watch rule comes from `watched_by` (below), from `exportable`
 #               and, for a config kind, from `readers`.
 #   watched_by  durable and temp kinds only: the readers (written as in `readers`) that watch the kind.
@@ -79,7 +86,7 @@
 #   create_only true on a kind that only grows: its writer gets create, get and list, and no actor may update, delete
 #               or apply an item (KeyRevocation); store@ enforces it and the generated rule table says it
 #   status      planned for a kind that exists in the registry but has no writer yet
-#   layer_module  core (default) | CIAM module | quota module
+#   product_layer core (default) | add-on | customer identity: the layer of record 0044 the kind belongs to
 #   notes       what the kind holds, in a sentence or two
 schema: 1
 checked: "2026-11-03"
@@ -145,7 +152,6 @@ built_in:
   - "hard caps: token and session lifetimes, agent chain 90 d, the maximum TTL of every temp kind, key@ cache TTL maximum"
   - "default tunables, log levels, sampling and retention floors"
   - "the supported sign-in methods, algorithms and their floors (software keys refuse production)"
-  - "the allowance modes: prepaid, limited, unlimited"
   - "client template defaults"
   - "the default slot plan per card model"
   - "the audit action table"
@@ -196,7 +202,7 @@ kinds:
     treatment: plain
     profile: Fixed
     writer: IaC
-    readers: [session, exchange, signer]
+    readers: [signin, exchange, signer]
     exportable: no
     backed_up: no
     notes: "Issuer and key custody of a regulated party's boundary; written with the party."
@@ -233,7 +239,7 @@ kinds:
     treatment: plain
     profile: Fixed
     writer: IaC
-    readers: [entry, session, signer, console]
+    readers: [entry, signin, signer, console]
     exportable: no
     backed_up: no
     notes: "Login domain and rp_id per client (id: client or `default`); needs DNS and a certificate, so it is Fixed and shared by clients. Clients reference it; a tenant client may pick only from the entries config allows. Sign-in and passkey flows use the one shared sign-in domain."
@@ -245,36 +251,23 @@ kinds:
     treatment: plain
     profile: Fixed
     writer: IaC
-    readers: [every actor (emitter library), quota]
+    readers: [every actor (emitter library)]
     exportable: no
     backed_up: no
     notes: "What usage to record and where."
 
   - name: Meter
     serves: audit
+    owned_by: audit
     scope: boundary
     class: config
     treatment: plain
     profile: Fixed
     writer: IaC
-    readers: [quota, every actor (emitter library)]
+    readers: [every actor (emitter library)]
     exportable: no
     backed_up: no
-    layer_module: quota module
     notes: "Name, unit and kind of each meter; never changes once used."
-
-  - name: Quota
-    serves: work
-    scope: boundary
-    class: config
-    treatment: plain
-    profile: Fixed
-    writer: IaC
-    readers: [quota]
-    exportable: no
-    backed_up: no
-    layer_module: quota module
-    notes: "Reserved with the allowance engine of ADR 0039, which ADR 0046 superseded; not built. The quotas that exist, their unit and the bounds an allowance push must respect."
 
   - name: Upstream
     serves: work
@@ -284,7 +277,7 @@ kinds:
     profile: Fixed
     links: [UpstreamSecret]
     writer: IaC
-    readers: [session, adapter-upstream-oidc]
+    readers: [signin, adapter-upstream-oidc]
     exportable: no
     backed_up: no
     notes: "An upstream made by hand or IaC on the provider side: issuer, client id, subject claim, the claim that carries the organisation id, the e-mail domains it serves, trust and assurance. The operator declares every upstream; a tenant adds none. It names no tenant: it declares only the claim that carries the organisation id. Upstream criterion: config."
@@ -323,13 +316,14 @@ kinds:
     profile: Operable
     layer: {group: Retention, layer: config}
     writer: IaC
-    readers: [session, exporter@]
+    readers: [signin, exporter@]
     exportable: no
     backed_up: no
     notes: "Retention windows per data class; must be at or above the built-in floor. The per-log windows of the audit logs are in AuditLog."
 
   - name: AuditLog
     serves: audit
+    owned_by: audit
     scope: boundary
     class: config
     treatment: plain
@@ -343,6 +337,7 @@ kinds:
 
   - name: AuditWitnesses
     serves: audit
+    owned_by: audit
     scope: boundary
     class: config
     treatment: plain
@@ -356,6 +351,7 @@ kinds:
 
   - name: AuditCatalogue
     serves: audit
+    owned_by: audit
     scope: boundary
     class: config
     treatment: plain
@@ -375,7 +371,7 @@ kinds:
     profile: Tenant-adjustable
     layer: {group: TokenLifetime, layer: config}
     writer: IaC
-    readers: [session, exchange, signer]
+    readers: [signin, exchange, signer]
     exportable: no
     backed_up: no
 
@@ -387,7 +383,7 @@ kinds:
     profile: Tenant-adjustable
     layer: {group: SignInMethods, layer: config}
     writer: IaC
-    readers: [session]
+    readers: [signin]
     exportable: no
     backed_up: no
 
@@ -424,7 +420,7 @@ kinds:
     treatment: plain
     profile: Fixed
     writer: pipeline
-    readers: [policy, exchange, session, signer, console]
+    readers: [policy, exchange, signin, signer, console]
     exportable: no
     backed_up: no
     notes: "Grant names, the role ladder, sensitive scopes. Not a sealed grant."
@@ -436,7 +432,7 @@ kinds:
     treatment: plain
     profile: Fixed
     writer: pipeline
-    readers: [session, exchange]
+    readers: [signin, exchange]
     exportable: no
     backed_up: no
     notes: "Which hosts a client metadata document may come from, what it requires, session limits."
@@ -461,7 +457,7 @@ kinds:
     profile: Fixed
     links: [InstallationClientSecret, ClientSecret, ClientSecretExport, Branding, FrontHost]
     writer: IaC
-    readers: [entry, session, exchange, signer]
+    readers: [entry, signin, exchange, signer]
     exportable: no
     backed_up: no
     notes: "The installation's own clients and resources. An exportable client is marked here."
@@ -474,7 +470,7 @@ kinds:
     profile: Tenant-adjustable
     layer: {group: Branding, layer: config}
     writer: IaC
-    readers: [session, console]
+    readers: [signin, console]
     exportable: no
     backed_up: no
     notes: "Id `default` (the boundary) or an installation client."
@@ -486,7 +482,7 @@ kinds:
     treatment: plain
     profile: Fixed
     writer: IaC
-    readers: [session, console]
+    readers: [signin, console]
     exportable: no
     backed_up: no
     notes: "The first-admin allow-list of a boundary."
@@ -498,7 +494,7 @@ kinds:
     treatment: plain
     profile: Fixed
     writer: IaC
-    readers: [session]
+    readers: [signin]
     exportable: no
     backed_up: no
     notes: "Config so that recovery works when the store is damaged. Three credential classes (hardware-fido, hardware-piv, synced): two attested hardware keys of either hardware class and one pinned synced passkey; enrolment tools only show the JSON to commit."
@@ -602,7 +598,7 @@ kinds:
     readers: [adapter-upstream-oidc]
     exportable: no
     backed_up: no
-    notes: "adapter-upstream-oidc exchanges the code at the upstream and returns the verified assertion to session, so session reads no upstream secret."
+    notes: "adapter-upstream-oidc exchanges the code at the upstream and returns the verified assertion to signin, so signin reads no upstream secret."
 
   - name: IntegrationSecret
     serves: work
@@ -624,10 +620,10 @@ kinds:
     profile: Fixed
     links: [InstallationClient]
     writer: IaC
-    readers: [session, exchange]
+    readers: [signin, exchange]
     exportable: no
     backed_up: no
-    notes: "A client secret provided by IaC (the generated kind is ClientSecret). The id is the client id, and the value is the secret exactly as the secret source holds it. The InstallationClient of that id names the credential in its `secret` field, which is where the config names the secret. Only store@ reads the source; session and exchange get the value through store@ and compare it in constant time."
+    notes: "A client secret provided by IaC (the generated kind is ClientSecret). The id is the client id, and the value is the secret exactly as the secret source holds it. The InstallationClient of that id names the credential in its `secret` field, which is where the config names the secret. Only store@ reads the source; signin and exchange get the value through store@ and compare it in constant time."
 
   - name: SlackAppSecret
     serves: work
@@ -670,7 +666,7 @@ kinds:
     purposes:
       per_tenant: [data, pseudonym, evidence, chain, credential]
       boundary: [grant, cookie, mac, data]
-    notes: "Id <purpose>/<generation>/<recipient>. Each tenant has five data keys, one per purpose: `data` (personal and operational data), `pseudonym` (keyed hashes, rolled by epoch), `evidence` (audit and usage), `chain` (the facts of a session chain, which session seals and opens and exchange opens) and `credential` (the StaffPasskey kind, which session seals and opens). Boundary purposes (tenant `-`): `grant`, `cookie`, `mac` (the key behind key@'s Mac operation) and `data` (the kinds that are sealed and have no tenant: EnrolmentToken, PendingEnrolment). They are generated software data keys, not KMS keys: on AWS key@ calls GenerateDataKey under the boundary's one symmetric KMS key with the encryption context {boundary, tenant, purpose} and stores only the wrapped copy; on boards key@ generates them in software and wraps them by ECDH for each board's card and the backup recovery key. A tenant declared to keep its keys in a customer account has its wraps made under KMS keys of that account (ADR 0006). The value is already ciphertext, so the treatment is plain. A tenant's exit deletes its `data`, `pseudonym`, `chain` and `credential` wraps at once (crypto-shred); the `evidence` wrap is deleted when the evidence retention ends, because evidence never shares a key with personal data and outlives it."
+    notes: "Id <purpose>/<generation>/<recipient>. Each tenant has five data keys, one per purpose: `data` (personal and operational data), `pseudonym` (keyed hashes, rolled by epoch), `evidence` (audit and usage), `chain` (the facts of a session chain, which signin seals and opens and exchange opens) and `credential` (the StaffPasskey kind, which signin seals and opens). Boundary purposes (tenant `-`): `grant`, `cookie`, `mac` (the key behind key@'s Mac operation) and `data` (the kinds that are sealed and have no tenant: EnrolmentToken, PendingEnrolment). They are generated software data keys, not KMS keys: on AWS key@ calls GenerateDataKey under the boundary's one symmetric KMS key with the encryption context {boundary, tenant, purpose} and stores only the wrapped copy; on boards key@ generates them in software and wraps them by ECDH for each board's card and the backup recovery key. A tenant declared to keep its keys in a customer account has its wraps made under KMS keys of that account (ADR 0006). The value is already ciphertext, so the treatment is plain. A tenant's exit deletes its `data`, `pseudonym`, `chain` and `credential` wraps at once (crypto-shred); the `evidence` wrap is deleted when the evidence retention ends, because evidence never shares a key with personal data and outlives it."
 
   - name: KeyRevocation
     serves: keys
@@ -700,33 +696,6 @@ kinds:
     indexes: [by_name]
     notes: "Name (a slug of lower-case letters, digits and hyphens, not free text; a display name is TenantBranding's, sealed), state (active, suspended, erasing), created by a product or by a seed apply. Its id is fixed (`self`). Its issuer host, its sector (required; `public` only when declared), whether it is regulated (a declaration), where its keys live (operator or customer account), the organisation id that the upstream sends for its business staff, and the status client of the product that owns its people. exchange owns what a tenant has configured."
 
-  - name: Allowance
-    serves: work
-    scope: boundary+tenant
-    class: durable
-    treatment: plain
-    profile: Tenant-adjustable
-    writer: quota
-    readers: [quota, console]
-    exportable: no
-    backed_up: yes
-    layer_module: quota module
-    notes: "Reserved with the allowance engine of ADR 0039, which ADR 0046 superseded; not built. Id is the quota name. Mode (prepaid, limited, unlimited) and units left, counted down by quota. A product changes it by a push: a request id, an operation (add | set | write-off) and, optionally, the expected version. A push is idempotent by request id (its SpentPush marker), is applied with a conditional update on the units (a delta), and is an audit fact. Admits use the same conditional update, so they race with pushes safely. Hot counter: the driver contract allows a single conditional update."
-
-  - name: AdmitRecord
-    serves: work
-    scope: boundary+tenant
-    class: durable
-    treatment: plain
-    profile: "-"
-    writer: quota
-    readers: [quota]
-    exportable: no
-    backed_up: no
-    ttl: {field: expires_at, default: 24h}
-    layer_module: quota module
-    notes: "Reserved with the allowance engine of ADR 0039, which ADR 0046 superseded; not built. Idempotency of an admit by operation id; rebuilt from usage facts after a restore. The admit's decrement of the Allowance is the same conditional update that a push uses."
-
   - name: Person
     serves: work
     scope: boundary+tenant
@@ -734,8 +703,8 @@ kinds:
     treatment: sealed
     personal: true
     profile: "-"
-    writer: session
-    readers: [session, exchange, signer]
+    writer: signin
+    readers: [signin, exchange, signer]
     exportable: no
     backed_up: yes
     notes: "Id is the subject (random, opaque). Claims for tokens are sealed for the tenant."
@@ -747,8 +716,8 @@ kinds:
     treatment: sealed
     personal: true
     profile: "-"
-    writer: session
-    readers: [session, exchange]
+    writer: signin
+    readers: [signin, exchange]
     exportable: no
     backed_up: yes
     notes: "Id is a keyed hash (key@ Mac, purpose `mac`) of (issuer, subject claim value); holds the subject, the issuer and the claim name."
@@ -759,8 +728,8 @@ kinds:
     class: durable
     treatment: plain
     profile: "-"
-    writer: session
-    readers: [session]
+    writer: signin
+    readers: [signin]
     exportable: no
     backed_up: yes
     notes: "The subject claim first used for an issuer; a contradiction is refused."
@@ -772,11 +741,11 @@ kinds:
     treatment: sealed
     personal: true
     profile: Operable
-    writer: session
-    readers: [session, exchange, console]
+    writer: signin
+    readers: [signin, exchange, console]
     exportable: no
     backed_up: yes
-    notes: "An operator holds a person (who, when, why); the console routes the write to session. The reason is free text, so sealed. Operable and tenant-scoped: a hold is written by an operator about one tenant's person."
+    notes: "An operator holds a person (who, when, why); the console routes the write to signin. The reason is free text, so sealed. Operable and tenant-scoped: a hold is written by an operator about one tenant's person."
 
   - name: ErasureHold
     serves: work
@@ -785,8 +754,8 @@ kinds:
     treatment: sealed
     personal: true
     profile: Operable
-    writer: session
-    readers: [session, console]
+    writer: signin
+    readers: [signin, console]
     exportable: no
     backed_up: yes
     notes: "A hold on the erasure of the records it covers, for a tenant, or for the whole boundary with tenant `-`: who set it, which records, and when its retention period ends. It keeps records and gives no access, and only whoever set it, or the owning product, lifts it. Its reason is free text, so sealed."
@@ -798,11 +767,11 @@ kinds:
     treatment: sealed
     personal: true
     profile: "-"
-    writer: session
-    readers: [session, exchange]
+    writer: signin
+    readers: [signin, exchange]
     exportable: no
     backed_up: yes
-    layer_module: CIAM module
+    product_layer: customer identity
     notes: "The status an upstream reported (suspended, erased)."
 
   - name: Tombstone
@@ -812,8 +781,8 @@ kinds:
     treatment: hashed
     personal: true
     profile: "-"
-    writer: session
-    readers: [session]
+    writer: signin
+    readers: [signin]
     exportable: no
     backed_up: yes
     notes: "A keyed hash of the subject (key@ Mac, boundary `mac` key, label `tombstone`), the time and the kind of an erasure; keeps a restore from bringing a person back. Compare-only, so hashed."
@@ -825,12 +794,12 @@ kinds:
     treatment: sealed
     personal: true
     profile: "-"
-    writer: session
-    readers: [session]
+    writer: signin
+    readers: [signin]
     exportable: no
     backed_up: yes
     indexes: [by_credential, by_subject]
-    notes: "Sealed under the tenant's `credential` key (the only kind that is: session opens it before it knows whose it is, ADR 0006). An operator's or staff member's passkey on the shared sign-in domain: the person's subject, the public key, the sign count, the class (hardware-attested, hardware or synced), the AAGUID and the outcome of the attestation check, sealed; the id is a keyed hash of the credential id (key@ Mac, purpose `mac`), and by_credential and by_subject hold keyed hashes of the credential id and of the subject, so an index value names no one. In the tenant of the person, the operator's own company for staff. End-user passkeys belong to the upstream."
+    notes: "Sealed under the tenant's `credential` key (the only kind that is: signin opens it before it knows whose it is, ADR 0006). An operator's or staff member's passkey on the shared sign-in domain: the person's subject, the public key, the sign count, the class (hardware-attested, hardware or synced), the AAGUID and the outcome of the attestation check, sealed; the id is a keyed hash of the credential id (key@ Mac, purpose `mac`), and by_credential and by_subject hold keyed hashes of the credential id and of the subject, so an index value names no one. In the tenant of the person, the operator's own company for staff. End-user passkeys belong to the upstream."
 
   - name: SigningRing
     serves: work
@@ -954,7 +923,7 @@ kinds:
     profile: Tenant-adjustable
     links: [ClientSecret, ClientSecretExport, TenantBranding, ClientTemplate]
     writer: exchange
-    readers: [session, exchange, signer, console]
+    readers: [signin, exchange, signer, console]
     exportable: no
     backed_up: yes
     indexes: [by_client_id]
@@ -967,10 +936,10 @@ kinds:
     treatment: hashed
     profile: "-"
     writer: exchange
-    readers: [session, exchange]
+    readers: [signin, exchange]
     exportable: no
     backed_up: yes
-    notes: "A generated client secret, one item per version; the current and the previous version verify during an overlap. Tenant `-` for the installation's own clients. exchange writes it and session verifies it at the token endpoint (a read)."
+    notes: "A generated client secret, one item per version; the current and the previous version verify during an overlap. Tenant `-` for the installation's own clients. exchange writes it and signin verifies it at the token endpoint (a read)."
 
   - name: ClientSecretExport
     serves: work
@@ -980,9 +949,9 @@ kinds:
     profile: "-"
     writer: exchange
     readers: [exporter@]
-    exportable: yes
+    exportable: no
     backed_up: yes
-    notes: "The sealed copy of a generated secret, only for a client marked exportable; non-exported secrets keep only the hash."
+    notes: "Retired, and never exported: a secret leaves sluis through KV, not through an export (records 0009, 0021 and 0047). It was the sealed copy of a generated client secret for a client marked exportable. The kind is removed with the managed prefix of exchange."
 
   - name: TenantBranding
     serves: work
@@ -992,7 +961,7 @@ kinds:
     profile: Tenant-adjustable
     layer: {group: Branding, layer: tenant}
     writer: exchange
-    readers: [session, console]
+    readers: [signin, console]
     exportable: no
     backed_up: yes
     notes: "Id `default` (the tenant) or a tenant client."
@@ -1005,7 +974,7 @@ kinds:
     profile: Tenant-adjustable
     layer: {group: TokenLifetime, layer: tenant}
     writer: exchange
-    readers: [session, exchange, signer]
+    readers: [signin, exchange, signer]
     exportable: no
     backed_up: yes
 
@@ -1017,7 +986,7 @@ kinds:
     profile: Tenant-adjustable
     layer: {group: SignInMethods, layer: tenant}
     writer: exchange
-    readers: [session]
+    readers: [signin]
     exportable: no
     backed_up: yes
 
@@ -1107,11 +1076,11 @@ kinds:
     treatment: sealed
     personal: true
     profile: "-"
-    writer: session
-    readers: [session, adapter-github]
+    writer: signin
+    readers: [signin, adapter-github]
     exportable: no
     backed_up: yes
-    notes: "The link between a person and their GitHub account, made when the person authorises the link App as themselves: the person, the GitHub user id and the permissions the person granted. It is its own kind, apart from UpstreamLink, which ties a person to the account that signs them in. It holds a vendor user id, so sealed. Written by session once adapter-github has returned the verified GitHub account; the person may narrow or revoke it, and it is lost when the person leaves."
+    notes: "The link between a person and their GitHub account, made when the person authorises the link App as themselves: the person, the GitHub user id and the permissions the person granted. It is its own kind, apart from UpstreamLink, which ties a person to the account that signs them in. It holds a vendor user id, so sealed. Written by signin once adapter-github has returned the verified GitHub account; the person may narrow or revoke it, and it is lost when the person leaves."
 
   - name: SlackConnection
     serves: work
@@ -1134,7 +1103,7 @@ kinds:
     profile: Tenant-adjustable
     links: [Upstream, EntraConsentState]
     writer: adapter-upstream-oidc
-    readers: [session, adapter-upstream-oidc]
+    readers: [signin, adapter-upstream-oidc]
     exportable: no
     backed_up: yes
     notes: "A customer directory's admin consent to the installation's multi-tenant app: directory id, consent time, scopes. Written by the adapter that completes the consent flow."
@@ -1227,8 +1196,8 @@ kinds:
     class: temp
     treatment: hashed
     profile: "-"
-    writer: session
-    readers: [session]
+    writer: signin
+    readers: [signin]
     exportable: no
     backed_up: no
     ttl: {default: 60s, max: 10m}
@@ -1240,8 +1209,8 @@ kinds:
     class: temp
     treatment: hashed
     profile: "-"
-    writer: session
-    readers: [session]
+    writer: signin
+    readers: [signin]
     exportable: no
     backed_up: no
     ttl: {default: 10m, max: 15m}
@@ -1253,8 +1222,8 @@ kinds:
     treatment: hashed
     personal: true
     profile: "-"
-    writer: session
-    readers: [session, exchange, console]
+    writer: signin
+    readers: [signin, exchange, console]
     exportable: no
     backed_up: no
     ttl: {default: "human chain 24h absolute; agent chain 14d idle and 30d absolute", max: "90d (agent chain, built-in maximum)"}
@@ -1267,8 +1236,8 @@ kinds:
     class: temp
     treatment: hashed
     profile: "-"
-    writer: session
-    readers: [session]
+    writer: signin
+    readers: [signin]
     exportable: no
     backed_up: no
     ttl: {default: 5m, max: 10m}
@@ -1280,12 +1249,12 @@ kinds:
     class: temp
     treatment: hashed
     profile: "-"
-    writer: session
-    readers: [session]
+    writer: signin
+    readers: [signin]
     exportable: no
     backed_up: no
     ttl: {default: "the session's", max: 90d}
-    notes: "Id is a keyed hash (key@ Mac, purpose `mac`) of (connection, upstream sid); points to the browser session for back-channel logout."
+    notes: "Id is a keyed hash (key@ Mac, purpose `mac`) of (connection, upstream sid); points to the sign-in session for back-channel logout."
 
   - name: ClientDocument
     serves: work
@@ -1293,8 +1262,8 @@ kinds:
     class: temp
     treatment: plain
     profile: "-"
-    writer: session
-    readers: [session, exchange]
+    writer: signin
+    readers: [signin, exchange]
     exportable: no
     backed_up: no
     ttl: {default: 10m, max: 1h}
@@ -1307,7 +1276,7 @@ kinds:
     treatment: plain
     profile: "-"
     writer: adapter-upstream-oidc
-    readers: [session, adapter-upstream-oidc]
+    readers: [signin, adapter-upstream-oidc]
     exportable: no
     backed_up: no
     ttl: {default: "from HTTP caching", max: 24h}
@@ -1380,20 +1349,6 @@ kinds:
     backed_up: no
     ttl: {default: 2m, max: 5m}
     notes: "The hash of a sealed grant used for a one-shot irreversible action (an artifact signature, a mint)."
-
-  - name: SpentPush
-    serves: work
-    scope: boundary+tenant
-    class: temp
-    treatment: hashed
-    profile: "-"
-    writer: quota
-    readers: [quota]
-    exportable: no
-    backed_up: no
-    ttl: {default: 7d, max: 30d}
-    layer_module: quota module
-    notes: "Reserved with the allowance engine of ADR 0039, which ADR 0046 superseded; not built. The hash of the request id of an allowance push that was applied, so a retried push changes nothing. A hashed spent marker, like SpentGrant, but with one writer."
 
   - name: LogLevelOverride
     serves: work
@@ -1498,7 +1453,7 @@ kinds:
     personal: true
     profile: "-"
     writer: adapter-<vendor>
-    readers: [session, exchange, adapter-<vendor> (as facts source)]
+    readers: [signin, exchange, adapter-<vendor> (as facts source)]
     exportable: no
     backed_up: no
     ttl: {default: 24h, max: 7d}
@@ -1513,7 +1468,7 @@ kinds:
     personal: true
     profile: "-"
     writer: adapter-<vendor>
-    readers: [session, exchange, adapter-<vendor> (as facts source)]
+    readers: [signin, exchange, adapter-<vendor> (as facts source)]
     exportable: no
     backed_up: no
     ttl: {default: 24h, max: 7d}
@@ -1527,7 +1482,7 @@ kinds:
     personal: true
     profile: "-"
     writer: adapter-<vendor>
-    readers: [session, exchange, adapter-<vendor> (as facts source)]
+    readers: [signin, exchange, adapter-<vendor> (as facts source)]
     exportable: no
     backed_up: no
     ttl: {default: 24h, max: 7d}

@@ -404,7 +404,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    gap: partly-built
+    gap: proved-in-atoom
     milestone: core
     runtimes: all
     actors: [exporter]

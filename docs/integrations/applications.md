@@ -14,12 +14,12 @@ These are **client profiles**: things that sign in to sluis or ask it for a toke
 - **An application has its own sign-in.** It speaks OpenID Connect to sluis directly and reads the `groups` claim from the token.
 - **A console with no sign-in of its own** sits behind a gateway with OIDC support, or a reverse proxy that runs the flow and forwards a bearer token.
 - **An MCP server asks who is calling it.** An AI agent discovers sluis as the authorization server for a resource, signs in on a person's behalf through a consent page that is never silent, and presents a token for that resource. A stock server sits behind a sidecar that verifies tokens and serves the protected-resource metadata ([0021](/decisions/0021-clients/#mcp-authorization)).
-- **cert-manager obtains certificates** for workloads from the `ca` actor through an external issuer, so the cluster needs no CA key of its own ([0023](/decisions/0023-certificate-authorities/#x509)).
-- **An infrastructure-as-code program gets provider tokens** (a GitHub token, a Cloudflare token) by token exchange with the identity of its CI job, instead of a stored credential. The tokens come from the minters of the [GitHub](/integrations/github/) and [Cloudflare](/integrations/cloud/#cloudflare) connections.
+- **cert-manager obtains certificates** for workloads from the `ca` actor of the PKI add-on through an external issuer, so the cluster needs no CA key of its own ([0023](/decisions/0023-certificate-authorities/#x509)).
+- **An infrastructure-as-code program gets provider tokens** (a GitHub token, a Cloudflare token) by token exchange with the identity of its CI job, instead of a stored credential. The tokens come from the minters of the [GitHub](/integrations/github/) and [Cloudflare](/integrations/cloudflare/) connections.
 
 ## Integration kinds
 
-None. What these clients use is core's: the OIDC endpoints, token exchange, resources, and the [`ca`](/concepts/families/) actor.
+None. What these clients use is the core's: the OIDC endpoints, token exchange and resources, and, for cert-manager, the [`ca`](/concepts/families/) actor of the PKI add-on.
 
 ## What sluis asks the vendor for
 
@@ -40,7 +40,7 @@ Every token's `aud` is exactly one registered client id, never a URL; a resource
 - **Which groups may sign in to the client** (`requires`; an empty list is refused), and the token lifetime cap. A client is a `Client` in Cedar, named `<boundary>/<client id>`, and each name in `requires` is a `Grant` of the vocabulary: the schema, the standard rule and a worked example are on [Policy](/reference/policy/).
 - **Redirect URIs and sign-out pages**, per client. A loopback redirect may differ in its port, for native apps.
 - **Resources.** A resource is a declared URL with its own `requires` and lifetime cap, matched exactly; an undeclared or unentitled resource is refused. Clients that describe themselves with an HTTPS URL (a client identity document) are admitted only from allow-listed hosts, and only to the groups the document gate names ([0021](/decisions/0021-clients/#self-described-clients)).
-- **Long-running agents** get a session class with a longer chain, shorter tokens and a consent page that is never silent ([0018](/decisions/0018-sessions/#agent-sessions)).
+- **Long-running agents** get a session class with a longer chain, shorter tokens and a consent page that is never silent ([0018](/decisions/0018-sign-in-sessions/#agent-sessions)).
 - **Groups in the token** are narrowed to the groups the audience requires, and a client may name more things in `groups` (every scope and role of each) and a `groups_delimiter` that replaces each `:` of a name, for a verifier that splits a group on `:` ([0020](/decisions/0020-grant-vocabulary-and-token-claims/#the-claims-of-a-token)).
 
 ## Verifying tokens
@@ -51,7 +51,7 @@ A relying party that verifies sluis tokens itself, such as a gateway, a sidecar 
 - **Fetch the set again when a token names an unfamiliar `kid`.** This is the rule of [OpenID Connect Core section 10.1.1](https://openid.net/specs/openid-connect-core-1_0.html#RotateSigKeys). You may throttle the fetch, for example to one in ten minutes, so that a flood of forged `kid` values cannot turn into a flood of requests.
 - **Verify with the key that the token's `kid` names,** and refuse a token whose `kid` is still unknown after the fetch.
 
-A new key is in the key set for 30 minutes before it signs: the `max-age`, the edge cache's time to live of at most the same, a refetch that is throttled to 10 minutes, and 5 minutes of clock skew, rounded up to 30 minutes. The 30 minutes count from the moment the key is seen in every published key set. A verifier that follows both duties never meets a token it cannot verify. A verifier that holds the set for longer than `max-age` and does not fetch it again on an unknown `kid` breaks at a rotation. sluis does not widen the lead time for it: an installation records each fetch of the key set at the edge by user-agent product and AS number ([REQ-OBS-018](/requirements/obs/#REQ-OBS-018)), and a rotation drill in staging lists the verifiers that fail ([REQ-OPS-078](/requirements/ops/#REQ-OPS-078)). A staging drill sees only the verifiers that are pointed at staging; the metric covers the others.
+A new key is in the key set for 30 minutes before it signs, which covers the `max-age`, the edge cache and the throttled refetch ([0006](/decisions/0006-keys-and-sealing/#rotation)). A verifier that follows both duties never meets a token it cannot verify; one that holds the set longer than `max-age` and does not fetch it again on an unknown `kid` breaks at a rotation. sluis does not widen the lead time for it: the installation records each fetch of the key set at the edge ([REQ-OBS-018](/requirements/obs/#REQ-OBS-018)), and a rotation drill in staging lists the verifiers that fail ([REQ-OPS-078](/requirements/ops/#REQ-OPS-078)). The signing and key-set mechanics are those of atoom's `token` block ([atoom 0008](https://github.com/truvity/atoom/blob/master/docs/decisions/0008-blocks.md)), planned; sluis adds the issuer, the audiences and the rotation drill.
 
 ## What is audited
 

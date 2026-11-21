@@ -1,205 +1,58 @@
-# 0030 — Audit records are OCSF events with one `unmapped.sluis` object, and usage is a separate stream from the same call
+# 0030 — Audit records are OCSF events and usage is a separate stream: both moved to truvity/audit, and sluis keeps its action table and its `unmapped.sluis` fields
 
-**Status:** Accepted; amended by 0046
-**Layer:** building block
-**Date:** 2026-11-12
+**Status:** Accepted
+**Date:** 2026-11-21
 
 Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 
 ## Context
 
-[0029](/decisions/0029-the-audit-log/) decides how a project's logs are laid out, sealed, witnessed, locked, encrypted and kept. This record decides what an entry holds: the audit record, and the usage facts that travel with it. v1's record format is dropped with no compatibility and no migration. The allowance that `quota` counts down, and its facts, are [0039](/decisions/0039-quota-allowance/).
-
-- **OCSF is the maintained and consumed security event schema.** The Open Cybersecurity Schema Framework (Linux Foundation, Apache-2.0) has written compatibility rules: a minor release only adds, a major release removes. Its release at the time of writing is 1.9.0 (2026-08-03). It has core classes for authentication, user, group and entity management and API activity, and `security_control` and `record_integrity` profiles. AWS Security Lake and the pipeline vendors read it.
-- **Most sluis facts have a core home in 1.9.0;** a short list does not (the fields table below). OCSF has no class for issuing a certificate or a token, or for using a key. Its FAQ advises native producers to write an extension rather than use `unmapped`; that is advice, not a rule.
-- **Billing wants a different record from security:** a tenant, a meter and an amount, with their own readers, retention and standard. OCSF has no usage class.
-- **The log is sealed and verifiable,** so a hash must be reproducible by any implementation: one canonical serialisation (RFC 8785), and numbers that survive it.
-- **Several projects emit into one boundary's audit** ([0028](/decisions/0028-audit-pieces/#one-audit-per-boundary)): sluis, the infrastructure and each product, each with actions of its own and its own releases.
-
-v1's audit volume, measured in October 2026, is about 2.4 records a second at peak and about 75,000 a week. This record answers threats T-10, T-12, T-13, T-14, T-25 and T-26 of the [threat model](/security/threat-model/).
+A log entry holds a security record and, for an action that uses something, usage events. The record is an event of a published schema (OCSF) in a canonical serialisation, validated against a catalogue that the emitting product publishes. The usage events are a stream of their own, with their own guarantee. None of this depends on an identity product, so the format moved to [truvity/audit](https://github.com/truvity/audit) ([0028](/decisions/0028-audit-pieces/) says why). This record stays under its number and says where each part went and what sluis keeps.
 
 ## Decision
 
-### The record format
+### What moved to audit
 
-- **An audit record is an OCSF event of a core class of the pinned version** (REQ-AUDIT-111). The action is `metadata.event_code`; product and release are `metadata.product.name` and `metadata.product.version` (REQ-AUDIT-116); the tenant is `metadata.tenant_uid`; the boundary is `metadata.log_name`, which the writer checks against the log; the record id is `metadata.uid`; the outcome is `status_id` with `status_code`; the trace id is `metadata.correlation_uid`.
-- **A health `check` call is not audited; every other call is** (decided 2026-11-04). The health protocol's `check` answers whether a process is up and reads or changes nothing, so a record for it would only grow the log without end: an idle installation would write entries all day from its probes. Every real call, a refusal included, is audited, so the exemption is for the `check` method alone, which a readiness probe shares, and for no caller or kind of caller ([REQ-AUDIT-161](/requirements/audit/#REQ-AUDIT-161)). A probe is answered by the process itself, so it calls no other actor and provokes no refusal at one ([REQ-AUDIT-162](/requirements/audit/#REQ-AUDIT-162)); a probe that is itself refused (a wrong method, a connection from a peer that is not the forwarder) is a real call and is audited. `entry`'s `/healthz` is the first probe.
-- **The project is the log's own,** like the boundary, so no record field names it. The writer refuses a record whose `metadata.product.name` its project does not declare, so one project's emitter cannot write as another's.
-- **The actor is `actor.user.uid = <actor>@<boundary>`** for an actor of sluis ([0002](/decisions/0002-families-of-actors/#names)), and the emitting service's own name for a product; a person or external actor is a keyed pseudonym before the `@` ([Pseudonyms](/decisions/0029-the-audit-log/#pseudonyms)). `actor.user.type_id` is 1 user, 2 operator, 3 sluis actor, 4 workload or client; the OAuth client is `actor.application`, the upstream provider `actor.idp`.
-- **Each release pins one OCSF version** in `metadata.version`; the first pins 1.9.0, and a `-dev` version is never pinned. An upgrade moves one minor release at a time in a deliberate pull request: CI compares the old and new generated schemas and fails when the action table or `unmapped.sluis` uses an item the new version deprecates (REQ-AUDIT-089), or when a new core attribute takes the name of an `unmapped.sluis` field, which the reviewer then moves. A new OCSF major release needs a new record.
-- **Records are never rewritten.** A log holds records of several versions, and readers, the indexer and exporters handle each by the versions it names.
-- **A record is RFC 8785 canonical JSON, and the same bytes travel end to end:** the emitter makes them, the transport carries them, the writer stores them unchanged inside the sealed entry, the reader returns them as opaque `bytes` beside typed envelope fields. Nothing re-encodes a record; proto3's JSON mapping would also turn 64-bit integers into strings.
-- **Canonical rules:** UTF-8 strings, never normalised by the writer; integers within ±(2^53−1) and no floating point, so a 64-bit value that can exceed the bound is a string; times in integer milliseconds; no duplicate keys; bounded free text. The writer parses, canonicalises again and refuses a record whose bytes differ, then stores the bytes it received. A verifier hashes the stored bytes and never re-serialises.
-- **The stored record is lean:** enum ids without captions (`activity_name` only for activity 99 or where the table names one), no `observables`, enrichments or `raw_data`, and no `unmapped` but `unmapped.sluis`.
-- **A record validates in three places.** The writer enforces the JSON Schema 2020-12 of the project's catalogue (the pinned OCSF schema, `unmapped.sluis` and sluis's rules: no names, e-mail addresses or phone numbers, no floating point, bounded text), and is authoritative. Go and Rust emitters validate before they emit; a browser emitter does not. The pre-1.0 OCSF toolkit runs in CI only, on the table's example records, and one set of test vectors runs through the Go, Rust and TypeScript validators. The schema is one shared definitions document with a slim schema per action.
-- **A record never carries a secret, an e-mail address, a name or a token** (REQ-AUDIT-003, REQ-AUDIT-037); a secret appears as a fingerprint and a revision. A sealed or hashed value of a kind never appears in a record ([0004](/decisions/0004-the-data-model/#treatment)).
-- **A record may point at a trace; the trace never carries what the record says.** The record carries the trace id in `metadata.correlation_uid` ([0016](/decisions/0016-telemetry/#pointing-from-audit-to-a-trace)).
+| Subject of the old record | Now in audit |
+|---|---|
+| The record format: OCSF classes, the pinned version, canonical JSON and its bounds, the lean stored record, the health `check` exemption, a trace id and no trace content | [0004 the record format](https://github.com/truvity/audit/blob/master/docs/decisions/0004-the-record-format.md) |
+| One product object, `unmapped.<product>`, with a closed schema and no OCSF extension | 0004 |
+| The action table, the generated schemas, the catalogue and its policy version, validation in three places | 0004, and [0015 configuration kinds](https://github.com/truvity/audit/blob/master/docs/decisions/0015-configuration-kinds.md) for `AuditCatalogue` |
+| The attributes an OCSF class requires, and `unknown` for a record that established no person | 0004 |
+| The class mapping rules | audit's [action table and catalogue](https://github.com/truvity/audit/blob/master/docs/reference/action-table-and-catalogue.md) |
+| The usage class: never dropped, an idempotency key, one call and one message for both parts, the usage log, no personal data | [0006 the usage class](https://github.com/truvity/audit/blob/master/docs/decisions/0006-the-usage-class.md) |
+| The export of OCSF events | [0012 search and the reader API](https://github.com/truvity/audit/blob/master/docs/decisions/0012-search-and-the-reader-api.md) |
+
+### What atoom owns
+
+The registry that declares audit's documents is atoom's `state` block ([atoom 0008](https://github.com/truvity/atoom/blob/master/docs/decisions/0008-blocks.md)); the extensible registry is planned work in atoom's [plan](https://github.com/truvity/atoom/blob/master/docs/plan.md).
+
+### What sluis keeps
+
+- **sluis's action table is sluis's input to audit's emitter.** It is the file `docs/architecture/audit-actions.yaml`: for each sluis action its class and activity, required fields, the treatment of each field, the meters it may carry, its subject, target and request-id paths, and which fields are searchable. Audit's generator makes the schemas, the example records and the emitters' code from it. The writer refuses a record whose action is not in the catalogue.
+- **sluis maps its words to audit's.** The boundary is the scope in `metadata.log_name`, an actor of sluis is a component whose `actor.user.uid` is `<actor>@<boundary>`, and the product is `sluis`. A person or an external actor is a pseudonym ([0029](/decisions/0029-the-audit-log/)).
+- **sluis's own facts go in `unmapped.sluis`,** and nowhere else in `unmapped`.
+- **The two ids `unregistered` and `unknown-audience` belong to no client.** They stand in a record for a request that names no registered client or an audience that is none, so store@ refuses a client document that declares either name ([0021](/decisions/0021-clients/)).
+- **A request that entry's HTTP library rejects itself is audited too,** with the edge row and a closed reason. This is planned; today only a request that reaches the handler is audited ([0003](/decisions/0003-units-transports-and-fusion/)).
+- **sluis aggregates usage per customer, organisation and product,** the claims of its token ([0020](/decisions/0020-grant-vocabulary-and-token-claims/), [0032](/decisions/0032-customer-identity-installations/)). How sluis calls the usage class is [0046](/decisions/0046-limits-on-the-request-path-and-usage-in-audit/).
 
 ### The sluis fields: `unmapped.sluis`
 
-- **Every sluis fact without a core home goes in one object, `unmapped.sluis`, and nowhere else in `unmapped`** (REQ-AUDIT-112). `unmapped` is in the base event of every class and version, so the object survives down-mapping. A field with a core home uses it.
-- **Its schema is sluis's own,** generated in CI from the action table (REQ-AUDIT-114), closed, with the fields each action requires; the writer refuses a record that does not validate (REQ-AUDIT-113).
-- **No OCSF extension.** The fields are versioned with the sluis release; within 2.x a field is only added, never removed or retyped (REQ-AUDIT-119). When OCSF gives a field a core home, the field is deprecated, new records use the home and old records keep the field. An extension comes only for a real consumer of typed fields, as a new record. Today no consumer needs one: a SIEM that flattens JSON queries `unmapped.sluis.key.algorithm` as easily, Security Lake takes OCSF 1.3 at most for a custom source and loads no extension, and the vendor mappings read on 2026-11-01 (OCSF's examples for CloudTrail, Okta and GitHub, and AWS's pipelines for Okta, Entra ID and GitHub) keep the rest in `unmapped`.
-- **The fields at first** (the generated schema is the exact list):
-
-  | Field | Shape | What it says |
-  |---|---|---|
-  | `sender_binding` | `type_id` (1 DPoP `jkt`, 2 mTLS `x5t#S256`, 99), `thumbprint` | A token's confirmation key |
-  | `token` | `audience`, `scopes` | Of the token issued, refreshed or exchanged (no core home before 1.10) |
-  | `assurance` | `acr`, `amr` | Authentication context class and methods |
-  | `key` | `kind_id` (token signing, X.509 CA, SSH CA, log, wrapping, data key), `algorithm`, `digest_algorithm`, `store` (`type_id`: software, cloud KMS, PIV token, other; `slot`) | The key used, created or destroyed; its id is in `resources[]` or `entity` |
-  | `attestation` | `subject_id` (1 key, 2 device), `format`, `digest` | The statement itself is kept where the key or device is registered |
-  | `config` | `kind`, `seq`, `digest` | The signed config document a start or a reload took ([0005](/decisions/0005-the-store/#the-snapshot)) |
-  | `enrolment` | `proof_type_id`, `proof_digest` | The proof a node, device or workload gave |
-  | `quota` | `name`, `amount`, `left` | An admit, a refusal or a push of an allowance, for security readers and for the restore's roll-forward ([0010](/decisions/0010-backup-and-recovery/#roll-forward)); the usage stream is the source for billing |
-  | `certificate` | `kind_id` (1 X.509, 2 SSH user, 3 SSH host), `serial_number`, `subject`, `sans`, `not_before`, `not_after`, `fingerprint`, `eku`, `ct_entry`, `ssh` (`key_id`, `principals`, `critical_options`, `extensions`, `ca_fingerprint`) | An issued or revoked certificate |
-  | `actor_chain` | array of `<actor>@<boundary>` | Further hops of an RFC 8693 `act` chain, outermost first |
-  | `approver` | `<actor>@<boundary>` | Who approved an impersonation or a break-glass action |
-  | `lost` | `process` (16 hex digits), `total` (integer), `since` (milliseconds) | The running total of best-effort facts that one process of the emitter failed to deliver for this record's tenant, and the time of the first not yet reported; a reader takes the highest total per actor, tenant and process and never sums. Written by the emitter alone and refused in an event from a caller ([0029](/decisions/0029-the-audit-log/#facts-that-are-lost-are-counted)) |
-
-- **Out of `unmapped.sluis`:** the treatment and storage class of a kind, which the kind registry gives ([0004](/decisions/0004-the-data-model/#kinds)); the pseudonym key epoch, encoded in the pseudonym; the boundary, which has a core home; and the roll-forward value of a console write, in OCSF's `updated_entity.data`.
-
-### The action table is code, and the release identifies it
-
-- **Each project's actions are a table in code,** in the project's own release: each action's class and activity, required fields, the treatment of each field and the meters it may carry, with its subject, target and request-id paths and which fields are filterable, facetable or searchable ([Search and the index](/decisions/0028-audit-pieces/#search-and-the-index)). An entry's name is `metadata.event_code`, with one event code per grant type, so no field carries the grant type.
-- **The records' JSON Schemas are generated from the table in CI,** published with the release and compiled into the emitters; Go, Rust and TypeScript types come from the same source.
-- **The catalogue is the table with its schemas, published as config.** The publishing pipeline signs each release's table and its generated schemas as one item of the `AuditCatalogue` config kind, so the table and its schemas move together in one version. store@ loads it with the rest of the snapshot ([0005](/decisions/0005-the-store/#the-snapshot)), and the writer, the indexer and the reader read it through the data port.
-- **The catalogue of a release is published before its emitters run.** The writer validates each record against the catalogue that its `metadata.product` names, and refuses a record whose release has no catalogue. A product's new release therefore needs no new writer, as long as its catalogue is within the policy version of the deployed readers (below).
-- **One item holds for every release of a major version (decided 2026-11-07).** `AuditCatalogue` is a singleton kind, so a project has one item, `default`, and it is the table of its newest release, not one item for each release. The table only grows within a major version (REQ-AUDIT-119: a field is added, never removed or retyped, and a new one is optional), so the newest catalogue validates the records of every older release of the same major version. The writer therefore validates each record against the schema of its action in `default`, and refuses a record whose `metadata.product.version` is newer than the item's `release` (the reason `release`) or is not a version: a release that has not published its catalogue has not been taken in. An older release of any major version is taken if its record validates: the table only grows within a major version, and across one the schema itself is the guard, so the release check is only for the newer. A new major version publishes its catalogue before its emitters run, and a writer reading the older one refuses its records until then; the seal entry of the batch that refused them says how many and why (ADR 0029, "Sealing"), and the quarantine keeps them whole. **The catalogue is held to a policy, and the policy has a version (decided 2026-11-07).** store@, the writer and the indexer accept only the documents the generator makes: a closed list of keywords, `$ref` to the shared definitions only, one grammar for patterns, bounded depth and combinators nested at most three deep, and a bound on the work one record can cost, counted in schema objects visited in the worst case (limit 4000, against 885 for the heaviest real record; the cost is the real guard, and the nesting limit only keeps documents readable). The catalogue says the version of the policy it was made to (`policy`, 1 today), and a reader refuses a higher one by name, at load for store@ and at start for the writer, so the catalogue in force stays in force and the failure is early and named. This is how "a new release needs no new writer" holds: it holds for every release whose catalogue stays within the policy version the deployed readers have. A generator change that needs a keyword, a pattern feature or a limit outside the policy raises `PolicyVersion` in the same change, and the readers are upgraded first, before the first release whose catalogue carries the new version; that is the one case where a new release needs a new writer, and the version makes it visible and not a surprise. The road not taken: an open keyword list priced by the cost limit, which would need no upgrade but gives the two engines (Go and Rust) a larger surface on which they differ. The writer also gives each validation five seconds, and a record that exceeds them is not refused at once: wall-clock time on a small board stalls under a re-sync or a loaded CPU, and a slow moment must not take a legitimate record out of the log. The batch is given back with an error and delivered again, and only a record that times out three times in a process is refused (as `schema`, kept whole in the quarantine). The road not taken, one item for each release: it keeps every old table for ever and needs a keyed kind and a lookup by release for no record that the newest does not already cover.
-- **No catalogue is stored in the log, and no record carries a catalogue field** (REQ-AUDIT-115). Product name, release and event code identify the entry in force. Witnesses cosign the log, not schemas; an auditor takes the schema from the release a record names.
-
-### The class mapping
-
-Checked against OCSF 1.9.0 on 2026-11-01.
-
-| sluis action | OCSF class / activity |
-|---|---|
-| Sign-in (browser, passkey, upstream OpenID Connect), recovery sign-in | 3002 Authentication / 1 Logon |
-| Sign-out, end of a session | 3002 Authentication / 2 Logoff |
-| Step-up ([Step-up](/decisions/0017-identity-and-sign-in/#step-up)) | 3002 / 1 Logon, `is_mfa` true, `auth_factors`, the session's `session.uid`, `is_new_logon` false, `activity_name` "Step-Up" |
-| Token grant, refresh, exchange, revocation | 3002 / 99 with `activity_name`; an impersonating exchange is 7 Account Switch, `account_switch_type_id` 2, with `unmapped.sluis.approver` |
-| A grant of scopes | 3003 Authorize Session / 1 Assign Privileges, scopes in `privileges[]` |
-| Certificate (X.509 or SSH) issued or revoked | 3002 / 99 "Certificate Issue" or "Certificate Revoke"; profile digest in `policy.version`, revocation reason in `status_detail` |
-| Credential minted to or revoked from a principal | 3007 User Management / 18, 19 Add, Remove Programmatic Credentials |
-| Enrolment of a node, device or workload | 3004 Entity Management / 6 Enroll, 7 Unenroll |
-| Passkey registered or removed | 3007 / 12, 13 Enable, Disable MFA Factors; the credential id in `resources[]` |
-| Person first seen, roster change, role assignment | 3007 User Management, 3006 Group Management |
-| Console write (configuration, client registration, lowered limit) | 3004 / 1, 3, 4; value in `updated_entity.data`, revision in `entity.version` |
-| Tenant created by a product's push, suspended or erased | 3004 / 1, 3, 4, the tenant in `entity` |
-| Quota admit, refusal or allowance push | 6003 API Activity / 1, 3, 4, request id in `api.request.uid` |
-| A request at the edge, answered or refused (`entry`) | 6003 API Activity / 2 Read for `GET` and `HEAD`, 1 Create for `POST`, 99 Other; the route, the HTTP status and a closed reason in `unmapped.sluis`, never a path, query, header, cookie or parameter value |
-| Audit read (search, get, tail, proof) | 6003 / 2 Read |
-| Audit export | 1008 Event Log Activity / 3 Export |
-| Key use (sign, open) | 6003 / 99 "Sign" or "Open", the key in `resources[]` |
-| Key created, rotated or destroyed, including a tenant's data key wraps deleted at its exit | 3004 / 1, 3, 4, the key in `entity` |
-| Start of an actor (`key@`, `store@`, `policy`, `exporter@`) | 6002 Application Lifecycle / 3 Start; for `exporter@` the number of destinations, documents and documents the check refused in `unmapped.sluis` |
-| Configuration reload, and a reload that is refused | 6002 / 99 "Reload", and 6002 / 99 "Refuse" with Failure and the closed reason in `status_code` |
-| A document published to, or removed from, an export destination (`exporter@`) | 3004 Entity Management / 3 Update (a first write too: `replaced` says which); the destination, the document, the address, the digest and a count of kids in `unmapped.sluis`, never a list; a name that the table's `ident` would refuse (empty, a space, a leading `-`) is written as `h-` and the first 16 hex digits of its SHA-256 (unsalted, not a keyed pseudonym) |
-| A document of a destination goes into, or comes out of, the state `unverified` (`exporter@`) | 3004 Entity Management / 99 "Unverified", the document in `entity`; Failure with the closed reason in `status_code` on the way in, Success on the way out; the destination and the document in `unmapped.sluis`; one fact for each transition, never for each repeat of the alarm |
-| A document of an `ExportDestination` that the check refuses (`exporter@`) | 3004 / 99 "Refuse", the document in `entity`, the closed reason in `status_code`; once at the start, not for each reconcile |
-| Writer and log lifecycle | 1008 Event Log Activity |
-
-- **A request that the HTTP library of `entry` rejects itself is audited too,** with the same row, the status the library answered and a closed reason, even though no handler runs: a malformed or oversized head, a header or body timeout, an unsupported protocol. Today only a request that reaches the handler is audited; the rejected ones are planned.
-- **A policy decision is part of the record of the action it gates,** in the `security_control` profile (`action_id`, `authorizations`, `policy`), not a record of its own.
-- **Token stages stay activity 99.** Activities 3 to 5 are described as Kerberos tickets and no vendor mapping read on 2026-11-01 uses them for OAuth. A step-up is a Logon because it is a second authentication of an open session, so a rule on failed logons sees it; a token grant is not a logon.
-- **A refresh rotation names two tokens:** `session.uid` is the session chain, `session.credential_uid` the presented token, `authentication_token` the new one.
-- **The actor chain is not `delegation`,** which in 1.9.0 exists only through the `ai_operation` profile and holds identifiers only. The acting party is `actor.user`, the subject `user`.
-- **An issued certificate is not Authentication's `certificate` object,** which means a presented certificate (a sign-in with a client certificate uses it). The field moves if OCSF adds a home for issuance (OCSF issue 1513).
-
-### The OCSF attributes a class requires
-
-Decided 2026-11-07, before the first release, because a log of test data is cheap to change now and a frozen format is not. An OCSF class requires attributes that `unmapped.sluis` cannot stand in for, and the toolkit that runs on the table's example records in CI ([REQ-AUDIT-100](/requirements/audit/#REQ-AUDIT-100)) reports each one that is missing. The emitter fills every one from what it knows, by class, in the kit; Go and Rust write the same bytes and the example records of the table are their shared vectors ([REQ-AUDIT-188](/requirements/audit/#REQ-AUDIT-188)). The table below is the rule, stated once. It was built in three changes: Application Lifecycle and Authentication first, then Entity Management, then API Activity. During them the findings of the classes not yet built were listed, counted, in a file that could only shrink; the last change deleted it, and the toolkit now fails the build on any error in an example record.
-
-| Class | Attribute | What it holds | Built |
-|---|---|---|---|
-| 6002 Application Lifecycle | `application` | `name`, the emitting actor. `metadata.profiles` declares `host`, whose `actor` the class takes | yes |
-| 3002 Authentication | `service` | `name`, the emitting actor, which is the service the subject authenticates to | yes |
-| 3002 Authentication | `user` | `uid` and `type_id`. A subject is its pseudonym with the kind of identity it names: `type_id` 1 for a person, 3 for a client or a workload (a service identity), 99 for another kind. A record that established no subject says `uid` `unknown` and `type_id` 0. `unknown` cannot be a pseudonym, which begin `p1.`, and the schema accepts nothing else | yes |
-| 3004 Entity Management | `entity` | `type` (a word of the row), `type_id` 99, and the `name`, `uid` and `version` of the thing the actor changed: a key id, a purpose and a generation, a document | yes |
-| 6003 API Activity | `api` | `operation`, the Connect method (`Sign`, `SignToken`, `Decide`, `Search`, `Install`, `Revoke`), the store verb, or the route that was called; a closed word the actor chooses, never text of a request | yes |
-| 6003 API Activity | `src_endpoint` | `name`, the peer the transport named (`session`, `signer`, `admin`, `harness-forwarder`), a node name for a request a peer node made, or `unknown` when the transport could not name the peer. An activity the actor started itself names the actor | yes |
-
-- **`unknown` means this record established no person.** It is not a claim that nobody is behind the step. A refusal is audited whatever else fails ([0005](/decisions/0005-the-store/)), so a refusal whose subject key@ cannot name in time is written with `unknown` too, and one warning says so; a fact that must name its subject fails instead. An exchange whose subject token verifies but whose session chain has ended has the token's `sub`, which is a claim of a token, not the person's id; the person's id is in the chain, which is what has ended, and a lookup that is bound to fail cannot be made to produce it. The same holds for a proof of another kind that is refused before a person is looked up. Writing a pseudonym of the claim would put a value in the log that is not the person's, and a second lookup in the path of a refusal would be a new way to fail; so the record says that it established nobody.
-- **A pseudonym may name a client, and the record says which.** A step with no person yet (a refused client, an authorization request) concerns the OAuth client, as the session actor already records ([0029](/decisions/0029-the-audit-log/#pseudonyms): the kind of identity is part of the pseudonym's input), so `user.type_id` carries the kind, as OCSF's own enumeration does (1 User, 3 System, 99 Other), and a rule on persons reads `type_id` 1. Where no client is known either, the step names nobody and says `unknown`, and a literal such as the client id "unknown" is not hashed into a pseudonym that looks like it. A callback whose cookie is ours but whose state is not the one sent names the client that started the sign-in, since that is a signal about the client. The ids `unregistered` (session's stand-in for a request that names no registered client) and `unknown-audience` (exchange's stand-in for an audience that is none) belong to no client: store@ refuses a document that declares a client of either name, so that a registered client's records are never mistaken for those refusals.
-
-- **Never an address, never text a caller wrote.** A caller on a Unix socket has a name from `SO_PEERCRED` and the registry, and that is the whole of its endpoint: no IP, port or host is invented. `entry` sees only the forwarder on its socket, so the source of a request is the forwarder; the address of the person behind it would be personal data and arrives only in a header that the caller controls, so it is not recorded. The source has the form of the table's type `source`, a letter or an underscore and then letters, digits and `. _ -` (at most 64): no IP address in any numeric form, no host and port, no path and no address with a user fits it, and the library refuses what the schema would, in Go and in Rust, whatever a call site passes. A host name or `localhost` has that form too and cannot be told from a name of the registry: the guard is that the value is only ever one the transport named, a node, or a constant, never a value of a request, and the form only keeps an address out by mistake. A node name that a peer wrote in a request that is then refused is the source only if it has the form, and is `invalid` otherwise (`unknown` means that the transport named no peer at all), so that a forged name does not choose what the log loses; in the fact itself the name and the request id of such a refusal are left out when empty and are `h-` and 16 hex digits of their SHA-256 when the table would refuse them or when they already look like such a digest. That digest is unsalted and cut to 64 bits: it is not a keyed pseudonym ([0029](/decisions/0029-the-audit-log/#pseudonyms)), it names no person, and it hides a name only from someone who cannot guess it. `api.operation` and `src_endpoint.name` are checked by the patterns of the table, which accept every value that really reaches them ([REQ-AUDIT-101](/requirements/audit/#REQ-AUDIT-101)).
-- **A start is not an API call.** Start, reload and refused reload of an actor are Application Lifecycle, as the class mapping says, not API Activity with an invented operation and a source that is the actor itself. A decision of `policy` stays API Activity, a `Decide` call from the actor that asked; OCSF gives API Activity no `user`, so the pseudonym of the person it concerns is `resources[0].uid` with the kind of identity as its `type` (`person`, `client`, `workload` or `other`), the same value in the same sealed record.
-- **The members of `unmapped.sluis` stay.** `caller`, `key_id`, `op` and the others are written as before and also give the attribute above. The copy costs 20 to 60 bytes a record and is deliberate: moving the members would change about 180 places of code and tests and the consumers that read them, to save those bytes, and within 2.x a member is only added (REQ-AUDIT-119).
-- **No person is added and no reader widens.** Every new value is a name of the registry, a node name, a key id, a purpose, a document name or a constant, all of which the records already hold or which are public. The envelope in clear is unchanged apart from this: a start is now `class_uid` 6002 and `activity_id` 3, and a reload or a refused reload `class_uid` 6002 and `activity_id` 99 (so `type_uid` too), where all were 6003 and 99. These are records of the operator's own tenant, so no tenant's auditor reads more, and an envelope reader learns that an actor started or reloaded, which the burst of records at that moment already told.
-- **The shape of a class is part of the format.** The attributes above come from the class, not from a row; changing them is a change of the format and needs a new major version of sluis, as removing a member of `unmapped.sluis` does. A row that gains a part (an `entity`) which the old row lacked is refused by `just audit-compat`, with the other changes it refuses, and so is a class that now requires what the records of the last release lack: the example record of every row of API Activity of `v2.0.0-alpha.1` fails the schema of the new table, which is this decision's own change (2026-11-08). Between two pre-releases nothing is promised ([0013](/decisions/0013-release-train-packaging-and-distribution/)), so against an alpha `audit-compat` prints those findings as a CI warning and does not fail; against a stable release it fails. The table of a past release is read as it was, not under the rules added since.
-- **Size** (measured 2026-11-07 on the example records of the table). A record of session with a subject is 41 bytes larger (`service` 29, `type_id` 12), `exchange.token` 42 and `upstream.complete` 55 (the name of the actor is longer), and a record without one is 67 to 80 larger; a start is 24 to 29 larger and a reload 51 or 52; `policy.decide` 12. An Entity Management record is 63 to 89 larger (65 for the ring, 70 and 89 for a data key and its wrap, 63 for a document); API Activity 60 to 76 (an entry route 67 to 76, a call of key@ 60 to 66, `policy.decide` 74, where its pseudonym moves from `user` to `resources`). The example records are 424 to 794 bytes before, against the 16 KiB cap; the largest real record, a `key.revoke` that names 64 keys, is 8.2 KB (8,103 bytes before API Activity and 61 more after it, measured with the 64 kids partitioned among the four lists, the most a declaration can hold). No record is added, so idle boards write the same number an hour ([REQ-AUDIT-180](/requirements/audit/#REQ-AUDIT-180)).
-
-### Export
-
-- **The audit export is NDJSON of OCSF events,** opened for the caller's grant ([0028](/decisions/0028-audit-pieces/#access)), one project and log kind per export. It adds enum captions, `observables` and the `record_integrity` attestation, whose fingerprint (SHA-256 over the RFC 8785 bytes) and chain id point back to the log entry, and keeps `metadata.log_name` and `unmapped.sluis` as written.
-- **Target-specific exporters are drivers, later.** Security Lake takes Parquet and OCSF 1.3 at most (checked 2026-10-31), so its exporter maps down; down-mapping lives in the exporter, never in the record.
-
-### The usage stream
-
-- **Usage is a separate log kind,** written by the project's writer, with its own prefix, checkpoints, witnesses, lock mode, readers and retention ([0029](/decisions/0029-the-audit-log/#projects)). It has no key of its own: the writer's one log key signs both kinds, and each signed checkpoint names its log. Usage entries are sealed under the tenant's `evidence` key, like audit entries ([Encryption and crypto-shredding](/decisions/0029-the-audit-log/#encryption-and-crypto-shredding)).
-- **Each stream declares its own retention,** with no default in production, so neither period binds the other ([Retention](/decisions/0029-the-audit-log/#retention)).
-- **The usage log has no search index** (REQ-AUDIT-098). It is read by those a binding grants `usage` ([0028](/decisions/0028-audit-pieces/#access)). A product builds its billing log from it outside sluis, in the `billing/` prefix of its project ([0039](/decisions/0039-quota-allowance/#the-billing-log-is-outside-sluis)); sluis holds no prices.
-- **A usage fact is a CloudEvents 1.0 (1.0.2) event, structured mode, JSON in RFC 8785 form:**
-
-  | Attribute | Value |
-  |---|---|
-  | `specversion` | `1.0` |
-  | `id` | `<message id>/<n>`: the audit record's `metadata.uid` (UUIDv7, RFC 9562) and the event's position in the usage part, from 0 |
-  | `source` | the emitter: `<actor>@<boundary>` for an actor of sluis, the service's own name for a product |
-  | `type` | the meter event, named by the catalogue |
-  | `subject` | the aggregation key: the tenant, or a key of the product's own within the tenant, never personal data |
-  | `time` | the time of use |
-  | `datacontenttype` | `application/json` |
-  | `data` | the unit, a signed integer amount, the request id where there is one, and for `quota` the quota name and the units left. No personal data |
-
-- **A usage fact carries no personal data** (REQ-AUDIT-132): no pseudonym, subject, e-mail address or free text. Caps and allowances are per tenant, so no consumer needs a person in it.
-- **The idempotency key is `source` plus `id`,** as CloudEvents and OpenMeter deduplicate; a bare message id would give two meters of one message one `id`. The writer removes duplicate messages by `metadata.uid`, so a usage fact is written exactly as often as its audit record.
-- **Only `quota` sends the facts of an allowance.** An application's usage part carries meters only; the writer refuses an admit, a refusal or a push from any other emitter ([0039](/decisions/0039-quota-allowance/#countdown-and-refusal)).
-
-### Usage is derived from the same event, once
-
-- **The emitter library builds both parts of a message from one call.** The application describes the action once, with its meters; the library gives the message one id, used as `metadata.uid` and as the prefix of each usage `id`, and sends one message. No call emits a usage part alone or an audit part twice.
-- **The catalogue entry declares the meters an action may carry,** with units; the writer refuses an undeclared meter, an amount out of bounds or an id that is not the record's. What a meter is, which outcomes bill, how a meter stays fixed over releases and which period an event belongs to are [0040](/decisions/0040-meters-and-usage-evidence/).
-- **Every usage fact has an audit record,** so the two cannot disagree about what happened. A periodic gauge is an audited action of its own.
-- **The writer splits the message and registers both logs' sealed batches in one conditional write of its state** (REQ-AUDIT-094; sealing is in [0029](/decisions/0029-the-audit-log/#sealing)). A crash leaves both or neither.
-
-### Amendment of 2026-11-12: the usage guarantee
-
-Maintainer decision D4 A, 2026-11-12 ([0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/)). A usage fact is never dropped: its idempotency key is `source` plus `id`, the write fails if the record cannot be stored, and an emitter does not take the best-effort path for it. Usage is aggregated per customer, organisation and product, the claims of the sluis token ([0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)). Only `quota` sending the facts of an allowance (the bullet under The usage stream) no longer applies: the allowance of [0039](/decisions/0039-quota-allowance/) is superseded.
-
-### Amendment of 2026-11-18: no allowance facts
-
-2026-11-18 ([0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/), maintainer decisions Quota and Order; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv)). The usage stream stands and is built right after the core, with the limit check. The allowance of [0039](/decisions/0039-quota-allowance/) is not built, so the `quota` action rows (an admit, a refusal or a push of an allowance), the sentence "Only `quota` sends the facts of an allowance" and the link to the billing log of 0039 describe a superseded design. An application's usage part carries meters ([0040](/decisions/0040-meters-and-usage-evidence/)), and a product builds its billing log from the usage stream outside sluis.
+The fields that no OCSF attribute holds and that sluis needs are declared in the action table as each action is built. They include the audience and scopes of a token, the sender binding, the authentication context, the key used, a configuration document taken, an attestation, an enrolment proof, a certificate, the actor chain of an exchange, and an approver. The generated schema is the exact list, and within a major version of sluis a field is only added. The emitter's own `lost` field is audit's ([0005](https://github.com/truvity/audit/blob/master/docs/decisions/0005-the-security-class.md)); in sluis it is `unmapped.sluis.lost`. There are no rows for an allowance: sluis keeps no balance.
 
 ## Consequences
 
-- A decrypted record is an OCSF event of a published version; an OCSF-only tool finds every core field and sees `unmapped.sluis` as source data. OCSF tells consumers not to rely on structure there, so keeping it stable, and publishing its schema with each release, is sluis's job. There is no extension to own.
-- A field that gains a core home (the token audience in 1.10) moves at an upgrade, and one log then holds two shapes. OCSF keeps deprecating classes (1.9.0 replaced Account Change by User Management); the CI comparison catches it.
-- Some actions fit OCSF only approximately (token and certificate stages at activity 99, key use and quota as API Activity, step-up as a Logon); a security tool sees them in OCSF terms.
-- A product's release publishes its catalogue before it emits, and a writer then accepts it without an upgrade. A record whose catalogue is missing is quarantined, not lost.
-- An OCSF record is about 2.8 times a minimal record of sluis's own: about 1.1 KB for a sign-in (measured 2026-10-31), plus up to a few hundred bytes of `unmapped.sluis` on a certificate issuance; a few gigabytes a year per boundary at v1's volume. Sealed records do not compress.
-- The integer bound and the canonical check refuse records other OCSF producers could send; emitters write large counters as strings.
-- Billing and quota read a stream made for them and never parse security records, at the cost of a second set of checkpoints to witness and a second retention to declare. One emit and one conditional write keep the logs consistent; a writer outage stops both, and a bad usage part fails its whole message.
-- Usage outlives the tenant's personal data under its `evidence` key, so a bill can be disputed after the tenant has left, and the exit still destroys everything personal.
+- One home for the format. A change to OCSF handling, canonical rules or the catalogue is a record in audit.
+- A new sluis action is a row in sluis's table, and sluis publishes its catalogue before its emitters run.
+- The generator, the emitters and the test vectors are still in this repository until they move to audit.
 
 ## Roads not taken
 
-- **Start and reload as API Activity.** It keeps one class for everything an actor does, at the cost of an `api.operation` of "Start" for something that is not a call, and a source that is the actor itself; Application Lifecycle is the class OCSF made for it.
-- **A made-up value for an attribute a class requires, or a class chosen for each record by what it happens to know.** A loopback address, an empty user: either would put something in the log that no emitter knew; a constant that says "not known" does not.
-- **Moving the members of `unmapped.sluis` that now have a core home.** No copy, but a change of about 180 places and a break of what reads them, for a few bytes a record.
-- **A sluis OCSF extension, full or only for the homeless fields.** What the OCSF FAQ advises, but a registry entry, a source tree, a version and a compile step in every strict consumer, dropped by Security Lake, for typed fields no consumer reads yet; possible later in a minor release.
-- **Plain OCSF with the facts spread over `policy.data`, `resources[].data` and `entity.data`.** Complete, but untyped slots that only the table explains, and no one place for a SIEM to look.
-- **New event classes for token, certificate and key activity.** An exact fit, but an extension class is invisible to rules keyed on core classes.
-- **Core tags and labels for the homeless fields.** Down-mapping-safe, but strings meant for classification, and still an unregistered schema of keys.
-- **A catalogue document in the log, versioned in every record.** A self-describing log, at the cost of a second versioned artefact in the log and a field in every record; the release already identifies the catalogue, which is config.
-- **The catalogue as a release artefact installed beside the writer.** Every product release would need an operator to install a file and restart the writer; as a signed config document it reloads with the snapshot.
-- **Authentication's ticket activities for token stages.** In the class, but described as Kerberos, so they mislead.
-- **No canonical form, deterministic Protobuf or CBOR.** Without RFC 8785 two implementations hash differently; the binary forms are not canonical across languages and no OCSF tool reads them.
-- **A format of sluis's own (v1's Protobuf core, or a minimal record plus an OCSF exporter), CADF, the OpenTelemetry log model or ECS.** Invented formats need a mapping in every exporter; CADF is unmaintained, OpenTelemetry has no audit conventions, ECS is merging into OpenTelemetry.
-- **Usage in the audit log, or derived from it by the writer.** One log, but billing in a security schema, one retention for both, and a writer parsing records for amounts that are often not there.
-- **A separate usage writer, or a usage API that emits alone.** A dual write, and a second path that can emit twice or without an audit record.
-- **A pseudonym in the usage fact.** No consumer needs it: caps are per tenant, and it would put personal data in the evidence.
+- **Keep the record format in sluis.** Every product that emits would take its format from an identity product.
+- **A sluis OCSF extension for the fields without a core home.** A registry entry and a compile step in every strict consumer, dropped by Security Lake, for typed fields no consumer reads yet.
 
 ## Follow-ups
 
-- Emitter, catalogue and the usage stream: [#841](https://github.com/truvity/sluis/issues/841).
+- Open: the neutral name of the pseudonym domain label (sluis binds `sluis-pseudonym-v1` today) and of the `lost` field for products other than sluis are audit's questions; sluis's pseudonyms change with the label.
+- Open: which sluis actions carry meters, and the first meters, are written with the first caller of the usage stream ([#841](https://github.com/truvity/sluis/issues/841)).
+- The emitter, the catalogue and the usage stream: [#841](https://github.com/truvity/sluis/issues/841).

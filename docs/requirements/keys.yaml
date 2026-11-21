@@ -420,7 +420,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    gap: partly-built
+    gap: proved-in-atoom
     milestone: core
     runtimes: all
     actors: [key]
@@ -541,7 +541,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    gap: partly-built
+    gap: proved-in-atoom
     milestone: core
     runtimes: all
     actors: [key]
@@ -584,7 +584,7 @@ requirements:
     rationale: "The wrap is the only route to the key, so every value sealed for the tenant stops opening (ADR 0006)."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -713,7 +713,7 @@ requirements:
     level: MUST
     source: design-decision
     status: partial
-    gap: partly-built
+    gap: proved-in-atoom
     milestone: core
     runtimes: ["bare-metal"]
     actors: [key]
@@ -881,7 +881,8 @@ requirements:
     rationale: "A busy kind would otherwise exhaust the AES-GCM nonce space of one key (ADR 0006)."
     level: MUST
     source: design-decision
-    status: planned
+    status: partial
+    gap: proved-in-atoom
     milestone: core
     runtimes: all
     actors: [key]
@@ -923,7 +924,7 @@ requirements:
   - id: REQ-KEYS-117
     area: KEYS
     statement: "A locked key@ MUST unlock from the PinRelease of any one listed, unrevoked, unlocked peer that is reachable, with no peer in particular required."
-    rationale: "A board that is down or left out must not stop another board from unlocking; a boundary has one PIN, so one verified answer is enough, and three boards then unlock whichever two stay up (docs/runtimes/rebuild-a-board.md; extends REQ-KEYS-059)."
+    rationale: "A board that is down or left out must not stop another board from unlocking; a boundary has one PIN, so one verified answer is enough, and three boards then unlock whichever two stay up (extends REQ-KEYS-059)."
     level: MUST
     source: design-decision
     status: done
@@ -1141,7 +1142,7 @@ requirements:
     rationale: "A move must change no subject (ADR 0032)."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -1361,7 +1362,7 @@ requirements:
       - {kind: integration-test, ref: "the key plan check refuses an audit-log purpose that is not ES256"}
   - id: REQ-KEYS-082
     area: KEYS
-    statement: "The chain data key of a tenant MUST be sealable by session alone and openable by session and exchange alone."
+    statement: "The chain data key of a tenant MUST be sealable by signin alone and openable by signin and exchange alone."
     rationale: "Session-chain facts are read by exchange, which must not hold the cookie key or a tenant's data key, and they are a tenant's personal data, so they are sealed under the tenant's key and erased with it (ADR 0006)."
     level: MUST
     source: design-decision
@@ -1373,10 +1374,10 @@ requirements:
     issues: [1208]
     tests: [actors/key/internal/keyd/seal_test.go, actors/session/internal/sessiond/token_test.go, actors/exchange/internal/exchanged/directory_store_test.go]
     verification:
-      - {kind: integration-test, ref: "session seals and opens and exchange opens, by rule with no grant; exchange's seal and every other actor's seal or open are refused with the reason rule; another tenant's chain does not open"}
+      - {kind: integration-test, ref: "signin seals and opens and exchange opens, by rule with no grant; exchange's seal and every other actor's seal or open are refused with the reason rule; another tenant's chain does not open"}
   - id: REQ-KEYS-263
     area: KEYS
-    statement: "The credential data key of a tenant MUST be sealable and openable by session alone, by rule and with no grant once the tenant has the key, and only for the kind StaffPasskey."
+    statement: "The credential data key of a tenant MUST be sealable and openable by signin alone, by rule and with no grant once the tenant has the key, and only for the kind StaffPasskey."
     rationale: "A passkey sign-in opens the credential before it knows whose it is, and a grant is a decision about that person's accounts, which the credential holds; the key is a tenant's, so it is erased with the tenant, and it seals one kind so that the one actor with the rule gets no second data key (ADR 0006)."
     level: MUST
     source: design-decision
@@ -1388,7 +1389,7 @@ requirements:
     issues: [885]
     tests: [actors/key/internal/keyd/seal_test.go, actors/store/tests/store.rs, actors/store/src/messages.rs]
     verification:
-      - {kind: integration-test, ref: "session seals and opens under credential with no grant, for staff-passkey alone; every other actor is refused by rule; another tenant's key fails; store@ takes it on StaffPasskey alone"}
+      - {kind: integration-test, ref: "signin seals and opens under credential with no grant, for staff-passkey alone; every other actor is refused by rule; another tenant's key fails; store@ takes it on StaffPasskey alone"}
   - id: REQ-KEYS-083
     area: KEYS
     statement: "key@ MUST delete a generation of the chain data key of a tenant only after the longest time to live of a session chain has passed since that tenant's key last sealed under it."

@@ -188,7 +188,7 @@ async fn no_rule_means_denied_and_the_refusal_is_audited_without_the_id() {
         "rule",
     );
     // An actor with no rule on the kind at all.
-    f.as_("quota");
+    f.as_("ssh-ca");
     refused(
         f.get("person", "acme", "x").await,
         ErrorCode::PermissionDenied,
@@ -1739,7 +1739,7 @@ async fn a_listed_reader_gets_the_secret_of_the_client_the_config_names() {
 async fn a_caller_that_is_not_a_listed_reader_gets_no_secret_and_the_source_is_not_asked() {
     let f = F::new().await;
     with_clients(&f);
-    for caller in ["quota", "policy", "signer", "adapter-upstream-oidc"] {
+    for caller in ["ssh-ca", "policy", "signer", "adapter-upstream-oidc"] {
         f.as_(caller);
         refused(
             f.get("installation-client-secret", "", "app").await,
@@ -1875,7 +1875,7 @@ async fn no_audit_fact_and_no_refusal_carries_the_secret() {
         );
     }
     // A caller that is refused before any read leaves a fact with no id of a secret it never asked for.
-    f.as_("quota");
+    f.as_("ssh-ca");
     let _ = f.get("installation-client-secret", "", "app").await;
     // A list of a secret kind is not served: there is no consumer.
     f.as_("session");
@@ -1895,7 +1895,7 @@ async fn no_audit_fact_and_no_refusal_carries_the_secret() {
 #[tokio::test]
 async fn an_audit_emit_that_fails_never_fails_the_call() {
     let f = F::new().await;
-    f.as_("quota");
+    f.as_("ssh-ca");
     f.sink.fail.store(true, Ordering::SeqCst);
     // The refusal still reaches the caller, with its reason.
     refused(
@@ -2078,7 +2078,7 @@ async fn the_shared_address_vectors_hold_on_the_wire() {
 #[tokio::test]
 async fn a_refusal_carries_the_correlation_id_of_the_call() {
     let f = F::new().await;
-    f.as_("quota");
+    f.as_("ssh-ca");
     let call = f.get("person", "acme", "x");
     let r = sluis_kit::correlation::scope(Some("req-42".into()), call).await;
     refused(r, ErrorCode::PermissionDenied, "rule");

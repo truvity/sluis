@@ -1,198 +1,168 @@
 # 0009 — exporter@ publishes the kinds marked exportable to destinations outside sluis, never to a secret source
 
-**Status:** Accepted; amended by 0044
-**Date:** 2026-11-12
+**Status:** Accepted
+**Date:** 2026-11-21
 
 Proposal: [issue #1014](https://github.com/truvity/sluis/issues/1014).
 
 ## Context
 
-sluis holds secrets because it has to: a vendor-issued app key, a bot token, a generated client secret. It is a secrets engine for static secrets only, through the KV building block of [0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/), and for nothing else ([Data and secrets](/concepts/data/)). Some of what it holds must still leave it, because something outside sluis needs it with its own identity: a cluster that needs a client secret, a relying party that needs the key set, a host that needs the revocation list.
+Some of what sluis holds must reach something outside it that has its own identity: a relying party that needs the key set, a host that needs a revocation list, a workload that needs a trust bundle. Secrets are a separate case. sluis keeps static secrets in KV ([0047](/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns/)) and never publishes one.
 
 Three rules from the data model bound the design.
 
-- **Where a thing is written decides its class** ([principle 17](/principles/#17-where-a-thing-is-written-decides-its-class)). A secret source is written by IaC and read-only for sluis. If sluis wrote into one, a value would have two writers and two classes.
-- **Few credential holders** ([principle 16](/principles/#16-few-credential-holders)). A destination needs a credential. That credential belongs to one holder of the data family, exporter@, and to no work actor ([0002](/decisions/0002-families-of-actors/#credential-holders)).
-- **Nothing without a consumer** ([principle 8](/principles/#8-nothing-without-a-consumer)). A kind leaves sluis only when someone is named who reads it.
+- **Where a thing is written decides its class** ([principle 17](/principles/)). A secret source is written by infrastructure code and is read-only for sluis. If sluis wrote into one, a value would have two writers and two classes.
+- **Few credential holders** ([principle 16](/principles/)). A destination needs a credential. That credential belongs to one holder of the data family, exporter@, and to no work actor ([0002](/decisions/0002-families-of-actors/)).
+- **Nothing without a consumer** ([principle 8](/principles/)). A kind leaves sluis only when someone is named who reads it.
 
-v1 exported typed credential documents to OpenBao and wrote Kubernetes objects. The design rule "sluis writes no Kubernetes object" is amended here, and the single case it allows is below.
+The mechanics of publishing are not specific to identity. They become atoom's `export` block, and the destination port and its directory driver are atoom's. This record keeps what is sluis's: which kinds may leave, who holds the credentials, and the rules for the key set.
 
 ## Decision
 
+### The host and the block
+
+- **exporter@ is the host of atoom's `export` block.** The block holds the mechanics: watch the exportable kinds from a resume point, reconcile at start and once a day, write, purge, read back and report. The block depends on the `destination` port and the `state` block ([atoom 0008](https://github.com/truvity/atoom/blob/master/docs/decisions/0008-blocks.md)). sluis plugs in the kinds, the rules and the credentials.
+- **The block is planned.** Today exporter@ (`actors/exporter`) carries the mechanics itself and is built for the directory driver and the static key set. It moves into atoom at its second consumer.
+- **The destination port and the directory driver are atoom's:** [the port](https://github.com/truvity/atoom/blob/master/destination/docs/destination-port.md) (`Put`, `Delete`, `List`, `Purge`, `ReadBack`, and its rules) and [the directory driver](https://github.com/truvity/atoom/blob/master/destination/dir/docs/dir.md). sluis consumes atoom's driver binaries and keeps a thin host, `drivers/exporter/dir`, for its socket and registry. This record does not restate the port.
+
 ### What is exportable
 
-- **Only a kind marked exportable in the kind registry may leave sluis.** The mark is a property of the kind ([0004](/decisions/0004-the-data-model/#kinds)), so what may leave is decided in review and not at run time. exporter@ refuses any other kind.
-- **Exactly seven kinds are exportable** (six once `ClientSecretExport` is retired, see the amendment of 2026-11-12 on KV). `SigningRing` (the key set), `KeyCertificate` (the certificate chains), `TrustAnchors` (input to the trust bundle), `Crl`, `Krl` and `TrustBundle` are public material. `ClientSecretExport` is the sealed copy of a generated client secret.
-- **A kind is marked only when a consumer is named** (principle 8). A new exportable kind needs the mark, a consumer and a rule that lets exporter@ read it, in that order.
-- **A generated secret that must leave sluis is stored twice:** as a hash to verify and as a sealed copy to export ([0004](/decisions/0004-the-data-model/#treatment)). The sealed copy exists only for a client marked exportable. A secret that is not exported keeps only its hash. Amendment of 2026-11-12: the sealed copy is replaced by a KV entry ([0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/#secrets-that-sluis-generates-live-in-kv-k4)).
+- **Only a kind marked exportable in the kind registry may leave sluis.** The mark is a property of the kind ([0004](/decisions/0004-the-data-model/)), so what may leave is decided in review and not at run time. exporter@ refuses any other kind.
+- **The exportable kinds are public material:** `SigningRing` (the key set), `KeyCertificate` (the certificate chains), `TrustAnchors` (input to the trust bundle), `Crl`, `Krl` and `TrustBundle`. `ClientSecretExport` is retired; removing its mark from the registry is planned.
+- **A kind is marked only when a consumer is named.** A new exportable kind needs the mark, a consumer and a rule that lets exporter@ read it, in that order.
+- **A secret leaves sluis by a KV read, not by an export.** A secret that sluis generates or receives for a named consumer is written by its owner actor into a KV entry. The consumer reads it with its own sluis identity under policy, and each read is an audit fact. A generated secret that is not for a consumer keeps only its hash ([0004](/decisions/0004-the-data-model/)). exporter@ carries no KV value, and no `kv` destination exists. KV itself is planned.
 - **No export carries a secret for a vendor that sluis could mint for.** sluis mints a scoped credential instead ([0025](/decisions/0025-integrations/)).
 
 ### Destinations
 
-- **A destination is a config kind, `ExportDestination`,** with one driver per destination type, private to exporter@ ([0005](/decisions/0005-the-store/#drivers)). exporter@ holds the destination credentials; no work actor does, and store@ does not.
-- **A store of record** (AWS SSM or OpenBao) receives values that a cluster reads through External Secrets with its own identity. sluis never holds the cluster's identity.
-- **A directory** receives public material at static paths on a file system, as a bucket does: the local installation uses it, and a forwarder serves the files. Like a bucket, it never receives `ClientSecretExport` or a sealed kind, and the configuration check refuses that pairing. Its driver writes a document through a temporary file and a rename, and keeps a record of what it wrote, so that `List` and `Delete` touch nothing else in the directory.
-- **A bucket** receives public material at static addresses: the key set, certificate chains, revocation lists and the trust bundle. A bucket never receives `ClientSecretExport`; the configuration check refuses that pairing. A bucket may sit behind an edge cache ([Publishing public material](/decisions/0009-export/#publishing-public-material)).
-- **A single cluster may receive a Kubernetes Secret directly,** written by exporter@ alone and only when the installation chooses the direct path. exporter@'s cluster credential is limited to writing the named Secrets in the named namespaces, and the threat model lists it.
-- **The amended rule:** sluis writes no Kubernetes object, except an exported Secret written by exporter@ when an installation chooses the direct path. Cluster tools such as cert-manager, trust-manager and External Secrets stay its clients and distributors.
-- **A destination may not overlap a secret source.** The configuration check refuses a destination whose address is also read as a secret source ([secret sources](/decisions/0005-the-store/#secret-sources)), so sluis never reads back what it wrote and no value has two writers.
-- **Every board of a boundary runs exporter@ with the same destination files.** The `ExportManifest` is one item for the boundary and each exporter@ writes it at its start, so boards with different files would overwrite each other's manifest and `signer` would wait for whichever was written last. Until store@ serves `ExportDestination`, the file is the operator's, and the operator keeps it identical on every board.
+- **A destination is a config kind, `ExportDestination`,** with one driver per destination type. exporter@ holds the destination credentials; no work actor does, and store@ does not. Until store@ serves the kind, exporter@ reads the destinations from a file the operator keeps.
+- **A directory** receives public material at static paths on a file system. A forwarder serves the files. The local and the board installations use it. It is built.
+- **A bucket** receives public material at static addresses and may sit behind an edge cache. The bucket driver, the edge purge and the credentials for them belong to the Cloudflare add-on ([0044](/decisions/0044-sluis-is-a-core-and-add-ons/)), and are planned. The core holds no Cloudflare credential.
+- **No destination is made for secrets.** A bucket or a directory never receives a sealed kind, and the configuration check refuses that pairing.
+- **A destination that writes a Kubernetes Secret is planned,** for a single cluster, written by exporter@ alone and only when an installation chooses the direct path, with public material only. exporter@'s cluster credential is limited to the named Secrets in the named namespaces, and the threat model lists it. Apart from that Secret, sluis writes no Kubernetes object: cert-manager, trust-manager and External Secrets stay its clients and distributors.
+- **A destination may not overlap a secret source.** The configuration check refuses a destination whose address is also read as a secret source ([0005](/decisions/0005-the-store/)), so sluis never reads back what it wrote and no value has two writers.
+- **Every board of a boundary runs exporter@ with the same destination files.** The `ExportManifest` is one item for the boundary and each exporter@ writes it at its start, so boards with different files would overwrite each other's manifest and `signer` would wait for whichever was written last.
 
 ### Watch and reconcile
 
-- **exporter@ watches the exportable kinds from a resume point** ([0005](/decisions/0005-the-store/#watch-and-the-resume-point)) and keeps the resume point of each destination in a temp kind, `ExportCursor`. Losing it costs a full reconcile, not data.
-- **A sealed value is opened at key@ with exporter@'s own grant,** written with the destination credential, and every write is an audit fact. The grant is sealed for the tenant of the value ([0007](/decisions/0007-policy-and-sealed-grants/#sealed-grants)). Public material is read and written as it is.
+- **exporter@ watches the exportable kinds from a resume point** ([0005](/decisions/0005-the-store/)) and keeps the resume point of each destination in a temp kind, `ExportCursor`. Losing it costs a full reconcile, not data.
+- **Public material is read and written as it is.** Every write is an audit fact.
 - **A full reconcile runs at start and once a day.** It writes what is missing or different at the destination and removes what exporter@ wrote for a value that no longer exists, so a missed change or an edit made at the destination is corrected within a day.
+- **A refusal is an audit fact and an alarm,** not a retry loop. exporter@ refuses a kind that is not marked and a destination that is not configured. The next reconcile tries again.
 
 ### Publishing public material
 
-The key set is the first public document, and the other public kinds follow the same rules. This part was decided on 2026-11-06. The first version has one issuer, and so one key set, for each boundary; the other destinations, the other kinds and the trigger on Lambda (nothing is pushed there, [0005](/decisions/0005-the-store/#watch-and-the-resume-point); the amendment of 2026-11-18 below sets it) come with their installations ([#1714](https://github.com/truvity/sluis/issues/1714)).
+The key set is the first public document, and the other public kinds follow the same rules. Built today: one issuer, and so one key set, for each boundary, written to a directory. Planned: the other kinds and the other destinations ([#1714](https://github.com/truvity/sluis/issues/1714)).
 
-- **A published document is one object at an address that `ExportDestination` declares,** with its content type and its `max-age`; the address is never derived from the kind. It is written whole and atomically: a rename in a directory, one put in a bucket. A reader never sees half a document.
+- **A published document is one object at an address that `ExportDestination` declares,** with its content type and its `max-age`. The address is never derived from the kind. It is written whole and atomically, so a reader never sees half a document.
 - **The key set is the JSON Web Key Set of RFC 7517,** built by the rule that `entry` uses for its live key set, with `Content-Type: application/json`, `Cache-Control: public, max-age=300` and `Access-Control-Allow-Origin: *` ([REQ-KEYS-016](/requirements/keys/#REQ-KEYS-016)). <!-- terms-allow: origin (the CORS header name) -->
 - **exporter@ leaves out every `kid` that `KeyRevocation` lists** ([REQ-EXPORT-020](/requirements/export/#REQ-EXPORT-020)). It watches `KeyRevocation` and `SigningRing` and rebuilds on a change at once, not at the daily reconcile.
 
 #### The edge
 
-The edge's settings (its time to live, its stale window and its fallback) are delivered by infrastructure code and not by sluis, and `sluis config check` cannot see them; the requirements below are checked by reading the edge of a test installation. **UNVERIFIED until the first measurement on the first edge (2026-11-06):** that a purge by address evicts a stale copy, that the stale window can be bounded at 65 minutes, that the fallback to `entry` can be set, and the 60 seconds of the next part. The measurement is part of [#1454](https://github.com/truvity/sluis/issues/1454) and fills the rows of the [incident page](/security/incident-response/#measured-times).
+Every production shape sits behind the Cloudflare edge. The edge's settings are delivered by infrastructure code and not by sluis, so `sluis config check` cannot see them.
 
-- **A bucket destination has an `edge` setting: `none` or a named edge.** `none` is what the directory and the local installation use. The first named edge is Cloudflare in front of R2, for the boards. Another edge arrives with the first installation that needs it ([principle 11](/principles/#11-one-product-many-installations)).
-- **The edge keeps the key set for at most its `max-age`** ([REQ-KEYS-084](/requirements/keys/#REQ-KEYS-084), [#1338](https://github.com/truvity/sluis/issues/1338)).
-- **The static document is the public `jwks_uri` wherever a bucket destination exists, and the edge falls back to the live key set of `entry` when the bucket cannot be read** ([REQ-EXPORT-025](/requirements/export/#REQ-EXPORT-025)). Both filter revoked kids, and `entry`'s fails closed ([REQ-KEYS-107](/requirements/keys/#REQ-KEYS-107)). An installation without a bucket destination serves `entry`'s key set alone.
-- **If the bucket and `entry` both fail, the edge may serve a cached copy for at most 65 minutes after it expired** ([REQ-EXPORT-023](/requirements/export/#REQ-EXPORT-023)). That is the access-token cap of one hour plus five minutes of clock skew, the figure of the retention of a retiring key ([0006](/decisions/0006-keys-and-sealing/#rotation)). The bucket and `entry` both being unavailable, no token is signed after the outage began, and a longer window would serve a key set that no live token needs. A purge evicts stale copies too.
-- **exporter@ alone holds a purge credential,** and it can purge only the public addresses of the documents of its destinations, nothing else ([REQ-EXPORT-026](/requirements/export/#REQ-EXPORT-026)). It is held beside the destination credential, and the threat model lists it ([T-39](/security/threat-model/#export-and-backup)).
+- **In the core the edge is set by documented rules.** The shared rules make the key set and the discovery document cacheable with a cache time below the pre-publish time of a key, so a new key is in every cache before it signs. A revoked key leaves the key set of `entry` and of the directory at once. A copy held at the edge expires with its cache time ([REQ-KEYS-084](/requirements/keys/#REQ-KEYS-084)). The time a revoked key stays verifiable in the core is measured by the drill of [0041](/decisions/0041-a-compromised-key-is-revoked-then-replaced/), and no figure is claimed here.
+- **A bucket destination has an `edge` setting: `none` or a named edge.** `none` is what the directory uses. The first named edge is Cloudflare in front of R2, and it belongs to the add-on. Another edge arrives with the first installation that needs it ([principle 11](/principles/)).
+- **Where a bucket destination exists, the static document is the public `jwks_uri`,** and the edge falls back to the live key set of `entry` when the bucket cannot be read ([REQ-EXPORT-025](/requirements/export/#REQ-EXPORT-025)). Both filter revoked kids, and `entry`'s fails closed ([REQ-KEYS-107](/requirements/keys/#REQ-KEYS-107)). An installation without a bucket destination serves `entry`'s key set alone.
+- **If the bucket and `entry` both fail, the edge may serve a cached copy for at most 65 minutes after it expired** ([REQ-EXPORT-023](/requirements/export/#REQ-EXPORT-023)). That is the access-token cap of one hour plus five minutes of clock skew, the same figure as the retention of a retiring key ([0006](/decisions/0006-keys-and-sealing/)). With both back ends down no token is signed, and a longer window would serve a key set that no live token needs. A purge evicts stale copies too.
+- **exporter@ alone holds a purge credential,** and it can purge only the public addresses of its destinations' documents, nothing else ([REQ-EXPORT-026](/requirements/export/#REQ-EXPORT-026)). The threat model lists it ([T-39](/security/threat-model/#export-and-backup)). It belongs to the add-on.
+- **Planned: measure the edge.** Whether a purge by address evicts a stale copy, whether the stale window can be bounded at 65 minutes and whether the fallback to `entry` can be set are measured on the first edge, with the 60 seconds of the next part ([#1454](https://github.com/truvity/sluis/issues/1454)). The result fills the rows of the [incident page](/security/incident-response/#measured-times).
 
 #### The order and the time
 
-After a change of `KeyRevocation` or `SigningRing`, exporter@ does four things in this order ([REQ-EXPORT-021](/requirements/export/#REQ-EXPORT-021)). A destination that has no public address, such as a directory with none declared, cannot read back: its `ReadBack` answers `unsupported`, and the report says `written` and carries no purge or read back time. The confirmation then rests on the live key set of `entry`, and `signer` does not count that document as published.
+After a change of `KeyRevocation` or `SigningRing`, exporter@ does four things in this order ([REQ-EXPORT-021](/requirements/export/#REQ-EXPORT-021)).
 
 1. **Write** the new document to the destination.
-2. **Purge** its public address. One purge covers the cached copy, whichever back end, the bucket or `entry`, filled it.
+2. **Purge** its public address, where an edge is declared. One purge covers the cached copy, whichever back end, the bucket or `entry`, filled it.
 3. **Read back** the public address the way a verifier does: no credential and no cache-buster. The answer must be 200 with the written digest.
-4. **Report** by writing the temp kind `ExportReport` ([REQ-EXPORT-022](/requirements/export/#REQ-EXPORT-022)): the state, the digest, for a key set the kids it lists, and the times of the write, the purge and the read back. The state is `published` when the read back matches, `purge-pending` while a purge or a read back is being retried, `written` when the destination cannot read back, and `unverified` when exporter@ could not tell. `published` needs a purge that was accepted (or no edge to purge) before the read back: a read back after a failed purge says nothing about the other copies of the edge. A configuration that gives a public address to a destination whose driver cannot read it back is refused.
+4. **Report** by writing the temp kind `ExportReport` ([REQ-EXPORT-022](/requirements/export/#REQ-EXPORT-022)): the state, the digest, for a key set the kids it lists, and the times of the write, the purge and the read back.
 
-The write, the purge and the read back finish within 60 seconds of the moment exporter@ sees the change ([REQ-EXPORT-028](/requirements/export/#REQ-EXPORT-028)). This is a target and not a measurement, and UNVERIFIED until the first measurement on the first edge (2026-11-06): the first drill replaces it with the measured figure ([REQ-OPS-080](/requirements/ops/#REQ-OPS-080), [Incident response](/security/incident-response/#measured-times)). A step that fails is retried with a back-off, and past the 60 seconds it raises an alarm. The daily reconcile runs the same four steps, so a report that nothing refreshes expires with its time to live, and a reader treats an absent report as "not seen".
+The state is `published` when the read back matches, `purge-pending` while a purge or a read back is being retried, `written` when the destination cannot read back, and `unverified` when exporter@ could not tell. `published` needs a purge that was accepted (or no edge to purge) before the read back, because a read back after a failed purge says nothing about the other copies of the edge. A destination with no public address answers `unsupported` to `ReadBack`; its report says `written` and carries no purge or read back time, and `signer` does not count that document as published. A configuration that gives a public address to a destination whose driver cannot read it back is refused.
 
-`signer` makes a token key active only after the report of every published key set has the state `published`, lists the key's `kid` and has a read back at most 26 hours old (a day of the reconcile and a margin, [REQ-KEYS-116](/requirements/keys/#REQ-KEYS-116)), and the lead time has passed since that read back ([REQ-KEYS-085](/requirements/keys/#REQ-KEYS-085)). A replacement for a revoked key signs only after the report shows the key published and purged ([REQ-KEYS-089](/requirements/keys/#REQ-KEYS-089)).
+Where there is no edge to purge, step 2 does not exist, and `published` needs the write and the read back. The purge, the 60-second target and the 65-minute window belong to an installation that has the add-on: the write, the purge and the read back finish within 60 seconds of the moment exporter@ sees the change ([REQ-EXPORT-028](/requirements/export/#REQ-EXPORT-028)). That is a target, not a measurement. The first drill replaces it with the measured figure ([REQ-OPS-080](/requirements/ops/#REQ-OPS-080)). A step that fails is retried with a back-off, and past the 60 seconds it raises an alarm. The daily reconcile runs the same steps, so a report that nothing refreshes expires with its time to live, and a reader treats an absent report as "not seen".
+
+`signer` makes a token key active only after the report of every published key set has the state `published`, lists the key's `kid` and has a read back at most 26 hours old (a day of the reconcile and a margin, [REQ-KEYS-116](/requirements/keys/#REQ-KEYS-116)), and the lead time has passed since that read back ([REQ-KEYS-085](/requirements/keys/#REQ-KEYS-085)). A replacement for a revoked key signs only after the report shows the key published ([REQ-KEYS-089](/requirements/keys/#REQ-KEYS-089)).
 
 #### When exporter@ cannot tell
 
-- **When exporter@ cannot read `KeyRevocation` or `SigningRing`, it leaves the published object as it is, raises an alarm and reports `unverified`** ([REQ-EXPORT-024](/requirements/export/#REQ-EXPORT-024)). It does not delete or empty the object. The one change it makes is a removal: a key that a `KeyRevocation` event has just named is taken out of the last good document, because removal is monotone (no revocation puts a key back) and needs nothing that cannot be read; nothing is added, and the state stays `unverified`. The alarm repeats every five minutes while the state lasts, with the number of documents in it, and each way into and out of the state is one audit fact. A blip of store@ would then stop verification for every relying party, and exporter@ cannot learn of the revocation it cannot read in any case ([0010](/decisions/0010-backup-and-recovery/#a-regional-outage)).
-- **`signer` holds activation while a report does not list the key as `published` within the 26 hours, and `sluis key revoke` prints "not confirmed"** ([REQ-KEYS-116](/requirements/keys/#REQ-KEYS-116), [REQ-KEYS-088](/requirements/keys/#REQ-KEYS-088)). The live key set of `entry` goes on failing closed. Amendment of 2026-11-07. The maintainer decided that there is no override for a public destination that stays stuck: no command and no setting lets `signer` activate a key before every report lists it as `published`, and an operator who needs the key waits, repairs the destination or removes it from the declared files. The decision is revisited with the bucket driver and the edge purge ([#1454](https://github.com/truvity/sluis/issues/1454)), where a stuck destination first becomes possible on the boards.
+- **When exporter@ cannot read `KeyRevocation` or `SigningRing`, it leaves the published object as it is, raises an alarm and reports `unverified`** ([REQ-EXPORT-024](/requirements/export/#REQ-EXPORT-024)). It does not delete or empty the object. A blip of store@ would then stop verification for every relying party, and exporter@ cannot learn of a revocation it cannot read in any case ([0010](/decisions/0010-backup-and-recovery/#a-regional-outage)).
+- **The one change it makes is a removal.** A key that a `KeyRevocation` event has just named is taken out of the last good document, because removal is monotone (no revocation puts a key back) and needs nothing that cannot be read. Nothing is added, and the state stays `unverified`. The alarm repeats every five minutes while the state lasts, and each way into and out of the state is one audit fact.
+- **`signer` holds activation while a report does not list the key as `published` within the 26 hours, and `sluis key revoke` prints "not confirmed"** ([REQ-KEYS-116](/requirements/keys/#REQ-KEYS-116), [REQ-KEYS-088](/requirements/keys/#REQ-KEYS-088)). The live key set of `entry` goes on failing closed. No command and no setting lets `signer` activate a key before every report lists it as `published`: an operator who needs the key waits, repairs the destination or removes it from the declared files.
 - **exporter@ down leaves the object as it was.** Its reports expire, so `signer` holds, and the start reconcile runs the four steps again.
 
 #### Confirmation
 
-`sluis key revoke` does not trust the report: it checks, and it reports "not confirmed" until both of these lack the revoked `kid` ([REQ-KEYS-088](/requirements/keys/#REQ-KEYS-088), [principle 4](/principles/#4-verify-never-trust-a-claim)):
+`sluis key revoke` does not trust the report. It checks, and it reports "not confirmed" until both of these lack the revoked `kid` ([REQ-KEYS-088](/requirements/keys/#REQ-KEYS-088), [principle 4](/principles/)):
 
 - the public `jwks_uri`, fetched through the edge as a verifier fetches it;
 - the live key set of `entry`, fetched from `entry`'s own listener, which is what the edge falls back to. How the command reaches it on each runtime is in [`sluis key revoke`](/reference/cli/#sluis-key-revoke).
 
-#### The destination port
+### On Lambda
 
-Each destination type is a driver behind the port `destination`, private to exporter@ ([0005](/decisions/0005-the-store/#drivers)). The port has five calls ([REQ-EXPORT-027](/requirements/export/#REQ-EXPORT-027)):
+exporter@ runs behind the Lambda Web Adapter like every function ([0003](/decisions/0003-units-transports-and-fusion/)). Nothing on Lambda is pushed to it by store@, so it has two triggers. The Lambda shape is planned, so both are planned.
 
-| Call | What it does |
-|---|---|
-| `Put` | Writes a document whole at an address, with its content type and `Cache-Control`, and returns its version |
-| `Delete` | Removes a document that exporter@ wrote |
-| `List` | Lists, under a prefix, the documents that exporter@ wrote with their digests, so that a reconcile can compare and remove |
-| `Purge` | Evicts the edge copy of public addresses; with `edge: none` it answers `none` |
-| `ReadBack` | Fetches a public address the way a verifier does, with no credential and no cache-buster, and returns the status, `Cache-Control`, `Age`, the cache state the edge reports, and the body |
-
-A driver for a store of record or a Kubernetes Secret implements `Put`, `Delete` and `List`, and answers `unsupported` to `Purge` and `ReadBack`, because it has no public address. Like every port it has `serve`, `check`, `version` and `conformance`, and the in-memory driver passes the suite. The first drivers are `directory` for the local installation and a bucket driver on S3-compatible storage with the Cloudflare edge for the boards. The port is not the audit blob port, which is create-if-absent and cannot overwrite, delete or purge ([0029](/decisions/0029-the-audit-log/#the-write-once-fence)).
-
-### Refusals
-
-- **exporter@ refuses a write** for a kind that is not marked, for a destination that is not configured, for a sealed kind sent to a bucket, and for a value that key@ refuses on its grant check.
-- **A refusal is an audit fact and an alarm,** not a retry loop. The next reconcile tries again, and an operator sees why it was refused.
-
-### Amendment of 2026-11-12: the bucket driver and the edge purge are the Cloudflare add-on
-
-2026-11-12 ([0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/)). The directory driver and the static key set are in the core. The bucket driver, the edge purge and the R2 credentials move out of the first working version into the Cloudflare add-on, which the cutover of the v1 platform needs.
-
-### Amendment of 2026-11-12: a secret leaves sluis by a KV read
-
-2026-11-12 ([0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/#secrets-that-sluis-generates-live-in-kv-k4), maintainer decision K4). The rule of the data model that a secret is readable outside sluis only through an export is replaced by this one: a secret that sluis generates or receives for a named consumer is written by its owner actor into a KV entry, and the consumer reads it with its own sluis identity under policy, each read an audit fact.
-
-- **`ClientSecretExport` is retired,** and so is the sealed copy of a generated secret. Six kinds stay exportable, all public material. The change that retires the kind also changes [REQ-EXPORT-008](/requirements/export/#REQ-EXPORT-008). [REQ-EXPORT-011](/requirements/export/#REQ-EXPORT-011), [REQ-EXPORT-013](/requirements/export/#REQ-EXPORT-013) and [REQ-DATA-022](/requirements/data/#REQ-DATA-022) are withdrawn in favour of [REQ-KV-028](/requirements/kv/#REQ-KV-028) to [REQ-KV-030](/requirements/kv/#REQ-KV-030).
-- **No `kv` destination and no reserved export mount are built.** exporter@ carries no KV value. A destination of type store of record stays for values that a cluster reads through External Secrets and that sluis does not hold in KV.
-- **The mark moves** from "exportable" to "published to KV" for a secret, and a consumer is still named for each mark.
-- **A secrets engine with dynamic secrets, leases and transit is still not built.** Static KV is built (below, the road not taken).
-
-### Amendment of 2026-11-18: the exporter on Lambda is woken by the stream of the table
-
-2026-11-18 (maintainer decision L2). On Lambda nothing is pushed to exporter@ by store@ ([0005](/decisions/0005-the-store/#watch-and-the-resume-point)), so the exporter has two triggers there:
-
-- **DynamoDB Streams on the store's table wake it** when an exportable item changes. The stream is a wake-up of the function, not a second path to the data: exporter@ still reads the kinds through store@ and publishes as it does after any change.
+- **DynamoDB Streams on the store's table wake it** when an exportable item changes. The stream is a wake-up of the function and not a second path to the data: exporter@ still reads the kinds through store@ and publishes as it does after any change.
 - **A daily scheduled run** does what the daily reconcile does everywhere: it rebuilds the documents and removes what is gone, so a missed wake-up or an edit made at a destination is corrected within a day.
-
-This is the Lambda trigger that the part "Publishing public material" above left to the installation. A revoked key still leaves the key set at once ([REQ-EXPORT-020](/requirements/export/#REQ-EXPORT-020)): the stream wakes the exporter on the change of `KeyRevocation`, and the daily run is the safety net, not the path. The conformance suite and the other destination drivers stay with [#1714](https://github.com/truvity/sluis/issues/1714), and so does the choice of which items the stream's filter lets through.
-
-### Amendment of 2026-11-18: KV replaces the store of record for consumers
-
-2026-11-18 (maintainer decision A4 A; [0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/#amendment-of-2026-11-18-kv-is-a-building-block-built-in-the-core-phase)). KV is a building block of the core phase, built before the Lambda and Kubernetes shapes. A consumer, External Secrets among them, reads KV through the Vault KV v2 subset, so the **store of record** destination of "Destinations" above is not the path for consumers and is not built for them. A board installation needs no cloud for its consumers. The store-of-record text of the Context and the amendment of 2026-11-12 above are read that way. Secret sources stay read-only, written by infrastructure code for what sluis needs to start (principle 17 stands), and exporter@ still publishes public material only.
-
-### Amendment of 2026-11-18: the edge and the exporter in the core
-
-2026-11-18 (maintainer decisions E1, E2 A and L2; [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv)). Read "The edge", "The order and the time", the Consequences and the Follow-ups with these changes.
-
-- **The core holds the directory driver and the static key set only.** The bucket driver, the purge and the credential for it belong to the Cloudflare add-on, and sluis holds no Cloudflare credential in the core (E2 A). The sentence that exporter@ is in the first version "and then the bucket and the purge for the boards" describes the add-on, and [#1454](https://github.com/truvity/sluis/issues/1454) is the add-on's work.
-- **In the core the edge is set by documented rules, not by sluis.** Every production shape sits behind the Cloudflare edge (E1), and the shared rules make the key set and the discovery document cacheable with a cache time below the pre-publish time of a key, so a new key is in every cache before it signs. A revoked key leaves the key set of `entry` and of the directory at once; a copy held at the edge expires with its cache time.
-- **The purge, the 60-second target and the 65-minute stale window belong to an installation that has the add-on.** Where there is no purge, step 2 of the four steps does not exist and `published` needs the write and the read back ([REQ-EXPORT-021](/requirements/export/#REQ-EXPORT-021) already allows "no edge to purge"). The time a revoked key stays verifiable in the core is measured by the drill of [0041](/decisions/0041-a-compromised-key-is-revoked-then-replaced/), and no figure is claimed here.
-
-The trigger on Lambda is in a picture; the amendment above of the same date has the rules.
+- **A revoked key still leaves the key set at once.** The stream wakes exporter@ on the change of `KeyRevocation`, and the daily run is the safety net, not the path.
 
 ```mermaid
 sequenceDiagram
     participant T as store table
     participant S as DynamoDB Streams
+    participant A as Web Adapter
     participant E as exporter@
     participant R as store@
     participant D as destination
     T->>S: exportable item changed
-    S->>E: wake
+    S->>A: stream event
+    A->>E: POST /events
     E->>R: read the kinds
     E->>D: write the documents
     Note over E: a daily run rebuilds and removes
 ```
 
-### Amendment of 2026-11-19: the destination port and the directory driver moved to atoom
+How a stream-woken function fits the adapter is the same as for the audit writer, which SQS wakes ([audit 0016](https://github.com/truvity/audit/blob/master/docs/decisions/0016-distribution-and-the-lambda-shape.md)). The adapter passes a non-HTTP event to the application as an HTTP request to a configured path, `/events` by default, with the event as the body, and returns the application's response. exporter@ serves `/events` on Lambda, ignores the body (the stream says when to look, never what changed) and reads the kinds itself. Built: nothing of this, since exporter@ serves no HTTP route today. Planned: the route, the stream filter and the schedule. To be tested: that a stream batch and a scheduled event pass through the adapter cleanly.
 
-Step 5 of [atoom's extraction plan](https://github.com/truvity/atoom/blob/master/docs/plan.md). The destination contract that "The destination port" above names (`atoom.destination.v1alpha1.DestinationService`, renamed from `sluis.port.destination.v2alpha1`; the calls, the messages and their numbers are the same), the Rust `Destination` trait with its service, the in-memory driver and the suite (the crate that was `sluis-destination`, now `atoom-destination-conformance`), and the directory driver (`destination/dir`) live in [truvity/atoom](https://github.com/truvity/atoom), and sluis pins them by release (`third_party/atoom`, `just atoom-sync`). Nothing above changes in what a driver does, and the text of this record stays as it was: the rules of the port are documented next to it (`destination/docs/destination-port.md`, `destination/dir/docs/dir.md`), and the conformance kit is atoom's (the binary `destination-conformance`). What stays in sluis: exporter@, which uses atoom's trait and rules and atoom's client for the driver's socket (`atoom_destination::client::Client` over `atoom_socket::dial`, since atoom 0.2.0; before it exporter@ kept a client of its own so that the deadline and the correlation id went down, and atoom's clients send both now), and the executable `driver-exporter-dir` (`drivers/exporter/dir`) as a thin host that registers atoom's library behind sluis's socket, peer credentials, registry owner and command line. exporter@ publishes outside any request, so it states the call itself: each call to a destination is made in an `atoom_socket::call::scope` that carries the time of one call (`Timing::call`, 20 seconds, as `Connect-Timeout-Ms`) and the correlation id that exporter@ makes for the publication (a UUID version 4; every call of one publication of one document carries it), which a driver reads and can log ([call context](https://github.com/truvity/atoom/blob/master/docs/call-context.md)). The wire names changed with the package, so an exporter@ and a destination driver of two builds do not talk.
+The directory driver has no Lambda form, because Lambda has no lasting disk ([atoom 0010](https://github.com/truvity/atoom/blob/master/docs/decisions/0010-distribution-per-driver-and-lambda.md)). On Lambda exporter@ therefore publishes through a bucket driver, which is the add-on's. The merged drivers layer carries that driver where its language differs from the function's. A Lambda installation without the add-on serves the key set from `entry` alone.
+
+Open: which items the stream's filter lets through, how long a wake may run and how a failed publication is retried inside the function's time limit. They are decided with the first Lambda exporter ([#1714](https://github.com/truvity/sluis/issues/1714)).
 
 ## Consequences
 
 - What leaves sluis is a short, reviewed list, and a reader of the registry can see every export and its consumer.
-- A cluster reads a client secret from a store of record with its own identity, and sluis holds no cluster identity. A single cluster without a store of record can take the direct path, at the price that exporter@ holds one cluster credential.
-- A secret is readable outside sluis only through an export or, since the amendment above, through a KV read under policy. An operator who wants the cloud console to show a value gets it from the store of record, not from sluis.
+- A secret is readable outside sluis only through a KV read under policy, each read an audit fact. An operator who wants a cloud console to show a value keeps it outside sluis.
 - exporter@ is one more unit in every installation that exports. It shares its family with store@ and never shares a unit with a work actor.
-- The principles page loses the absolute "sluis never writes Kubernetes objects" and gains the amended sentence.
-- A revoked key leaves the edge within 60 seconds by target, and a verifier's own copy expires within `max-age` after that. If the purge fails, the edge copy lives for its time to live on top of that. The first drill measures both.
-- exporter@ holds one more credential, the purge, which is narrow: it can evict named public addresses and write nothing. A compromised exporter@ can already write the key set; the purge adds the power to make an edge forget it.
-- The key set has two back ends behind one address, so a revocation has two places to be checked, and the confirmation checks both.
-- exporter@ is in the first version, with the directory driver, and then the bucket and the purge for the boards, so the foundation of the first version is store@, exporter@ and key@, as [0002](/decisions/0002-families-of-actors/#the-foundation-and-the-modules) says.
+- The mechanics of publishing live in one block that other products can use, and sluis keeps the kinds, the credentials and the key-set rules.
+- In the core a revoked key leaves `entry`'s key set and the directory at once, and a verifier's own copy expires within `max-age`. With the add-on a revoked key leaves the edge within 60 seconds by target. If the purge fails, the edge copy lives for its time to live on top of that. The first drill measures both.
+- exporter@ holds one more credential with the add-on, the purge. It is narrow: it can evict named public addresses and write nothing. A compromised exporter@ can already write the key set, and the purge adds the power to make an edge forget it.
+- The key set has two back ends behind one address where a bucket exists, so a revocation has two places to be checked, and the confirmation checks both.
+- exporter@ is part of the foundation with store@ and key@ ([0002](/decisions/0002-families-of-actors/)).
 
 ## Roads not taken
 
-- **Always go through a store of record and External Secrets.** One rule instead of two, but a single cluster would need a store it does not otherwise have.
-- **Write into the secret source.** sluis would read back what it wrote, and the same value would be IaC-written and sluis-written.
+- **Always go through a store of record and External Secrets.** One rule instead of two, but a board installation would need a cloud for its consumers, and a secret would be held in a second place.
+- **Write into the secret source.** sluis would read back what it wrote, and the same value would be written by infrastructure code and by sluis.
 - **Each work actor exports its own kinds.** Work actors would hold destination credentials, against principle 16.
 - **store@ does the exporting.** It would hold destination credentials beside its storage credentials and mix serving with publishing.
 - **Export any kind on request.** Whether a value may leave sluis would become a run-time choice instead of a property of the kind, and the rules could not be generated from the registry.
-- **A drop of files encrypted to a consumer's own recipient.** No consumer is named for it, so none is built; the first one arrives as a new destination type with its consumer.
-- **A general-purpose secrets engine with dynamic secrets, leases and transit.** It is the product of another team and widens the trusted base. Static KV is built by [0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/); this road stays closed for the rest.
+- **A drop of files encrypted to a consumer's own recipient.** No consumer is named for it, so none is built.
+- **A general-purpose secrets engine with dynamic secrets, leases and transit.** It is the product of another team and widens the trusted base. Static KV serves secrets ([0047](/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns/)) and this road stays closed for the rest.
 - **Export a secret for a vendor sluis can mint for.** A long-lived copy would exist where a short-lived scoped credential is possible.
 - **No purge: the edge never caches the key set.** It needs no purge credential, but every fetch of a verifier reaches the back end, and the key set no longer outlives an outage of the bucket's region ([0010](/decisions/0010-backup-and-recovery/#a-regional-outage)).
-- **Purge by hand.** It needs no code, and it is slow at the worst moment; the confirmation and the replacement ([REQ-KEYS-089](/requirements/keys/#REQ-KEYS-089)) could not rely on it.
+- **Purge by hand.** It needs no code, and it is slow at the worst moment; the confirmation and the replacement could not rely on it.
 - **A versioned address for the key set.** The discovery document names one `jwks_uri`, and relying parties cache that document, so a new address would reach them slower than the key set itself.
 - **Delete or empty the published key set when `KeyRevocation` cannot be read.** `entry` answers 503 then, but a blip of store@ would become an outage of verification for every relying party.
-- **Only the live key set, with exporter@ just purging.** Verification would depend on the compute of the issuer, against [0017](/decisions/0017-identity-and-sign-in/#issuers).
+- **Only the live key set, with exporter@ just purging.** Verification would depend on the compute of the issuer, against [0017](/decisions/0017-identity-and-sign-in/).
 - **Only the static key set, with no fallback to `entry`.** One back end instead of two, but a failed bucket would leave the edge's stale window as the only protection.
-- **Confirm from the report of exporter@.** It proves what exporter@ saw and not what a verifier sees, against [principle 4](/principles/#4-verify-never-trust-a-claim).
+- **Confirm from the report of exporter@.** It proves what exporter@ saw and not what a verifier sees, against principle 4.
+- **An override that activates a key before its report says `published`.** An operator under pressure would defeat the check that protects every verifier.
 - **Reuse the audit blob port.** Its writes are create-if-absent, and a key set must be overwritten, removed and purged.
+- **The stream as a second path to the data.** The exporter would trust an event's content, and a missed event would make a document wrong and not only late.
 
 ## Follow-ups
 
-- Build of exporter@ in the first version: the directory driver, the static key set and the report ([#1453](https://github.com/truvity/sluis/issues/1453)), then the bucket driver, the Cloudflare purge for the boards and the measurement of the edge ([#1454](https://github.com/truvity/sluis/issues/1454)). They serve [#962](https://github.com/truvity/sluis/issues/962) (static discovery and key set), [#1338](https://github.com/truvity/sluis/issues/1338) (the header and the edge time to live) and the confirmation of `sluis key revoke` ([#1362](https://github.com/truvity/sluis/issues/1362)).
-- The rest of exporter@: the other destination drivers, the other exportable kinds, the daily reconcile for them, the Lambda trigger and the conformance suite: [#1714](https://github.com/truvity/sluis/issues/1714). A destination for the client secrets of a platform is no longer needed, because [0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/) puts them in KV.
+- Build of the bucket driver, the Cloudflare purge and the measurement of the edge, with the 60-second and 65-minute figures: [#1454](https://github.com/truvity/sluis/issues/1454). They serve the static discovery and key set ([#962](https://github.com/truvity/sluis/issues/962)), the header and the edge time to live ([#1338](https://github.com/truvity/sluis/issues/1338)) and the confirmation of `sluis key revoke` ([#1362](https://github.com/truvity/sluis/issues/1362)).
+- The rest of exporter@: the other destination drivers, the other exportable kinds, the Lambda trigger and the conformance suite: [#1714](https://github.com/truvity/sluis/issues/1714).
+- Moving the mechanics into atoom's `export` block, step B11 of [atoom's plan](https://github.com/truvity/atoom/blob/master/docs/plan.md).
+- Open: removing the `ClientSecretExport` mark and the requirements that name it (REQ-EXPORT-008, REQ-EXPORT-011, REQ-EXPORT-013, REQ-DATA-022) in favour of the KV rules (REQ-KV-028 to REQ-KV-030).

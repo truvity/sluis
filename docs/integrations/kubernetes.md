@@ -20,13 +20,13 @@ Kubernetes appears twice here. A **workload** in a cluster proves itself to slui
 
 | Kind | What it does for Kubernetes |
 |---|---|
-| `WorkloadVerifier` | The `k8s-sa-token` verifier driver of `exchange` checks a projected ServiceAccount token against the issuing cluster's published key set and returns `cluster`, `namespace` and `name` as attributes. It holds no secret ([0022](/decisions/0022-workload-identity-and-host-enrolment/#proofs-and-the-exchange)). It arrives at the parity milestone. |
+| `WorkloadVerifier` | The `k8s-sa-token` verifier driver of `exchange` checks a projected ServiceAccount token against the issuing cluster's published key set and returns `cluster`, `namespace` and `name` as attributes. It holds no secret ([0022](/decisions/0022-workload-identity-and-host-enrolment/#proofs-and-the-exchange)). It is planned, and [KV](/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns/) reads with it, so the slice that KV needs is in the core. |
 
 Kubernetes has no adapter and no connection: nothing of a cluster is stored in sluis, and no credential for a cluster exists. The published key set is cached as the temp kind `VerifierKeyCache`, for as long as HTTP caching allows and 24 hours at most.
 
 Signing in to the API server is a client profile: each cluster is one OIDC client (`k8s:<cluster>`) that reads the `groups` claim, and sluis lists those clusters for the person. sluis has no minter for Kubernetes: the API server trusts sluis as an issuer, so a service-account token is not minted ([0025](/decisions/0025-integrations/#credential-minters)).
 
-sluis does **not** call `TokenReview`, which would need a kubeconfig per cluster; a published key set needs none. Nothing in sluis depends on a cluster checking a token: break-glass recovery is passkeys only ([Break-glass recovery](/security/break-glass/)). sluis also writes no Kubernetes objects, except a Secret that exporter@ writes when an installation chooses the direct path ([0009](/decisions/0009-export/#destinations)); clusters pull what they need.
+sluis does **not** call `TokenReview`, which would need a kubeconfig per cluster; a published key set needs none. Nothing in sluis depends on a cluster checking a token: break-glass recovery is passkeys only ([Break-glass recovery](/security/break-glass/)). sluis also writes no Kubernetes objects, except a Secret that the exporter writes when an installation chooses the direct path (planned) ([0009](/decisions/0009-export/#destinations)); clusters pull what they need.
 
 ## What sluis asks the vendor for
 

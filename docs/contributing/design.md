@@ -63,14 +63,9 @@ A store, a driver, an endpoint or an option arrives with its first real installa
 
 A decision lives in one place: a record, or a reference page with test vectors that a record links. The other pages link to it and do not restate it. When you find the same rule in two places, keep the one that owns it and replace the other with a link ([Where a page lives](/contributing/pages/#where-a-page-lives)).
 
-## Records change until the first release
+## Records are append-only
 
-Until the first v2 release, a record may be rewritten, merged and renumbered; after it, records are append-only and a changed mind gets a new record that supersedes the old one. While records are still rewritable:
-
-- keep `docs/decisions/renumbered.json` current, so each old address redirects to the record that took it over;
-- a rewritten record carries no history lines, and an accepted record has no open part.
-
-The steps are in "Design phase" of `docs/decisions/README.md`, and the `new-decision` skill carries them.
+The records were rewritten once, cleanly, so each states the current design. From then on a record is not edited to change a decision: a changed mind gets a new record that supersedes the old one, and the old one moves to the archive ([Changing a decision](/contributing/decisions/#changing-a-decision)). An accepted record has no open part, and a rule is stated in one record. A decision lives in one repository: atoom, audit and session have their own records, and a record here links them instead of restating them.
 
 ## Records and issues stay in step
 
@@ -81,20 +76,19 @@ The steps are in "Design phase" of `docs/decisions/README.md`, and the `new-deci
 
 ## Milestones are an order
 
-The phases are an order, not a wish list. Each opens when the one before it is done: the core (cut as `v2.0.0-alpha.2` before the installations), then customer identity and quota, then a re-plan that decides what parity needs, then parity with v1, then the switch of the platform from v1 to v2, then the PKI, SSH and database add-on. Block extraction stays last and is not scheduled. The phases and their exit tests are on the [roadmap](/roadmap/#phases); older records name them P0 to P4, and the roadmap maps those names to these.
+The product is a core, add-ons and customer identity ([0044](/decisions/0044-sluis-is-a-core-and-add-ons/)). The roadmap puts the work in an order of milestones, and a milestone opens when the one before it is done: the core first (cut as `v2.0.0-alpha.2` before the installations), then customer identity, a re-plan that decides what parity needs, parity with v1, the cutover from v1 ([0001](/decisions/0001-v1-and-v2-lines/)), and then the PKI, SSH and database add-ons. The milestones and their exit tests are on the [roadmap](/roadmap/).
 
 ```mermaid
 flowchart LR
-  core["Core<br/>alpha.2"] --> ci["Customer<br/>identity<br/>and quota"]
+  core["Core<br/>alpha.2"] --> ci["Customer<br/>identity"]
   ci --> replan{{"Re-plan"}}
   replan --> parity["Parity"]
-  parity --> switch["Switch"]
-  switch --> pki["PKI, SSH<br/>and DB"]
-  pki -.-> ext["Block<br/>extraction<br/>(unscheduled)"]
+  parity --> cutover["Cutover"]
+  cutover --> addons["PKI, SSH<br/>and DB"]
 ```
 
-Design is finished phase by phase, and the code for a phase starts after its design is. Nothing after customer identity and quota is planned in detail before the re-plan. Inside the core, the installations (local, boards, Lambda and Kubernetes) are built in the order of the roadmap's [Delivery order](/roadmap/#delivery-order), and [ADR 0011](/decisions/0011-runtimes-and-installations/#delivery-order) records any change to it.
+Design is finished milestone by milestone, and the code for a milestone starts after its design is. Nothing after customer identity is planned in detail before the re-plan. Inside the core, the installations (local, boards, Lambda and Kubernetes) are built in the order of the roadmap, and [ADR 0011](/decisions/0011-runtimes-and-installations/) records any change to it.
 
 ## Do not make a later screen harder
 
-The console is part of the core layer but is built in the Parity phase, so it has no pages yet, and a shortcut in its API reaches every screen built later. Before you write a console call, read [Before the pages exist](/decisions/0027-the-console/#before-the-pages-exist): eleven things the first console leaves out, such as an owner that cannot verify the operator, a page-shaped call, an unpaged list and a destructive write in one call.
+The console is part of the core layer but is built at the parity milestone, so it has no pages yet, and a shortcut in its API reaches every screen built later. Before you write a console call, read [Before the pages exist](/decisions/0027-the-console/#before-the-pages-exist): eleven things the first console leaves out, such as an owner that cannot verify the operator, a page-shaped call, an unpaged list and a destructive write in one call.

@@ -11,8 +11,8 @@ The architecture of sluis is described at three zoom levels ([0002](/decisions/0
 | Level | Question | What it produces | Where |
 | ----- | -------- | ---------------- | ----- |
 | **L1, the black box** | What does sluis do, for whom, and which resources does it touch to do it? | The use cases, the external API, and the resources each use case touches | [This page](#the-black-box) |
-| **L2, the components** | Which actor owns each operation, through which contract and which of its ports? | Actors in four families, their ports, the call graph and one writer per kind | [Components and units](/architecture/components/) |
-| **L3, the units** | What runs where, with which credentials, and what enforces that on each installation? | The units, the holders and their drivers, the packaging, the enforcement and the listeners of each installation | [Components and units](/architecture/components/#units-on-each-installation), [Deployment and listeners](/architecture/deployment/) |
+| **L2, the components** | Which actor owns each operation, through which contract and which of its ports? | Actors in three families, their ports, the call graph and one writer per kind | [Components and units](/architecture/components/) |
+| **L3, the units** | What runs where, with which credentials, and what enforces that on each installation? | The units, the holders and their drivers, the enforcement and the listeners of each installation | [Components and units](/architecture/components/#units-on-each-installation), [Deployment and listeners](/architecture/deployment/) |
 
 ## The registries are the spine
 
@@ -50,22 +50,21 @@ Three consequences follow:
 ## Ground rules
 
 - **Every contract is Protobuf served over ConnectRPC,** even when caller and callee share a process ([0002](/decisions/0002-families-of-actors/#contracts)). The contracts are in `proto/`.
-- **A work actor holds no storage, key or audit credential at rest.** It reaches data at store@, keys at key@ and the audit transport through its ports ([0002](/decisions/0002-families-of-actors/#work-actors)).
+- **A work actor holds no storage, key or export credential at rest.** It reaches data at store@ and keys at key@ through its ports, and hands its audit records to audit's emitter through its emit port ([0002](/decisions/0002-families-of-actors/#work-actors)).
 - **Integrations return facts, or carry out effects that core has already authorised. They never decide.** An adapter receives a grant that `policy` decided and key@ sealed, and opens a tenant's connection credential at key@ for each call. Caps and rate limits live in core ([0025](/decisions/0025-integrations/#the-rule)).
 - **Core calls adapters, and an adapter calls only `policy`.**
-- **Drivers are separate binaries, private to their owner,** and the platform starts them. There are no Go `.so` plugins and no WebAssembly ([0005](/decisions/0005-the-store/#drivers)).
+- **Drivers are atoom's separate binaries,** and the platform starts them. There are no Go `.so` plugins and no WebAssembly ([0005](/decisions/0005-the-store/#drivers)).
 
 ## Pages
 
 | Page | Level | What it covers |
 | ---- | ----- | -------------- |
 | This page | L1 | Who uses sluis, the external API surface, and the use case by resource matrix |
-| [Components and units](/architecture/components/) | L2, L3 | The four families, the foundation and the modules, the ports, the call graph, one writer per kind, the fusion rule, packaging, the units on each installation and the source layout |
+| [Components and units](/architecture/components/) | L2, L3 | The three families, the foundation and the layers, the call graph, one writer per kind, the fusion rule, the units on each installation and the source layout |
 | [Deployment and listeners](/architecture/deployment/) | L3 | What enforces the registries on each installation, what accepts connections and where, and the residual risk |
-| [Identity explorer](/architecture/identity-explorer/) | L1 to L3 | An interactive view of the identity module on the shared foundation: the actors and their calls |
-| [Audit explorer](/architecture/audit-explorer/) | L2 | An interactive view of the audit module on the shared foundation: the audit pipeline |
+| [Identity explorer](/architecture/identity-explorer/) | L1 to L3 | An interactive view of the actors and their calls on the shared foundation |
 
-Related: [Concepts](/concepts/) explains the vocabulary ([families](/concepts/families/), [data](/concepts/data/), [keys](/concepts/keys/)), [Integrations](/integrations/) the integration model, and [Runtimes](/runtimes/) where sluis runs. To try sluis rather than read about it, follow the [single-node install](/tutorials/single-node-install/).
+Related: [Concepts](/concepts/) explains the vocabulary ([families](/concepts/families/), [data](/concepts/data/), [keys](/concepts/keys/)), [Integrations](/integrations/) the integration model, and [Runtimes](/runtimes/) where sluis runs. To try sluis rather than read about it, follow the [local installation](/runtimes/local/).
 
 ## The black box
 
@@ -106,7 +105,7 @@ flowchart LR
 
 | Party | What they do with sluis |
 | ----- | ----------------------- |
-| **People** | From a browser or a CLI, sign in through an upstream identity provider, refresh, list and revoke their sessions, and sign out. Device login for headless machines is postponed ([#855](https://github.com/truvity/sluis/issues/855)) |
+| **People** | From a browser or a CLI, sign in through an upstream identity provider, refresh, list and revoke their sign-in sessions, and sign out. Device login for headless machines is postponed ([#855](https://github.com/truvity/sluis/issues/855)) |
 | **Robots** | CI jobs, workloads and services present a platform token (a GitHub Actions token, a Kubernetes ServiceAccount token, an AWS web-identity token) and exchange it for an access token, a downstream credential, or a certificate |
 | **Relying parties** | Apps and cloud APIs read discovery and the key set, then verify tokens offline with any standard JOSE library. sluis needs no client library |
 | **Operators** | Through the console and the CLI, connect integrations, manage clients and secrets, and, once the optional token certificate is on (off in the core), request and install the certificates of the intermediates (`sluis key request`, `install`, `status`). Backup is a job of exporter@; a restore is the operator's command `sluis restore` ([0010](/decisions/0010-backup-and-recovery/#restore)) |
@@ -119,7 +118,7 @@ flowchart LR
 
 ### The external API surface
 
-Four kinds of caller identity reach the box, and these are all it has to verify: a person's session cookie, a person's bearer (the access token of a live sign-in), a workload's platform token or the token of the installation's trusted realm, and a confidential client's secret. A product service that writes limits for the limit check needs a fifth, which is decided with the first caller of the check ([0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/#limits-and-balances), [#841](https://github.com/truvity/sluis/issues/841)). Only discovery and the key set are public.
+Four kinds of caller identity reach the box, and these are all it has to verify: a person's session cookie, a person's bearer (the access token of a live sign-in), a workload's platform token or the token of the installation's trusted realm, and a confidential client's secret. A product service that writes limits for the limit check needs a fifth, which is open and decided with the first caller of the check ([0046](/decisions/0046-limits-on-the-request-path-and-usage-in-audit/#limits-and-balances), [#841](https://github.com/truvity/sluis/issues/841)). Only discovery and the key set are public.
 
 #### OIDC and OAuth endpoints
 
@@ -129,7 +128,7 @@ Served at the root of the public host, for example `https://sluis.example.com`.
 | -------- | --------------- | ------ |
 | Discovery | `GET /.well-known/openid-configuration`, `GET /.well-known/oauth-authorization-server` | Anyone. Public, CORS-open, no credentials |
 | Key set | `GET /jwks`, found by a relying party through the `jwks_uri` of discovery | Anyone. Public |
-| Liveness | `GET /healthz` (`HEAD` too), no parameter | The platform's or the forwarder's probe. `entry` answers it alone and writes no audit record for it ([0030](/decisions/0030-audit-records-and-the-usage-stream/#the-record-format)) |
+| Liveness | `GET /healthz` (`HEAD` too), no parameter | The platform's or the forwarder's probe. `entry` answers it alone and writes no audit record for it ([audit 0004](https://github.com/truvity/audit/blob/master/docs/decisions/0004-the-record-format.md)) |
 | Authorization | `GET /authorize` with the parameters in the query, or `POST /authorize` with them in a form body (OpenID Connect Core section 3.1.2.1); a closed list of parameters that it acts on; any other name is ignored and only the number of ignored names is audited, except `resource`, `audience`, `authorization_details` and `dpop_jkt`, which are refused because each narrows or binds what is issued (PKCE `S256` only, `response_mode=query` or `form_post` ([0017](/decisions/0017-identity-and-sign-in/)), `resource`, `prompt`) | A browser |
 | Sign-in | `GET /login`, `GET /login/<provider>/start`, `GET /callback` | A browser, bound to the request by the `__Host-sluis_signin` cookie ([0025](/decisions/0025-integrations/#the-upstream-contract)) |
 | Token | `POST /token` with `authorization_code` or `refresh_token` | A client, public with PKCE or confidential with a secret. Refresh tokens are single use |
@@ -137,11 +136,11 @@ Served at the root of the public host, for example `https://sluis.example.com`.
 | Revocation | `POST /revoke` (RFC 7009) | The client the token was issued to |
 | Sign-out | `GET\|POST /end_session`, `GET /signed-out`; back-channel logout to relying parties | A browser; the relying party |
 | Recovery | `POST /login/recovery`, a passkey assertion | An operator, when no upstream can vouch: see [Break-glass recovery](/security/break-glass/) |
-| Agent consent | `POST /login/agent-consent` | A signed-in person authorising an agent session ([0018](/decisions/0018-sessions/#agent-sessions)) |
+| Agent consent | `POST /login/agent-consent` | A signed-in person authorising an agent session ([0018](/decisions/0018-sign-in-sessions/#agent-sessions)) |
 
 #### Token exchange and mint
 
-Both are `POST /token` with `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` (RFC 8693). The `subject_token` is a Kubernetes ServiceAccount token from any known cluster, a GitHub Actions token (the GitHub add-on), an AWS web-identity token, a token from a peer sluis, a token of the installation's trusted realm (Keycloak in the tested installations; customer identity, built right after the core, [0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)), or the access token of a live sign-in presented by a client that is allowed to re-audience it. The `actor_token` is refused.
+Both are `POST /token` with `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` (RFC 8693). The `subject_token` is a Kubernetes ServiceAccount token from any known cluster, a GitHub Actions token (the GitHub add-on), an AWS web-identity token, a token from a peer sluis, a token of the installation's trusted realm (customer identity, [0032](/decisions/0032-customer-identity-installations/)), or the access token of a live sign-in presented by a client that is allowed to re-audience it. The `actor_token` is refused.
 
 | Result | Selected by | Notes |
 | ------ | ----------- | ----- |
@@ -156,13 +155,13 @@ Both are `POST /token` with `grant_type=urn:ietf:params:oauth:grant-type:token-e
 
 Connect services (JSON or protobuf over HTTP) on the console's own host, under one fixed prefix ([0027](/decisions/0027-the-console/#the-browser)), package `sluis.console.v2alpha1` until v2.0.0 ([Contracts and errors](/reference/contracts/#packages-and-files)), served by the `console` actor through `entry`. Console calls use the same-origin HttpOnly session cookie, and the browser holds no token. A workload may call them with its own platform token; some services also accept a CLI bearer. The roles are `viewer` and `operator`, scoped to a tenant or to all ([0027](/decisions/0027-the-console/#roles)). The console checks the operator's delegation and routes each write to the actor that owns the kind, and the write is audited under the signed-in person's name ([0002](/decisions/0002-families-of-actors/#the-console)). The single-page application is a separate artifact on the same origin ([The console's static host](/architecture/deployment/#the-consoles-static-host)).
 
-The services are `SessionService` (list and revoke sessions), `AccessService` (`WhoAmI`, `Explain`, the effective policy, recovery status, group search), `BackupService` (status and history, read-only), and one service per adapter (connect, reconnect, probe, refresh, disconnect; for a minter, list, rotate and revoke what it minted).
+The services are `SessionService` (list and revoke sign-in sessions; the name follows the executable of `signin`), `AccessService` (`WhoAmI`, `Explain`, the effective policy, recovery status, group search), `BackupService` (status and history, read-only), and one service per adapter (connect, reconnect, probe, refresh, disconnect; for a minter, list, rotate and revoke what it minted).
 
 Browser redirect routes under `/connect/<integration>/`, on the console's host, complete the provider flows.
 
 #### Audit read
 
-The audit trail is served by the audit installation's own front: its own `entry` on a sibling host (`sluis-audit.example.com`), the `reader` as its API, and its own `session` and `console`. A sluis console reaches it with an exchanged token of at most five minutes, bound to the console's certificate ([0028](/decisions/0028-audit-pieces/#the-audit-front)). Independent verification does not call sluis: an auditor fetches the sealed batches, the log's public key and any witness co-signatures from the bucket, and checks the chain.
+sluis does not serve the audit trail. Audit's own front serves it, on a host of its own, and sluis's console embeds audit's page with an exchanged token of at most five minutes ([0027](/decisions/0027-the-console/#the-audit-page)). Independent verification does not call sluis: an auditor checks the log with `audit verify`. Both belong to audit ([audit 0014](https://github.com/truvity/audit/blob/master/docs/decisions/0014-the-front-the-console-page-and-audit-verify.md)).
 
 #### Operator and automation
 
@@ -171,7 +170,7 @@ The audit trail is served by the audit installation's own front: its own `entry`
 | `sluis` CLI, login, token, exchange, credential helpers for kubeconfig and cloud SDKs | The endpoints above, with results cached under the user's config directory |
 | `sluis config check`, `sluis config explain` | Offline by default, with no call to sluis. With `--live` they read the durable kinds through the console API, with an operator's credentials |
 | `sluis restore`, `doctor` | On the host. `restore` runs as store@ under its own restore identity ([0010](/decisions/0010-backup-and-recovery/#restore)) |
-| Scheduled work (directory refresh, reconcile passes, rotation, backup) | Events from a timer, a queue or a platform scheduler, not user API. A job that must run once takes a lease ([0005](/decisions/0005-the-store/#leases)) |
+| Scheduled work (directory refresh, reconcile passes, rotation, backup) | Events from a timer, a queue or a platform scheduler, not user API. A job that must run once takes a lease ([0003](/decisions/0003-units-transports-and-fusion/#units)) |
 
 #### Second factor
 
@@ -184,8 +183,8 @@ These operations are new in v2; their paths and RPC names are fixed when each is
 - device login (RFC 8628), postponed ([#855](https://github.com/truvity/sluis/issues/855)): `POST /device_authorization`, `GET /device` and the `device_code` grant, with a verification page that needs a session with upstream MFA;
 - certificates for workloads, people and hosts, in the PKI, SSH and database add-on after parity: a Connect call for cert-manager's external-issuer library, and `sluis pki` and `sluis ssh` ([0023](/decisions/0023-certificate-authorities/));
 - static publication: public `GET` of CA certificates, CRLs, trust bundles, SSH CA keys and the key revocation list, exported by exporter@ with the directory driver in the core, and with the bucket driver and the edge purge in the Cloudflare add-on ([0009](/decisions/0009-export/#what-is-exportable));
-- quota: the usage stream and the limit check on the request path, with limits that the product writes ([0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/)); there is no allowance or balance in sluis;
-- KV: the Vault KV v2 subset that External Secrets reads, and `sluis kv` for staff ([0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/#amendment-of-2026-11-18-kv-is-a-building-block-built-in-the-core-phase));
+- limits: the limit check on the request path, with limits that the product writes, and usage records that go to audit ([0046](/decisions/0046-limits-on-the-request-path-and-usage-in-audit/)); there is no allowance or balance in sluis;
+- KV: the Vault KV v2 subset that External Secrets reads, and `sluis kv` for staff ([0047](/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns/#what-kv-is));
 - the signing API: `SigningService.SignDetached`, a Connect call served by `exchange` through `entry`, for a caller with a CI identity token ([0024](/decisions/0024-root-custody-and-the-signing-api/#the-signing-api)).
 
 ### Resources each use case touches
@@ -197,13 +196,13 @@ A use case touches the resources of four ports, and every call crosses a holder:
 - **Durable and temp kinds,** read and written through store@, with the verbs `get`, `list`, `create`, `update`, `apply` and `delete`.
 - **External** systems, reached by an adapter or by a verifier of `exchange`: `fetch` (an external read) and `call` (an external write).
 
-Every use case also emits an audit fact through the audit emit port, which the matrix does not repeat. `r` marks an operation on the request path (the caller waits); `b` marks one in the background.
+Every use case also emits an audit fact through the emit port, which the matrix does not repeat. Reading and verifying the audit trail is audit's. `r` marks an operation on the request path (the caller waits); `b` marks one in the background.
 
 | Use case | Keys at key@ | Config, secret | Durable | Temp | External |
 | -------- | ------------ | -------------- | ------- | ---- | -------- |
 | Sign in through an upstream | open r, seal r, sign r | get r | get, create, update r | get, create, update, delete r | fetch r |
 | Device login (postponed) | open r, seal r, sign r | get r | get r | get, create, update r | fetch r |
-| Refresh, UserInfo, revoke, sign out, sessions | open r, sign r, mac r | get r | get r | get, list, update, delete r | call b |
+| Refresh, UserInfo, revoke, sign out, sign-in sessions | open r, sign r, mac r | get r | get r | get, list, update, delete r | call b |
 | Agent sessions and resources | open r, sign r | get r | get r | create, get r | fetch r |
 | Recovery sign-in | open r, sign r | get r | get r | create, get r | call r |
 | Token exchange from a platform token | sign r, mac r | get r | get r | create, get r | fetch r |
@@ -217,13 +216,10 @@ Every use case also emits an audit fact through the audit emit port, which the m
 | Export a kind | open b | | get, list b (watch) | | call b |
 | Back up | wrap b | | get, list b | | call b |
 | Restore | unwrap b | get b | create, apply b | | |
-| Query and verify the audit trail | open r, mac r | get r | | | |
 | Console reads and actions | open r | get r | get, list r | get r | |
 | Rotate signing keys, request intermediates | sign b | get b | create b | | |
 | Discovery and offline verification | | | | | static documents |
-| Check a limit and write a usage record (Quota phase) | mac r | | update r | | |
-
-The audit pieces use their own ports besides these: the blob, the transport and the index ([0028](/decisions/0028-audit-pieces/#four-pieces)).
+| Check a limit and write a usage record (planned) | mac r | | update r | | |
 
 Three things follow from the matrix, and they shape L2 and L3:
 
@@ -260,10 +256,10 @@ sequenceDiagram
   autonumber 4
   participant J as CI job
   participant S as sluis
-  participant ST as session data
+  participant ST as sign-in state
   participant K as token signing key
-  participant A as audit transport
-  S->>ST: create the session chain
+  participant A as audit
+  S->>ST: create the sign-in session chain
   S->>K: sign access token
   S--)A: emit the exchange fact
   S-->>J: token or refusal
@@ -275,6 +271,6 @@ The answer is an access token, or a refusal in fixed words plus a request id. No
 
 The request is the same token exchange with a `requested_token_type`, an `audience` and a `scope`, and the proof is verified as above. sluis checks that a grant covers the group, audience and scope and that the caller's caps allow it; the read of the caller's live credentials fails closed, and a refusal is `access_denied` with an audit record. Within the grant, sluis opens the tenant's connection credential, creates a downstream credential narrowed to the grant and answers with the credential and its expiry, shown once. The audit record never holds the value.
 
-At L2 this one participant becomes several: the decision is made by `policy`, and the call that holds the vendor credential is made by an adapter that only carries out what core has authorised. The flow is drawn in two steps on [Components and units](/architecture/components/#integrations-return-facts-or-carry-out-authorized-effects).
+At L2 this one participant becomes several: the decision is made by `policy`, and the call that holds the vendor credential is made by an adapter that only carries out what core has authorised. The flow is drawn on [Components and units](/architecture/components/#integrations-return-facts-or-carry-out-authorized-effects).
 
 Next: [Components and units](/architecture/components/) opens the box. [Runtimes](/runtimes/) shows the same box running on each runtime.

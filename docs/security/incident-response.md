@@ -28,7 +28,7 @@ A revocation is never undone. A restore, a roll-forward or a write by the key's 
 | The replacement signs at once when no other key is active | Built in `signer`; its key set reaches the public address only as fast as `exporter@` reads it back |
 | The alert `alert=key-revoked` and the audit fact | Built (the log line and the fact); the alert rule is not |
 | A data key generation or a recipient ([REQ-KEYS-262](/requirements/keys/#REQ-KEYS-262), v1 parity), a board (`--node`), `sluis node pin` | Not built; the steps below are the target |
-| The checkpoint that names the last witnessed size, and a verifier that takes two log keys | Not built; `sluis audit verify` takes one key |
+| The checkpoint that names the last witnessed size, and a verifier that takes two log keys | Not built; they are audit's ([the log keys](#an-audit-issuance-or-witness-log-key)) |
 | The restore and roll-forward that re-apply revocations ([REQ-BACKUP-064](/requirements/backup/#REQ-BACKUP-064), [REQ-BACKUP-065](/requirements/backup/#REQ-BACKUP-065)) | Not built. Until they are, a restored boundary has the revocations of its archive and no more. `key@` keeps the highest sequence number it took in its state directory, which a restore of the store does not touch, and refuses any lower one: deliver the **last** declaration again (it is a retry and finds the revocations that exist), and for the older ones that the archive lacks sign a **new** declaration naming those keys, with `allow_unknown`, because the restored `SigningRing` may not list them. A restore of `KeyRevocation` must write the index entry of each item, or `key@` and `signer` see it up to ten seconds late |
 | The drill and the measured times | Not run; the table at the end is empty |
 
@@ -71,7 +71,7 @@ The certificate revocation list is no control for tokens. A standard verifier ig
 
 **Not built.** The revocation of a data key generation and of a recipient is [REQ-KEYS-262](/requirements/keys/#REQ-KEYS-262), v1 parity (the core declares signing keys only, [ADR 0041](/decisions/0041-a-compromised-key-is-revoked-then-replaced/#the-declaration)); `sluis key revoke` takes `--kid`, a signing key's thumbprint, and no generation. What follows is the target.
 
-Declare the generation, by its exact name, with `sluis key revoke` and `--reason compromise`. `key@` makes a new generation that every later seal uses and refuses every seal under the compromised one. Whether it also stops opening the compromised generation depends on what the key protects: the integrity keys (`grant`, `cookie`, `chain`) stop opening at once, because a forged value is the threat; the confidentiality keys (`data`, `pseudonym`, `evidence`) keep opening, because the thief already holds the key and refusing opens would only take the data offline. For `data` the re-seal job rewrites every value and then the old wraps are deleted.
+Declare the generation, by its exact name, with `sluis key revoke` and `--reason compromise`. `key@` makes a new generation that every later seal uses and refuses every seal under the compromised one. Whether it also stops opening the compromised generation depends on what the key protects: the integrity keys (`grant`, `cookie`, `chain`) stop opening at once, because a forged value is the threat; the confidentiality keys (`data`, `credential`, `pseudonym`, `evidence`) keep opening, because the thief already holds the key and refusing opens would only take the data offline. For `data` and `credential` the re-seal job rewrites every value and then the old wraps are deleted.
 
 | Purpose | What stops | What people see | After the declaration |
 |---|---|---|---|
@@ -79,6 +79,7 @@ Declare the generation, by its exact name, with `sluis key revoke` and `--reason
 | `cookie` | Seals and opens under the old generation are refused; every browser session of the boundary ends | People sign in again, silently while the upstream session lives | Refresh-token chains are not affected |
 | `chain` | Seals and opens under the old generation are refused; that tenant's session chains end | That tenant's people sign in again | Only that tenant |
 | `data` (a tenant's, or the boundary's) | Seals under the old generation are refused; it keeps opening until the re-seal ends, then its wraps are deleted | Nothing, apart from latency during the job | Re-seal runs in pages and can be resumed |
+| `credential` (a tenant's) | Seals under the old generation are refused; it keeps opening until the re-seal ends, then its wraps are deleted | Nothing, apart from latency during the job | Re-seal runs in pages and can be resumed |
 | `pseudonym` | The epoch ends; no new hash under it | Past audit records keep their pseudonyms | A new epoch starts at once |
 | `evidence` | Seals under the old generation are refused; it keeps opening for the retention | Nothing; what it already sealed stays exposed (accepted) | New evidence is sealed under a new generation |
 
@@ -96,11 +97,19 @@ An archive keeps the wraps and the values it held. Re-sealing cannot reach it, a
 4. **Make the removal visible.** A reviewed `KeyPlan` commit drops the board from the signed list. The revocation is permanent: a board comes back only as a new key, listed in the `KeyPlan` by its new thumbprint.
 5. **A suspected PIN** is changed with `sluis node pin`, which delivers the new PIN to the board over the unlock channel. Until that command exists, replace the board.
 
-## An audit or issuance log key
+## An audit, issuance or witness log key
 
-Declare the log key with `sluis key revoke --kid KID --reason compromise`, as for a token-signing key. **Built:** the declaration of the log key, as for a token-signing key. **Not built:** the checkpoint that names the last size a witness cosigned before the compromise, and a verifier that takes both keys, each with the size from which it applies. `sluis audit verify` takes one key (`--key` or `--key-file`) and checks the log against it alone, so today a log that spans a change of key cannot be verified as one by that command.
+The log, its checkpoint keys, its witnesses and the key-change record are audit's ([audit 0008](https://github.com/truvity/audit/blob/master/docs/decisions/0008-the-log.md), [audit 0009](https://github.com/truvity/audit/blob/master/docs/decisions/0009-witnesses-and-verification.md)). The runbooks for verifying a log and for a failed verification are audit's too ([audit runbooks](https://github.com/truvity/audit/blob/master/docs/runbooks/README.md)). `ca`'s issuance log is written through audit's emitter and signed through key@ with the issuance-log key ([0023](/decisions/0023-certificate-authorities/#issuance-log-and-revocation)).
 
-With no witness, nothing before the compromise can be trusted from the old key alone. A witness key's compromise is handled the same way: revoke it and drop it from the verifiers' witness list.
+Declare the log key with `sluis key revoke --kid KID --reason compromise`, as for a token-signing key. **Built:** the declaration of the log key, as for a token-signing key. **Not built:** the checkpoint that names the last size a witness cosigned before the compromise, and a verifier that takes both keys, each with the size from which it applies; both are audit's ([audit 0009](https://github.com/truvity/audit/blob/master/docs/decisions/0009-witnesses-and-verification.md)). `sluis audit verify` takes one key (`--key` or `--key-file`) and checks the log against it alone, so today a log that spans a change of key cannot be verified as one by that command.
+
+Where audit runs beside sluis, `key@` holds these keys, and sluis does this:
+
+1. **Declare the key like any signing key:** `sluis key revoke --kid KID --reason compromise`. `key@` writes the `KeyRevocation` item and refuses to sign with the key at once, so the writer cannot sign another checkpoint with it. Built, as for a token-signing key.
+2. **`key@` makes the replacement key,** and audit signs the key-change record with it. The next checkpoint carries the new key.
+3. **What a verifier trusts is audit's call:** its list of keys, the size from which each applies, and the loss of fork detection when a witness key is revoked. `audit verify` is audit's command ([audit reference](https://github.com/truvity/audit/blob/master/docs/reference/audit-verify.md)).
+
+The `evidence` and `pseudonym` keys follow the [data-key rule](#data-keys).
 
 ## An intermediate, an SSH CA and a release subkey
 
@@ -149,6 +158,7 @@ These are written in the [threat model](/security/threat-model/#accepted-risks) 
 | `mac` | The thief confirms guessed e-mail addresses or upstream ids offline against any id seen | A new key changes every link id, and a migration needs sealed inputs | At v1 parity, after a migration is measured |
 | `evidence` (what it sealed before the declaration) | The thief reads a tenant's audit and usage evidence from before | Shredding it destroys evidence the law may require | When the first tenant with an evidence retention exits, or at v1 parity |
 | Lambda cache | A warm function opens a revoked integrity-key generation until its entry expires | A shorter time to live costs key service calls | After the first drill |
+| Static key set | The published key set keeps a revoked key until the exporter can read `KeyRevocation`; the edge's stale window is at most 65 minutes | A store outage must not stop verification for every relying party ([0009](/decisions/0009-export/)) | After a drill has measured how long the exporter goes blind |
 
 ## Drills
 

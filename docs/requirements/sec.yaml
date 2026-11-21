@@ -715,4 +715,4 @@ requirements:
     standards: []
     issues: [1857]
     verification:
-      - {kind: integration-test, ref: "a store that fails and a key service that fails each refuse the request with 503 and no call to session"}
+      - {kind: integration-test, ref: "a store that fails and a key service that fails each refuse the request with 503 and no call to signin"}

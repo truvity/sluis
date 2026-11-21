@@ -23,7 +23,11 @@ type keyPurposeUse struct {
 }
 
 type actorDoc struct {
-	Name        string          `yaml:"name"`
+	Name string `yaml:"name"`
+	// Executable is the name of the program, binary, unit and uid when it differs from the name of the actor in the
+	// docs: `signin` runs as `session` until the planned step that renames the executable. The generators use it
+	// wherever they name the actor.
+	Executable  string          `yaml:"executable"`
 	Family      string          `yaml:"family"`
 	Holder      bool            `yaml:"holder"`
 	Language    string          `yaml:"language"`
@@ -35,10 +39,13 @@ type actorDoc struct {
 }
 
 type actorsDoc struct {
-	Schema    int        `yaml:"schema"`
-	Actors    []actorDoc `yaml:"actors"`
-	Platform  []actorDoc `yaml:"platform"`
-	Externals []actorDoc `yaml:"external_callers"`
+	Schema int        `yaml:"schema"`
+	Actors []actorDoc `yaml:"actors"`
+	// AuditPieces are audit's pieces that still run from this repository (the writer, witness, indexer and reader).
+	// They are read like actors, after them.
+	AuditPieces []actorDoc `yaml:"audit_pieces"`
+	Platform    []actorDoc `yaml:"platform"`
+	Externals   []actorDoc `yaml:"external_callers"`
 }
 
 type ttlDoc struct {
@@ -137,5 +144,85 @@ func load(root string) (*inputs, error) {
 			return nil, fmt.Errorf("%s: schema %d is not the schema 1 this generator reads", c.file, c.schema)
 		}
 	}
+	in.toExecutables()
 	return in, nil
+}
+
+// toExecutables makes the inputs speak in executable names: the audit pieces join the actors, and an actor whose row says
+// `executable:` is named so everywhere (its own row, `calls`, the writer, readers and watchers of a kind, and the users of a key
+// purpose). The generated files therefore name an actor as its program, its unit and its uid do.
+func (in *inputs) toExecutables() {
+	in.actors.Actors = append(in.actors.Actors, in.actors.AuditPieces...)
+	in.actors.AuditPieces = nil
+	exe := map[string]string{}
+	for _, list := range [][]actorDoc{in.actors.Actors, in.actors.Platform} {
+		for _, a := range list {
+			if a.Executable != "" && a.Executable != a.Name {
+				exe[a.Name] = a.Executable
+			}
+		}
+	}
+	if len(exe) == 0 {
+		return
+	}
+	for _, list := range [][]actorDoc{in.actors.Actors, in.actors.Platform, in.actors.Externals} {
+		for i := range list {
+			list[i].Name = mapName(list[i].Name, exe)
+			list[i].Calls = mapNames(list[i].Calls, exe)
+		}
+	}
+	for i := range in.kinds.Kinds {
+		k := &in.kinds.Kinds[i]
+		k.Writer = mapToken(k.Writer, exe)
+		k.Readers = mapTokens(k.Readers, exe)
+		k.WatchedBy = mapTokens(k.WatchedBy, exe)
+	}
+	for i := range in.keys.Purposes {
+		in.keys.Purposes[i].Users = mapNames(in.keys.Purposes[i].Users, exe)
+	}
+	for _, m := range []map[string]dataKeyDoc{in.keys.DataKeys.Tenant, in.keys.DataKeys.Boundary} {
+		for n, d := range m {
+			d.Users = mapNames(d.Users, exe)
+			m[n] = d
+		}
+	}
+}
+
+func mapName(n string, exe map[string]string) string {
+	if to, ok := exe[n]; ok {
+		return to
+	}
+	return n
+}
+
+func mapNames(ns []string, exe map[string]string) []string {
+	out := make([]string, len(ns))
+	for i, n := range ns {
+		out[i] = mapName(n, exe)
+	}
+	return out
+}
+
+// mapToken maps the actor name that starts a writer or reader token: `signin`, `signin@` and `signin (own id)` all name it.
+func mapToken(tok string, exe map[string]string) string {
+	i := 0
+	for i < len(tok) && tok[i] == ' ' {
+		i++
+	}
+	j := i
+	for j < len(tok) && (tok[j] >= 'a' && tok[j] <= 'z' || tok[j] >= '0' && tok[j] <= '9' || tok[j] == '-') {
+		j++
+	}
+	if to, ok := exe[tok[i:j]]; ok {
+		return tok[:i] + to + tok[j:]
+	}
+	return tok
+}
+
+func mapTokens(ts []string, exe map[string]string) []string {
+	out := make([]string, len(ts))
+	for i, t := range ts {
+		out[i] = mapToken(t, exe)
+	}
+	return out
 }

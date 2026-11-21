@@ -1,28 +1,31 @@
-# 0004 — Data is resource kinds in a compiled registry, each with an address, one storage class, a treatment, a profile and one writer
+# 0004 — Data is kinds that sluis declares in the state registry, each with an address, one storage class, a treatment, a profile and one writer
 
-**Status:** Accepted; amended by 0047
-**Date:** 2026-11-03
+**Status:** Accepted
+**Date:** 2026-11-21
 
 Proposal: [issue #909](https://github.com/truvity/sluis/issues/909).
 
 ## Context
 
-sluis keeps many kinds of data: settings that an operator reviews, settings that a tenant admin changes at run time, secrets that the platform supplies, secrets that sluis generates or receives, sessions and codes that may be lost, facts read from outside systems, and things sluis issues. Each raises the same questions: who may write it, where it lives, whether it is backed up, what a restore does with it, whether it may leave sluis, and what an audit record, a log line or a span may say about it. v1 answered these one kind at a time (v1 ADRs 0018 to 0022, 0036 and 0075, on `master`), and the lists for backup, export, audit and telemetry disagreed.
+sluis keeps many kinds of data: settings that an operator reviews, settings that a tenant admin changes at run time, secrets that the installation supplies, secrets that sluis generates or receives, sessions and codes that may be lost, facts read from outside systems, and things sluis issues. Each raises the same questions. Who may write it? Where does it live? Is it backed up, and what does a restore do with it? May it leave sluis? What may an audit record, a log line or a span say about it? v1 answered these one kind at a time (v1 ADRs 0018 to 0022, 0036 and 0075, on `master`), and the lists for backup, export, audit and telemetry disagreed.
 
-The store ([0005](/decisions/0005-the-store/)) has to enforce every one of those answers for every actor, and an actor holds no storage credential ([0002](/decisions/0002-families-of-actors/#credential-holders)). The store can do that only if the answers are data it can read: one registry, compiled in, that says what each kind is. A setting that several places can set, such as policy from a reviewed repository, from an operator and from a tenant admin, also needs a rule for how the places combine and in which direction each may move. And a customer that arrives at run time cannot wait for a pull request, so the data model has to say what a tenant may write and within which bounds (principle 17: where a thing is written decides its class).
+The store ([0005](/decisions/0005-the-store/)) has to enforce every one of those answers for every actor, and an actor holds no storage credential ([0002](/decisions/0002-families-of-actors/)). It can do that only if the answers are data it can read: one registry that says what each kind is. The registry and its mechanics are not sluis's alone. They are the `state` block of [atoom](https://github.com/truvity/atoom), which any product extends with its own kinds ([atoom 0008](https://github.com/truvity/atoom/blob/master/docs/decisions/0008-blocks.md)). This record states what sluis declares in that registry and the rules those declarations follow.
 
-The shape of every kind is read by many consumers: Go and Rust actors, the TypeScript console, Helm and the reference pages. One schema source keeps them in agreement, and Protobuf is already the wire contract ([0002](/decisions/0002-families-of-actors/#contracts)). A spike measured whether Protobuf, with generated JSON Schema and protovalidate, carries every constraint the data model needs in Go and Rust ([#1177](https://github.com/truvity/sluis/issues/1177), 2026-11-03): protovalidate agrees in both languages, and the JSON Schema is a derived subset ([Schemas are Protobuf](/decisions/0004-the-data-model/#schemas-are-protobuf)).
+A setting that several places can set, such as policy from a reviewed repository, from an operator and from a tenant admin, needs a rule for how the places combine and in which direction each may move. A customer that arrives at run time cannot wait for a pull request, so the data model also says what a tenant may write and within which bounds (principle 17: where a thing is written decides its class).
+
+The shape of every kind is read by many consumers: Go and Rust actors, the TypeScript console, Helm and the reference pages. One schema source keeps them in agreement, and Protobuf is already the wire contract. A spike measured whether Protobuf, with generated JSON Schema and protovalidate, carries every constraint the data model needs in Go and Rust ([#1177](https://github.com/truvity/sluis/issues/1177), 2026-11-03). protovalidate agrees in both languages, and the JSON Schema is a derived subset.
 
 ## Decision
 
-Data is **kinds**. A kind is declared once in the compiled kind registry and has an address, one storage class, a treatment, a profile and exactly one writer. The registry is the one source of the store's rules, the deny matrix, the backup list and the generated reference pages.
+Data is **kinds**. A kind is declared once in the kind registry and has an address, one storage class, a treatment, a profile and exactly one writer.
 
 ### Kinds
 
-- **A kind is a typed resource declared in the kind registry.** It names a Protobuf schema, a scope, one storage class, a treatment, a profile, its layers or links, its declared indexes, its rules (actor × kind × verb) and exactly one writer. A kind that is not in the registry cannot be read or written.
-- **The registry is compiled into the binaries that use it.** store@ enforces it ([0005](/decisions/0005-the-store/#rules)); the tests and the generated pages [Kinds](/reference/kinds/) and [Rules](/reference/rules/) read it. Adding a kind is a reviewed change to the registry, and it names its consumer (principle 8).
+- **The kind registry is the `state` block's, and any product extends it.** A product declares its own kinds with their schemas and treatments; the block serves them with the same addresses, layers, signed-config checks and watch. sluis declares the kinds in this record's tables and in the [Kinds](/reference/kinds/) page. audit declares its own (`AuditLog`, `AuditWitnesses`, `AuditCatalogue` and `Meter`; [audit 0015](https://github.com/truvity/audit/blob/master/docs/decisions/0015-configuration-kinds.md)) in the same registry. No product needs another's registry. The mechanics (the registry, the storage-class bindings, the layered reads) are described in [atoom's plan](https://github.com/truvity/atoom/blob/master/docs/plan.md) and atoom's records; the block is planned there, and store@ is its host until it moves ([0005](/decisions/0005-the-store/)).
+- **A kind is a typed resource.** It names a Protobuf schema, a scope, one storage class, a treatment, a profile, its layers or links, its declared indexes, its rules (actor × kind × verb) and exactly one writer. A kind that is not in the registry cannot be read or written.
 - **A kind's name is PascalCase** (`DataKeyWrap`); its address segment is the kebab-case form (`data-key-wrap`).
-- **A new question about data is a new declared index,** not a query ([0005](/decisions/0005-the-store/#the-store-api)).
+- **Adding a kind is a reviewed change** that names its consumer (principle 8). A new question about data is a new declared index, not a query.
+- **Where sluis keeps the registry today.** The sluis kinds are declared in `docs/architecture/kinds.yaml`. A generator turns it, with the actor registry, into the tables that every binary compiles in, and into the generated pages [Kinds](/reference/kinds/) and [Rules](/reference/rules/); a check fails while they are stale. Protobuf options on each kind message as the source, with the YAML generated from them, are planned.
 
 The fields of a kind:
 
@@ -38,22 +41,23 @@ The fields of a kind:
 | Readers and rules | The actors with a get, list or watch rule on it |
 | Indexes | The declared lookups besides listing by tenant |
 | TTL | Temp: mandatory, with a default and a maximum. Durable: only when the kind carries an expiry field |
-| Exportable | `yes` for the kinds exporter@ may watch; set by review ([0009](/decisions/0009-export/#what-is-exportable)) |
+| Exportable | `yes` for the kinds exporter@ may watch; set by review ([0009](/decisions/0009-export/)) |
 | Backed up | `yes` only for authoritative durable kinds |
 | Status | `planned` for a kind that is in the registry but has no writer yet |
 
-During the design phase the registry is `docs/architecture/kinds.yaml`. When code exists, Protobuf options on each kind message (`option (sluis.kind) = {...}`) become the source, the YAML is generated from them, and CI checks the two for equality, so the generated pages keep their generator.
+The kinds of the KV service (`KvStore`, `KvSecret` and `KvVersion`) are declared in [0047](/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns/).
 
 ### The address
 
 - **The address of an item is `<boundary>/<tenant | ->/<kind>/<id>`.** The address space is flat, not a tree: listing by prefix lists items and creates no scope.
-- **Only two scope dimensions exist.** The boundary is always there ([0008](/decisions/0008-boundaries-and-tenants/#boundaries)). The tenant ([0008](/decisions/0008-boundaries-and-tenants/#tenants)) appears only on durable and temp kinds; a config or secret kind never has it. A `-` stands where a kind has no tenant, or where an item belongs to the whole boundary.
-- **A kind belongs to the tenant that made it.** What a company connects (its directory, its chat workspace, its code host and its account at a provider that sluis mints for), the app or connection it makes through a UI or API flow, and the directory read through it, are kinds of that company's tenant. The desired state belongs to the tenant that owns the container it describes ([0026](/decisions/0026-reconcilers/#the-desired-state)). The operator's own company is a tenant ([0008](/decisions/0008-boundaries-and-tenants/#boundaries)), so an app the operator makes in the UI lives there. A kind with no tenant in its address is a boundary-wide fact such as a switch, a signing ring or an enrolment token. The KV kinds are the one exception to "a kind belongs to the tenant that made it": a KV store is boundary-wide and no tenant owns it, so `KvSecret` and `KvVersion` carry tenant `-` however many tenants write them, and a tenant's exit does not delete what its identities wrote there ([0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/#storage-and-encryption)).
-- **Actor, module, client and quota are parts of the id,** never scopes: a tunable for `session` is `Tunables` with id `session`, an allowance is `Allowance` with the quota name as id.
-- **An id never contains personal data.** It is a random value (128 bits), or a keyed hash of a natural key made by key@ ([0006](/decisions/0006-keys-and-sealing/#sign-and-mac)). A person is found by an opaque subject, never by an e-mail address.
-- **An installation is not a scope.** Settings that hold for a whole installation are one signed document that IaC writes, with the same content, into every boundary's config source; no boundary reads another's ([0008](/decisions/0008-boundaries-and-tenants/#installation-wide-settings)).
-- **A sealed value is bound to its full address,** so a value moved to another item, kind or tenant no longer opens ([0006](/decisions/0006-keys-and-sealing/#seal-and-open)).
-- **The encoding of the segments and their limits** are on the store API reference page.
+- **Only two scope dimensions exist.** The boundary is always there ([0008](/decisions/0008-boundaries-and-tenants/)). The tenant appears only on durable and temp kinds; a config or secret kind never has it. A `-` stands where a kind has no tenant, or where an item belongs to the whole boundary.
+- **A kind belongs to the tenant that made it.** What a company connects (its directory, its chat workspace, its code host and its account at a provider that sluis mints for), the app or connection it makes through a UI or API flow, and the directory read through it, are kinds of that company's tenant. The desired state belongs to the tenant that owns the container it describes ([0026](/decisions/0026-reconcilers/)). The operator's own company is a tenant, so an app the operator makes in the UI lives there. A kind with no tenant in its address is a boundary-wide fact such as a switch, a signing ring or an enrolment token.
+- **The KV kinds are the one exception.** A KV store is boundary-wide and no tenant owns it, so `KvSecret` and `KvVersion` carry tenant `-` however many tenants write them, and a tenant's exit does not delete what its identities wrote there ([0047](/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns/)).
+- **Actor, module, client and quota are parts of the id,** never scopes: a tunable for `signin` is `Tunables` with id `signin`.
+- **An id never contains personal data.** It is a random value (128 bits), or a keyed hash of a natural key made by key@ ([0006](/decisions/0006-keys-and-sealing/)). A person is found by an opaque subject, never by an e-mail address.
+- **An installation is not a scope.** Settings that hold for a whole installation are one signed document that IaC writes, with the same content, into every boundary's config source; no boundary reads another's ([0008](/decisions/0008-boundaries-and-tenants/)).
+- **A sealed value is bound to its full address,** so a value moved to another item, kind or tenant no longer opens ([0006](/decisions/0006-keys-and-sealing/)).
+- **The encoding of the segments and their limits** are on the [store API](/reference/store-api/) page.
 
 | Address | Kind | Class |
 |---|---|---|
@@ -65,26 +69,26 @@ During the design phase the registry is `docs/architecture/kinds.yaml`. When cod
 
 ### Storage classes
 
-Every kind is in **exactly one storage class**. The classes are mutually exclusive, and the class decides who writes, where the value lives and whether it is backed up.
+Every kind is in **exactly one storage class**. The classes are mutually exclusive, and the class decides who writes, where the value lives and whether it is backed up. Which store driver serves each class is an installation's choice ([0005](/decisions/0005-the-store/)).
 
 | Class | Access | Where it lives | Written by | Backed up | Tenant |
 |---|---|---|---|---|---|
 | **config** | Read-only, signed | A file, a ConfigMap or AWS AppConfig | IaC or the publishing pipeline, under review; sluis never writes config | No: the reviewed source is the copy | Never |
 | **secret** | Read-only | A systemd credential or AWS SSM | IaC | No | Never |
-| **durable** | Read-write, must survive | The durable engine behind store@ | One actor, through the store | Yes, when the kind is authoritative | If the kind has one |
-| **temp** | Read-write, may be lost | The temp engine behind store@ | One actor, through the store | Never | If the kind has one |
+| **durable** | Read-write, must survive | The durable store behind store@ | One actor, through the store | Yes, when the kind is authoritative | If the kind has one |
+| **temp** | Read-write, may be lost | The temp store behind store@ | One actor, through the store | Never | If the kind has one |
 
-- **Where a thing is written decides its class** (principle 17). IaC and the publishing pipeline write config and secrets; sluis writes durable and temp data through the store; sluis never writes config. A setting that comes from several places is split into one kind per place ([Layered and linked kinds](/decisions/0004-the-data-model/#layered-and-linked-kinds)).
-- **Config is read-only and signed.** It reaches the store as signed documents, one per config kind, loaded as a whole snapshot ([0005](/decisions/0005-the-store/#configuration-loading)). The tenant dimension never appears on a config kind: a tenant never appears in config.
-- **A secret is a value from a secret source,** which holds it in the clear for whoever may read it ([0005](/decisions/0005-the-store/#secret-sources)). A secret that sluis generates or receives is not this class: it is sealed or hashed durable data ([Treatment](/decisions/0004-the-data-model/#treatment)).
-- **Durable data must survive.** It has one writer. A durable kind that nothing else can recreate is **authoritative**, and only authoritative kinds are backed up ([0010](/decisions/0010-backup-and-recovery/#what-the-archive-holds)).
-- **Temp data may be lost,** and losing it costs a sign-in or a retry, never data. A temp kind has a mandatory time to live with a default and a maximum built in ([0005](/decisions/0005-the-store/#time-to-live)). A fact that a re-sync rebuilds is temp: the directory facts have a 24 h default and a 7 d maximum.
+- **Where a thing is written decides its class** (principle 17). IaC and the publishing pipeline write config and secrets; sluis writes durable and temp data through the store. A setting that comes from several places is split into one kind per place ([Layered and linked kinds](/decisions/0004-the-data-model/#layered-and-linked-kinds)).
+- **Config is read-only and signed.** It reaches the store as signed documents, one per config kind, loaded as a whole snapshot ([0005](/decisions/0005-the-store/)). A tenant never appears in config.
+- **A secret is a value from a secret source,** which holds it in the clear for whoever may read it. A secret that sluis generates or receives is not this class: it is sealed or hashed durable data ([Treatment](/decisions/0004-the-data-model/#treatment)).
+- **Durable data must survive.** It has one writer. A durable kind that nothing else can recreate is **authoritative**, and only authoritative kinds are backed up ([0010](/decisions/0010-backup-and-recovery/)).
+- **Temp data may be lost,** and losing it costs a sign-in or a retry, never data. A temp kind has a mandatory time to live with a default and a maximum built in. A fact that a re-sync rebuilds is temp: the directory facts have a 24 h default and a 7 d maximum.
 - **Built-in TTL defaults of temp kinds** (maximum in brackets): AuthCode 60 s [10 min], DeviceCode 10 min [15 min], WebAuthnChallenge 5 min [10 min], Lease 30 s [10 min], SpentGrant 2 min [5 min], LogLevelOverride 1 h [24 h], PredefinedPolicyLinkTemporary 1 h [24 h], PendingEnrolment 7 d [30 d]; UpstreamMetadata and VerifierKeyCache follow HTTP caching [24 h]. The other TTLs are in the registry. A tunable may shorten a value and never lengthens it past the maximum.
 
 ### Built-in
 
 - **Built-in is what the binary carries,** and it is not a storage class. It changes only with a release, and it is the lowest layer of every layered kind.
-- **It holds:** the baseline policies and the predefined policies (break-glass among them); the hard caps (token and session lifetimes, the agent chain at 90 d, the maximum TTL of every temp kind, the maximum cache TTL of key@); the default tunables, log levels, sampling and retention floors; the sign-in methods, algorithms and their floors that a release supports (a software key refuses production, [0006](/decisions/0006-keys-and-sealing/#floors-in-code)); the allowance modes (prepaid, limited, unlimited); the client template defaults; the default slot plan per card model; the audit action table; and the kind registry itself.
+- **It holds:** the baseline policies and the predefined policies (break-glass among them); the hard caps (token and session lifetimes, the agent chain at 90 d, the maximum TTL of every temp kind, the maximum cache TTL of key@); the default tunables, log levels, sampling and retention floors; the sign-in methods, algorithms and their floors that a release supports (a software key refuses production, [0006](/decisions/0006-keys-and-sealing/)); the client template defaults; the default slot plan per card model; the audit action table; and the kind registry itself.
 
 ### Treatment
 
@@ -94,17 +98,17 @@ Every kind has one treatment. **Sealed** is the default, and a kind is declared 
 |---|---|---|---|
 | **hashed** | A compare-only secret: it is verified, never read back | The hash. The value never reaches key@ | `SessionChain` (the hash of the current refresh token), `AuthCode`, `ClientSecret` |
 | **sealed** | A value that is read back: a provider token, personal data, free text | The ciphertext. The writing actor sealed it at key@ | `Person`, `GitHubApp`, `IssuedCertificate` |
-| **plain** | A value that is neither secret nor personal: a switch, a mint target, a counter | The value as it is | `Switch`, `Allowance`, `MinterTarget` |
+| **plain** | A value that is neither secret nor personal: a switch, a mint target, a counter | The value as it is | `Switch`, `MinterTarget` |
 
 - **Treatment follows the data.** A kind that holds personal data or free text (names, SSH principals, vendor user ids, the reason of a hold, a requester) is sealed, or hashed when it is compare-only. Plain is only for values that are neither secret nor personal. Each kind declares whether it holds personal data (`personal` in the [kind registry](/reference/kinds/)); a personal kind is never plain. The rule covers what sluis stores, durable and temp. Config is the operator's reviewed, signed document and may name people, as the first-admin allow-list, the people bindings of a policy and the operators' break-glass passkeys do, because recovery and the first sign-in must work without the store.
-- **A hashed kind may hold a sealed value beside its hash.** The `SessionChain` of [0018](/decisions/0018-sessions/#session-chains) holds the hash of the current refresh token, a generation, and the salt that the tags of its refresh tokens are made over. The salt is not a token and is never in the clear: it is sealed with the chain's facts under the tenant's `chain` key ([0006](/decisions/0006-keys-and-sealing/#data-keys)), so the store keeps ciphertext and a hash, and a tenant's exit takes the salt with the facts (amendment of 2026-11-18).
-- **The store never seals or opens.** It keeps ciphertext and hashes as they are. To write a sealed value, the actor asks key@ to seal it and then writes; to read, it asks key@ to open it ([0006](/decisions/0006-keys-and-sealing/#seal-and-open)). The plaintext exists only in that actor, for that call.
+- **A hashed kind may hold a sealed value beside its hash.** The `SessionChain` ([0018](/decisions/0018-sign-in-sessions/)) holds the hash of the current refresh token, a generation, and the salt that the tags of its refresh tokens are made over. The salt is never in the clear: it is sealed with the chain's facts under the tenant's `chain` key ([0006](/decisions/0006-keys-and-sealing/)), so the store keeps ciphertext and a hash, and a tenant's exit takes the salt with the facts.
+- **The store never seals or opens.** It keeps ciphertext and hashes as they are. To write a sealed value, the actor asks key@ to seal it and then writes; to read, it asks key@ to open it ([0006](/decisions/0006-keys-and-sealing/)). The plaintext exists only in that actor, for that call.
 - **The writing actor validates a sealed field before it seals it,** because the store cannot read it. The schema of a sealed kind describes the plaintext.
 - **An index on a sealed kind holds a keyed hash or a date,** computed by the writing actor (a keyed hash is key@'s `Mac`). An index never holds personal data in the clear.
-- **A hash uses an algorithm of the approved set** ([0006](/decisions/0006-keys-and-sealing/#algorithms)); the actor that writes a hashed kind computes it.
+- **A hash uses an algorithm of the approved set** ([0006](/decisions/0006-keys-and-sealing/)); the actor that writes a hashed kind computes it.
 - **Config and secret kinds are plain in the registry:** config is protected by its signature and a secret by its secret source. A `DataKeyWrap` value is already ciphertext, so its treatment is plain.
-- **A generated or received secret is ordinary data.** A secret that sluis generates (a client secret) or receives (a provider token, an app key) is a sealed durable kind, or a hashed durable kind when it is compare-only. A generated secret that a consumer reads is stored twice: a hash to verify it (`ClientSecret`, hashed) and a KV entry to read it, which `exchange` writes ([0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/#secrets-that-sluis-generates-live-in-kv-k4)). The sealed copy `ClientSecretExport`, which this record named before, is retired by 0047 and leaves the registry with the change that makes `exchange` write the entry.
-- **Audit redaction and the telemetry allowlist come from treatment:** a sealed or hashed value is never in an audit record, a log line or a span ([0016](/decisions/0016-telemetry/), [0030](/decisions/0030-audit-records-and-the-usage-stream/)).
+- **A generated or received secret is ordinary data.** A secret that sluis generates (a client secret) or receives (a provider token, an app key) is a sealed durable kind, or a hashed durable kind when it is compare-only. A generated secret that a consumer reads is stored twice: a hash to verify it (`ClientSecret`, hashed) and a KV entry to read it, which `exchange` writes ([0047](/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns/)). The sealed copy `ClientSecretExport` is retired with the change that makes `exchange` write the entry, and stays in the registry until then.
+- **Audit redaction and the telemetry allowlist come from treatment:** a sealed or hashed value is never in an audit record, a log line or a span ([0016](/decisions/0016-telemetry/)).
 
 ### Profiles
 
@@ -116,7 +120,7 @@ A **profile** says which layers may set a kind's value. It classifies settings, 
 | **Operable** | Built-in and config, and an operator at run time | An operator, through the console, routed to the owning actor. The kind may be boundary-scoped or tenant-scoped, for example a hold on one tenant's person | Log levels and their overrides, switches, retention and holds, apps made through a UI flow |
 | **Tenant-adjustable** | Built-in and config, and the tenant | A tenant admin, or a product for its tenant, inside bounds declared in config, only in its own tenant, with a grant sealed for that tenant | Policy links, token lifetimes, sign-in methods, clients, branding, the allowance |
 
-- **A bound is a limit declared in config (or built in) that a higher layer may not cross,** such as the redirect hosts a client template allows or a cap on a lifetime. The store reads the bound and refuses an out-of-bound write ([0005](/decisions/0005-the-store/#rules)).
+- **A bound is a limit declared in config (or built in) that a higher layer may not cross,** such as the redirect hosts a client template allows or a cap on a lifetime. The store reads the bound and refuses an out-of-bound write.
 - **A kind may carry a field that a tenant sets within a bound.** A tenant may lower the rate limits of its own clients: those are fields of `TenantClient`, checked against `RateBound` on write. The mint targets of a tenant (`MinterTarget`) are checked against `MinterBounds`, which says which target types and maximum lifetimes an installation allows.
 - **A product writes through the same Tenant-adjustable path as a tenant admin,** for its own tenant; what it may write is a policy decision ([0007](/decisions/0007-policy-and-sealed-grants/)).
 - **A tenant admin or a product creates an instance under a template.** A client template in config says which slots an instance may fill and the bound on each. The instance is durable data, written by its one owner after policy has decided, and it holds no authority the template did not carry: no new grant name, no claim and no logic ([0021](/decisions/0021-clients/)).
@@ -126,16 +130,16 @@ A **profile** says which layers may set a kind's value. It classifies settings, 
 The layers of a setting, lowest first, are **built-in**, **config**, **operator** (at run time) and **tenant**. All four apply to policies only. Every other kind uses a subset: lifetimes and sign-in methods use built-in, config and tenant; log levels use built-in, config and a run-time override per boundary, actor and module, never per tenant; keys are built-in limits plus config.
 
 - **The direction rule:** a higher layer tightens freely; it loosens only as far as the layer below allows; a run-time loosening carries an expiry (principle 12).
-- **The store checks the rule when a value is written,** and refuses a write that loosens past the layer below ([0005](/decisions/0005-the-store/#rules)). It composes the layers on read, so a bound that config tightens applies at once to values already written. A read of a layered kind returns the effective value with its provenance ([0005](/decisions/0005-the-store/#the-store-api)).
+- **The store checks the rule when a value is written,** and refuses a write that loosens past the layer below. It composes the layers on read, so a bound that config tightens applies at once to values already written. A read of a layered kind returns the effective value with its provenance ([0005](/decisions/0005-the-store/)).
 - **A tightening takes effect at once and is durable:** a revocation, a shorter lifetime, a stricter sign-in, a paused job. Deleting a switch returns the value to config, which is not a loosening.
 - **A loosening that is made at run time expires.** It is a temp kind with a built-in default and a maximum: a debug log level (`LogLevelOverride`, 1 h, at most 24 h), a break-glass link (`PredefinedPolicyLinkTemporary`, 1 h, at most 24 h). Making a loosening permanent goes through the reviewed path that sets the layer below.
-- **A restore never loosens what was tightened after the archive was taken** ([0010](/decisions/0010-backup-and-recovery/#roll-forward)).
+- **A restore never loosens what was tightened after the archive was taken** ([0010](/decisions/0010-backup-and-recovery/)).
 
 #### What a loosening is
 
 - **A loosening makes the effective value more permissive than what the layer below grants.** A client template is config's grant to the tenant layer, so a link inside a template is within the bound: it is durable, and it needs no expiry.
 - **Linking a predefined policy that grants beyond config is a loosening** (break-glass recovery is the example), so it is a temp kind and expires. A predefined link that only tightens is durable.
-- **A regulated party's policy** is signed by the party as well as the publisher ([0005](/decisions/0005-the-store/#signed-config-documents)).
+- **A regulated party's policy** is signed by the party as well as the publisher ([0005](/decisions/0005-the-store/)).
 
 #### Branding is exempt
 
@@ -156,7 +160,7 @@ Branding has no tighter or looser direction, so it is exempt from the direction 
 | Branding | Tenant-adjustable | The default theme | `Branding` | | `TenantBranding` | The most specific wins |
 | Rate bounds | Fixed | Maximum rates | `RateBound` | | | Within bounds |
 
-- **Union with forbid-wins** compiles every layer's policies into one Cedar set, so a forbid anywhere wins and the built-in baseline holds ([0007](/decisions/0007-policy-and-sealed-grants/#four-layers)).
+- **Union with forbid-wins** compiles every layer's policies into one Cedar set, so a forbid anywhere wins and the built-in baseline holds ([0007](/decisions/0007-policy-and-sealed-grants/)).
 - **Shortest wins** takes, field by field, the shortest duration of any layer. A tenant write longer than config is refused at the store.
 - **Intersection** keeps the methods every layer allows. A higher layer may remove a method or require a stronger one.
 - **The unexpired override wins;** otherwise config; otherwise built-in.
@@ -178,10 +182,10 @@ The worked example is a chat app:
 ### One writer per kind
 
 - **Every kind has exactly one writer.** For a durable or temp kind it is an actor, named in the registry, and the store refuses any other caller. For a config or secret kind it is IaC or the publishing pipeline, outside sluis. Every writer and reader in the registry is an actor name; an integration is an adapter named `adapter-<vendor>` ([0025](/decisions/0025-integrations/)).
-- **The store knows the caller from the transport,** never from the request ([0003](/decisions/0003-units-transports-and-fusion/#transports)). A work actor's own code is not the check: a compromised actor cannot write what its rules refuse.
-- **Two named exceptions.** The first is the restore command of store@ (`sluis restore`), which writes back the kinds it restores and writes `MaintenanceMode` ([0010](/decisions/0010-backup-and-recovery/#restore)). The second is the **declared self-scoped kind**: `Lease`, `ReplayGuard` and `SpentGrant` have an id that starts with the writing actor's name, and the store lets each listed actor write only ids under its own name, so one writer per item still holds.
-- **The console writes exactly two kinds itself,** `Switch` and `LogLevelOverride`. It checks the operator's delegation and routes every other write to the owning actor, which validates it with its own logic ([0027](/decisions/0027-the-console/#writes)).
-- **Writers of tenant settings.** exchange owns what a tenant has configured: `Tenant`, `TenantClient`, `ClientSecret`, `ClientSecretExport`, `TenantBranding`, `TokenLifetimeTenant`, `SignInMethodsTenant`, `PolicyLink`, `PredefinedPolicyLink` and `PredefinedPolicyLinkTemporary`. session owns everything about people: the person kinds. The adapter that completes a browser flow owns what the flow makes: `GitHubApp` (`adapter-github`), `SlackConnection` (`adapter-slack`), `EntraConnection` (`adapter-upstream-oidc`). The adapter that completes a connect flow owns the connection it makes, under ids that start with its own name: `DirectoryConnection` (`adapter-upstream-oidc` for Google Workspace and Entra, `adapter-github` for a GitHub organisation), `MinterConnection` and `MinterTarget` (the adapter of the provider).
+- **The store knows the caller from the transport,** never from the request ([0003](/decisions/0003-units-transports-and-fusion/)). A work actor's own code is not the check: a compromised actor cannot write what its rules refuse. These rules are what sluis plugs into the `state` block's rules hook ([0005](/decisions/0005-the-store/)).
+- **Two named exceptions.** The first is the restore command of store@ (`sluis restore`), which writes back the kinds it restores and writes `MaintenanceMode` ([0010](/decisions/0010-backup-and-recovery/)). The second is the **declared self-scoped kind**: `Lease`, `ReplayGuard` and `SpentGrant` have an id that starts with the writing actor's name, and the store lets each listed actor write only ids under its own name, so one writer per item still holds.
+- **The console writes exactly two kinds itself,** `Switch` and `LogLevelOverride`. It checks the operator's delegation and routes every other write to the owning actor, which validates it with its own logic ([0027](/decisions/0027-the-console/)).
+- **Writers of tenant settings.** exchange owns what a tenant has configured: `Tenant`, `TenantClient`, `ClientSecret`, `ClientSecretExport`, `TenantBranding`, `TokenLifetimeTenant`, `SignInMethodsTenant`, `PolicyLink`, `PredefinedPolicyLink` and `PredefinedPolicyLinkTemporary`. signin owns everything about people: the person kinds. The adapter that completes a browser flow owns what the flow makes: `GitHubApp` (`adapter-github`), `SlackConnection` (`adapter-slack`), `EntraConnection` (`adapter-upstream-oidc`). The adapter that completes a connect flow owns the connection it makes, under ids that start with its own name: `DirectoryConnection` (`adapter-upstream-oidc` for Google Workspace and Entra, `adapter-github` for a GitHub organisation), `MinterConnection` and `MinterTarget` (the adapter of the provider).
 - **Other writers follow the actor that holds the thing:** key@ writes `DataKeyWrap` and `KeyCertificate`, ca writes `TrustBundle`, store@ writes `MaintenanceMode`, exporter@ writes `ExportCursor` and `ExportReport`.
 - **Every run-time write is authorised for a concrete person or caller** and audited under that name.
 
@@ -197,23 +201,22 @@ An upstream or provider app is classed by how it is made.
 
 - **The criterion applies to every connection made in the UI, the operator's own included.** A hand- or IaC-made app is config plus a secret source, and config never has a tenant. A flow that needs a browser round trip is run in the UI by the adapter that completes it, and what it makes is durable, with its secrets sealed, and **belongs to the tenant that ran the flow**: `GitHubApp`, `GitHubInstallation`, `SlackConnection` and `EntraConnection`, with the state of the flow in progress (a temp kind) in the same tenant. An operator who makes a GitHub App in the UI makes it in the operator's own company, which is a tenant.
 - **An app and a connection are two things.** A provider app that serves the whole installation (`SlackApp`, `Upstream` as a multi-tenant app, and their secrets) stays config and secret at the boundary. Every connection of a tenant to a provider is a durable kind of that tenant with its credential sealed, made through the UI or the API: a directory (Google Workspace, Entra or a GitHub organisation), a Cloudflare account, a Slack workspace, a GitHub organisation or app. The company that runs the installation is a tenant of it, so its own connections are durable too.
-- **An IaC tool that writes through the API makes durable data, not config.** IaC may create a connection by calling the API; where a thing is written decides its class ([principle 17](/principles/#17-where-a-thing-is-written-decides-its-class)), and a write through the store's API lands in a durable kind of the tenant. Config stays what IaC commits as a signed document.
+- **An IaC tool that writes through the API makes durable data, not config.** Where a thing is written decides its class ([principle 17](/principles/#17-where-a-thing-is-written-decides-its-class)), and a write through the store's API lands in a durable kind of the tenant. Config stays what IaC commits as a signed document.
 - **Linked kinds carry the difference.** The app is config, its secret a secret, its connection per tenant durable and the install in progress temp, and the directory facts a connection reads are temp kinds of the same tenant ([Layered and linked kinds](/decisions/0004-the-data-model/#layered-and-linked-kinds)).
 
 #### Who connects decides
 
-A tenant's connection to its directory, chat workspace or code host is **always durable data** (`DirectoryConnection`, `SlackConnection` and the other connection kinds), entered through the UI or the API, with its credential sealed. It is never config committed by the operator: a tenant never appears in config, and a customer's change does not wait for review. A tenant has no connection to its identity provider in sluis: the upstreams are the operator's config, and a customer installation's one upstream is the broker that holds the tenants' providers ([0033](/decisions/0033-customer-connections/#which-upstreams-an-installation-has)).
+A tenant's connection to its directory, chat workspace or code host is **always durable data** (`DirectoryConnection`, `SlackConnection` and the other connection kinds), entered through the UI or the API, with its credential sealed. It is never config committed by the operator: a tenant never appears in config, and a customer's change does not wait for review. A tenant has no connection to its identity provider in sluis: the upstreams are the operator's config, and a customer installation's one upstream is the broker that holds the tenants' providers ([0032](/decisions/0032-customer-identity-installations/)).
 
 ### Schemas are Protobuf
 
-- **Protobuf is the only schema source.** Each kind is a Protobuf message, and its constraints are protovalidate rules. The wire contracts are Protobuf over ConnectRPC ([0002](/decisions/0002-families-of-actors/#contracts)); Go and Rust types are generated from the same messages.
-- **Protobuf with protovalidate is the authority in code. JSON Schema is a derived subset,** generated from the messages for editors and `helm lint` on what is not on the wire: Helm values, the bootstrap file ([0005](/decisions/0005-the-store/#the-bootstrap-file)) and external configs. It is draft 2020-12, made by a small generator of our own that reads the protovalidate rules and stops on a rule it can neither state in JSON Schema nor list as enforced by protovalidate only, committed as a golden file that CI compares, and part of the public API.
-- **Each schema has a stable `$id`,** a URL on the sluis site with its version in the path. A published identifier never changes; an incompatible change is a new version under a new path, beside the old one ([0013](/decisions/0013-release-train-packaging-and-distribution/#compatibility-between-releases)).
-- **Validation is protovalidate in Go and hand-written checks of the same rules in the Rust kit,** with shared conformance vectors ([0012](/decisions/0012-the-language-follows-the-executable/#per-actor-table)). A validator that disagrees fails the build, and each real disagreement adds a vector. The schema is embedded in each binary that loads it, and every binary validates a document against it before decoding.
+- **Protobuf is the only schema source.** Each kind is a Protobuf message, and its constraints are protovalidate rules. The wire contracts are Protobuf over ConnectRPC ([0002](/decisions/0002-families-of-actors/)); Go and Rust types are generated from the same messages.
+- **Protobuf with protovalidate is the authority in code. JSON Schema is a derived subset,** generated from the messages for editors and `helm lint` on what is not on the wire: Helm values, the bootstrap file and external configs. It is draft 2020-12, made by a small generator of our own that reads the protovalidate rules and stops on a rule it can neither state in JSON Schema nor list as enforced by protovalidate only. The result is committed as a golden file that CI compares, and it is part of the public API.
+- **Each schema has a stable `$id`,** a URL on the sluis site with its version in the path. A published identifier never changes; an incompatible change is a new version under a new path, beside the old one ([0013](/decisions/0013-release-train-packaging-and-distribution/)).
+- **Validation is protovalidate in Go and hand-written checks of the same rules in the Rust kit,** with shared conformance vectors ([0012](/decisions/0012-the-language-follows-the-executable/)). A validator that disagrees fails the build, and each real disagreement adds a vector. The schema is embedded in each binary that loads it, and every binary validates a document against it before decoding.
 - **Strictness comes from the schema.** An unknown key is an error that names the path. An error never shows the value. A retired field in a signed config document is refused; a retired field in an item that sluis wrote is read, ignored and never written again, because refusing it would make an installed item unreadable.
-- **The JSON Schema agrees with protovalidate on every constraint it can express** ([#1177](https://github.com/truvity/sluis/issues/1177), MEASURED 2026-11-03). Only protovalidate enforces cross-field CEL rules, duration and timestamp ranges, exact byte lengths, the strictness of `uri`, and the refusal of non-canonical proto3 JSON spellings, so a document that the JSON Schema accepts can still be refused at load.
+- **The JSON Schema agrees with protovalidate on every constraint it can express** ([#1177](https://github.com/truvity/sluis/issues/1177), measured 2026-11-03). Only protovalidate enforces cross-field CEL rules, duration and timestamp ranges, exact byte lengths, the strictness of `uri`, and the refusal of non-canonical proto3 JSON spellings, so a document that the JSON Schema accepts can still be refused at load.
 - **Durations in configuration files are written with a unit:** one whole number and one of `s`, `m`, `h` or `d` (`900s`, `15m`, `12h`, `30d`), with no fraction and no compound. The loader converts them to a Duration, and the generated schema checks the pattern `^[0-9]+(s|m|h|d)$`. In a value that is not a configuration file a duration is a proto3 JSON duration, such as `30s`.
-- **Pkl is not used.** <!-- terms-allow: pkl -->
 
 ### What is not data
 
@@ -221,12 +224,12 @@ These are not kinds. The registry does not list them, and an actor cannot read o
 
 | Not a kind | Where it lives instead |
 |---|---|
-| Authority keys and wrapping keys | In their key store (a card or KMS); key@ uses them in place ([0006](/decisions/0006-keys-and-sealing/#key-purposes)) |
-| Opened data keys | In key@'s memory only, with a TTL per entry ([0006](/decisions/0006-keys-and-sealing/#data-keys)) |
-| Sealed grants | In flight only; a one-shot use leaves a `SpentGrant` hash ([0007](/decisions/0007-policy-and-sealed-grants/#sealed-grants)) |
-| Audit records, usage facts, checkpoints, the writer's state and the search index | In the audit family ([0028](/decisions/0028-audit-pieces/), [0029](/decisions/0029-the-audit-log/)). Audit's own documents are config kinds (`AuditLog`, `AuditWitnesses` and `AuditCatalogue`), loaded by the store like the rest |
-| The bootstrap file | store@'s own local file ([0005](/decisions/0005-the-store/#the-bootstrap-file)) |
-| The credentials of the holders | The engine login and secret-source access of store@, the destination credentials of exporter@, key@'s PIN or KMS permission and the audit blob credential: platform-provided (a systemd credential, an IAM role, a service account), never served to an actor |
+| Authority keys and wrapping keys | In their key store (a card or KMS); key@ uses them in place ([0006](/decisions/0006-keys-and-sealing/)) |
+| Opened data keys | In key@'s memory only, with a TTL per entry ([0006](/decisions/0006-keys-and-sealing/)) |
+| Sealed grants | In flight only; a one-shot use leaves a `SpentGrant` hash ([0007](/decisions/0007-policy-and-sealed-grants/)) |
+| Audit records, usage facts, checkpoints, the writer's state and the search index | In audit ([audit 0008](https://github.com/truvity/audit/blob/master/docs/decisions/0008-the-log.md)). Audit's own documents are config kinds, declared in the same registry (above) and loaded by the store like the rest |
+| The bootstrap file | store@'s own local file ([0005](/decisions/0005-the-store/)) |
+| The credentials of the holders | The engine login and secret-source access of store@, the destination credentials of exporter@, key@'s PIN or KMS permission and the audit blob credential: provided by the platform the installation runs on (a systemd credential, an IAM role, a service account), never served to an actor |
 | Minted credentials | Never recorded |
 | Backup archives | In the backup bucket; each archive's provenance is a `backup.completed` audit fact ([0010](/decisions/0010-backup-and-recovery/)) |
 | Exported copies | In the destinations exporter@ writes ([0009](/decisions/0009-export/)) |
@@ -238,10 +241,11 @@ These are not kinds. The registry does not list them, and an actor cannot read o
 - One registry answers who writes, where a value lives, whether it is backed up, what a restore does with it, whether it may leave sluis and what audit and telemetry may say. The lists each part kept by hand are generated from it: the deny matrix, the backup list, the export list, the audit redaction and the telemetry allowlist.
 - A customer is onboarded, changed and removed with no pull request, no deployment and no operator. Every change is an audited item inside a bound that a reviewer has read, so the reviewed surface stays small: templates and bounds, not one entry per tenant. A stolen tenant-admin session can tighten and change that tenant's settings inside the bounds, and cannot widen anything past them.
 - A new setting costs a kind in the registry, a class and a writer, and a setting with layers costs one kind per layer. The cost is accepted so that the store, and not each actor's code, enforces ownership and direction.
+- Because the registry is atoom's block, sluis, audit and any later product declare kinds in one mechanism and share its tests. sluis's kinds stay in sluis.
 - Sealed fields cannot be searched. A question over sealed content needs an index of keyed hashes designed with the kind.
 - Temp kinds can be lost, so every writer treats them as such: a lost `SessionChain` costs a sign-in.
 - The effective value of a layered kind is composed on read, so a store read of a layered group costs a read per layer. The store caches the config layers in its snapshot.
-- Moving a v1 installation is part of the cutover tooling of the parity milestone ([#1017](https://github.com/truvity/sluis/issues/1017)).
+- Moving a v1 installation is part of the cutover tooling of the parity milestone ([#1017](https://github.com/truvity/sluis/issues/1017); the order is on the [roadmap](/roadmap/)).
 - The pages that follow are [Data](/concepts/data/), [Kinds](/reference/kinds/) and [Rules](/reference/rules/); the last two are generated from the registry.
 
 ## Roads not taken
@@ -250,6 +254,7 @@ These are not kinds. The registry does not list them, and an actor cannot read o
 - **Hand-written JSON Schema as the source.** Helm schemas and the reference pages would be written again from it and drift.
 - **CUE as the source.** A third language for a job that Protobuf and protovalidate already do.
 - **The `protoschema-plugins` generator, with a post-processor.** The spike measured (2026-11-03) 152 of 243 documents in agreement as generated, and the post-processor had to rewrite durations, drop the `required` on every scalar and restore bounds the plugin drops; it writes the JSON names of proto3, not the keys of the files, and a plugin release would change the golden file without a change of ours. The generator of our own states the few rules the files use and stops on any other, so a rule is never dropped silently.
+- **A registry private to sluis.** audit and session would each build their own kind registry, addresses and signed-config checks. One block that any product extends keeps them in one mechanism.
 - **A five-way classification by how a value came to be (written by hand, set by an operator, observed, rebuilt, issued).** It mixed where a value lives with who wrote it, so one setting needed rules from several classes, and the lists for backup and export kept disagreeing. The storage class is decided by where the value is written.
 - **A level per field (public, internal, personal, secret).** Every field of every kind would need a reviewed annotation, and the store cannot tell a sealed field from a plain one. Treatment per kind is enforced without parsing the value.
 - **An installation as a scope.** A boundary could then read another boundary's data. One signed document written into every boundary keeps each boundary's reads inside itself.
@@ -264,5 +269,6 @@ These are not kinds. The registry does not list them, and an actor cannot read o
 
 ## Follow-ups
 
-- The schema fidelity spike reported on 2026-11-03; the golden file and the validators of the first schema are in place, and the shared protovalidate vectors land with the first kind that carries protovalidate rules in code: [#1177](https://github.com/truvity/sluis/issues/1177).
+- The shared protovalidate vectors land with the first kind that carries protovalidate rules in code: [#1177](https://github.com/truvity/sluis/issues/1177).
 - The cutover of a v1 installation's configuration: [#1017](https://github.com/truvity/sluis/issues/1017).
+- Open: the `state` block is planned in atoom (step B7 of its [plan](https://github.com/truvity/atoom/blob/master/docs/plan.md)); until it exists, sluis declares its kinds in `kinds.yaml` and no issue tracks the move to Protobuf kind options.

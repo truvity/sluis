@@ -1,4 +1,5 @@
-# VAULT: Fallback credential vault
+# VAULT: Fallback credential vault (archived area).
+# Every record is withdrawn. The ids stay reserved.
 schema: 1
 area: VAULT
 requirements:

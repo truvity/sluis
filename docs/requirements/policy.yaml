@@ -327,7 +327,7 @@ requirements:
   - id: REQ-POLICY-024
     area: POLICY
     statement: "policy MUST accept the customer, the organisation and the product of a token as facts of a decision."
-    rationale: "A service that decides on them reads facts that sluis set, not parameters of the call (ADR 0045; ADR 0007)."
+    rationale: "A service that decides on them reads facts that sluis set, not parameters of the call (ADR 0032; ADR 0007)."
     level: MUST
     source: design-decision
     status: planned

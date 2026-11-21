@@ -6,11 +6,11 @@ sidebar:
   order: 3
 ---
 
-Google Workspace is the corporate directory in the common case. People sign in with their Google account, and sluis reads the tenant's users, groups and domains as facts. `adapter-upstream-oidc@<boundary>` does both jobs, with two separate credentials.
+Google Workspace is the corporate directory in the common case. People sign in with their Google account, and sluis reads the tenant's users, groups and domains as facts. `adapter-upstream-oidc@<boundary>` does both jobs, with two separate credentials. The sign-in is built; the directory is planned ([0025](/decisions/0025-integrations/#built-and-planned)).
 
 ## What it's for
 
-- **People sign in with the account they already have.** An engineer opens a console or runs `sluis login`, is routed to the right tenant by the domain of their e-mail address, passes the tenant's MFA, and returns with a sluis session. sluis never sees a password.
+- **People sign in with the account they already have.** An engineer opens a console or runs `sluis login`, is routed to the right tenant by the domain of their e-mail address, passes the tenant's MFA, and returns with a sign-in session at sluis. sluis never sees a password.
 - **Policy talks about groups that already exist.** "Members of `platform-engineers@example.org` may assume this role" needs the group's membership, which the adapter supplies and keeps fresh.
 - **A leaver loses access when the directory says so.** Membership changes reach sluis on the next refresh. A failed read is an error, never an empty answer that would remove everyone.
 
@@ -18,7 +18,7 @@ Google Workspace is the corporate directory in the common case. People sign in w
 
 | Kind | What it does for Google |
 |---|---|
-| `Upstream` | Runs the sign-in: sends the person to Google, exchanges the code, checks the returned ID token (signature, issuer, audience, `azp`, `nonce` and the time claims), and returns a verified identity to `session` ([0025](/decisions/0025-integrations/#the-upstream-contract)). |
+| `Upstream` | Runs the sign-in: sends the person to Google, exchanges the code, checks the returned ID token (signature, issuer, audience, `azp`, `nonce` and the time claims), and returns a verified identity to `signin` ([0025](/decisions/0025-integrations/#the-upstream-contract)). |
 | `FactsSource` | Reads users, groups and domains into directory facts of the tenant, refreshed on an interval, and answers "which groups is this person in" with its freshness: `as_of`, `max_age` and whether the answer is authoritative. |
 
 ## Connections
@@ -31,7 +31,7 @@ The two jobs use different credentials, so they are **two connections**. One ada
 | The directory | `DirectoryConnection`, written by `adapter-upstream-oidc` | Durable, per tenant, credential sealed | The UI or the API |
 
 - **A tenant's directory is read through its own connection.** The facts are the temp kinds `DirectoryUser`, `DirectoryGroup` and `DirectoryMembership` of that tenant, sealed because they hold names and addresses, with a time to live of 24 hours by default and 7 days at most ([0025](/decisions/0025-integrations/#what-an-integration-may-return)).
-- **A scheduled re-sync asks `policy` for a grant** for one tenant at a time, because no caller starts it. On boards, a full re-sync is many commits of the cluster; its cost is the subject of [#1180](https://github.com/truvity/sluis/issues/1180) and its result is recorded in [0037](/decisions/0037-capacity-is-measured-before-it-is-promised/#board-capacity).
+- **A scheduled re-sync asks `policy` for a grant** for one tenant at a time, because no caller starts it. On boards, a full re-sync is many commits of the cluster; its measured cost is in [0037](/decisions/0037-capacity-is-measured-before-it-is-promised/#board-capacity) ([#1180](https://github.com/truvity/sluis/issues/1180)).
 - **The operator's own company is a tenant,** so its directory connection is durable too.
 
 ## What sluis asks the vendor for
@@ -44,7 +44,7 @@ For sign-in, an OAuth client of type *Web application* with the scopes `openid`,
 | Service-account key with delegation | A JSON key, sealed. Some organisations forbid creating keys. |
 | Admin consent | A Super Admin's refresh token, sealed, which dies with that account. |
 
-The keyless method is the target for new installations. It needs the GCP exchange ([#871](https://github.com/truvity/sluis/issues/871)), with its token signed under the ES256 cloud-federation exception ([0006](/decisions/0006-keys-and-sealing/#named-exceptions)); until that is built, an installation uses a key or admin consent. The [setup patterns](/integrations/connecting/#google-workspace) compare the three.
+The keyless method is the target for new installations. It needs the GCP exchange ([#871](https://github.com/truvity/sluis/issues/871)); until that is built, an installation uses a key or admin consent. The [setup patterns](/integrations/connecting/#google-workspace) describe the three and their steps.
 
 ## What policy controls
 
@@ -71,7 +71,7 @@ What sluis does with it ([0017](/decisions/0017-identity-and-sign-in/#what-an-up
 
 ## What is audited
 
-Each sign-in (client, class of session) and each refusal; a directory connected, changed or disconnected; a failed directory read, as a failure. No Google credential or refresh token is ever recorded.
+Each sign-in (client, class of sign-in session) and each refusal; a directory connected, changed or disconnected; a failed directory read, as a failure. No Google credential or refresh token is ever recorded.
 
 ## Setup
 

@@ -89,7 +89,7 @@ requirements:
     rationale: "Asymmetric client authentication removes shared secrets."
     level: SHOULD
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-CLIENT-058: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-CLIENT-058]
@@ -108,7 +108,7 @@ requirements:
     rationale: "Asymmetric client authentication removes shared secrets."
     level: SHOULD
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-CLIENT-054: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-CLIENT-054]
@@ -127,7 +127,7 @@ requirements:
     rationale: "A short lifetime limits replay."
     level: SHOULD
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-CLIENT-055: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-CLIENT-055]
@@ -145,7 +145,7 @@ requirements:
     rationale: "Asymmetric client authentication removes shared secrets."
     level: SHOULD
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-CLIENT-056: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-CLIENT-056]
@@ -347,7 +347,7 @@ requirements:
     rationale: "Some external systems can use only client certificates."
     level: MAY
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-CLIENT-059: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-CLIENT-059]
@@ -363,7 +363,7 @@ requirements:
     rationale: "A machine proves what it is with a workload proof and holds no client secret (ADR 0022)."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -521,7 +521,7 @@ requirements:
     rationale: "The profile forbids shared secrets."
     level: MUST
     source: standard
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-CLIENT-053: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-CLIENT-053]
@@ -537,7 +537,7 @@ requirements:
     rationale: "The profile requires pushed authorization requests."
     level: MUST
     source: standard
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-CLIENT-052: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-CLIENT-052]
@@ -553,7 +553,7 @@ requirements:
     rationale: "A replayed request_uri must fail."
     level: MUST
     source: standard
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-AUTHN-113: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-AUTHN-113]
@@ -569,7 +569,7 @@ requirements:
     rationale: "The assertion rules are MUST for the profile."
     level: MUST
     source: standard
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-CLIENT-054: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-CLIENT-054]
@@ -585,7 +585,7 @@ requirements:
     rationale: "A short assertion limits replay."
     level: MUST
     source: standard
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-CLIENT-055: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-CLIENT-055]
@@ -601,7 +601,7 @@ requirements:
     rationale: "A replayed assertion must fail."
     level: MUST
     source: standard
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-CLIENT-056: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-CLIENT-056]
@@ -619,7 +619,7 @@ requirements:
     rationale: "A tenant must not widen its own claims, trust ceiling or redirect rules (ADR 0021)."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -646,7 +646,7 @@ requirements:
 
   - id: REQ-CLIENT-043
     area: CLIENT
-    statement: "session MUST read the declaration of a client and fetch its secret exactly once for each token or revocation request whose credentials it can read, whether the client is unknown, public, exchange or confidential."
+    statement: "signin MUST read the declaration of a client and fetch its secret exactly once for each token or revocation request whose credentials it can read, whether the client is unknown, public, exchange or confidential."
     rationale: "The same work for every client keeps the answer from telling a caller which client ids exist or which have a secret."
     level: MUST
     source: design-decision
@@ -660,7 +660,7 @@ requirements:
 
   - id: REQ-CLIENT-044
     area: CLIENT
-    statement: "session MUST NOT write a log line or an audit record that holds a client secret, an Authorization header or a request body."
+    statement: "signin MUST NOT write a log line or an audit record that holds a client secret, an Authorization header or a request body."
     rationale: "A secret in a log is a secret in every place the log is copied to."
     level: MUST
     source: design-decision

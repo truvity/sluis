@@ -8,7 +8,7 @@ It describes the project as it is today: one maintainer, a young v2 line, and a 
 - `main` holds **v2**, built from scratch. It started as an orphan branch and shares no history with v1.
 - `master` holds **v1**. It continues its agreed roadmap releases (v1.80 to v1.85) and takes fixes. Any other v1 feature needs a decision issue first. New feature requests target v2.
 - v2 is built alongside v1 and has to reach parity with v1 as it is at cutover.
-- v1 is supported until the maintainers' own production deployments run v2. There is no fixed end date. See [ADR 0001](docs/decisions/0001-v1-and-v2-lines.md).
+- v1 is supported until it is switched off after the last relying party has moved to v2. There is no fixed end date. See [ADR 0001](docs/decisions/0001-v1-and-v2-lines.md).
 - v1 issues carry the label `line:v1`. An issue without it is about v2. The two lines have their own boards: [sluis v2](https://github.com/orgs/truvity/projects/9) and [sluis v1](https://github.com/orgs/truvity/projects/10).
 - At cutover `master` is renamed `v1` and `main` becomes the default branch. Before the rename, workflow triggers, dependency-bot settings and rulesets learn the new name.
 - v2 versions are `v2.x`. Until cutover they are pre-releases named `v2.0.0-alpha.N`. The Go module path ends in `/v2`.
@@ -18,7 +18,7 @@ It describes the project as it is today: one maintainer, a young v2 line, and a 
 
 ## Roles
 
-**Maintainer.** Oleg is the sole maintainer today. The maintainer decides scope, accepts ADRs, grants compatibility exceptions, merges and cuts releases.
+**Maintainer.** One person is the maintainer today. The maintainer decides scope, accepts ADRs, grants compatibility exceptions, merges and cuts releases.
 
 **Reviewers.** Anyone may review a pull request. A review from a non-maintainer is welcome and is read, but it does not replace the maintainer's decision. Reviewers who work in a part of the code for a long time may be named as code owners when the rules tighten (see below).
 
@@ -28,7 +28,7 @@ It describes the project as it is today: one maintainer, a young v2 line, and a 
 
 ## Scope
 
-sluis issues credentials and brokers identity. It is not a key-value store, a transit service or a data-path proxy.
+sluis issues credentials and brokers identity. It is not a general-purpose secrets engine (no dynamic secrets, leases or transit) and not a data-path proxy. Its KV core service holds static secrets under the same policy, keys and audit ([0047](docs/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns.md)).
 New scope enters only through an ADR that names its owner, its boundary and its non-goals.
 A change to the design model (the shape of components and how they depend on each other) also needs an ADR.
 
@@ -38,7 +38,7 @@ A change to the design model (the shape of components and how they depend on eac
 2. **Discussion.** Comments on the issue. The maintainer may also discuss it internally. Internal discussion can hold material that must not be public, such as details of a private deployment.
 3. **ADR pull request.** When the direction is clear, someone opens a pull request that adds `docs/decisions/NNNN-title.md` with status `Proposed`. It follows the [template](docs/decisions/0000-template.md), lists the roads not taken (one line each) and names its follow-ups with their issues. The order of work is in [Decision records](docs/contributing/decisions.md); the format and the status values are in the [decisions README](docs/decisions/README.md).
 4. **Accepted.** A record is `Accepted` only when every part of it is decided. The maintainer merges it with status `Accepted`, and that merge is the decision. A record with a part still open is merged as `Proposed`, with the open part tracked in an issue the record links, and a later pull request sets it to `Accepted` once the part is decided. A rejected proposal is merged with status `Rejected`, so the reasoning is kept.
-5. **Changing a decision.** During the v2 design phase, before the first v2 release, the maintainer may have records rewritten, merged and renumbered in place, to keep the set short and each rule in one record; the earlier text stays in git history, the old addresses redirect, and a rewritten record carries no history lines. After the first v2 release, records are append-only: a new ADR supersedes the old one, the old status line says so (`Superseded by NNNN`, or `Accepted; amended by NNNN`), and a number is never reused. The details are in the "Design phase" section of the [decisions README](docs/decisions/README.md).
+5. **Changing a decision.** The records were rewritten once, cleanly, so that each states the current design and stands alone; the earlier text stays in git history and the old addresses redirect. From that rewrite on, records are append-only: a new ADR supersedes the old one, the old status line says so (`Superseded by NNNN`, or `Accepted; amended by NNNN`), the old record moves to the archive, and a number is never reused. A decision lives in one repository: atoom, audit and session have their own records. The details are in the [decisions README](docs/decisions/README.md).
 
 Small changes that follow existing ADRs need no proposal. A pull request is enough.
 

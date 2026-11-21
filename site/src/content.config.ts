@@ -24,7 +24,8 @@ const decisionsLoader = (): Loader => ({
     if (existsSync(decisionsRoot)) {
       await glob({
         base: decisionsRoot,
-        pattern: ['*.md', '!README.md', '!_*'],
+        // The archive holds the superseded records under their own numbers.
+        pattern: ['*.md', 'archive/*.md', '!README.md', '!_*'],
       }).load(context);
     }
     if (context.store.keys().length === 0) {

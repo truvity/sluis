@@ -1,6 +1,6 @@
 ---
 title: Deployment and listeners
-description: "L3, enforcement per installation: how IAM, key policies, systemd, nftables, Landlock and pods hold each unit to the registries, and what listens where."
+description: "L3: how IAM, key policies, systemd, nftables, Landlock and pods hold each unit to the registries, what listens where, and the residual risk."
 status: target
 sidebar:
   order: 3
@@ -11,7 +11,7 @@ The [registries](/architecture/#the-registries-are-the-spine) say what each acto
 Two things are enforced, and they are enforced separately:
 
 - **Who a unit is.** The runtime decides how the platform proves it: the peer uid of a socket, the role of a function, the service-account token of a pod ([0003](/decisions/0003-units-transports-and-fusion/#transports)).
-- **What a unit can reach.** Only the credential holders reach storage, keys, export destinations or the audit blob. A work actor holds no such credential, so what it can do is what its rules in the kind registry and its key purposes in the actor registry allow, checked by store@ and key@ ([0002](/decisions/0002-families-of-actors/#credential-holders)).
+- **What a unit can reach.** Only the credential holders reach storage, keys or export destinations. A work actor holds no such credential, so what it can do is what its rules in the kind registry and its key purposes in the actor registry allow, checked by store@ and key@ ([0002](/decisions/0002-families-of-actors/#credential-holders)).
 
 ## Enforcement per runtime
 
@@ -19,8 +19,8 @@ Every mechanism is generated from the registries; none is written by hand.
 
 | Runtime | Identity of a unit | Who reaches storage and keys | systemd sandboxing | nftables per uid | Landlock |
 | ------- | ------------------ | ---------------------------- | ------------------ | ---------------- | -------- |
-| **bare-metal** (a board, a virtual machine, local Docker) | The peer uid on the unit's socket; `sluis-node` issues a workload token per actor from that uid | Only store@, key@, exporter@ and the audit pieces, through drivers whose socket only the owner opens. key@ has the card to itself | Every unit (not in a container) | Default-deny egress with per-uid allow-lists, IMDS closed on a cloud VM, rqlite's Raft port between peers | Per actor where the kernel has it (5.13 or later) |
-| **serverless** (AWS Lambda) | The function's role, one per actor and per holder. Calls between functions are authorised by a resource policy | Only the roles of the holders' functions; a work function's role may invoke and send to the audit transport | The platform's sandbox | Not available. A VPC route can cut `policy` off entirely | Optional, in process |
+| **bare-metal** (a board, a virtual machine, local Docker) | The peer uid on the unit's socket; `sluis-node` issues a workload token per actor from that uid | Only store@, key@ and exporter@, through drivers whose socket only the owner opens. key@ has the card to itself | Every unit (not in a container) | Default-deny egress with per-uid allow-lists, IMDS closed on a cloud VM, rqlite's Raft port between peers | Per actor where the kernel has it (5.13 or later) |
+| **serverless** (AWS Lambda) | The function's role, one per actor and per holder. Calls between functions are authorised by a resource policy | Only the roles of the holders' functions; a work function's role may invoke and hand records to audit's transport | The platform's sandbox | Not available. A VPC route can cut `policy` off entirely | Optional, in process |
 | **kubernetes** | A projected service-account token per pod, one audience per callee; a pod per actor and per holder | Only the holders' pods. The token reaches the driver container alone, so a work pod has no cloud identity | `restricted` Pod Security, a security context per container | NetworkPolicy per pod, an egress policy per adapter pod; Cilium optional for egress by host name | Optional |
 
 The tested installations read as their runtime's row, with these details:
@@ -28,8 +28,8 @@ The tested installations read as their runtime's row, with these details:
 | Installation | What differs |
 | ------------ | ------------ |
 | **local** (bare-metal, Docker Compose on a workstation) | Software keys by default; nothing is production. A dedicated development card is opt-in: only the key@ container reaches it, through the host's smart-card service, and key@ has the card to itself ([0011](/decisions/0011-runtimes-and-installations/#the-local-installation)). Containers run as their actors' pinned uids and mount only the sockets the registry allows; no systemd sandboxing, nftables or Landlock |
-| **boards** (bare-metal, three single-board computers, a YubiKey per node) | key@ for each node's card; one rqlite cluster over the three boards, with the Raft port over mutual TLS between peers. No cloud credential for the board-only parts. Landlock is missing on the current board image's kernel, so the other layers carry the load ([Bare-metal](/runtimes/bare-metal/)) |
-| **lambda** | As its runtime row |
+| **boards** (bare-metal, three single-board computers, a YubiKey per node) | key@ for each node's card; one rqlite cluster over the three boards, with the Raft port over mutual TLS between peers. No cloud credential for the board-only parts ([Bare-metal](/runtimes/bare-metal/)) |
+| **lambda** | As its runtime row. Every function runs behind the vendored, pinned Lambda Web Adapter ([0011](/decisions/0011-runtimes-and-installations/#the-lambda-shape)) |
 | **kubernetes** (Kubernetes on AWS, EKS) | As its runtime row. A holder's driver container exchanges the projected token for its role by web identity through the cluster's IAM OIDC provider; EKS Pod Identity is not used, because its credentials reach every container of the pod ([0011](/decisions/0011-runtimes-and-installations/#kubernetes)). A cluster without AWS is not in 2.0 |
 
 A bare-metal node on a cloud VM is a possible installation, not a tested one: there the workload token is exchanged for a role per holder, KMS key policies name key@'s role alone, and the metadata service is closed to every uid but the node agent.
@@ -40,9 +40,9 @@ On bare-metal `sluis-node` issues a short-lived **workload token per actor**, fr
 
 ### IAM per holder
 
-Each holder has its own role (a function role on Lambda, a role that trusts the cluster's issuer and the driver container's token audience on Kubernetes), generated from the registries. A work function's role may only invoke the functions its call graph names and send to the audit transport. The trust relationship differs by runtime; the permissions policy is the same in all of them.
+Each holder has its own role (a function role on Lambda, a role that trusts the cluster's issuer and the driver container's token audience on Kubernetes), generated from the registries. A work function's role may only invoke the functions its call graph names and hand records to audit's transport. The trust relationship differs by runtime; the permissions policy is the same in all of them.
 
-KMS key policies allow use to key@'s role alone, and allow the control-plane actions to one named key-administrator role (the example below). There is one symmetric key per boundary, with an encryption context {boundary, tenant, purpose} for every data key it wraps, and one `ECC_NIST_P384` key per enabled signing purpose (a named exception has a key of its own type), because KMS allows one usage per key and `kms:Sign` takes no encryption context ([0006](/decisions/0006-keys-and-sealing/#keys-per-boundary-on-aws)). A work actor reaches a key only through key@, whose rules say who may ask for which purpose ([0007](/decisions/0007-policy-and-sealed-grants/#two-independent-checks)). A generated key policy for the audit log key (an example; `<account-id>` and `<install>` are placeholders). It has no statement that delegates the key to IAM through the account root, and it allows the control-plane actions, including those on the key's alias, to the named key administrators alone ([REQ-KEYS-119](/requirements/keys/#REQ-KEYS-119)):
+KMS key policies allow use to key@'s role alone, and allow the control-plane actions to one named key-administrator role (the example below). There is one symmetric key per boundary, with an encryption context {boundary, tenant, purpose} for every data key it wraps, and one `ECC_NIST_P384` key per enabled signing purpose (a named exception has a key of its own type), because KMS allows one usage per key and `kms:Sign` takes no encryption context ([0006](/decisions/0006-keys-and-sealing/#keys-per-boundary-on-aws)). A work actor reaches a key only through key@, whose rules say who may ask for which purpose ([0007](/decisions/0007-policy-and-sealed-grants/#two-independent-checks)). A generated key policy for the token-signing key (an example; `<account-id>`, `<boundary>` and `<install>` are placeholders). It has no statement that delegates the key to IAM through the account root, and it allows the control-plane actions, including those on the key's alias, to the named key administrators alone ([REQ-KEYS-119](/requirements/keys/#REQ-KEYS-119)):
 
 ```json
 {
@@ -54,7 +54,7 @@ KMS key policies allow use to key@'s role alone, and allow the control-plane act
     { "Sid": "DenyUseByAnyoneElse", "Effect": "Deny", "Principal": { "AWS": "*" },
       "Action": ["kms:Sign", "kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey*"],
       "Resource": "*",
-      "Condition": { "ArnNotEquals": { "aws:PrincipalArn": "arn:aws:iam::<account-id>:role/sluis-<install>-key" } } },
+      "Condition": { "ArnNotEquals": { "aws:PrincipalArn": "arn:aws:iam::<account-id>:role/sluis-key-<boundary>" } } },
     { "Sid": "ControlPlaneToKeyAdministratorsOnly", "Effect": "Allow",
       "Principal": { "AWS": "arn:aws:iam::<account-id>:role/sluis-<install>-key-admin" },
       "Action": ["kms:CreateAlias", "kms:UpdateAlias", "kms:DeleteAlias", "kms:PutKeyPolicy", "kms:ScheduleKeyDeletion", "kms:DisableKey"],
@@ -103,9 +103,9 @@ MemoryDenyWriteExecute=yes
 RuntimeDirectory=sluis/policy/prod
 ```
 
-The packages ship template units only, `sluis-<actor>@.service` and `sluis-<actor>@.socket`, with `User=sluis-<actor>-%i`, `RuntimeDirectory=sluis/<actor>/%i` and `ListenStream=/run/sluis/<actor>/%i.sock`. A generator in the package reads the bootstrap files in `/etc/sluis/bootstrap.d/`, one for each boundary ([Where it lives](/reference/bootstrap-file/#where-it-lives)), and creates the instances and their `sysusers.d` entries. An actor whose registry row lists no egress host, `entry` included, gets `PrivateNetwork=yes` and `RestrictAddressFamilies=AF_UNIX` ([0003](/decisions/0003-units-transports-and-fusion/#units)). A work actor needs no credential file: the credentials of a holder, such as store@'s engine login or the PIN of a card, arrive through `LoadCredentialEncrypted=` on that holder's unit alone, and a holder's driver is a unit beside it.
+The packages ship template units only, `sluis-<actor>@.service` and `sluis-<actor>@.socket`, with `User=sluis-<actor>-%i`, `RuntimeDirectory=sluis/<actor>/%i` and `ListenStream=/run/sluis/<actor>/%i.sock`. A generator in the package reads the bootstrap files in `/etc/sluis/bootstrap.d/`, one for each boundary ([Bootstrap file](/reference/bootstrap-file/)), and creates the instances and their `sysusers.d` entries. An actor whose registry row lists no egress host, `entry` included, gets `PrivateNetwork=yes` and `RestrictAddressFamilies=AF_UNIX` ([0003](/decisions/0003-units-transports-and-fusion/#units)). A work actor needs no credential file: the credentials of a holder, such as store@'s engine login or the PIN of a card, arrive through `LoadCredentialEncrypted=` on that holder's unit alone, and a holder's driver is a unit beside it.
 
-The systemd floor is 252, which Ubuntu 26.04 LTS, Rocky Linux 10.x and Amazon Linux 2023 meet. A board image older than the floor is a declared exception, and the boards no longer need it: they run Ubuntu 26.04 and Rocky 10 ([Bare-metal](/runtimes/bare-metal/#ubuntu-2204-boards-are-gone)). The boards deploy refuses to write a credential below the floor.
+The systemd floor is 252, which Ubuntu 26.04 LTS, Rocky Linux 10.x and Amazon Linux 2023 meet. The boards deploy refuses to write a credential below the floor ([0013](/decisions/0013-release-train-packaging-and-distribution/#supported-platforms)).
 
 ### nftables per uid
 
@@ -135,8 +135,7 @@ A TCP port can be reached by anything that can route to it; a Unix socket only b
 
 ### The rule
 
-- **`entry`'s public API is the only listener that faces the edge,** and `entry` authenticates every request itself. On bare-metal it is a Unix socket that `cloudflared` forwards to, and `entry` runs with `PrivateNetwork=yes` and no network at all. On Kubernetes it is a Unix socket too, and the key-less edge relay in the pod forwards to it. Only inside the Lambda sandbox, where the edge cannot reach a Unix socket, is it TCP on `127.0.0.1`.
-- **An audit front has an `entry` of its own,** on its own host (`sluis-audit.example.com`), and it is its front's only edge listener ([0028](/decisions/0028-audit-pieces/#the-audit-front)).
+- **`entry`'s public API is the only listener that faces the edge,** and `entry` authenticates every request itself. On bare-metal it is a Unix socket that `cloudflared` forwards to, and `entry` runs with `PrivateNetwork=yes` and no network at all. On Kubernetes it is a Unix socket too, and the key-less edge relay in the pod forwards to it. On Lambda every function's process listens on `127.0.0.1` inside its sandbox, and the Web Adapter is the only client of that port; only the `entry` function is reached from outside, and every other function by invoke only.
 - **Every other actor and every driver listens on Unix sockets only on a board,** one socket per instance, `/run/sluis/<actor>/<boundary>.sock`. No actor has a TCP listener on a board, and a holder and a driver never get one.
 - **Reachability is generated from the registries, by group on a host and by mount on Kubernetes.** On a host every socket is mode 0660 with a group that is the set of actors allowed to call it. On Kubernetes an actor's pod accepts gRPC from its callers on the pod address, admitted by a NetworkPolicy from the callers only; a driver listens on its `emptyDir` socket only, and a generated check fails the build when a container that holds a cloud token exposes a listener ([0011](/decisions/0011-runtimes-and-installations/#kubernetes)).
 - **The callee checks the caller.** It reads the peer's credentials with `SO_PEERCRED`, maps the uid to an actor and checks the call graph, default deny. key@ goes further: each caller has a socket of its own, in a directory only that caller can open ([0006](/decisions/0006-keys-and-sealing/#exclusive-card-access)).
@@ -157,9 +156,10 @@ An example of the socket directory on one board (illustrative):
   store/prod.sock           group: every actor that has a data port
   key/session-prod/         one socket per caller; only that caller opens it
   key/signer-prod/
-  writer/prod.sock          group: every actor that emits in direct mode
   node/cred.sock            workload token; one answer per uid
 ```
+
+The socket, unit and user of `signin` still carry the executable's name, `session`, as the record of the actor says ([0002](/decisions/0002-families-of-actors/#the-families)).
 
 ### The edge connector reaches a Unix socket
 
@@ -183,7 +183,7 @@ The listener is public by design, and the actor each request is routed to authen
 | ------------------------ | -------- | ------------ |
 | bare-metal: local | A Unix socket on a shared volume; `entry`'s container has no network | The forwarder, a Compose service (a generic reverse proxy that ends TLS) that mounts the socket and publishes a port for the developer's browser or the test harness ([The local installation](/runtimes/local/)). Production installations never publish one ([0011](/decisions/0011-runtimes-and-installations/#the-local-installation)) |
 | bare-metal: boards, or a virtual machine | A Unix socket | `cloudflared` on the same host, a tunnel to the public hostname |
-| serverless: lambda | `127.0.0.1:<port>` inside the function's sandbox, a micro-VM that holds only sluis's own processes | The Lambda Web Adapter, pinned and vendored into sluis's own layer; API Gateway in front, on a custom domain with mutual TLS that only Cloudflare's authenticated pull can pass, with the default `execute-api` endpoint disabled (decisions E1 and E2 A of 2026-11-18) |
+| serverless: lambda | `127.0.0.1:<port>` inside the function's sandbox, a micro-VM that holds only sluis's own processes | The Lambda Web Adapter, pinned and vendored; API Gateway in front, on a custom domain with mutual TLS that only Cloudflare's authenticated pull can pass, with the default `execute-api` endpoint disabled ([0011](/decisions/0011-runtimes-and-installations/#the-cloudflare-edge)) |
 | kubernetes | A Unix socket in the pod | The edge relay in the same pod, routed from the cluster's own Cloudflare tunnel and gateway by an HTTPRoute or an Ingress (the default), or a `cloudflared` sidecar for a cluster without its own tunnel |
 
 ### The console's static host
@@ -195,8 +195,6 @@ The console's single-page application is served by each runtime's static host: a
 On boards the traffic between nodes is one flow: **rqlite's Raft port, over mutual TLS with a certificate per cluster,** admitted by the firewall from the declared peers only ([0003](/decisions/0003-units-transports-and-fusion/#calls-between-nodes)). Everything else crosses through the store or the blob:
 
 - a locked board gets its PIN through the store: its key@ writes a request and an unlocked peer's key@ writes the PIN sealed to it ([0006](/decisions/0006-keys-and-sealing/#touch-and-pin));
-- the `peer` witnesses meet through the audit blob ([0029](/decisions/0029-the-audit-log/#witnesses));
-- an audit transport to a separate audit installation is a queue or NATS JetStream, not a socket between boards;
 - calls between boundaries are federation and name SPIFFE IDs ([0008](/decisions/0008-boundaries-and-tenants/#federation-between-boundaries)).
 
 No actor is otherwise reachable from another node: a work actor asks the holders of its own node, and the deny tests check that nothing else binds a TCP address, apart from rqlite's client API on the loopback address, which only store@'s driver reaches ([0005](/decisions/0005-the-store/#engines)).
@@ -213,9 +211,8 @@ Some guarantees cannot be matched without hardware isolation per process. They a
 | **The node agent is a trusted base** | It can obtain a workload token for every actor on its node | Keep it tiny and audited; it parses no caller input beyond a fixed protocol and holds no key, because key@ signs its tokens |
 | **A holder is one door** | A compromised key@ can use, not extract, every key on its card, and a compromised store@ can read secret-source values and change or delete items in its engine ([0005](/decisions/0005-the-store/#secret-sources)) | One small unit each, running only its own code and its drivers, with no work actor beside it; no network for key@ on a board; a socket per caller; content-aware signing; a rate limit; the audit log and the backup against changed items |
 | **One PIN per card** | A PIV card has no per-slot caller separation. Unattended signing needs a touch policy of never, so physical theft of a powered host is use | key@ is the only process that opens the card; a stolen board is replaced and its certificate revoked by ritueel, which uses the roots only in a ceremony |
-| **A compromised writer with no witness** | It can get a rewritten checkpoint signed. A compliance lock stops overwriting, not a split view | A `peer` or `external` witness exposes a split view; `sluis config check` warns when there is none ([0029](/decisions/0029-the-audit-log/#witnesses)) |
 | **A cluster is one trust domain** | A compromised node reads replicated data | The blast radius is the installation, not the estate |
 | **Shared egress address** | One NAT means no per-actor source identity at the network layer. A proxy is a software control | Make the proxy mandatory by firewall |
 | **Account or key-admin compromise** on AWS | A KMS key policy cannot hide use from the account root or a key administrator | The control-plane actions are denied to every actor, and every use of the account's emergency access is audited |
 
-Serverless removes the first three rows: the platform attests the function and runs each in its own micro-VM. That is why serverless needs no node agent. The threat model has the attacker positions and their order ([Threat model](/security/threat-model/)).
+Serverless removes the first three rows: the platform attests the function and runs each in its own micro-VM. That is why serverless needs no node agent. The threat model has the attacker positions and their order ([Threat model](/security/threat-model/)); the risks of the audit log are audit's.

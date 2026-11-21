@@ -32,7 +32,6 @@ dir /v/key-exchange 61014 61703 2750
 dir /v/key-exporter 61014 61713 2750
 dir /v/key-indexer 61014 61717 2750
 dir /v/key-policy 61014 61705 2750
-dir /v/key-quota 61014 61708 2750
 dir /v/key-reader 61014 61718 2750
 dir /v/key-session 61014 61701 2750
 dir /v/key-signer 61014 61704 2750
@@ -58,7 +57,6 @@ dir /v/run-key/dev/exchange 61014 61014 0751
 dir /v/run-key/dev/exporter 61014 61014 0751
 dir /v/run-key/dev/indexer 61014 61014 0751
 dir /v/run-key/dev/policy 61014 61014 0751
-dir /v/run-key/dev/quota 61014 61014 0751
 dir /v/run-key/dev/reader 61014 61014 0751
 dir /v/run-key/dev/session 61014 61014 0751
 dir /v/run-key/dev/signer 61014 61014 0751

@@ -1,20 +1,18 @@
 # 0033 — An installation federates to a fixed set of upstreams that its operator declares, and a customer installation sees exactly one
 
-**Status:** Superseded by 0045
+**Status:** Superseded by 0032
 **Layer:** customer identity
 **Date:** 2026-11-12
 
 Proposal: [issue #916](https://github.com/truvity/sluis/issues/916).
 
-> Superseded on 2026-11-12 by [0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/): federation of customers' own identity providers is a feature of the upstream realms, and an installation trusts the one realm of its boundary (D1 B, D3, D7 A, 2026-11-12).
-
-> Read with the amendment of 2026-11-18 of [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv): the Customer identity phase returns with a narrow scope, the exchange of a token of the trusted realm for a sluis token with customer, org and product ([0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)). This record stays superseded and nothing in it is built.
+> Archived in the clean rewrite of 2026-11-21. It is kept as it was decided and is superseded by [0032](/decisions/0032-customer-identity-installations/). Nothing in it is built.
 
 ## Context
 
 When more than one upstream is connected, sluis must decide where to send a person: to the customer-identity product that is the default, or to the identity provider of the person's own company. Four things were left open or in conflict.
 
-- **Which upstreams an installation has, and who adds one.** Letting every customer organisation connect its own identity provider to sluis would mean thousands of connections to serve, an egress path to hosts that nobody knows in advance, and a proof of each organisation's domain. The tenants' identity providers belong to the customer-identity product, which brokers them ([0031](/decisions/0031-ciam-is-a-broker/#who-owns-what)), so sluis need not be a second broker.
+- **Which upstreams an installation has, and who adds one.** Letting every customer organisation connect its own identity provider to sluis would mean thousands of connections to serve, an egress path to hosts that nobody knows in advance, and a proof of each organisation's domain. The tenants' identity providers belong to the customer-identity product, which brokers them ([0031](/decisions/archive/0031-ciam-is-a-broker/#who-owns-what)), so sluis need not be a second broker.
 - **A connection's trust.** [REQ-FED-004](/requirements/fed/#REQ-FED-004) gives a connection a "trust policy" of an assurance ceiling, methods and an age, [REQ-AUTHN-010](/requirements/authn/#REQ-AUTHN-010) states the ceiling again, and the page has a `trust` field that limits what a sign-in may reach. Two ideas share one word.
 - **`idp_hint`** is named in #916 and has no record.
 - **Groups.** [REQ-FED-016](/requirements/fed/#REQ-FED-016) says sluis must not read upstream roles or groups, and the [OIDC upstream](/integrations/oidc-upstream/) page offers `groups: ignore | map | trust`.
@@ -26,18 +24,18 @@ An identity provider is controlled by its administrators. It can send any subjec
 ### Which upstreams an installation has
 
 - **The internal installation sees three upstreams.** It runs serverless on Lambda for infrastructure access, and it federates to a fixed set of upstreams that the operator declares: three, each a Google Workspace, one per company of the operator's group. Each is an `Upstream` of config ([0004](/decisions/0004-the-data-model/#profiles)), written by IaC under review. These are fixed config and not tenant self-service: a company's staff cannot add an upstream, and a change of upstream waits for review.
-- **The customer installation sees exactly one upstream: the CIAM broker, Keycloak.** It runs on Kubernetes on AWS (EKS), for customer and product access. Each customer's own identity provider is configured on the Keycloak side (Keycloak Organizations holds the tenants' providers) and never in sluis. sluis sees the broker's ID token and one issuer, and stays one hop away from every tenant's provider ([0031](/decisions/0031-ciam-is-a-broker/#who-owns-what)). `sluis config check` refuses a second upstream at the front of a customer installation ([REQ-FED-035](/requirements/fed/#REQ-FED-035)).
+- **The customer installation sees exactly one upstream: the CIAM broker, Keycloak.** It runs on Kubernetes on AWS (EKS), for customer and product access. Each customer's own identity provider is configured on the Keycloak side (Keycloak Organizations holds the tenants' providers) and never in sluis. sluis sees the broker's ID token and one issuer, and stays one hop away from every tenant's provider ([0031](/decisions/archive/0031-ciam-is-a-broker/#who-owns-what)). `sluis config check` refuses a second upstream at the front of a customer installation ([REQ-FED-035](/requirements/fed/#REQ-FED-035)).
 - **The operator declares which upstream serves which e-mail domain,** as the `domains` of the `Upstream`. The operator is the authority for that mapping, so sluis asks for no proof of a domain.
-- **The upstream hosts are known,** so the adapter's egress is an allow-list of those hosts and sluis runs no general egress proxy ([The upstream hosts are known](/decisions/0033-customer-connections/#the-upstream-hosts-are-known)).
-- **A person's tenant is the tenant of the client they sign in to,** and the organisation id that the upstream sends maps only a tenant's own business staff ([Which tenant a person belongs to](/decisions/0033-customer-connections/#which-tenant-a-person-belongs-to)).
+- **The upstream hosts are known,** so the adapter's egress is an allow-list of those hosts and sluis runs no general egress proxy ([The upstream hosts are known](/decisions/archive/0033-customer-connections/#the-upstream-hosts-are-known)).
+- **A person's tenant is the tenant of the client they sign in to,** and the organisation id that the upstream sends maps only a tenant's own business staff ([Which tenant a person belongs to](/decisions/archive/0033-customer-connections/#which-tenant-a-person-belongs-to)).
 - **The installations are listed in [0011](/decisions/0011-runtimes-and-installations/#installations);** this record is the only place that says which upstreams each sees.
 
 ### Which tenant a person belongs to
 
 This is the one place that says how a sign-in finds its tenant.
 
-- **A person's tenant is the tenant of the client they sign in to.** Each client belongs to one tenant ([0032](/decisions/0032-customer-identity-installations/#client-names)), and the tenant is the controller ([0008](/decisions/0008-boundaries-and-tenants/#tenants)), so an app's customers are people of its tenant whatever organisation they belong to at the broker ([REQ-FED-037](/requirements/fed/#REQ-FED-037)).
-- **The organisation claim maps only a tenant's own business staff.** The members of a tenant's own business (the B2B members of an organisation at the broker) are told apart by an organisation id that comes in an allow-listed claim ([REQ-FED-005](/requirements/fed/#REQ-FED-005)). Config names no tenant: each `Upstream` declares only the binding rule, `organisation_claim`, the claim that carries the id, and the `Tenant` item, written by `exchange` ([0008](/decisions/0008-boundaries-and-tenants/#tenants)), records the upstream and the organisation id that belong to it, and the status client of the product that owns its people ([0034](/decisions/0034-end-users-and-upstream-signals/#erasure)).
+- **A person's tenant is the tenant of the client they sign in to.** Each client belongs to one tenant ([0032](/decisions/0032-customer-identity-installations/)), and the tenant is the controller ([0008](/decisions/0008-boundaries-and-tenants/#tenants)), so an app's customers are people of its tenant whatever organisation they belong to at the broker ([REQ-FED-037](/requirements/fed/#REQ-FED-037)).
+- **The organisation claim maps only a tenant's own business staff.** The members of a tenant's own business (the B2B members of an organisation at the broker) are told apart by an organisation id that comes in an allow-listed claim ([REQ-FED-005](/requirements/fed/#REQ-FED-005)). Config names no tenant: each `Upstream` declares only the binding rule, `organisation_claim`, the claim that carries the id, and the `Tenant` item, written by `exchange` ([0008](/decisions/0008-boundaries-and-tenants/#tenants)), records the upstream and the organisation id that belong to it, and the status client of the product that owns its people ([0034](/decisions/archive/0034-end-users-and-upstream-signals/#erasure)).
 - **In an internal installation** each of the three upstreams is one company's, and the organisation id it sends maps to the one `Tenant` that records it.
 - **A staff sign-in is refused when the id is absent, unknown or ambiguous,** that is, when no `Tenant` records it, more than one does, or it is not the tenant of the client ([REQ-FED-036](/requirements/fed/#REQ-FED-036)). A person whom no binding names is refused ([0019](/decisions/0019-person-and-upstream-link/#the-records)). It fails closed.
 - **A broker account in several organisations** is signed in for exactly one: the broker must send only the organisation chosen for that sign-in, and a sign-in whose claim carries more than one id is refused.
@@ -59,7 +57,7 @@ A connection has two separate fields, which resolves the overlap:
 
 - **`trust` limits reach.** It is one of `internal` (the operator's own workforce directory), `partner` (an organisation the operator has agreed with) and `customer` (end users of a product; the broker of a customer installation is always `customer`). The policy compiles it into Cedar `forbid` guards: a person who came through a connection can hold only grants in scopes that their trust level and tenant may reach ([REQ-ISO-036](/requirements/iso/#REQ-ISO-036) is the model; [0007](/decisions/0007-policy-and-sealed-grants/#four-layers) says how guards are composed). A `customer` person never reaches an `all:` scope or a scope another tenant owns.
 - **`assurance` limits strength.** It is the policy of [REQ-FED-004](/requirements/fed/#REQ-FED-004): an `acr` ceiling ([REQ-AUTHN-010](/requirements/authn/#REQ-AUTHN-010)), optionally required `amr` values, and a maximum authentication age. The upstream's `acr` values are mapped to the values that sluis's policy names by a per-connection table; an unmapped value is unknown, and a value above the ceiling is lowered to it.
-- **An `internal` connection does not renew silently.** The periodic full sign-in with multi-factor authentication of [0017](/decisions/0017-identity-and-sign-in/#passkeys) stays; `customer` and `partner` connections renew as [0018](/decisions/0018-sessions/#customers) says.
+- **An `internal` connection does not renew silently.** The periodic full sign-in with multi-factor authentication of [0017](/decisions/0017-identity-and-sign-in/#passkeys) stays; `customer` and `partner` connections renew as [0018](/decisions/0018-sign-in-sessions/#customers) says.
 - **Both are set in the `Upstream` and nowhere else.** The operator writes them under review, and no tenant can raise either.
 
 ### Claims and groups

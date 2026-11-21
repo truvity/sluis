@@ -6,7 +6,7 @@ sidebar:
   order: 4
 ---
 
-Every major component of sluis is a ConnectRPC contract, written in Protobuf under `proto/`, even when caller and callee share a process ([0002](/decisions/0002-families-of-actors/#contracts)). This page is the rule book every `proto/` file and every HTTP endpoint follows. The endpoints themselves are on [Architecture](/architecture/#the-external-api-surface); which actor may call which is the call graph of the [actor registry](/reference/actors/).
+Every major component of sluis is a ConnectRPC contract, written in Protobuf under `proto/`, even when caller and callee share a process ([0002](/decisions/0002-families-of-actors/#contracts); in process the call goes over an in-memory transport, [atoom 0009](https://github.com/truvity/atoom/blob/master/docs/decisions/0009-connectrpc-in-process.md)). The one exception is Cedar, which is used as a library ([Policy](/reference/policy/#what-atoom-supplies)). This page is the rule book every `proto/` file and every HTTP endpoint follows. The endpoints themselves are on [Architecture](/architecture/#the-external-api-surface); which actor may call which is the call graph of the [actor registry](/reference/actors/).
 
 ## Packages and files
 
@@ -35,11 +35,11 @@ Every major component of sluis is a ConnectRPC contract, written in Protobuf und
 
 | Surface | Who calls it | How | Where it is defined |
 |---|---|---|---|
-| OAuth and OpenID Connect endpoints | Browsers, clients, relying parties | Plain HTTP on the issuer's origin, not Connect: `entry` parses and routes each request to `session` or `exchange` | The standards ([Endpoints](/architecture/#oidc-and-oauth-endpoints)) |
+| OAuth and OpenID Connect endpoints | Browsers, clients, relying parties | Plain HTTP on the issuer's origin, not Connect: `entry` parses and routes each request to `signin` or `exchange` | The standards ([Endpoints](/architecture/#oidc-and-oauth-endpoints)) |
 | Discovery and the key set | Anyone | Static documents in a bucket of the boundary ([0017](/decisions/0017-identity-and-sign-in/#issuers)) | The standards |
-| Public Connect services: the console API (built in the Parity phase), the signing API, and in the Quota phase the writing of limits | The console's single-page application, declared clients, CI jobs | Connect over HTTPS through `entry`, JSON or binary Protobuf | `proto/`, published as generated OpenAPI |
+| Public Connect services: the console API (planned), the signing API, and the writing of limits (planned) | The console's single-page application, declared clients, CI jobs | Connect over HTTPS through `entry`, JSON or binary Protobuf | `proto/`, published as generated OpenAPI |
 | Internal services: actor to actor | The callers the call graph allows | Connect over a Unix socket with peer credentials, a Lambda invoke, in-cluster gRPC with a projected service-account token whose audience the callee checks, behind a NetworkPolicy (mutual TLS between callers is later work), or HTTPS with mutual TLS between boundaries; binary Protobuf | `proto/` |
-| Port contracts | The owning holder's port library | Connect over the driver's Unix socket | atoom's `<port>/proto/`, vendored under `third_party/atoom/proto` ([Store API](/reference/store-api/#the-driver-contracts)) |
+| Port contracts | The owning holder's port library | Connect over the driver's Unix socket | atoom's `<port>/proto/`, vendored under `third_party/atoom/proto` ([atoom's architecture](https://github.com/truvity/atoom/blob/master/docs/architecture.md)) |
 | Integration contracts | Core actors | As internal services | `proto/sluis/integration/` ([Integration contracts](/architecture/components/#integration-contracts)) |
 
 - **`entry` serves no business logic of its own.** It validates each request against closed parameter lists generated from these contracts and from the standards, and forwards it to the owning actor ([0002](/decisions/0002-families-of-actors/#work-actors)).
@@ -49,10 +49,12 @@ Every major component of sluis is a ConnectRPC contract, written in Protobuf und
 ## Every call
 
 - **A deadline.** Every call carries one (`Connect-Timeout-Ms`); a method without one gets the default its contract declares. A callee never extends its caller's deadline, and passes what is left to the calls it makes.
-- **A correlation id.** `entry` gives every request a random 128-bit id (UUID version 4), returns it in the `Sluis-Correlation-Id` response header, and passes it in the metadata of every internal call that request causes. Every audit record of the request carries it, so a support question with the id finds the records. A client cannot choose it; one it sends is ignored.
+- **A correlation id.** `entry` gives every request a random 128-bit id (UUID version 4), returns it to the caller in a response header, and passes it in the metadata of every internal call that request causes. A client cannot choose it; one it sends is ignored. A support question with the id finds the records of the request ([0016](/decisions/0016-telemetry/#the-correlation-id)). The OCSF field `metadata.correlation_uid` of an audit record holds the W3C trace id, not this id ([0016](/decisions/0016-telemetry/#pointing-from-audit-to-a-trace)).
+  - **The header is `Atoom-Correlation-Id`,** the name of atoom's call context, which also fixes its format and what a client and a server do with it ([call context](https://github.com/truvity/atoom/blob/master/docs/call-context.md)). A server accepts the old name `Sluis-Correlation-Id` for one release.
+  - **Built today:** the kits send and echo `Sluis-Correlation-Id`. **Planned:** the rename, in step B14 of atoom's [plan](https://github.com/truvity/atoom/blob/master/docs/plan.md) and then in sluis's own change.
 - **Trace context.** W3C Trace Context headers are passed on; only internal actors use a remote parent, and the telemetry rules are [0016](/decisions/0016-telemetry/). A span never carries what an audit record says ([0016](/decisions/0016-telemetry/#the-allowlist)).
-- **Idempotency.** Every public method that changes something takes a `request_id` field, chosen by the client; `entry` also accepts an `Idempotency-Key` header and copies it in, and refuses both with different values. A request id is scoped to the client and the method and remembered for 24 hours with its outcome. A repeat returns the first outcome; a reused id with another payload is refused (`failed_precondition`); a repeat while the first is still running is `aborted` (HTTP 409). A usage record has an idempotency key of its own, `source` plus `id`, and the writer stores a repeat once ([0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/#two-classes-of-record)).
-- **Pagination by cursor.** A list method takes `page_size` and `page_token`, and returns `next_page_token`, empty on the last page. Every contract declares a default and a maximum `page_size`; a larger request is cut to the maximum and a negative one is `invalid_argument`. A token is opaque, bound to the query that made it and to the caller, and expiring; a token used with another query, or one that does not decode, is `invalid_argument`. The target type is `bytes`. The item, index and reader contracts carry it as `bytes` today; the store service ([Get and List](/reference/store-api/#get-and-list)) and the blob port ([The blob contract](/reference/store-api/#the-blob-contract)) still carry it as a `string`, and changing them is planned.
+- **Idempotency.** Every public method that changes something takes a `request_id` field, chosen by the client; `entry` also accepts an `Idempotency-Key` header and copies it in, and refuses both with different values. A request id is scoped to the client and the method and remembered for 24 hours with its outcome. A repeat returns the first outcome; a reused id with another payload is refused (`failed_precondition`); a repeat while the first is still running is `aborted` (HTTP 409). A usage record has an idempotency key of its own, which is audit's ([the usage class](https://github.com/truvity/audit/blob/master/docs/decisions/0006-the-usage-class.md)).
+- **Pagination by cursor.** A list method takes `page_size` and `page_token`, and returns `next_page_token`, empty on the last page. Every contract declares a default and a maximum `page_size`; a larger request is cut to the maximum and a negative one is `invalid_argument`. A token is opaque, bound to the query that made it and to the caller, and expiring; a token used with another query, or one that does not decode, is `invalid_argument`. The target type is `bytes`. The item, index and reader contracts carry it as `bytes` today; sluis's store service ([Store API](/reference/store-api/#the-service)) and atoom's blob port still carry it as a `string`, and changing them is planned.
 
 - **A refused call is audited.** The guard that wraps every server (`MayCall` in the Go kit, `may_call` in the Rust kit) refuses a call with `permission_denied` and the reason `caller` (no known peer, or a uid of another boundary) or `call_graph` (a known caller that the call graph does not allow), before the message is decoded. The callee audits each such refusal as a fact that names the caller and the method and never the payload. The kits log the refusal today; the audit fact is planned.
 
@@ -101,7 +103,7 @@ The integration contracts keep their own closed list as the `Refusal` reason, ea
 | `UNSUPPORTED` | `unimplemented` |
 | `STALE` | `failed_precondition` |
 
-The guard of every server has two more reasons, both `permission_denied`: `caller` and `call_graph` ([Every call](#every-call)). The reasons of the store service are in [Store API](/reference/store-api/#refusals), and those of the blob port in [The blob contract](/reference/store-api/#the-blob-contract).
+The guard of every server has two more reasons, both `permission_denied`: `caller` and `call_graph` ([Every call](#every-call)). The reasons of the store service are in [Store API](/reference/store-api/#refusals); those of each port are on its atoom page, such as the [store port](https://github.com/truvity/atoom/blob/master/store/docs/store-port.md#refusals).
 
 No vendor error text crosses the contract.
 
@@ -116,7 +118,7 @@ A refusal tells a caller what to do, never why someone else may do more:
 
 ### Limits at the edge
 
-`entry` bounds what one client and one source address can cost on the endpoints that start work ([0036](/decisions/0036-volumetric-abuse/#inside-sluis), decision H7 of 2026-11-18). The edge in front of the installation is the first line; these limits stay when it is not there.
+`entry` bounds what one client and one source address can cost on the endpoints that start work ([0036](/decisions/0036-volumetric-abuse/#inside-sluis)). The edge in front of the installation is the first line; these limits stay when it is not there.
 
 | Limit | Endpoint | Counted by | Default |
 |---|---|---|---|
@@ -142,7 +144,7 @@ These endpoints answer in the error format of their standard, as clients impleme
 | Endpoint | Errors |
 |---|---|
 | Authorization | Redirected to the client with `error` and `state` (RFC 6749, section 4.1.2.1): `invalid_request`, `unauthorized_client`, `access_denied`, `unsupported_response_type`, `invalid_scope`, `server_error`, `temporarily_unavailable`, and OpenID Connect's `login_required`, `interaction_required`, `consent_required`, `account_selection_required`, `request_not_supported`, `request_uri_not_supported` and `registration_not_supported`. A bad `redirect_uri` or `client_id` is never redirected: the browser gets an error page with the correlation id |
-| Token | JSON with `error` (RFC 6749, section 5.2): `invalid_request`, `invalid_client`, `invalid_grant`, `unauthorized_client`, `unsupported_grant_type`, `invalid_scope`; RFC 8693 adds `invalid_target`, which is also the answer for a refused audience. Every 401 of the token endpoint, from `session` or from `exchange`, carries `WWW-Authenticate` (an `invalid_client` is `Basic`; RFC 6749, section 5.2), and `entry` passes it on. `session` and `exchange` do so today: `exchange` answers a failed client authentication with 401 `invalid_client` and answers a request that uses both methods with 400 `invalid_request` |
+| Token | JSON with `error` (RFC 6749, section 5.2): `invalid_request`, `invalid_client`, `invalid_grant`, `unauthorized_client`, `unsupported_grant_type`, `invalid_scope`; RFC 8693 adds `invalid_target`, which is also the answer for a refused audience. Every 401 of the token endpoint, from `signin` or from `exchange`, carries `WWW-Authenticate` (an `invalid_client` is `Basic`; RFC 6749, section 5.2), and `entry` passes it on. `signin` and `exchange` do so today: `exchange` answers a failed client authentication with 401 `invalid_client` and answers a request that uses both methods with 400 `invalid_request` |
 | Passkey pages (`/passkeys/add`, `/passkeys/register`) | A fixed HTML page, status 400, with a reference line and no value of the request; the cookie is cleared ([0017](/decisions/0017-identity-and-sign-in/#passkeys)) |
 | A protected resource (UserInfo) | `WWW-Authenticate` with `invalid_request`, `invalid_token` or `insufficient_scope` (RFC 6750), and `insufficient_user_authentication` with `acr_values` and `max_age` for step-up (RFC 9470) |
 
