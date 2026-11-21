@@ -21,7 +21,7 @@ The ports, drivers and blocks that the core hosts are [atoom](https://github.com
 | Proof | State | Recipe |
 |---|---|---|
 | **The spine** | On the local installation, a client asks `policy` for a decision and `signer` for a token, the token verifies against the key set that `entry` serves, the run's records are in the audit log, and `audit verify` checks the log | `local-up`, then `local-smoke` |
-| **The boards** | On three boards over one three-node rqlite cluster, the same spine runs against each board in turn, and each later board finds the earlier boards' signing key | `build-arm64`, `boards-deploy`, then `boards-smoke` |
+| **The boards** | On an additional, external testing area of three boards over one three-node rqlite cluster, the same spine runs against each board in turn, and each later board finds the earlier boards' signing key | `build-arm64`, `boards-deploy`, then `boards-smoke` |
 | **The person** | `signin` seals the facts of a sign-in session chain, `signin` and `exchange` alone open them ([ADR 0006](/decisions/0006-keys-and-sealing/#data-keys)), `sluis login` signs a person in through an upstream identity provider, and `sluis token` exchanges the token for an audience (RFC 8693) | `local-up`, then `local-person-smoke` |
 | **Passkey registration** | In a real headless Chromium with a virtual authenticator | `local-passkey-smoke` |
 | **Packages and the release candidate** | `.deb` and `.rpm` packages build, a throwaway apt and dnf repository installs from them, and the `Candidate` workflow builds the release once, so the tag run publishes the candidate's bytes and builds nothing | `release-packages`, `release-repo-smoke` |
