@@ -148,7 +148,7 @@ A check that cannot run is reported as not run, never as passed ([principle 4](/
 
 Read-only secrets come from a **secret source** and are written by infrastructure code. The store fetches a value on first use and holds it in memory only, and it never appears in an audit fact, a log line or a span. A secret source holds its values in the clear for whoever may read it, so they pass through store@ in memory: a compromised store@ yields secret-source values and no sealed data.
 
-sluis is a store of static secrets and not a general secrets engine. **KV** is a core service of stores that no tenant owns: policy decides by path, each store has a data key of its own, and External Secrets reads it through a subset of the Vault KV v2 API ([ADR 0047](/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns/)). It is planned and not built. It offers no dynamic secrets, leases or transit. Where a caller needs a credential for a vendor, sluis mints a scoped credential instead of storing the caller's own ([Integrations](/integrations/)).
+sluis is a store of static secrets and not a general secrets engine. **KV** is a core service of stores that no tenant owns: policy decides by path, each store has a data key of its own, ([ADR 0047](/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns/)). SSM stays the only secret store for now; serving External Secrets through a subset of the Vault KV v2 API is a later option, decided at parity ([ADR 0049](/decisions/0049-ssm-stays-the-only-secret-store-for-now/)). KV is planned and not built. It offers no dynamic secrets, leases or transit. Where a caller needs a credential for a vendor, sluis mints a scoped credential instead of storing the caller's own ([Integrations](/integrations/)).
 
 ## Export
 

@@ -76,18 +76,18 @@ The records were rewritten once, cleanly, so each states the current design. Fro
 
 ## Milestones are an order
 
-The product is a core, add-ons and customer identity ([0044](/decisions/0044-sluis-is-a-core-and-add-ons/)). The roadmap puts the work in an order of milestones, and a milestone opens when the one before it is done: the core first (cut as `v2.0.0-alpha.2` before the installations), then customer identity, a re-plan that decides what parity needs, parity with v1, the cutover from v1 ([0001](/decisions/0001-v1-and-v2-lines/)), and then the PKI, SSH and database add-ons. The milestones and their exit tests are on the [roadmap](/roadmap/).
+The product is a core and add-ons ([0044](/decisions/0044-sluis-is-a-core-and-add-ons/)). The roadmap puts the work in an order of milestones, and a milestone opens when the one before it is done: the core first (cut as `v2.0.0-alpha.2` before the installations), then the exchange for infrastructure calls and the limit check, a re-plan that decides what parity needs, parity with v1, the cutover from v1 ([0001](/decisions/0001-v1-and-v2-lines/)), and then the PKI, SSH and database add-ons. The milestones and their exit tests are on the [roadmap](/roadmap/).
 
 ```mermaid
 flowchart LR
-  core["Core<br/>alpha.2"] --> ci["Customer<br/>identity"]
+  core["Core<br/>alpha.2"] --> ci["Exchange and<br/>limit check"]
   ci --> replan{{"Re-plan"}}
   replan --> parity["Parity"]
   parity --> cutover["Cutover"]
   cutover --> addons["PKI, SSH<br/>and DB"]
 ```
 
-Design is finished milestone by milestone, and the code for a milestone starts after its design is. Nothing after customer identity is planned in detail before the re-plan. Inside the core, the installations (local, boards, Lambda and Kubernetes) are built in the order of the roadmap, and [ADR 0011](/decisions/0011-runtimes-and-installations/) records any change to it.
+Design is finished milestone by milestone, and the code for a milestone starts after its design is. Nothing after the exchange and the limit check is planned in detail before the re-plan. Inside the core, the installations (local, boards, Lambda and Kubernetes) are built in the order of the roadmap, and [ADR 0011](/decisions/0011-runtimes-and-installations/) records any change to it.
 
 ## Do not make a later screen harder
 

@@ -243,7 +243,7 @@ Docker on a workstation is the development and CI form of bare-metal, one node: 
 
 - An actor's identity on a node is its uid, read through `SO_PEERCRED` on the Unix socket. On a cloud VM, calls to AWS use the actor's own IAM role, so CloudTrail names the actor and the instance.
 - `cloudflared` is the edge connector on the boards installation, as described [above](#sockets-and-the-call-graph).
-- **Consumers read KV.** KV is a core service ([0047](/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns/#what-kv-is)). External Secrets reads it through the Vault KV v2 subset, so the boards need no cloud for their consumers. KV is planned.
+- **Consumers read KV.** KV is a core service ([0047](/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns/#what-kv-is)). SSM stays the only secret store for now. If External Secrets later reads sluis KV through the Vault KV v2 subset, the boards need no cloud for their consumers; that is a later option, decided at parity ([0049](/decisions/0049-ssm-stays-the-only-secret-store-for-now/)). KV is planned.
 - **The console** is part of the core and planned ([0027](/decisions/0027-the-console/#built-and-planned)). `entry` will serve the console's single-page application from a directory on the node, same-origin with its API. The bundle is a separate artifact of the release ([Packages](/distribution/packages/)).
 
 ## Limits and residual risk

@@ -57,8 +57,8 @@ requirements:
       - {kind: integration-test, ref: "no finance export job exists in the actor registry"}
   - id: REQ-QUOTA-097
     area: QUOTA
-    statement: "sluis MUST check a limit on the request path against a counter of usage for the customer, the organisation and the product."
-    rationale: "A limit needs a fast check beside the policy decision, while plans, prices and balances stay in the product (ADR 0046)."
+    statement: "sluis MUST check a limit on the request path against a counter of usage."
+    rationale: "A limit needs a fast check beside the policy decision, while plans, prices and balances stay in the product, and what the counter is keyed by is open (ADR 0046, ADR 0048)."
     level: MUST
     source: design-decision
     status: planned

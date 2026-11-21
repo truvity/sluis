@@ -44,16 +44,16 @@ An id is `REQ-<AREA>-<nnn>`, for example `REQ-AUTHN-002`.
 
 ## Milestones
 
-A record's `milestone` is the milestone of the [roadmap](../roadmap.md) in which its work is done. The slug is the key in `index.yaml`; the board option is the name that `index.yaml` maps it to, and the status page lists the options in the order of the board. The product is a core, add-ons and customer identity ([0044](../decisions/0044-sluis-is-a-core-and-add-ons.md)); a milestone is a step of delivery, and a layer is a part of the product.
+A record's `milestone` is the milestone of the [roadmap](../roadmap.md) in which its work is done. The slug is the key in `index.yaml`; the board option is the name that `index.yaml` maps it to, and the status page lists the options in the order of the board. The product is a core and add-ons ([0044](../decisions/0044-sluis-is-a-core-and-add-ons.md), [0048](../decisions/0048-product-apis-take-the-identity-providers-tokens.md)); a milestone is a step of delivery, and a layer is a part of the product. The milestone `customer-identity` keeps its name, because the board option carries it, and it is not a layer.
 
 | Slug | Board option | Layer | What belongs to it |
 |---|---|---|---|
-| `core` | Core | core | What every installation needs: the actors and flows, the hosts of atoom's blocks (store, key), policy, the limit check, KV, the security hardening, and the local, boards, Lambda and Kubernetes installations with release management. |
-| `customer-identity` | Customer identity | customer identity | The exchange of a token of the trusted realm for a sluis token with customer, org and product (ADR 0032). Not the cancelled broker. |
+| `core` | Core | core | What every installation needs: the actors and flows, the hosts of atoom's blocks (store, key), policy, the limit check, KV (not its External Secrets facade, which is in `backlog`, ADR 0049), the security hardening, and the local, boards, Lambda and Kubernetes installations with release management. |
+| `customer-identity` | Customer identity | core | The exchange of a token of the trusted context realm for a sluis token for an infrastructure audience (ADR 0048). A sluis token never carries customer, org or product. Not the cancelled broker. |
 | `quota` | Quota | core | The limit check and its counters (ADR 0046). Usage records are audit's. Not an allowance or a balance. |
 | `parity` | Parity | core | What v1 does and the core does not yet: integrations, clients, the console, backup and restore, what sluis emits to audit. Re-planned after the core, customer identity and the limit check. |
 | `pki-ssh-db` | PKI, SSH and database | add-on | The certificate, SSH and database add-on: the intermediate hand-off, certificate profiles, SSH certificates, database client certificates. |
-| `backlog` | Backlog | not scheduled | Superseded designs that stay for the record, and later drivers and features. |
+| `backlog` | Backlog | not scheduled | Superseded designs that stay for the record, and later drivers and features, such as sluis KV serving External Secrets (a later option, ADR 0049). |
 
 The board may still carry earlier option names. Until it is renamed, `just check-requirements` warns, with a board at hand, that an option is missing, and the status page puts the records of a missing option under "Unassigned".
 

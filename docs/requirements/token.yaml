@@ -723,8 +723,9 @@ requirements:
     rationale: "Services call each other with the sluis token and need the three claims, and the request must never name them (ADR 0032, ADR 0020)."
     level: MUST
     source: design-decision
-    status: planned
-    milestone: customer-identity
+    # Withdrawn 2026-11-21: ADR 0048 (customers sign in at the group's identity provider; products use its tokens; a sluis token never carries customer, org or product).
+    status: withdrawn
+    superseded_by: [REQ-TOKEN-058]
     runtimes: all
     standards: []
     issues: [782, 785, 1842]
@@ -907,14 +908,14 @@ requirements:
       - {kind: integration-test, ref: "a configuration that declares certificate-bound tokens for a client or an audience is refused, and one that declares DPoP is accepted"}
   - id: REQ-TOKEN-058
     area: TOKEN
-    statement: "A sluis token that did not come from an exchange of an upstream token MUST carry none of the claims customer, org and product."
-    rationale: "An absent claim stays absent, so a staff sign-in never claims a customer (ADR 0032)."
+    statement: "A sluis token MUST NOT carry any of the claims customer, org and product."
+    rationale: "Products use the group's identity provider's tokens and never a sluis token, so no sluis token claims a customer (ADR 0048)."
     level: MUST
     source: design-decision
     status: planned
-    milestone: customer-identity
+    milestone: core
     runtimes: all
     standards: []
     issues: [1842]
     verification:
-      - {kind: integration-test, ref: "the token of a staff sign-in carries none of the three claims"}
+      - {kind: integration-test, ref: "the token of a staff sign-in and the token of an exchange of a context realm's token carry none of the three claims, and a declared key for one is refused at load"}

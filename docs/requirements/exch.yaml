@@ -419,10 +419,24 @@ requirements:
     rationale: "The three claims come from the claims of the upstream token through the mapping of the installation, and never from the caller (ADR 0032)."
     level: MUST
     source: design-decision
-    status: planned
-    milestone: customer-identity
+    # Withdrawn 2026-11-21: ADR 0048 (customers sign in at the group's identity provider; products use its tokens; a sluis token never carries customer, org or product).
+    status: withdrawn
+    superseded_by: [REQ-TOKEN-058]
     runtimes: all
     standards: []
     issues: [1842]
     verification:
       - {kind: integration-test, ref: "a request that names customer, org or product as a parameter gets a token with the values of the mapping, or is refused"}
+  - id: REQ-EXCH-030
+    area: EXCH
+    statement: "exchange MUST accept a token of the trusted context realm as a subject token only for an audience that the installation declares as infrastructure."
+    rationale: "sluis takes a token of the group's identity provider only for a call down to infrastructure, and a product API is never such an audience (ADR 0048)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: customer-identity
+    runtimes: all
+    standards: []
+    issues: [961]
+    verification:
+      - {kind: integration-test, ref: "a token of the trusted realm is exchanged for an infrastructure audience and refused, with a closed reason and an audit fact, for any other audience"}

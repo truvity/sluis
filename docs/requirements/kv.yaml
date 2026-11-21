@@ -256,7 +256,8 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: core
+    # Later option, ADR 0049: SSM stays the only secret store for now; External Secrets reading sluis KV is decided at parity.
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [798]
@@ -269,7 +270,8 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: core
+    # Later option, ADR 0049: SSM stays the only secret store for now; External Secrets reading sluis KV is decided at parity.
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [798]
@@ -282,7 +284,8 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: core
+    # Later option, ADR 0049: SSM stays the only secret store for now; External Secrets reading sluis KV is decided at parity.
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [798]
@@ -295,7 +298,8 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: core
+    # Later option, ADR 0049: SSM stays the only secret store for now; External Secrets reading sluis KV is decided at parity.
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [798]
@@ -308,7 +312,8 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: core
+    # Later option, ADR 0049: SSM stays the only secret store for now; External Secrets reading sluis KV is decided at parity.
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [798]
@@ -334,7 +339,8 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: core
+    # Later option, ADR 0049: SSM stays the only secret store for now; External Secrets reading sluis KV is decided at parity.
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [798]
@@ -347,7 +353,8 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: core
+    # Later option, ADR 0049: SSM stays the only secret store for now; External Secrets reading sluis KV is decided at parity.
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [798]
@@ -360,7 +367,8 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: core
+    # Later option, ADR 0049: SSM stays the only secret store for now; External Secrets reading sluis KV is decided at parity.
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [798]
@@ -373,7 +381,8 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: core
+    # Later option, ADR 0049: SSM stays the only secret store for now; External Secrets reading sluis KV is decided at parity.
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [798]
@@ -477,7 +486,8 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: core
+    # Later option, ADR 0049: SSM stays the only secret store for now; External Secrets reading sluis KV is decided at parity.
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [798]
@@ -490,7 +500,8 @@ requirements:
     level: SHOULD
     source: design-decision
     status: planned
-    milestone: core
+    # Later option, ADR 0049: SSM stays the only secret store for now; External Secrets reading sluis KV is decided at parity.
+    milestone: backlog
     runtimes: all
     standards: []
     issues: [798]

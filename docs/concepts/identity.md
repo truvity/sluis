@@ -71,20 +71,23 @@ Each kind of proof is a **verifier** inside `exchange`. A verifier holds public 
 | Manual approval | A person approved the request in the console | Planned |
 | `tailscale-whois`, TPM | The Tailscale node behind the connection; a TPM quote | Later |
 
-## Customers sign in upstream
+## Customers sign in at the group's identity provider
 
-This is the **customer identity** layer ([ADR 0032](/decisions/0032-customer-identity-installations/)). sluis signs in its staff and operators itself. A customer signs in only at the upstream identity provider: sluis hosts no customer account, page or registration. One installation serves one boundary and trusts one realm, which the `ExchangeTrust` config kind declares, so a token of another realm is refused. `exchange` takes a token of the trusted realm as the subject token and issues a sluis token for one audience. It sets `customer`, `org` and `product` from the upstream token through the mapping that the installation declares, and never from the request.
+sluis signs in its staff and operators itself. A customer signs in at the group's identity provider, a Keycloak installation with a realm per context, and the products use its tokens: a product API never accepts a sluis token, and the identifier of a person is pairwise per boundary. sluis hosts no customer account, page or registration ([ADR 0048](/decisions/0048-product-apis-take-the-identity-providers-tokens/)).
+
+A token of the group's identity provider enters sluis in one way only. `exchange` takes it as the subject token (RFC 8693) and issues a sluis token for a call down to infrastructure, such as KV or a minted credential. One installation trusts one context realm, which the `ExchangeTrust` config kind declares, and never the central realm above the context realms, so a token of another realm is refused. The token that comes out carries no `customer`, `org` or `product`.
 
 ```mermaid
 flowchart LR
-  user["person"] --> realm["trusted realm<br/>(an upstream provider)"]
-  realm -->|"realm token"| xchg["exchange<br/>RFC 8693"]
+  user["person"] --> realm["context realm<br/>(the group's identity provider)"]
+  realm -->|"token"| prod["product API<br/>takes the realm's token"]
+  realm -->|"token as subject"| xchg["exchange<br/>RFC 8693"]
   trust["ExchangeTrust<br/>declares the realm"] -.-> xchg
-  xchg -->|"sluis token<br/>customer, org, product"| svc["service"]
+  xchg -->|"sluis token<br/>for infrastructure"| infra["infrastructure call"]
   other["token of another realm"] -.->|"refused"| xchg
 ```
 
-`exchange` verifies a token of a trusted issuer today and then refuses it as a subject token. Accepting it, the claim mapping and the three claims are planned ([ADR 0032](/decisions/0032-customer-identity-installations/#the-exchange)). A person who works for several vendors keeps one identity per tenant and holds several sessions in parallel on the client, not one subject shared across tenants ([#1894](https://github.com/truvity/sluis/issues/1894)).
+`exchange` verifies a token of a trusted issuer today and then refuses it as a subject token. Accepting it for an infrastructure audience is planned ([ADR 0048](/decisions/0048-product-apis-take-the-identity-providers-tokens/)). A person who works for several vendors keeps one identity per tenant and holds several sessions in parallel on the client, not one subject shared across tenants ([#1894](https://github.com/truvity/sluis/issues/1894)).
 
 ## How an actor reaches a cloud
 

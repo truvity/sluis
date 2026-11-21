@@ -16,7 +16,7 @@
 //     kind the exporter watches is readable by it; every `backed_up: yes` kind is read by exporter@'s
 //     backup job as ciphertext (a read rule implied by the field, not listed in `readers`), so exporter@
 //     must be a data-family actor with the data port; layered groups and the kinds in their layers agree; a kind's
-//     `product_layer` is core, add-on or customer identity, and `owned_by: audit` marks audit's kinds (serves audit);
+//     `product_layer` is core or add-on, and `owned_by: audit` marks audit's kinds (serves audit);
 //     linked kinds exist; DataKeyWrap lists the data key purposes of keys.yaml;
 //   - keys: closed fields; every algorithm declared; the AWS baseline of one symmetric key, four P-384
 //     keys and the audit log's one P-256 key; a signing or key-agreement key has exactly one using actor; the card slot plan has no
@@ -51,7 +51,7 @@ const CLASSES = ['config', 'secret', 'durable', 'temp'];
 const SCOPES = ['boundary', 'boundary+tenant'];
 const TREATMENTS = ['hashed', 'sealed', 'plain'];
 const PROFILES = ['Fixed', 'Operable', 'Tenant-adjustable', '-'];
-const PRODUCT_LAYERS = ['core', 'add-on', 'customer identity'];
+const PRODUCT_LAYERS = ['core', 'add-on'];
 const KIND_FIELDS = ['name', 'serves', 'scope', 'class', 'treatment', 'profile', 'layer', 'links', 'writer', 'readers', 'exportable', 'backed_up',
   'ttl', 'indexes', 'purposes', 'self_scoped', 'create_only', 'status', 'product_layer', 'owned_by', 'watched_by', 'personal', 'notes'];
 const KIND_REQUIRED = ['name', 'serves', 'scope', 'class', 'treatment', 'profile', 'writer', 'readers', 'exportable', 'backed_up'];

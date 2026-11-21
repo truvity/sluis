@@ -118,7 +118,7 @@ flowchart LR
 
 ### The external API surface
 
-Four kinds of caller identity reach the box, and these are all it has to verify: a person's session cookie, a person's bearer (the access token of a live sign-in), a workload's platform token or the token of the installation's trusted realm, and a confidential client's secret. A product service that writes limits for the limit check needs a fifth, which is open and decided with the first caller of the check ([0046](/decisions/0046-limits-on-the-request-path-and-usage-in-audit/#limits-and-balances), [#841](https://github.com/truvity/sluis/issues/841)). Only discovery and the key set are public.
+Four kinds of caller identity reach the box, and these are all it has to verify: a person's session cookie, a person's bearer (the access token of a live sign-in), a workload's platform token or the token of the installation's trusted context realm (only as the subject of an exchange, [0048](/decisions/0048-product-apis-take-the-identity-providers-tokens/)), and a confidential client's secret. A product service that writes limits for the limit check needs a fifth, which is open and decided with the first caller of the check ([0046](/decisions/0046-limits-on-the-request-path-and-usage-in-audit/#limits-and-balances), [#841](https://github.com/truvity/sluis/issues/841)). Only discovery and the key set are public.
 
 #### OIDC and OAuth endpoints
 
@@ -140,7 +140,7 @@ Served at the root of the public host, for example `https://sluis.example.com`.
 
 #### Token exchange and mint
 
-Both are `POST /token` with `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` (RFC 8693). The `subject_token` is a Kubernetes ServiceAccount token from any known cluster, a GitHub Actions token (the GitHub add-on), an AWS web-identity token, a token from a peer sluis, a token of the installation's trusted realm (customer identity, [0032](/decisions/0032-customer-identity-installations/)), or the access token of a live sign-in presented by a client that is allowed to re-audience it. The `actor_token` is refused.
+Both are `POST /token` with `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` (RFC 8693). The `subject_token` is a Kubernetes ServiceAccount token from any known cluster, a GitHub Actions token (the GitHub add-on), an AWS web-identity token, a token from a peer sluis, a token of the installation's trusted context realm (only for an infrastructure audience, [0048](/decisions/0048-product-apis-take-the-identity-providers-tokens/)), or the access token of a live sign-in presented by a client that is allowed to re-audience it. The `actor_token` is refused.
 
 | Result | Selected by | Notes |
 | ------ | ----------- | ----- |
@@ -184,7 +184,7 @@ These operations are new in v2; their paths and RPC names are fixed when each is
 - certificates for workloads, people and hosts, in the PKI, SSH and database add-on after parity: a Connect call for cert-manager's external-issuer library, and `sluis pki` and `sluis ssh` ([0023](/decisions/0023-certificate-authorities/));
 - static publication: public `GET` of CA certificates, CRLs, trust bundles, SSH CA keys and the key revocation list, exported by exporter@ with the directory driver in the core, and with the bucket driver and the edge purge in the Cloudflare add-on ([0009](/decisions/0009-export/#what-is-exportable));
 - limits: the limit check on the request path, with limits that the product writes, and usage records that go to audit ([0046](/decisions/0046-limits-on-the-request-path-and-usage-in-audit/)); there is no allowance or balance in sluis;
-- KV: the Vault KV v2 subset that External Secrets reads, and `sluis kv` for staff ([0047](/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns/#what-kv-is));
+- KV: `sluis kv` for staff, and the Vault KV v2 subset that External Secrets would read, which is a later option ([0047](/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns/#what-kv-is), [0049](/decisions/0049-ssm-stays-the-only-secret-store-for-now/));
 - the signing API: `SigningService.SignDetached`, a Connect call served by `exchange` through `entry`, for a caller with a CI identity token ([0024](/decisions/0024-root-custody-and-the-signing-api/#the-signing-api)).
 
 ### Resources each use case touches

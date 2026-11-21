@@ -62,9 +62,10 @@ terms:
     notes: "KV is part of the core, not an add-on."
 
   - term: customer identity
-    definition: "The layer of sluis for a customer's sign-in: the exchange of a customer's upstream token for a sluis token that carries the customer, the organisation and the product. Planned."
+    definition: "A layer of sluis that its records once named, for a customer's sign-in. Withdrawn: customers sign in at the group's identity provider and the products use its tokens, and sluis takes such a token only as the subject of an exchange for a call down to infrastructure, which is core work."
     category: structure
-    see: ["0044-sluis-is-a-core-and-add-ons#the-layers", "0032-customer-identity-installations"]
+    see: ["0048-product-apis-take-the-identity-providers-tokens", "0032-customer-identity-installations"]
+    notes: "Superseded by ADR 0048. Not used in new text, except for the name of the roadmap milestone and of the records that carry the old layer."
 
   - term: block
     definition: "atoom's term: a contract built from other ports and blocks, with no backend code of its own, whose host supplies the rules. atoom has four, `seal`, `state`, `token` and `export`. `store@`, `key@` and `exporter@` are the hosts of `state`, `seal` and `export` in sluis."
@@ -1085,7 +1086,7 @@ terms:
     notes: "A security audit fact may be lost and counted; a usage record may not."
 
   - term: limit check
-    definition: "The check on the request path that compares a counter of usage for a customer, organisation and product in the current period with a limit that the product writes, and answers allow or refuse, next to the policy decision."
+    definition: "The check on the request path that compares a counter of usage in the current period with a limit that the product writes, and answers allow or refuse, next to the policy decision. What the counter is keyed by is open."
     category: audit
     see: ["0046-limits-on-the-request-path-and-usage-in-audit#limits-and-balances"]
     avoid: ['quota check', 'balance check']
@@ -1238,11 +1239,11 @@ retired:
     allowed_in: []
   - term: "building block"
     id: building-block
-    replacement: "layer (core, add-on, customer identity) for the parts of sluis; block for atoom's `seal`, `state`, `token` and `export`"
+    replacement: "layer (core, add-on) for the parts of sluis; block for atoom's `seal`, `state`, `token` and `export`"
     allowed_in: []
   - term: "identity module, audit module, quota module, CIAM module"
     id: module
-    replacement: "layer (core, add-on, customer identity); audit is a product of its own, truvity/audit"
+    replacement: "layer (core, add-on); audit is a product of its own, truvity/audit"
     allowed_in: []
   - term: "audit family"
     id: audit-family

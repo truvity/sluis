@@ -86,7 +86,7 @@
 #   create_only true on a kind that only grows: its writer gets create, get and list, and no actor may update, delete
 #               or apply an item (KeyRevocation); store@ enforces it and the generated rule table says it
 #   status      planned for a kind that exists in the registry but has no writer yet
-#   product_layer core (default) | add-on | customer identity: the layer of record 0044 the kind belongs to
+#   product_layer core (default) | add-on: the layer of record 0044 the kind belongs to
 #   notes       what the kind holds, in a sentence or two
 schema: 1
 checked: "2026-11-03"
@@ -771,7 +771,6 @@ kinds:
     readers: [signin, exchange]
     exportable: no
     backed_up: yes
-    product_layer: customer identity
     notes: "The status an upstream reported (suspended, erased)."
 
   - name: Tombstone

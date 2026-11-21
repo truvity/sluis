@@ -6,7 +6,7 @@ sluis is an open-source identity and access broker for people, robots and extern
 
 ## Where it stands
 
-v2 is the line on the `main` branch. Its core is being built in the open: `v2.0.0-alpha.1` was published on 2026-11-08. Customer identity and the limit check, parity with v1, and the PKI, SSH and database add-on come after it, in that order. v1 runs in production and lives on the `master` branch.
+v2 is the line on the `main` branch. Its core is being built in the open: `v2.0.0-alpha.1` was published on 2026-11-08. The exchange of a context realm's token for infrastructure calls and the limit check, parity with v1, and the PKI, SSH and database add-on come after it, in that order. v1 runs in production and lives on the `master` branch.
 
 ## The family
 

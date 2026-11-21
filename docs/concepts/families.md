@@ -81,7 +81,7 @@ store@, exporter@ and key@ are thin hosts of blocks of [atoom](https://github.co
 
 ## The foundation and the layers
 
-The data and keys families, store@, exporter@ and key@, are the **foundation**: every installation runs them, and their binaries do not change with what runs above them. Above it sluis has a **core** that every installation runs, **add-ons** that bring their own actors, kinds and key purposes, and **customer identity**; no core actor calls an add-on ([ADR 0044](/decisions/0044-sluis-is-a-core-and-add-ons/)). A layer is a grouping, not a fourth family: each actor stays in one family ([ADR 0002](/decisions/0002-families-of-actors/#the-foundation-and-the-layers)).
+The data and keys families, store@, exporter@ and key@, are the **foundation**: every installation runs them, and their binaries do not change with what runs above them. Above it sluis has a **core** that every installation runs and **add-ons** that bring their own actors, kinds and key purposes; no core actor calls an add-on ([ADR 0044](/decisions/0044-sluis-is-a-core-and-add-ons/)). A layer is a grouping, not a fourth family: each actor stays in one family ([ADR 0002](/decisions/0002-families-of-actors/#the-foundation-and-the-layers)).
 
 ## Ports of a work actor
 

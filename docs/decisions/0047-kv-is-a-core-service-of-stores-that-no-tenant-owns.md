@@ -1,6 +1,6 @@
 # 0047 — KV is a core service of stores that no tenant owns: policy decides by path, each store has its own data key, and External Secrets reads it through a Vault KV v2 subset
 
-**Status:** Accepted
+**Status:** Accepted; partly superseded by 0049
 **Date:** 2026-11-21
 
 Proposal: [issue #798](https://github.com/truvity/sluis/issues/798).

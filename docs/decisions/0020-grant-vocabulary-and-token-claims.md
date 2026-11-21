@@ -1,6 +1,6 @@
 # 0020 — Grant names come from a declared vocabulary, and a token carries fixed claims for one audience
 
-**Status:** Accepted
+**Status:** Accepted; partly superseded by 0048
 **Date:** 2026-11-21
 
 Proposal: [issue #999](https://github.com/truvity/sluis/issues/999).
