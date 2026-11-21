@@ -66,7 +66,7 @@ requirements:
     rationale: "Pairwise subjects separate controllers that must not correlate a person, and the key is one per boundary (ADR 0034)."
     level: MAY
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customers sign in through the upstream.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customers sign in through the upstream.
     status: withdrawn
     superseded_by: [REQ-CIAM-017]
     runtimes: all
@@ -188,7 +188,7 @@ requirements:
     rationale: "Resets are account-takeover paths."
     level: MUST
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customers sign in through the upstream.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customers sign in through the upstream.
     status: withdrawn
     superseded_by: [REQ-CIAM-017]
     runtimes: all
@@ -204,7 +204,7 @@ requirements:
     rationale: "Resets are account-takeover paths."
     level: MUST
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customers sign in through the upstream.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customers sign in through the upstream.
     status: withdrawn
     superseded_by: [REQ-CIAM-017]
     runtimes: all
@@ -220,7 +220,7 @@ requirements:
     rationale: "Resets are account-takeover paths."
     level: MUST
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customers sign in through the upstream.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customers sign in through the upstream.
     status: withdrawn
     superseded_by: [REQ-CIAM-017]
     runtimes: all
@@ -264,7 +264,7 @@ requirements:
     rationale: "The customer-identity product owns the account, and sluis only brokers the sign-in (ADR 0031)."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customers sign in through the upstream.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customers sign in through the upstream.
     status: withdrawn
     superseded_by: [REQ-CIAM-017]
     runtimes: all
@@ -278,7 +278,7 @@ requirements:
     rationale: "A social provider is reached through the upstream product, so sluis has no consumer for a connector of its own (ADR 0031)."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customers sign in through the upstream.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customers sign in through the upstream.
     status: withdrawn
     superseded_by: [REQ-CIAM-017]
     runtimes: all

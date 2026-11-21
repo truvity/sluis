@@ -44,7 +44,7 @@ flowchart LR
 | `signer` | Signs tokens under a signing policy, and artifacts for a grant that `policy` sealed. It asks key@ to sign |
 | `ca` | The X.509 certificate authority |
 | `ssh-ca` | The SSH certificate authority, a separate actor because it is a different authority |
-| `quota` | Reserved for the allowance engine of [0039](/decisions/0039-quota-allowance/), which [0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/) superseded; not built. sluis keeps no balance |
+| `quota` | Reserved for the allowance engine of [0039](/decisions/archive/0039-quota-allowance/), which [0046](/decisions/0046-limits-on-the-request-path-and-usage-in-audit/) superseded; not built. sluis keeps no balance |
 | `adapter-<vendor>` | The work actor of an integration. It returns facts or carries out effects that core authorised, never decides, and opens each tenant's connection credential at key@ for each call ([Integrations](/integrations/)) |
 
 `signer`, `policy`, `ca` and `ssh-ca` run per [boundary](/concepts/boundaries/). The verifiers of proofs are not actors: they are verifiers inside `exchange`.
@@ -97,9 +97,9 @@ The holders are exactly four kinds of unit: store@ and exporter@ (data), key@ (k
 
 ## The foundation and the modules
 
-The data and keys families, store@, exporter@ and key@, are the **foundation**: every installation runs them, and their binaries do not change with what runs above them. Identity (the work actors other than `quota`, the adapters included) and audit are **modules**; the quota module is reserved with the superseded allowance engine ([0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/)). A module is a set of actors on top of the foundation, and it brings its own kinds and key purposes into the registries.
+The data and keys families, store@, exporter@ and key@, are the **foundation**: every installation runs them, and their binaries do not change with what runs above them. Identity (the work actors other than `quota`, the adapters included) and audit are **modules**; the quota module is reserved with the superseded allowance engine ([0046](/decisions/0046-limits-on-the-request-path-and-usage-in-audit/)). A module is a set of actors on top of the foundation, and it brings its own kinds and key purposes into the registries.
 
-An installation runs the foundation and the modules it needs. It may run the foundation with the audit module only, to keep the audit trail of a product that does not use sluis for sign-in ([Audit](/concepts/audit/#audit-alone)). The foundation and the modules are a grouping, not a fifth family: each actor stays in one family ([ADR 0002](/decisions/0002-families-of-actors/#the-foundation-and-the-modules)).
+An installation runs the foundation and the modules it needs. It may run the foundation with the audit module only, to keep the audit trail of a product that does not use sluis for sign-in ([Audit](/concepts/audit/#audit-alone)). The foundation and the modules are a grouping, not a fifth family: each actor stays in one family ([ADR 0002](/decisions/0002-families-of-actors/#the-foundation-and-the-layers)).
 
 ## Ports of a work actor
 

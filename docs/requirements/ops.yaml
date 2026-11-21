@@ -415,7 +415,7 @@ requirements:
   - id: REQ-OPS-030
     area: OPS
     statement: "Before the first relying party moves from v1, the cutover inventory MUST list every relying party of the v1 issuer, every consumer that keys on its sub, aud or groups claim, and how each relying party caches the key set: whether it honours max-age, whether it fetches again on an unknown kid, and the longest cache seen."
-    rationale: "A consumer keyed on v1's e-mail sub breaks when the subject becomes opaque, and a relying party that caches the key set for an hour breaks the first rotation after the move (ADR 0015, ADR 0006)."
+    rationale: "A consumer keyed on v1's e-mail sub breaks when the subject becomes opaque, and a relying party that caches the key set for an hour breaks the first rotation after the move (ADR 0001, ADR 0006)."
     level: MUST
     source: v1-parity
     status: planned

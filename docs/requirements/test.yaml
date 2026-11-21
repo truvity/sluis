@@ -41,7 +41,7 @@ requirements:
     rationale: "Certification of the high-assurance profile."
     level: MAY
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: the customer-facing profile (FAPI, PAR, DPoP) is the upstream's.
     # Restored 2026-11-18 as REQ-TEST-019: the profile is revived for the core issuer (ADR 0038, amendment of 2026-11-18, decision H1); the row returns under a new id.
     status: withdrawn
     superseded_by: [REQ-TEST-019]
@@ -284,7 +284,7 @@ requirements:
   - id: REQ-TEST-020
     area: TEST
     statement: "CI MUST run a test realm whose token is exchanged for a sluis token that carries customer, org and product."
-    rationale: "The exchange is proved against a realm of the kind that an installation trusts (ADR 0045)."
+    rationale: "The exchange is proved against a realm of the kind that an installation trusts (ADR 0032)."
     level: MUST
     source: design-decision
     status: planned

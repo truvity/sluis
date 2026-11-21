@@ -47,7 +47,7 @@ A record's `milestone` is the phase of the [roadmap](../roadmap.md#phases) in wh
 | Slug | Board option | Phase of the roadmap | What belongs to it |
 |---|---|---|---|
 | `core` | Core | [Core](../roadmap.md#core) | What every installation needs: the actors and flows, the building blocks (store, key, policy, audit with usage and limits, KV), the security hardening, and the local, boards, Lambda and Kubernetes installations with release management. |
-| `customer-identity` | Customer identity | [Customer identity and quota](../roadmap.md#customer-identity-and-quota) | The exchange of a token of the trusted realm for a sluis token with customer, org and product (ADR 0045). Not the cancelled broker. |
+| `customer-identity` | Customer identity | [Customer identity and quota](../roadmap.md#customer-identity-and-quota) | The exchange of a token of the trusted realm for a sluis token with customer, org and product (ADR 0032). Not the cancelled broker. |
 | `quota` | Quota | [Customer identity and quota](../roadmap.md#customer-identity-and-quota) | The usage stream and the limit check (ADR 0046). Not an allowance or a balance. |
 | `parity` | Parity | [Parity](../roadmap.md#parity) | What v1 does and the core does not yet: integrations, clients, the console, backup and restore, the rest of audit. Re-planned after the core, customer identity and quota. |
 | `pki-ssh-db` | PKI, SSH and database | [PKI, SSH and database](../roadmap.md#the-pki-ssh-and-database-add-on) | The certificate, SSH and database add-on: the intermediate hand-off, certificate profiles, SSH certificates, database client certificates. |

@@ -12,7 +12,7 @@ Schema v1 has only the keys that code of the core reads ([principle 8](/principl
 
 ## Where it lives
 
-- **`--bootstrap FILE` points store@ at the file.** The platform provides it: a file of root's in `/etc/sluis/bootstrap.d/` on a board or in the local installation (below), a mounted ConfigMap in a pod, a file in the function's package or layer on Lambda. The registries render its fragments, and IaC places them ([0015](/decisions/0015-evolution-and-compatibility/)).
+- **`--bootstrap FILE` points store@ at the file.** The platform provides it: a file of root's in `/etc/sluis/bootstrap.d/` on a board or in the local installation (below), a mounted ConfigMap in a pod, a file in the function's package or layer on Lambda. The registries render its fragments, and IaC places them ([0015](/decisions/0001-v1-and-v2-lines/)).
 - **A host has one file for each boundary, in `/etc/sluis/bootstrap.d/<boundary>.yaml`.** The name is the boundary's ([Names](#schema-and-validation)). The file holds one `boundary`, so a second boundary on the host is a second file, and the systemd generator reads the directory and creates one set of instances for each file ([Bare-metal](/runtimes/bare-metal/#what-runs-where)). On Kubernetes and Lambda the platform mounts or packages the one file of the boundary the pod or function serves.
 - **store@ reads all of it; key@ decodes the `publishers` block and nothing else, but checks the whole file against the schema first,** as store@ does, and so does the card driver of key@ (below, [Schema and validation](#schema-and-validation)). key@ verifies the `KeyPlan` itself, under these keys, instead of taking it from store@ ([0006](/decisions/0006-keys-and-sealing/#who-may-receive-a-wrap)). The block holds public keys only, so the file stays readable by root's group and others, and key@ gets it read-only (`--bootstrap`). No other actor reads it, and it is not a kind ([0004](/decisions/0004-the-data-model/#what-is-not-data)).
 - **store@ refuses a file that another uid can write.** The owner must be root or store@'s own uid, and the mode must not allow a write by group or others.
@@ -99,7 +99,7 @@ Schema v1 has only the keys that code of the core reads ([principle 8](/principl
 |---|---|---|---|
 | `$schema` | no | every binary that reads it | The schema `$id`, for editors |
 | `boundary` | yes | store@ | The boundary this store@ serves. Every address it handles begins with it ([0004](/decisions/0004-the-data-model/#the-address)) |
-| `start_timeout` | no | store@ | How long store@ waits at start for each driver to pass its `check` and for the config source to answer, a duration. Default `30s`. When it passes, store@ does not start ([0005](/decisions/0005-the-store/#a-cold-start-refuses-on-any-failure)) |
+| `start_timeout` | no | store@ | How long store@ waits at start for each driver to pass its `check` and for the config source to answer, a duration. Default `30s`. When it passes, store@ does not start ([0005](/decisions/0005-the-store/#configuration-loading)) |
 | `config_source` | yes | store@ | The destination of the config class ([below](#the-four-destinations)) |
 | `secret_source` | yes | store@ | The destination of the secret class |
 | `durable` | yes | store@ | The destination of the durable class |
@@ -108,7 +108,7 @@ Schema v1 has only the keys that code of the core reads ([principle 8](/principl
 
 ### The four destinations
 
-A destination names the driver behind one of store@'s four ports and the Unix socket where store@ reaches it ([0005](/decisions/0005-the-store/#the-four-ports-downward)). The durable and temp destinations may name one engine, and they stay two keys because the classes differ in backup and in time to live.
+A destination names the driver behind one of store@'s four ports and the Unix socket where store@ reaches it ([0005](/decisions/0005-the-store/#the-store-api)). The durable and temp destinations may name one engine, and they stay two keys because the classes differ in backup and in time to live.
 
 | Field | Required | Meaning |
 |---|---|---|

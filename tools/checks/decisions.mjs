@@ -129,7 +129,7 @@ if (r.errors.length) r.finish(0, 'records');
 const names = readdirSync(dir).sort();
 const records = new Map();
 for (const name of names) {
-  if (name === 'README.md' || name === TEMPLATE || name === 'renumbered.json') continue;
+  if (name === 'README.md' || name === TEMPLATE || name === 'renumbered.json' || name === 'archive') continue;
   const m = FILE.exec(name);
   if (!m) { E(`docs/decisions/${name}: not NNNN-kebab-case.md (or README.md, ${TEMPLATE})`); continue; }
   if (m[1] === '0000') { E(`docs/decisions/${name}: 0000 is the template's number`); continue; }
@@ -253,7 +253,14 @@ function headingSlugs(text) {
   }
   return out;
 }
-const slugs = new Map([...records.values()].map((rec) => [rec.name.replace(/\.md$/, ''), rec]));
+// The archive holds the superseded records under their old numbers. They are frozen: they are
+// not checked as records, but a citation or a link may name them.
+const archiveDir = join(dir, 'archive');
+const archived = existsSync(archiveDir)
+  ? readdirSync(archiveDir).sort().filter((n) => FILE.test(n)).map((n) => ({ name: `archive/${n}`, num: n.slice(0, 4) }))
+  : [];
+const slugs = new Map([...records.values(), ...archived].map((rec) => [rec.name.replace(/\.md$/, ''), rec]));
+const archivedNumbers = new Set(archived.map((a) => a.num));
 const anchorsOf = (slug) => {
   const rec = slugs.get(slug);
   rec.anchors ??= headingSlugs(read(rec.name));
@@ -261,10 +268,10 @@ const anchorsOf = (slug) => {
 };
 const CITE_FILE = /^(?:docs\/.+\.(?:md|mdx|yaml)|site\/src\/.+|[^/]+\.md|\.claude\/.+\.md)$/;
 const ADR_RX = /\bADRs? (\d{4})((?:(?:,? and |, | or |\/)\d{4})*)/g;
-const LINK_RX = /\/?decisions\/(\d{4}-[a-z0-9]+(?:-[a-z0-9]+)*)(\/|\.md)?(#[\w-]+)?/g;
+const LINK_RX = /\/?decisions\/((?:archive\/)?\d{4}-[a-z0-9]+(?:-[a-z0-9]+)*)(\/|\.md)?(#[\w-]+)?/g;
 let cited = 0;
 let files = [];
-try { files = trackedFiles(root).filter((f) => CITE_FILE.test(f)); } catch { /* not a git checkout */ }
+try { files = trackedFiles(root).filter((f) => CITE_FILE.test(f) && !f.startsWith('docs/decisions/archive/')); } catch { /* not a git checkout */ }
 for (const f of files) {
   let text;
   try { text = readFileSync(join(root, f), 'utf8'); } catch { continue; }
@@ -277,7 +284,7 @@ for (const f of files) {
       if (/\bv1\s*$|ritueel/i.test(before) || /^\s*(?:in its repository|of ritueel|in ritueel)/.test(after)) continue;
       for (const n of [m[1], ...[...m[2].matchAll(/\d{4}/g)].map((x) => x[0])]) {
         cited++;
-        if (n !== '0000' && !records.has(n)) E(`${at}: "${m[0]}" names record ${n}, which does not exist; a planned decision is named by its issue`);
+        if (n !== '0000' && !records.has(n) && !archivedNumbers.has(n)) E(`${at}: "${m[0]}" names record ${n}, which does not exist; a planned decision is named by its issue`);
       }
     }
     for (const m of line.matchAll(LINK_RX)) {

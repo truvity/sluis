@@ -14,7 +14,7 @@ A **runtime** is the kind of place sluis runs: how processes are started and wha
 
 The runtime is not the node count and not the cloud account: both are attributes of an installation. Nor is it the [boundary](/concepts/boundaries/), the environment or customer that an installation keeps apart from the others.
 
-Every runtime runs the same actors: the foundation (store@, key@ and exporter@) and the modules the installation needs ([0002](/decisions/0002-families-of-actors/#the-foundation-and-the-modules)). The actor registry says where each one runs. The runtime decides how an actor becomes a unit and how a call travels from one unit to the next ([0003](/decisions/0003-units-transports-and-fusion/#units)):
+Every runtime runs the same actors: the foundation (store@, key@ and exporter@) and the modules the installation needs ([0002](/decisions/0002-families-of-actors/#the-foundation-and-the-layers)). The actor registry says where each one runs. The runtime decides how an actor becomes a unit and how a call travels from one unit to the next ([0003](/decisions/0003-units-transports-and-fusion/#units)):
 
 | | bare-metal | serverless | kubernetes |
 |---|---|---|---|
@@ -54,7 +54,7 @@ Serverless always comes with a provider, AWS Lambda today, so for serverless the
 
 `sluis config check` validates an installation against what its drivers declare: a driver that needs a long-running process is refused on serverless, a driver that needs exactly one node is refused on a cluster, and a driver whose dependency is missing is refused everywhere.
 
-An actor that must run once at a time, such as the audit writer, is fenced by the write-once rule on its blob, and a background job takes a lease, which is a temp kind in store@'s engine ([0005](/decisions/0005-the-store/#leases)). There is no lock outside the store on any installation.
+An actor that must run once at a time, such as the audit writer, is fenced by the write-once rule on its blob, and a background job takes a lease, which is a temp kind in store@'s engine ([0005](https://github.com/truvity/atoom/blob/master/docs/decisions/0008-blocks.md)). There is no lock outside the store on any installation.
 
 ## Which drivers fit which runtime
 
@@ -85,7 +85,7 @@ This table is derived from what each driver requires and from [what each runtime
 | Audit witness | none, `external` | ✓ | ✓ | ✓ | ✓ |
 | | `peer` | ✗ | ✓ | ✗ | not independent in one cluster |
 
-The audit rows are audit's own ports ([0028](/decisions/0028-audit-pieces/#transport)); the others are store@'s and key@'s ([0005](/decisions/0005-the-store/#drivers), [0006](/decisions/0006-keys-and-sealing/#keys-per-board)). A lease needs no row: it is a temp kind in the engine.
+The audit rows are audit's own ports ([0028](https://github.com/truvity/audit/blob/master/docs/decisions/0002-pieces-and-holders.md)); the others are store@'s and key@'s ([0005](/decisions/0005-the-store/#drivers), [0006](/decisions/0006-keys-and-sealing/#keys-per-board)). A lease needs no row: it is a temp kind in the engine.
 
 ## Configuration sources
 
@@ -125,7 +125,7 @@ Anything else is a possible installation: start from the nearest tested one and 
 
 ## The edge and the engines of each installation
 
-Every production installation sits behind the Cloudflare edge, and each has its own way in. sluis's own deploy code sets its side of it, and each installation's infrastructure code applies the Cloudflare records, rules and rate limits; sluis holds no Cloudflare credential in the core (decisions E1 and E2 A of 2026-11-18, [0011](/decisions/0011-runtimes-and-installations/#amendment-of-2026-11-18-the-core-comes-first)). The key set and the discovery document are cacheable for less than the key pre-publish time.
+Every production installation sits behind the Cloudflare edge, and each has its own way in. sluis's own deploy code sets its side of it, and each installation's infrastructure code applies the Cloudflare records, rules and rate limits; sluis holds no Cloudflare credential in the core (decisions E1 and E2 A of 2026-11-18, [0011](/decisions/0011-runtimes-and-installations/#the-cloudflare-edge)). The key set and the discovery document are cacheable for less than the key pre-publish time.
 
 ```mermaid
 flowchart LR
@@ -159,7 +159,7 @@ flowchart LR
   end
 ```
 
-On Kubernetes the store and the audit index are separate databases with separate roles of one CloudNativePG cluster, so the credential of one does not open the other ([0005](/decisions/0005-the-store/#amendment-of-2026-11-18-kubernetes-stores-in-postgresql-through-cloudnativepg)). On Lambda the audit index is `postgres` on Aurora Serverless v2.
+On Kubernetes the store and the audit index are separate databases with separate roles of one CloudNativePG cluster, so the credential of one does not open the other ([0005](/decisions/0005-the-store/#engines)). On Lambda the audit index is `postgres` on Aurora Serverless v2.
 
 ## local
 
@@ -187,15 +187,15 @@ flowchart LR
   rq <-- "Raft, mutual TLS" --> peers["rqlite nodes of<br/>the other boards"]
 ```
 
-- **Drivers:** `yubikey-piv` behind key@; `rqlite` behind store@, one cluster over the three boards with the data on eMMC and the temp data replicated too, so any board serves any request ([0005](/decisions/0005-the-store/#engines)); `file` for config and systemd credentials for secrets; the audit `spool` on each board; the `fs` blob on each board's disk (R2 through `s3-compatible`, with credentials from the `cloud-cloudflare` driver, belongs to the Cloudflare add-on and holds no place in the core). The audit index is an rqlite cluster of its own; its full-text search was tested on a three-node cluster on 2026-10-30 ([0028](/decisions/0028-audit-pieces/#search-and-the-index)).
+- **Drivers:** `yubikey-piv` behind key@; `rqlite` behind store@, one cluster over the three boards with the data on eMMC and the temp data replicated too, so any board serves any request ([0005](/decisions/0005-the-store/#engines)); `file` for config and systemd credentials for secrets; the audit `spool` on each board; the `fs` blob on each board's disk (R2 through `s3-compatible`, with credentials from the `cloud-cloudflare` driver, belongs to the Cloudflare add-on and holds no place in the core). The audit index is an rqlite cluster of its own; its full-text search was tested on a three-node cluster on 2026-10-30 ([0028](https://github.com/truvity/audit/blob/master/docs/decisions/0012-search-and-the-reader-api.md)).
 - **Keys:** a board's keys are its own, born on its card. No key is shared between boards, so losing a board loses its keys, not the installation's. Data keys are wrapped for each board's card, so any board opens them ([0006](/decisions/0006-keys-and-sealing/#keys-per-board)). The slots are on [Bare-metal](/runtimes/bare-metal/#the-card-and-its-slots).
-- **Audit:** one log per board, with its own writer, spool and log key; the other two boards are its peer witnesses, through the audit blob, so a checkpoint carries two boards' signatures ([0029](/decisions/0029-the-audit-log/#witnesses)). Readers merge the logs by time. The log lives on each board's own disk for now, so a reinstalled board starts a fresh log ([Rebuild one board](/runtimes/rebuild-a-board/#what-a-reinstall-loses)); the Cloudflare add-on brings the R2 bucket that keeps it off site.
-- **Identity and edge:** each board runs its own `cloudflared`, which forwards to `entry`'s Unix socket. The boundary's issuer issues workload tokens, with one key per board card in its key set ([0022](/decisions/0022-workload-identity-and-host-enrolment/)). The audit pieces have a front of their own, a second `entry` with its own tunnel route on `sluis-audit.example.com` ([0028](/decisions/0028-audit-pieces/#the-audit-front)).
+- **Audit:** one log per board, with its own writer, spool and log key; the other two boards are its peer witnesses, through the audit blob, so a checkpoint carries two boards' signatures ([0029](https://github.com/truvity/audit/blob/master/docs/decisions/0009-witnesses-and-verification.md)). Readers merge the logs by time. The log lives on each board's own disk for now, so a reinstalled board starts a fresh log ([Rebuild one board](/runtimes/rebuild-a-board/#what-a-reinstall-loses)); the Cloudflare add-on brings the R2 bucket that keeps it off site.
+- **Identity and edge:** each board runs its own `cloudflared`, which forwards to `entry`'s Unix socket. The boundary's issuer issues workload tokens, with one key per board card in its key set ([0022](/decisions/0022-workload-identity-and-host-enrolment/)). The audit pieces have a front of their own, a second `entry` with its own tunnel route on `sluis-audit.example.com` ([0028](https://github.com/truvity/audit/blob/master/docs/decisions/0014-the-front-the-console-page-and-audit-verify.md)).
 - **Limits:** Raft tolerates the loss of one board of three. Physical access to a board with its card and PIN allows signing as that board; peer witnessing limits that for the audit logs but not for tokens. The `fs` blob has no lock (lock mode `none`), so the logs get their tamper evidence from the witnesses; with the Cloudflare add-on's R2 bucket the lock is `removable` by an account administrator and the witnesses still carry it.
 
 ## lambda
 
-One Lambda function per actor and per holder behind API Gateway, with KMS keys, DynamoDB, an SQS queue to the audit writer, an S3 bucket with a compliance lock, and an audit index on Aurora Serverless v2 with auto-pause that the indexer and the reader reach directly with IAM authentication, without RDS Proxy at first. Cloudflare proxies to an API Gateway custom domain with mutual TLS, and the API's default endpoint is disabled. A work function holds no credential; only the holders' roles reach storage, keys and the audit blob, and every hop between functions is an invoke. An invoke is fast enough for this layout, so no function links store@ into a work actor ([0003](/decisions/0003-units-transports-and-fusion/#fusion)); the figures of the warm sign-in are in [0037](/decisions/0037-capacity-is-measured-before-it-is-promised/#the-warm-sign-in-on-lambda). The writer runs with a reserved concurrency of 1, and correctness comes from the write-once fence on the bucket, not from the limit ([0029](/decisions/0029-the-audit-log/#the-write-once-fence)). The request path, the audit path and the limits are on [Serverless](/runtimes/serverless/). Runtime: serverless, elastic.
+One Lambda function per actor and per holder behind API Gateway, with KMS keys, DynamoDB, an SQS queue to the audit writer, an S3 bucket with a compliance lock, and an audit index on Aurora Serverless v2 with auto-pause that the indexer and the reader reach directly with IAM authentication, without RDS Proxy at first. Cloudflare proxies to an API Gateway custom domain with mutual TLS, and the API's default endpoint is disabled. A work function holds no credential; only the holders' roles reach storage, keys and the audit blob, and every hop between functions is an invoke. An invoke is fast enough for this layout, so no function links store@ into a work actor ([0003](/decisions/0003-units-transports-and-fusion/#fusion)); the figures of the warm sign-in are in [0037](/decisions/0037-capacity-is-measured-before-it-is-promised/#the-warm-sign-in-on-lambda). The writer runs with a reserved concurrency of 1, and correctness comes from the write-once fence on the bucket, not from the limit ([0029](https://github.com/truvity/audit/blob/master/docs/decisions/0008-the-log.md)). The request path, the audit path and the limits are on [Serverless](/runtimes/serverless/). Runtime: serverless, elastic.
 
 ## kubernetes
 

@@ -49,9 +49,11 @@ export function generator(name, script, { source, page, recipe }) {
   // that does not exist is an error, so a generated page never carries a dead link.
   const dir = join(root, 'docs', 'decisions');
   const files = existsSync(dir) ? readdirSync(dir).filter((f) => /^[0-9]{4}-.*\.md$/.test(f) && !f.startsWith('0000')) : [];
-  const records = new Map(files.map((f) => {
-    const text = readFileSync(join(dir, f), 'utf8');
-    return [f.slice(0, 4), { slug: f.replace(/\.md$/, ''), headings: new Set([...text.matchAll(/^#{2,6} +(.+?) *$/gm)].map((m) => slug(m[1]))) }];
+  const archiveDir = join(dir, 'archive');
+  const archiveFiles = existsSync(archiveDir) ? readdirSync(archiveDir).filter((f) => /^[0-9]{4}-.*\.md$/.test(f)) : [];
+  const records = new Map([...files.map((f) => [f, dir, '']), ...archiveFiles.map((f) => [f, archiveDir, 'archive/'])].map(([f, d, prefix]) => {
+    const text = readFileSync(join(d, f), 'utf8');
+    return [f.slice(0, 4), { slug: prefix + f.replace(/\.md$/, ''), headings: new Set([...text.matchAll(/^#{2,6} +(.+?) *$/gm)].map((m) => slug(m[1]))) }];
   }));
   const adrHref = (num, heading) => {
     const r = records.get(num);
@@ -66,7 +68,7 @@ export function generator(name, script, { source, page, recipe }) {
     if (!m) { error(`${page}: ${ref}: not a decision record reference`); return ref; }
     const r = records.get(m[1]);
     if (!r) { error(`${page}: ${ref}: there is no record ${m[1]} in docs/decisions/`); return `ADR ${m[1]}`; }
-    if (r.slug !== `${m[1]}-${m[2]}`) error(`${page}: ${ref}: the record ${m[1]} is ${r.slug}`);
+    if (r.slug.replace(/^archive\//, '') !== `${m[1]}-${m[2]}`) error(`${page}: ${ref}: the record ${m[1]} is ${r.slug}`);
     if (m[3] && !r.headings.has(m[3])) error(`${page}: ${ref}: ${r.slug} has no heading #${m[3]}`);
     return `[ADR ${m[1]}](/decisions/${r.slug}/${m[3] ? `#${m[3]}` : ''})`;
   };

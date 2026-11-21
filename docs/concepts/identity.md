@@ -11,7 +11,7 @@ sluis gives credentials to people and to machines. A person comes from an upstre
 ## A person's subject
 
 - **A person has an opaque random id, and it is the `sub` of every token the person gets,** for every client: v2 issues no pairwise `sub` ([ADR 0020](/decisions/0020-grant-vocabulary-and-token-claims/#the-sub-of-a-token)). A relying party that needs a readable name reads the `email` claim of the ID token. sluis assigns the id when it first sees a person: at a directory read where the upstream has a directory, so it is known before the first sign-in, and otherwise at the first sign-in, which is how the core works today. An upstream account is tied to the person by the issuer and a configured subject claim (`sub`, or `oid` for Microsoft Entra), never by e-mail ([ADR 0019](/decisions/0019-person-and-upstream-link/)). The subject is never an e-mail address or a directory account name, so it survives a rename and keeps personal data out of log lines.
-- **The directory account and `email` are claims of their own**, beside `acr`, `amr` and `auth_time`. A token for an audience that declares a binding also carries `cnf`: `cnf.jkt` for DPoP, which the core offers as part of its FAPI 2.0 profile ([ADR 0038](/decisions/0038-fapi-2-profile/#amendment-of-2026-11-18-the-profile-is-revived-for-the-core-issuer)). Binding by mutual TLS (`cnf.x5t#S256`) comes later, with a design for forwarding the client certificate through the Cloudflare edge.
+- **The directory account and `email` are claims of their own**, beside `acr`, `amr` and `auth_time`. A token for an audience that declares a binding also carries `cnf`: `cnf.jkt` for DPoP, which the core offers as part of its FAPI 2.0 profile ([ADR 0038](/decisions/0038-fapi-2-profile/#the-profile)). Binding by mutual TLS (`cnf.x5t#S256`) comes later, with a design for forwarding the client certificate through the Cloudflare edge.
 - **A person disabled in the directory, or held by an operator, is refused at once**, whatever the cached state.
 - **A person has four states** (live, held, suspended and left), computed from the kinds and never stored; a person who is not live is refused at sign-in, refresh, exchange and step-up ([ADR 0019](/decisions/0019-person-and-upstream-link/#states)).
 
@@ -19,7 +19,7 @@ Each environment has its own issuer, and tokens carry exactly one audience; see 
 
 ## How a person signs in
 
-People come from an upstream directory, so sluis stores no passwords. A person signs in at the upstream, and `session` assigns the subject and keeps a **session chain**, a temp kind whose limits depend on the session class ([ADR 0018](/decisions/0018-sessions/#session-chains)).
+People come from an upstream directory, so sluis stores no passwords. A person signs in at the upstream, and `session` assigns the subject and keeps a **session chain**, a temp kind whose limits depend on the session class ([ADR 0018](/decisions/0018-sign-in-sessions/#session-chains)).
 
 - **Passkeys are the fast path** and count as phishing-resistant multi-factor authentication. sluis stores only their public keys, sealed in the person's tenant. A full upstream sign-in is still required every N days and for high-privilege grant names ([ADR 0017](/decisions/0017-identity-and-sign-in/#passkeys)).
 - **Step-up** asks for a fresh factor when a request needs more than the session holds ([ADR 0017](/decisions/0017-identity-and-sign-in/#step-up)).
@@ -72,7 +72,7 @@ Each kind of proof is a **verifier** inside `exchange`. A verifier holds public 
 
 ## Customers sign in upstream
 
-sluis signs in its staff and operators itself, with passkeys. A customer signs in only at the upstream identity provider: sluis hosts no customer account, page or registration ([ADR 0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)). One installation serves one boundary and trusts one realm, which the `ExchangeTrust` config kind declares, so a token of another realm is refused. `exchange` takes a token of the trusted realm (Keycloak in the tested installations) as the subject token and issues a sluis token for one audience. It sets three claims from the upstream token, through the mapping that the installation declares, and never from the request.
+sluis signs in its staff and operators itself, with passkeys. A customer signs in only at the upstream identity provider: sluis hosts no customer account, page or registration ([ADR 0032](/decisions/0032-customer-identity-installations/)). One installation serves one boundary and trusts one realm, which the `ExchangeTrust` config kind declares, so a token of another realm is refused. `exchange` takes a token of the trusted realm (Keycloak in the tested installations) as the subject token and issues a sluis token for one audience. It sets three claims from the upstream token, through the mapping that the installation declares, and never from the request.
 
 ```mermaid
 flowchart LR
@@ -83,7 +83,7 @@ flowchart LR
   other["token of another realm"] -.->|"refused"| xchg
 ```
 
-This is built right after the core, in the Customer identity phase ([roadmap](/roadmap/#customer-identity-and-quota)). The customer-facing broker of the earlier plan ([0031](/decisions/0031-ciam-is-a-broker/) and the records that follow it) stays superseded. A person who works for several vendors keeps one identity per tenant and holds several sessions in parallel on the client, not one subject shared across tenants ([#1894](https://github.com/truvity/sluis/issues/1894)).
+This is built right after the core, in the Customer identity phase ([roadmap](/roadmap/#customer-identity-and-quota)). The customer-facing broker of the earlier plan ([0031](/decisions/archive/0031-ciam-is-a-broker/) and the records that follow it) stays superseded. A person who works for several vendors keeps one identity per tenant and holds several sessions in parallel on the client, not one subject shared across tenants ([#1894](https://github.com/truvity/sluis/issues/1894)).
 
 ## How an actor reaches a cloud
 

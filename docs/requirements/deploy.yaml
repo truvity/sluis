@@ -203,7 +203,7 @@ requirements:
   - id: REQ-DEPLOY-014
     area: DEPLOY
     statement: "sluis MUST render IAM policies, the function and schedule map, units and chart values as plain files that need no sluis library to apply."
-    rationale: "The rendered artifacts are the contract, so any tool can apply them (ADR 0015)."
+    rationale: "The rendered artifacts are the contract, so any tool can apply them (ADR 0001)."
     level: MUST
     source: design-decision
     status: partial
@@ -217,7 +217,7 @@ requirements:
   - id: REQ-DEPLOY-015
     area: DEPLOY
     statement: "The Pulumi library MUST live in a Go module of its own and consume the rendered artifacts only."
-    rationale: "The product must not depend on one infrastructure-as-code tool (ADR 0015)."
+    rationale: "The product must not depend on one infrastructure-as-code tool (ADR 0001)."
     level: MUST
     source: v1-parity
     status: planned
@@ -298,7 +298,7 @@ requirements:
   - id: REQ-DEPLOY-021
     area: DEPLOY
     statement: "A rolling update on Kubernetes MUST NOT remove a replica before its replacement is ready."
-    rationale: "Sign-in then stays up through a release (ADR 0003, Cells; ADR 0015)."
+    rationale: "Sign-in then stays up through a release (ADR 0003, Cells; ADR 0001)."
     level: MUST
     source: design-decision
     status: planned

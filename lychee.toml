@@ -34,6 +34,10 @@ exclude = [
   # project are merged or created; the site links to them by their final path.
   '^https://github\.com/truvity/sluis/(blob|tree|edit)/',
   '^https://github\.com/orgs/truvity/projects',
+  # The records of atoom, audit and session are linked by their final path on master. They
+  # arrive with the pull requests that rewrite those repositories' documentation; drop these
+  # three lines when those are merged.
+  '^https://github\.com/truvity/(atoom|audit|session)/(blob|tree)/master/',
   # www.rfc-editor.org redirects /rfc/rfcNNNN to /info/rfcNNNN/ and that page to itself
   # (301 in a loop) or answers 502, as of 2026-11-01; with the timeout and the retries
   # that kept the link check busy for the whole job. The RFC links are references, not

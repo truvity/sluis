@@ -94,7 +94,7 @@ The AWS and Kubernetes pages sit between the two: the integration part is the wo
 
 Every page has the same parts: what it is for, the kinds it plays, what sluis asks the vendor for, what policy controls, what is audited, and setup. v1 behaviour and the parity issues are on the [v1 parity checklist](/features/).
 
-The core has the `Integration` and `Upstream` contracts, served by `adapter-upstream-oidc`. The other contracts arrive with their first consumer: the GitHub and Cloudflare minters in their add-ons, on the shared Cloudflare, AWS and GitHub clients, and the rest at parity ([0025](/decisions/0025-integrations/#the-first-working-version)).
+The core has the `Integration` and `Upstream` contracts, served by `adapter-upstream-oidc`. The other contracts arrive with their first consumer: the GitHub and Cloudflare minters in their add-ons, on the shared Cloudflare, AWS and GitHub clients, and the rest at parity ([0025](/decisions/0025-integrations/#built-and-planned)).
 
 | Page | Kinds | The use cases it serves |
 |---|---|---|

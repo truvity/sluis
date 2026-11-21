@@ -1,18 +1,16 @@
 # 0035 — Customer pages are few, branded per client and login domain, and localised per request
 
-**Status:** Superseded by 0045
+**Status:** Superseded by 0032
 **Layer:** customer identity
 **Date:** 2026-11-12
 
 Proposal: [issue #927](https://github.com/truvity/sluis/issues/927).
 
-> Superseded on 2026-11-12 by [0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/): sluis serves no customer page; the upstream owns customer sign-in screens (D1 B, D7 A, 2026-11-12).
-
-> Read with the amendment of 2026-11-18 of [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv): the Customer identity phase returns with a narrow scope, the exchange of a token of the trusted realm for a sluis token with customer, org and product ([0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)). This record stays superseded and nothing in it is built.
+> Archived in the clean rewrite of 2026-11-21. It is kept as it was decided and is superseded by [0032](/decisions/0032-customer-identity-installations/). Nothing in it is built.
 
 ## Context
 
-With sign-in done at the upstream ([0031](/decisions/0031-ciam-is-a-broker/)), the pages that sluis itself shows a customer are few. The requirements already say that pages come from templates with message catalogues ([REQ-UX-002](/requirements/ux/#REQ-UX-002)), that locales are configurable ([REQ-UX-007](/requirements/ux/#REQ-UX-007)), that a refusal shows only a generic message and a request identifier ([REQ-UX-001](/requirements/ux/#REQ-UX-001)), and that every page meets WCAG 2.1 AA ([REQ-A11Y-001](/requirements/a11y/#REQ-A11Y-001)) under a strict content security policy ([REQ-SEC-004](/requirements/sec/#REQ-SEC-004)).
+With sign-in done at the upstream ([0031](/decisions/archive/0031-ciam-is-a-broker/)), the pages that sluis itself shows a customer are few. The requirements already say that pages come from templates with message catalogues ([REQ-UX-002](/requirements/ux/#REQ-UX-002)), that locales are configurable ([REQ-UX-007](/requirements/ux/#REQ-UX-007)), that a refusal shows only a generic message and a request identifier ([REQ-UX-001](/requirements/ux/#REQ-UX-001)), and that every page meets WCAG 2.1 AA ([REQ-A11Y-001](/requirements/a11y/#REQ-A11Y-001)) under a strict content security policy ([REQ-SEC-004](/requirements/sec/#REQ-SEC-004)).
 
 A product wants its customers to see its own brand on those pages, and a client may want its own login domain. Both raise a safety question.
 
@@ -29,9 +27,9 @@ sluis serves these pages for a customer, and no others. `session` renders them.
 
 | Page | When |
 |---|---|
-| Account chooser and identifier prompt | Only for a client that routes by domain, which needs more than one upstream ([0033](/decisions/0033-customer-connections/#choosing-the-connection)) |
+| Account chooser and identifier prompt | Only for a client that routes by domain, which needs more than one upstream ([0033](/decisions/archive/0033-customer-connections/#choosing-the-connection)) |
 | Redirect and form-post pages | While a sign-in is handed to the upstream or to the client |
-| Step-up notice | Before the person is sent to authenticate again ([0018](/decisions/0018-sessions/#customers)) |
+| Step-up notice | Before the person is sent to authenticate again ([0018](/decisions/0018-sign-in-sessions/#customers)) |
 | Agent consent | When an agent asks for access ([REQ-CIAM-004](/requirements/ciam/#REQ-CIAM-004)) |
 | My sessions | The person lists and revokes their sessions and agent sessions ([REQ-SESS-006](/requirements/sess/#REQ-SESS-006), [REQ-SESS-034](/requirements/sess/#REQ-SESS-034)) |
 | Sign-out confirmation | RP-initiated logout |
@@ -61,14 +59,14 @@ Registration, sign-in with a password or a factor, recovery and profile pages ar
 
 - **A login domain is a `FrontHost` entry,** a config kind with a host and a name. The entry named `default` serves a client that names none. A domain needs DNS and a certificate, so the kind is Fixed: a new domain is a reviewed, signed change.
 - **A client references a `FrontHost` entry by name.** An installation client names it in config. A tenant client has the entry that its tenant's `Tenant` item names ([0021](/decisions/0021-clients/#the-client-declaration)), so a tenant cannot use a domain that config never provisioned.
-- **A tenant's issuer host is a `FrontHost` entry.** The `Tenant` item names it and an operator sets it; a new host is a reviewed, signed change, and a tenant cannot add a domain at run time. What a tenant brings besides is a brand. The e-mail domains that an upstream serves ([0033](/decisions/0033-customer-connections/#which-upstreams-an-installation-has)) route a person's address to an upstream and are a different thing.
+- **A tenant's issuer host is a `FrontHost` entry.** The `Tenant` item names it and an operator sets it; a new host is a reviewed, signed change, and a tenant cannot add a domain at run time. What a tenant brings besides is a brand. The e-mail domains that an upstream serves ([0033](/decisions/archive/0033-customer-connections/#which-upstreams-an-installation-has)) route a person's address to an upstream and are a different thing.
 - **Each login domain is one origin.** Its cookies are host-prefixed with no `Domain`, so a session started on one login domain does not reach another, and the origins a passkey verifier accepts are those of [0017](/decisions/0017-identity-and-sign-in/#passkeys) ([REQ-ISO-034](/requirements/iso/#REQ-ISO-034)).
 - **The issuer URL of a client is the host of its login domain,** which is its tenant's issuer ([0017](/decisions/0017-identity-and-sign-in/#issuers)). Relying parties pin `iss`, so a client that moves to another login domain is a new issuer for them; a tenant that moves to another boundary keeps its host.
 
 ### Passkeys and the relying-party ID
 
 - **Passkey flows and staff passkeys use the one shared sign-in domain.** The flows are the ones that need a person's passkey, such as the certification of a PKI intermediate and GPG signing. Staff passkeys are the `StaffPasskey` kind. Both belong to the `rp_id` of the `FrontHost` entry of that domain, so there is one `rp_id` for them.
-- **End-user passkeys belong to the upstream.** sluis enrols no factor and asks for no passkey of a person who signs in through a customer upstream ([0018](/decisions/0018-sessions/#customers)). No customer-facing login domain enrols a passkey, so no such domain needs an `rp_id` of its own.
+- **End-user passkeys belong to the upstream.** sluis enrols no factor and asks for no passkey of a person who signs in through a customer upstream ([0018](/decisions/0018-sign-in-sessions/#customers)). No customer-facing login domain enrols a passkey, so no such domain needs an `rp_id` of its own.
 - **How a verifier checks a passkey assertion** is in [0017](/decisions/0017-identity-and-sign-in/#passkeys).
 
 ## Consequences
@@ -87,7 +85,7 @@ Registration, sign-in with a password or a factor, recovery and profile pages ar
 - **Custom CSS or templates from a product.** A tenant could rebuild the page into a phishing page served from sluis's own host.
 - **A custom domain per tenant.** It multiplies origins, certificates and passkey allow-list entries by the number of tenants, and nobody reviews them. A tenant picks among reviewed entries.
 - **The login domain as a field of each client.** A tenant client could then name a domain that config never provisioned. A `FrontHost` entry that clients reference is Fixed and shared.
-- **Hosted sign-in, registration and recovery pages in sluis.** They are the upstream's job and the account hosting that [0031](/decisions/0031-ciam-is-a-broker/) refuses.
+- **Hosted sign-in, registration and recovery pages in sluis.** They are the upstream's job and the account hosting that [0031](/decisions/archive/0031-ciam-is-a-broker/) refuses.
 - **End-user passkeys in sluis, with an `rp_id` per login domain.** sluis would hold customer credentials, and every login domain would need its own enrolment of the same person.
 - **An `rp_id` per login domain for staff.** A staff member would enrol a passkey on every domain.
 - **Locale from the tenant's setting.** A person's language is not their organisation's; the request carries the better signal.

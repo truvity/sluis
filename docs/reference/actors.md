@@ -6,7 +6,7 @@ sidebar:
   order: 1
 ---
 
-The registry lists every [actor](/concepts/families/) of sluis by [family](/decisions/0002-families-of-actors/#the-four-families): the work actors (the adapters among them), store and exporter (data), key (keys), and the audit pieces. Its source is [`docs/architecture/actors.yaml`](https://github.com/truvity/sluis/blob/main/docs/architecture/actors.yaml), and the tables below are generated from it. With the kind registry and the key registry it generates the enforcement layers; each fact has one source.
+The registry lists every [actor](/concepts/families/) of sluis by [family](/decisions/0002-families-of-actors/#the-families): the work actors (the adapters among them), store and exporter (data), key (keys), and the audit pieces. Its source is [`docs/architecture/actors.yaml`](https://github.com/truvity/sluis/blob/main/docs/architecture/actors.yaml), and the tables below are generated from it. With the kind registry and the key registry it generates the enforcement layers; each fact has one source.
 
 `just check-actors` (`tools/checks/actors.mjs`) keeps the registry true. It fails when:
 
@@ -78,7 +78,7 @@ Sign-in, session chains, the session cookie and the freshness of each person's a
 - **Calls:** `policy`, `signer`, `exchange`, `adapter-upstream-oidc`.
 - **Egress:** `client-document-hosts`.
 - **Key purposes:** `chain` (seal, open), `cookie` (seal, open), `credential` (seal, open), `data` (seal, open), `mac` (mac), `pseudonym` (mac).
-- **Decisions:** [ADR 0002](/decisions/0002-families-of-actors/), [ADR 0012](/decisions/0012-the-language-follows-the-executable/), [ADR 0017](/decisions/0017-identity-and-sign-in/), [ADR 0018](/decisions/0018-sessions/), [ADR 0019](/decisions/0019-person-and-upstream-link/).
+- **Decisions:** [ADR 0002](/decisions/0002-families-of-actors/), [ADR 0012](/decisions/0012-the-language-follows-the-executable/), [ADR 0017](/decisions/0017-identity-and-sign-in/), [ADR 0018](/decisions/0018-sign-in-sessions/), [ADR 0019](/decisions/0019-person-and-upstream-link/).
 - **Requirement areas:** [AUTHN](/requirements/authn/), [SESS](/requirements/sess/), [TOKEN](/requirements/token/), [FED](/requirements/fed/), [SUBJ](/requirements/subj/).
 - **Standards:** ST-28 OIDC Core 1.0; ST-29 OIDC Discovery; ST-03 RFC 7636 PKCE; ST-24 RFC 9470 Step-up; ST-34 Form Post response mode; ST-59 WebAuthn L2/L3; ST-30 RP-Initiated Logout; ST-31 Back-Channel Logout.
 - **Issues:** [#959](https://github.com/truvity/sluis/issues/959), [#775](https://github.com/truvity/sluis/issues/775), [#776](https://github.com/truvity/sluis/issues/776), [#777](https://github.com/truvity/sluis/issues/777), [#778](https://github.com/truvity/sluis/issues/778), [#885](https://github.com/truvity/sluis/issues/885), [#979](https://github.com/truvity/sluis/issues/979), [#1081](https://github.com/truvity/sluis/issues/1081), [#793](https://github.com/truvity/sluis/issues/793); label `actor:session`.
@@ -190,7 +190,7 @@ Reserved for the allowance engine of ADR 0039, which ADR 0046 superseded; not bu
 - **Calls:** `policy`.
 - **Egress:** none.
 - **Key purposes:** `pseudonym` (mac).
-- **Decisions:** [ADR 0002](/decisions/0002-families-of-actors/), [ADR 0012](/decisions/0012-the-language-follows-the-executable/), [ADR 0039](/decisions/0039-quota-allowance/), [ADR 0040](/decisions/0040-meters-and-usage-evidence/).
+- **Decisions:** [ADR 0002](/decisions/0002-families-of-actors/), [ADR 0012](/decisions/0012-the-language-follows-the-executable/), [ADR 0046](/decisions/0046-limits-on-the-request-path-and-usage-in-audit/), [ADR 0040](/decisions/0040-meters-and-usage-evidence/).
 - **Requirement areas:** [QUOTA](/requirements/quota/).
 - **Standards:** NC-15 Idempotency: IETF Idempotency-Key draft (`X-Request-ID` is not an RFC).
 - **Issues:** [#915](https://github.com/truvity/sluis/issues/915), [#1026](https://github.com/truvity/sluis/issues/1026); label `actor:quota`.

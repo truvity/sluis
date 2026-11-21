@@ -1,8 +1,9 @@
 {
-  "$comment": "The records renumbered on 2026-11-01 and again on 2026-11-03 (docs/decisions/README.md, 'Design phase'). Each old slug and the record that holds its content now; every row points at a final record, so no redirect chains. site/astro.config.mjs turns every row whose old differs from new into a 301; tools/checks/decisions.mjs checks that no old slug is a file and every new one is. A part of a record that went elsewhere is in anchors. This file is the step-0 variant: it omits the rows whose old slug is still a record file (the parked records), which the content pull requests add when they delete those files.",
+  "$comment": "The records renumbered on 2026-11-01 and 2026-11-03 and were rewritten once, cleanly, on 2026-11-21 (docs/decisions/README.md). Each old slug and the record that holds its content now; every row points at a final record or archived record, so a redirect is one hop. site/astro.config.mjs turns every row whose old differs from new into a 301; tools/checks/decisions.mjs checks that no old slug is a file and every new one is. A part of a record that went elsewhere is in anchors.",
   "dates": [
     "2026-11-01",
-    "2026-11-03"
+    "2026-11-03",
+    "2026-11-21"
   ],
   "records": [
     {
@@ -117,7 +118,7 @@
     },
     {
       "old": "0023-sessions-have-three-classes-with-limits-per-class",
-      "new": "0018-sessions",
+      "new": "0018-sign-in-sessions",
       "renumbered": "2026-11-03"
     },
     {
@@ -167,7 +168,7 @@
     },
     {
       "old": "0033-evolution-and-compatibility-n-and-n-1-inside-a-major-and-parallel-cutover",
-      "new": "0015-evolution-and-compatibility",
+      "new": "0001-v1-and-v2-lines",
       "renumbered": "2026-11-03"
     },
     {
@@ -207,17 +208,17 @@
     },
     {
       "old": "0041-the-finance-export-is-a-statement-per-account-and-period-closed-once-anchored-in-the-usage-log-and-pulled",
-      "new": "0039-quota-allowance",
+      "new": "archive/0039-quota-allowance",
       "renumbered": "2026-11-03"
     },
     {
       "old": "0042-plan-templates-are-declared-and-accounts-are-issued-at-run-time-by-a-declared-client",
-      "new": "0039-quota-allowance",
+      "new": "archive/0039-quota-allowance",
       "renumbered": "2026-11-03"
     },
     {
       "old": "0043-a-quota-installation-is-fronted-by-service-identity-for-services-and-exchanged-tokens-for-people",
-      "new": "0039-quota-allowance",
+      "new": "archive/0039-quota-allowance",
       "renumbered": "2026-11-03"
     },
     {
@@ -227,12 +228,12 @@
     },
     {
       "old": "0045-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on",
-      "new": "0039-quota-allowance",
+      "new": "archive/0039-quota-allowance",
       "renumbered": "2026-11-03"
     },
     {
       "old": "0046-ciam-is-a-broker-the-upstream-owns-accounts-and-sluis-owns-sessions-and-tokens",
-      "new": "0031-ciam-is-a-broker",
+      "new": "archive/0031-ciam-is-a-broker",
       "renumbered": "2026-11-03"
     },
     {
@@ -242,27 +243,27 @@
     },
     {
       "old": "0048-customer-connections-run-in-a-pool-per-customer-boundary",
-      "new": "0033-customer-connections",
+      "new": "archive/0033-customer-connections",
       "renumbered": "2026-11-03"
     },
     {
       "old": "0049-a-domain-routes-only-after-dns-proof-and-a-connection-has-a-trust-level",
-      "new": "0033-customer-connections",
+      "new": "archive/0033-customer-connections",
       "renumbered": "2026-11-03"
     },
     {
       "old": "0050-an-end-user-is-a-person-record-with-five-states-erased-by-deleting-its-records",
-      "new": "0034-end-users-and-upstream-signals",
+      "new": "archive/0034-end-users-and-upstream-signals",
       "renumbered": "2026-11-03"
     },
     {
       "old": "0051-upstream-signals-end-sessions-and-suspend-or-erase-a-person",
-      "new": "0034-end-users-and-upstream-signals",
+      "new": "archive/0034-end-users-and-upstream-signals",
       "renumbered": "2026-11-03"
     },
     {
       "old": "0052-customer-pages-are-few-themed-per-client-and-localised-per-request",
-      "new": "0035-customer-pages",
+      "new": "archive/0035-customer-pages",
       "renumbered": "2026-11-03"
     },
     {
@@ -467,7 +468,7 @@
     },
     {
       "old": "0055-upstream-signals-end-sessions-and-suspend-or-erase-a-person",
-      "new": "0034-end-users-and-upstream-signals",
+      "new": "archive/0034-end-users-and-upstream-signals",
       "renumbered": "2026-11-03"
     },
     {
@@ -487,12 +488,12 @@
     },
     {
       "old": "0052-a-quota-installation-is-fronted-by-service-identity-for-services-and-exchanged-tokens-for-people",
-      "new": "0039-quota-allowance",
+      "new": "archive/0039-quota-allowance",
       "renumbered": "2026-11-03"
     },
     {
       "old": "0053-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on",
-      "new": "0039-quota-allowance",
+      "new": "archive/0039-quota-allowance",
       "renumbered": "2026-11-03"
     },
     {
@@ -517,13 +518,68 @@
     },
     {
       "old": "0051-the-finance-export-is-a-statement-per-account-and-period-closed-once-anchored-in-the-usage-log-and-pulled",
-      "new": "0039-quota-allowance",
+      "new": "archive/0039-quota-allowance",
       "renumbered": "2026-11-03"
     },
     {
       "old": "0054-customer-connections-run-in-a-pool-per-customer-boundary",
-      "new": "0033-customer-connections",
+      "new": "archive/0033-customer-connections",
       "renumbered": "2026-11-03"
+    },
+    {
+      "old": "0015-evolution-and-compatibility",
+      "new": "0001-v1-and-v2-lines",
+      "renumbered": "2026-11-21"
+    },
+    {
+      "old": "0018-sessions",
+      "new": "0018-sign-in-sessions",
+      "renumbered": "2026-11-21"
+    },
+    {
+      "old": "0031-ciam-is-a-broker",
+      "new": "archive/0031-ciam-is-a-broker",
+      "renumbered": "2026-11-21"
+    },
+    {
+      "old": "0033-customer-connections",
+      "new": "archive/0033-customer-connections",
+      "renumbered": "2026-11-21"
+    },
+    {
+      "old": "0034-end-users-and-upstream-signals",
+      "new": "archive/0034-end-users-and-upstream-signals",
+      "renumbered": "2026-11-21"
+    },
+    {
+      "old": "0035-customer-pages",
+      "new": "archive/0035-customer-pages",
+      "renumbered": "2026-11-21"
+    },
+    {
+      "old": "0039-quota-allowance",
+      "new": "archive/0039-quota-allowance",
+      "renumbered": "2026-11-21"
+    },
+    {
+      "old": "0044-sluis-v2-is-a-core-building-blocks-and-add-ons",
+      "new": "0044-sluis-is-a-core-and-add-ons",
+      "renumbered": "2026-11-21"
+    },
+    {
+      "old": "0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product",
+      "new": "0032-customer-identity-installations",
+      "renumbered": "2026-11-21"
+    },
+    {
+      "old": "0046-usage-records-are-never-dropped-and-balances-live-in-the-product",
+      "new": "0046-limits-on-the-request-path-and-usage-in-audit",
+      "renumbered": "2026-11-21"
+    },
+    {
+      "old": "0047-kv-is-an-add-on-of-stores-that-no-tenant-owns",
+      "new": "0047-kv-is-a-core-service-of-stores-that-no-tenant-owns",
+      "renumbered": "2026-11-21"
     }
   ],
   "anchors": {
@@ -531,7 +587,7 @@
     "0002-the-design-model-actors-ports-drivers-and-contracts#ports-and-drivers": "0002-families-of-actors#ports-of-a-work-actor",
     "0002-the-design-model-actors-ports-drivers-and-contracts#placement-is-derived": "0003-units-transports-and-fusion#units",
     "0002-the-design-model-actors-ports-drivers-and-contracts#the-permission-manifest": "0002-families-of-actors#registries-generate-the-enforcement",
-    "0003-core-actors-with-one-responsibility-each#the-actors": "0002-families-of-actors#the-four-families",
+    "0003-core-actors-with-one-responsibility-each#the-actors": "0002-families-of-actors",
     "0003-core-actors-with-one-responsibility-each#names": "0002-families-of-actors#names",
     "0003-core-actors-with-one-responsibility-each#the-console": "0002-families-of-actors#the-console",
     "0003-core-actors-with-one-responsibility-each#the-fusion-rule": "0003-units-transports-and-fusion#fusion",
@@ -545,7 +601,7 @@
     "0010-configuration-and-data-pkl-schema-origins-and-sensitivities#audit-and-telemetry-by-origin": "0004-the-data-model#what-is-not-data",
     "0011-state-is-one-port-with-compare-and-set#the-port": "0005-the-store#the-store-api",
     "0011-state-is-one-port-with-compare-and-set#one-writer-per-kind": "0004-the-data-model#one-writer-per-kind",
-    "0011-state-is-one-port-with-compare-and-set#leases": "0005-the-store#leases",
+    "0011-state-is-one-port-with-compare-and-set#leases": "0005-the-store",
     "0011-state-is-one-port-with-compare-and-set#sealed-secrets": "0004-the-data-model#treatment",
     "0011-state-is-one-port-with-compare-and-set#drivers": "0005-the-store#drivers",
     "0011-state-is-one-port-with-compare-and-set#how-a-per-actor-rqlite-driver-reaches-its-cluster": "0005-the-store#engines",
@@ -554,8 +610,8 @@
     "0035-the-secrets-port-has-one-driver-sealed-state-and-the-export-port-publishes-only-kinds-marked-external#one-driver-sealed-state": "0004-the-data-model#treatment",
     "0057-configuration-sources-are-a-port-sources-own-disjoint-paths-authority-is-signed-and-a-failing-source-keeps-the-version-in-force#a-port-config-source": "0005-the-store#configuration-loading",
     "0057-configuration-sources-are-a-port-sources-own-disjoint-paths-authority-is-signed-and-a-failing-source-keeps-the-version-in-force#declared-versus-issued": "0004-the-data-model#storage-classes",
-    "0057-configuration-sources-are-a-port-sources-own-disjoint-paths-authority-is-signed-and-a-failing-source-keeps-the-version-in-force#failure": "0005-the-store#a-failed-reload",
-    "0057-configuration-sources-are-a-port-sources-own-disjoint-paths-authority-is-signed-and-a-failing-source-keeps-the-version-in-force#freshness-at-a-cold-start": "0005-the-store#freshness-at-a-cold-start",
+    "0057-configuration-sources-are-a-port-sources-own-disjoint-paths-authority-is-signed-and-a-failing-source-keeps-the-version-in-force#failure": "0005-the-store",
+    "0057-configuration-sources-are-a-port-sources-own-disjoint-paths-authority-is-signed-and-a-failing-source-keeps-the-version-in-force#freshness-at-a-cold-start": "0005-the-store",
     "0057-configuration-sources-are-a-port-sources-own-disjoint-paths-authority-is-signed-and-a-failing-source-keeps-the-version-in-force#roads-not-taken": "0005-the-store#roads-not-taken",
     "0047-declared-and-issued-configuration-authority-is-declared-and-instances-are-issued#three-kinds-of-configuration": "0004-the-data-model#storage-classes",
     "0047-declared-and-issued-configuration-authority-is-declared-and-instances-are-issued#instances-are-issued-under-declared-templates": "0004-the-data-model#profiles",
@@ -589,52 +645,52 @@
     "0046-tenancy-and-scale-a-boundary-holds-keys-and-a-tenant-is-a-record#growth-is-another-installation": "0008-boundaries-and-tenants#scale",
     "0047-declared-and-issued-configuration-authority-is-declared-and-instances-are-issued#workforce-installations": "0008-boundaries-and-tenants#example-installations",
     "0047-declared-and-issued-configuration-authority-is-declared-and-instances-are-issued#customer-identity-installations": "0008-boundaries-and-tenants#example-installations",
-    "0048-customer-connections-run-in-a-pool-per-customer-boundary#what-a-pool-is-allowed": "0033-customer-connections#the-upstream-hosts-are-known",
-    "0055-upstream-signals-end-sessions-and-suspend-or-erase-a-person#inbound-back-channel-logout": "0034-end-users-and-upstream-signals#inbound-back-channel-logout",
-    "0055-upstream-signals-end-sessions-and-suspend-or-erase-a-person#disable-and-delete": "0034-end-users-and-upstream-signals#disable-and-delete",
-    "0055-upstream-signals-end-sessions-and-suspend-or-erase-a-person#global-sign-out": "0034-end-users-and-upstream-signals#global-sign-out",
-    "0051-upstream-signals-end-sessions-and-suspend-or-erase-a-person#inbound-back-channel-logout": "0034-end-users-and-upstream-signals#inbound-back-channel-logout",
-    "0051-upstream-signals-end-sessions-and-suspend-or-erase-a-person#disable-and-delete": "0034-end-users-and-upstream-signals#disable-and-delete",
-    "0051-upstream-signals-end-sessions-and-suspend-or-erase-a-person#global-sign-out": "0034-end-users-and-upstream-signals#global-sign-out",
-    "0004-drivers-listeners-and-boundary-enforcement#nats-jetstream": "0028-audit-pieces#nats-jetstream",
-    "0004-drivers-listeners-and-boundary-enforcement#postgresql-row-level-security": "0028-audit-pieces#postgresql-row-level-security",
-    "0017-audit-records-the-usage-stream-and-quota#quota": "0039-quota-allowance#the-allowance",
-    "0025-audit-pseudonyms-are-keyed-per-company-and-epoch#decision": "0029-the-audit-log#pseudonyms",
-    "0044-audit-pseudonyms-are-keyed-per-company-and-epoch#decision": "0029-the-audit-log#pseudonyms",
-    "0032-data-lifecycle-and-evidence-never-share-a-key-with-personal-data#two-classes-of-data-two-keys": "0029-the-audit-log#encryption-and-crypto-shredding",
+    "0048-customer-connections-run-in-a-pool-per-customer-boundary#what-a-pool-is-allowed": "archive/0033-customer-connections#the-upstream-hosts-are-known",
+    "0055-upstream-signals-end-sessions-and-suspend-or-erase-a-person#inbound-back-channel-logout": "archive/0034-end-users-and-upstream-signals#inbound-back-channel-logout",
+    "0055-upstream-signals-end-sessions-and-suspend-or-erase-a-person#disable-and-delete": "archive/0034-end-users-and-upstream-signals#disable-and-delete",
+    "0055-upstream-signals-end-sessions-and-suspend-or-erase-a-person#global-sign-out": "archive/0034-end-users-and-upstream-signals#global-sign-out",
+    "0051-upstream-signals-end-sessions-and-suspend-or-erase-a-person#inbound-back-channel-logout": "archive/0034-end-users-and-upstream-signals#inbound-back-channel-logout",
+    "0051-upstream-signals-end-sessions-and-suspend-or-erase-a-person#disable-and-delete": "archive/0034-end-users-and-upstream-signals#disable-and-delete",
+    "0051-upstream-signals-end-sessions-and-suspend-or-erase-a-person#global-sign-out": "archive/0034-end-users-and-upstream-signals#global-sign-out",
+    "0004-drivers-listeners-and-boundary-enforcement#nats-jetstream": "0028-audit-pieces",
+    "0004-drivers-listeners-and-boundary-enforcement#postgresql-row-level-security": "0028-audit-pieces",
+    "0017-audit-records-the-usage-stream-and-quota#quota": "archive/0039-quota-allowance#the-allowance",
+    "0025-audit-pseudonyms-are-keyed-per-company-and-epoch#decision": "0029-the-audit-log",
+    "0044-audit-pseudonyms-are-keyed-per-company-and-epoch#decision": "0029-the-audit-log",
+    "0032-data-lifecycle-and-evidence-never-share-a-key-with-personal-data#two-classes-of-data-two-keys": "0029-the-audit-log",
     "0032-data-lifecycle-and-evidence-never-share-a-key-with-personal-data#roads-not-taken": "0029-the-audit-log#roads-not-taken",
-    "0032-data-lifecycle-and-evidence-never-share-a-key-with-personal-data#the-period-statement-is-the-portable-evidence": "0039-quota-allowance#the-billing-log-is-outside-sluis",
-    "0010-configuration-and-data-pkl-schema-origins-and-sensitivities#quota-by-origin": "0039-quota-allowance#the-allowance",
-    "0042-plan-templates-are-declared-and-accounts-are-issued-at-run-time-by-a-declared-client#accounts-are-issued": "0039-quota-allowance#the-allowance",
-    "0042-plan-templates-are-declared-and-accounts-are-issued-at-run-time-by-a-declared-client#plans-are-declared": "0039-quota-allowance#the-allowance",
-    "0041-the-finance-export-is-a-statement-per-account-and-period-closed-once-anchored-in-the-usage-log-and-pulled#a-period-closes-once": "0039-quota-allowance#the-billing-log-is-outside-sluis",
-    "0041-the-finance-export-is-a-statement-per-account-and-period-closed-once-anchored-in-the-usage-log-and-pulled#late-events-and-corrections": "0039-quota-allowance#the-billing-log-is-outside-sluis",
-    "0041-the-finance-export-is-a-statement-per-account-and-period-closed-once-anchored-in-the-usage-log-and-pulled#open-product-facts-the-billing-calendar": "0039-quota-allowance#the-billing-log-is-outside-sluis",
-    "0043-a-quota-installation-is-fronted-by-service-identity-for-services-and-exchanged-tokens-for-people#service-callers": "0039-quota-allowance#the-push",
-    "0043-a-quota-installation-is-fronted-by-service-identity-for-services-and-exchanged-tokens-for-people#when-the-issuer-is-down": "0039-quota-allowance#consistency-under-load",
-    "0052-a-quota-installation-is-fronted-by-service-identity-for-services-and-exchanged-tokens-for-people#service-callers": "0039-quota-allowance#the-push",
-    "0052-a-quota-installation-is-fronted-by-service-identity-for-services-and-exchanged-tokens-for-people#when-the-issuer-is-down": "0039-quota-allowance#consistency-under-load",
-    "0045-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on#the-load-test": "0039-quota-allowance#consistency-under-load",
-    "0045-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on#the-writer-is-down": "0039-quota-allowance#consistency-under-load",
-    "0045-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on#pending-decision-lines": "0039-quota-allowance#consistency-under-load",
-    "0053-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on#the-load-test": "0039-quota-allowance#consistency-under-load",
-    "0053-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on#the-writer-is-down": "0039-quota-allowance#consistency-under-load",
-    "0053-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on#pending-decision-lines": "0039-quota-allowance#consistency-under-load",
+    "0032-data-lifecycle-and-evidence-never-share-a-key-with-personal-data#the-period-statement-is-the-portable-evidence": "archive/0039-quota-allowance#the-billing-log-is-outside-sluis",
+    "0010-configuration-and-data-pkl-schema-origins-and-sensitivities#quota-by-origin": "archive/0039-quota-allowance#the-allowance",
+    "0042-plan-templates-are-declared-and-accounts-are-issued-at-run-time-by-a-declared-client#accounts-are-issued": "archive/0039-quota-allowance#the-allowance",
+    "0042-plan-templates-are-declared-and-accounts-are-issued-at-run-time-by-a-declared-client#plans-are-declared": "archive/0039-quota-allowance#the-allowance",
+    "0041-the-finance-export-is-a-statement-per-account-and-period-closed-once-anchored-in-the-usage-log-and-pulled#a-period-closes-once": "archive/0039-quota-allowance#the-billing-log-is-outside-sluis",
+    "0041-the-finance-export-is-a-statement-per-account-and-period-closed-once-anchored-in-the-usage-log-and-pulled#late-events-and-corrections": "archive/0039-quota-allowance#the-billing-log-is-outside-sluis",
+    "0041-the-finance-export-is-a-statement-per-account-and-period-closed-once-anchored-in-the-usage-log-and-pulled#open-product-facts-the-billing-calendar": "archive/0039-quota-allowance#the-billing-log-is-outside-sluis",
+    "0043-a-quota-installation-is-fronted-by-service-identity-for-services-and-exchanged-tokens-for-people#service-callers": "archive/0039-quota-allowance#the-push",
+    "0043-a-quota-installation-is-fronted-by-service-identity-for-services-and-exchanged-tokens-for-people#when-the-issuer-is-down": "archive/0039-quota-allowance#consistency-under-load",
+    "0052-a-quota-installation-is-fronted-by-service-identity-for-services-and-exchanged-tokens-for-people#service-callers": "archive/0039-quota-allowance#the-push",
+    "0052-a-quota-installation-is-fronted-by-service-identity-for-services-and-exchanged-tokens-for-people#when-the-issuer-is-down": "archive/0039-quota-allowance#consistency-under-load",
+    "0045-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on#the-load-test": "archive/0039-quota-allowance#consistency-under-load",
+    "0045-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on#the-writer-is-down": "archive/0039-quota-allowance#consistency-under-load",
+    "0045-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on#pending-decision-lines": "archive/0039-quota-allowance#consistency-under-load",
+    "0053-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on#the-load-test": "archive/0039-quota-allowance#consistency-under-load",
+    "0053-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on#the-writer-is-down": "archive/0039-quota-allowance#consistency-under-load",
+    "0053-quota-consistency-and-failure-are-measured-per-state-driver-before-enforcement-is-switched-on#pending-decision-lines": "archive/0039-quota-allowance#consistency-under-load",
     "0030-tenancy-and-scale-a-boundary-holds-keys-and-a-tenant-is-a-record#where-installations-run": "0011-runtimes-and-installations#installations",
     "0046-tenancy-and-scale-a-boundary-holds-keys-and-a-tenant-is-a-record#where-installations-run": "0011-runtimes-and-installations#installations",
-    "0032-data-lifecycle-and-evidence-never-share-a-key-with-personal-data#v1s-history": "0015-evolution-and-compatibility#v1s-history",
-    "0048-data-lifecycle-and-evidence-never-share-a-key-with-personal-data#v1s-history": "0015-evolution-and-compatibility#v1s-history",
-    "0048-data-lifecycle-and-evidence-never-share-a-key-with-personal-data#two-classes-of-data-two-keys": "0029-the-audit-log#encryption-and-crypto-shredding",
+    "0032-data-lifecycle-and-evidence-never-share-a-key-with-personal-data#v1s-history": "0001-v1-and-v2-lines#v1s-history",
+    "0048-data-lifecycle-and-evidence-never-share-a-key-with-personal-data#v1s-history": "0001-v1-and-v2-lines#v1s-history",
+    "0048-data-lifecycle-and-evidence-never-share-a-key-with-personal-data#two-classes-of-data-two-keys": "0029-the-audit-log",
     "0048-data-lifecycle-and-evidence-never-share-a-key-with-personal-data#roads-not-taken": "0029-the-audit-log#roads-not-taken",
     "0048-data-lifecycle-and-evidence-never-share-a-key-with-personal-data#erasure-and-export": "0008-boundaries-and-tenants#tenant-lifecycle",
     "0048-data-lifecycle-and-evidence-never-share-a-key-with-personal-data#backups": "0010-backup-and-recovery#what-the-archive-holds",
-    "0048-data-lifecycle-and-evidence-never-share-a-key-with-personal-data#the-period-statement-is-the-portable-evidence": "0039-quota-allowance#the-billing-log-is-outside-sluis",
-    "0054-customer-connections-run-in-a-pool-per-customer-boundary#two-classes-of-connection": "0033-customer-connections#which-upstreams-an-installation-has",
-    "0054-customer-connections-run-in-a-pool-per-customer-boundary#what-a-pool-is-allowed": "0033-customer-connections#the-upstream-hosts-are-known",
-    "0054-customer-connections-run-in-a-pool-per-customer-boundary#scaling": "0033-customer-connections#roads-not-taken",
-    "0054-customer-connections-run-in-a-pool-per-customer-boundary#what-this-changes": "0033-customer-connections#the-upstream-hosts-are-known",
-    "0051-the-finance-export-is-a-statement-per-account-and-period-closed-once-anchored-in-the-usage-log-and-pulled#a-period-closes-once": "0039-quota-allowance#the-billing-log-is-outside-sluis",
-    "0051-the-finance-export-is-a-statement-per-account-and-period-closed-once-anchored-in-the-usage-log-and-pulled#late-events-and-corrections": "0039-quota-allowance#the-billing-log-is-outside-sluis",
-    "0051-the-finance-export-is-a-statement-per-account-and-period-closed-once-anchored-in-the-usage-log-and-pulled#open-product-facts-the-billing-calendar": "0039-quota-allowance#the-billing-log-is-outside-sluis"
+    "0048-data-lifecycle-and-evidence-never-share-a-key-with-personal-data#the-period-statement-is-the-portable-evidence": "archive/0039-quota-allowance#the-billing-log-is-outside-sluis",
+    "0054-customer-connections-run-in-a-pool-per-customer-boundary#two-classes-of-connection": "archive/0033-customer-connections#which-upstreams-an-installation-has",
+    "0054-customer-connections-run-in-a-pool-per-customer-boundary#what-a-pool-is-allowed": "archive/0033-customer-connections#the-upstream-hosts-are-known",
+    "0054-customer-connections-run-in-a-pool-per-customer-boundary#scaling": "archive/0033-customer-connections#roads-not-taken",
+    "0054-customer-connections-run-in-a-pool-per-customer-boundary#what-this-changes": "archive/0033-customer-connections#the-upstream-hosts-are-known",
+    "0051-the-finance-export-is-a-statement-per-account-and-period-closed-once-anchored-in-the-usage-log-and-pulled#a-period-closes-once": "archive/0039-quota-allowance#the-billing-log-is-outside-sluis",
+    "0051-the-finance-export-is-a-statement-per-account-and-period-closed-once-anchored-in-the-usage-log-and-pulled#late-events-and-corrections": "archive/0039-quota-allowance#the-billing-log-is-outside-sluis",
+    "0051-the-finance-export-is-a-statement-per-account-and-period-closed-once-anchored-in-the-usage-log-and-pulled#open-product-facts-the-billing-calendar": "archive/0039-quota-allowance#the-billing-log-is-outside-sluis"
   }
 }
