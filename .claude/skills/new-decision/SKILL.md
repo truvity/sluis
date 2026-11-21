@@ -13,7 +13,7 @@ Checklist, each step as the pages describe it:
 - [ ] The rule is stated once: in this record, or in a reference page with test vectors that the record links. A second record links to its heading and does not restate it.
 - [ ] The status is right for what is decided; open parts are listed with their issue.
 - [ ] The index in `docs/decisions/README.md` has the row.
-- [ ] Life cycle: before the first v2 release a record may be rewritten, merged and renumbered, with no history lines; then `docs/decisions/renumbered.json` is updated in the same pull request, so each old address redirects to the record that took it over. After the first release records are append-only: supersede, do not edit the decision.
+- [ ] Life cycle: records are append-only since the clean rewrite of 2026-11-21. A changed mind is a new record that supersedes the old one, which moves to `docs/decisions/archive/`; do not edit a decision. An address that stops being a file gets a line in `docs/decisions/renumbered.json` in the same pull request, so it redirects to the record that took it over.
 - [ ] Every external fact is dated and has a source; an unverified claim is left out or marked "to be confirmed" (`docs/contributing/design.md`, "Measure and date"). An `Accepted` record has no open part.
 - [ ] Requirements and target-state pages that follow are added or named.
 - [ ] The pull request holds no more records than the page allows.
