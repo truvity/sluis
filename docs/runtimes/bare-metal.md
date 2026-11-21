@@ -48,6 +48,8 @@ Mutual TLS on the Raft port, the issuer of its certificate and a firewall that f
 
 ## Deploy and prove on three boards
 
+The boards installation is proved on an additional, external testing area of three single-board computers. Nothing about that area is part of the product or of any production installation.
+
 The hosts and the account are never in the repository: `SLUIS_BOARDS` and the SSH settings come from the environment. The flow is a set of recipes, run as `devbox run -- just <recipe>`:
 
 | Recipe | What it does |
