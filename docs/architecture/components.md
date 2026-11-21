@@ -12,7 +12,7 @@ Every contract is Protobuf served over ConnectRPC, even when caller and callee s
 
 ## The four families
 
-Every actor belongs to one family, and a port is never shared between two families ([0002](/decisions/0002-families-of-actors/#the-four-families)). The [actor registry](/reference/actors/) lists every actor with its language, placement, key purposes and governing records.
+Every actor belongs to one family, and a port is never shared between two families ([0002](/decisions/0002-families-of-actors/#the-families)). The [actor registry](/reference/actors/) lists every actor with its language, placement, key purposes and governing records.
 
 | Family | Actors | Holds at rest | Its ports |
 | ------ | ------ | ------------- | --------- |
@@ -37,16 +37,16 @@ The **credential holders** are exactly store@, exporter@, key@ and the audit pie
 
 ### The foundation and the modules
 
-The data and keys families are the **foundation**: store@, exporter@ and key@ run in every installation, and their binaries do not change with what runs above them. The rest comes in **modules**, each a set of actors that brings its own kinds and key purposes into the registries ([0002](/decisions/0002-families-of-actors/#the-foundation-and-the-modules)).
+The data and keys families are the **foundation**: store@, exporter@ and key@ run in every installation, and their binaries do not change with what runs above them. The rest comes in **modules**, each a set of actors that brings its own kinds and key purposes into the registries ([0002](/decisions/0002-families-of-actors/#the-foundation-and-the-layers)).
 
 | Module | Actors | Brings |
 | ------ | ------ | ------ |
 | **Identity** | The work actors other than `quota`: `entry`, `session`, `console`, `exchange`, `policy`, `signer`, `ca`, `ssh-ca` and the adapters | Sign-in, sessions, token exchange, certificates, integrations and the console |
 | **Audit** | The audit pieces | The audit log, the usage stream and Search |
-| **Quota** | `quota`, reserved | The allowance engine of [0039](/decisions/0039-quota-allowance/), which [0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/) superseded on 2026-11-12. It is not built and not scheduled: sluis keeps no balance. The usage stream and the limit check of 0046 are built right after the core, and which actor serves the check is decided with its first caller ([#841](https://github.com/truvity/sluis/issues/841)). The row stays in the registry until a change removes it |
-| **KV** | `kv`, a core building block, not yet in the registry | Versioned static secrets in stores that no tenant owns, with a Vault KV v2 subset that External Secrets reads ([0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/#amendment-of-2026-11-18-kv-is-a-building-block-built-in-the-core-phase)). Built in the core phase, after the core features and before the shapes |
+| **Quota** | `quota`, reserved | The allowance engine of [0039](/decisions/archive/0039-quota-allowance/), which [0046](/decisions/0046-limits-on-the-request-path-and-usage-in-audit/) superseded on 2026-11-12. It is not built and not scheduled: sluis keeps no balance. The usage stream and the limit check of 0046 are built right after the core, and which actor serves the check is decided with its first caller ([#841](https://github.com/truvity/sluis/issues/841)). The row stays in the registry until a change removes it |
+| **KV** | `kv`, a core building block, not yet in the registry | Versioned static secrets in stores that no tenant owns, with a Vault KV v2 subset that External Secrets reads ([0047](/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns/#what-kv-is)). Built in the core phase, after the core features and before the shapes |
 
-An installation runs the foundation and the modules it needs. A module is a grouping, not a fifth family: each actor stays in one of the four. The foundation with the audit module only is "audit alone": it also runs the work actors that its front and its access check need, `entry`, `policy` and `exchange` for the tenant push ([0028](/decisions/0028-audit-pieces/#audit-alone)).
+An installation runs the foundation and the modules it needs. A module is a grouping, not a fifth family: each actor stays in one of the four. The foundation with the audit module only is "audit alone": it also runs the work actors that its front and its access check need, `entry`, `policy` and `exchange` for the tenant push ([0028](https://github.com/truvity/audit/blob/master/docs/decisions/0013-access.md)).
 
 ## Actors
 
@@ -64,7 +64,7 @@ Each actor runs as `<actor>@<boundary>` ([0002](/decisions/0002-families-of-acto
 | `policy` | The decision point: a declared Cedar policy maps facts to grants, and key@ seals them. No state of its own, no outbound network | Nothing | `session`, `console`, `exchange`, `ssh-ca`, `quota`, the adapters, `exporter@`, the `writer`, the `indexer` and the `reader` | `grant` (seal), `pseudonym` |
 | `ca` | The X.509 authority and its issuance log | Nothing | `exchange` | `x509-intermediate`, `grant` (open), `data`, `mac`, `pseudonym` |
 | `ssh-ca` | The SSH authority, for user and host certificates | `policy` | `entry` | `ssh-user`, `ssh-host`, `data`, `pseudonym` |
-| `quota` | Reserved: the allowance engine of [0039](/decisions/0039-quota-allowance/), superseded by [0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/); not built, and sluis keeps no balance | `policy` | `entry`, `exchange`, `console` | `pseudonym` |
+| `quota` | Reserved: the allowance engine of [0039](/decisions/archive/0039-quota-allowance/), superseded by [0046](/decisions/0046-limits-on-the-request-path-and-usage-in-audit/); not built, and sluis keeps no balance | `policy` | `entry`, `exchange`, `console` | `pseudonym` |
 | `adapter-<vendor>` | The work actor of an integration: `adapter-upstream-oidc`, `adapter-github`, `adapter-slack`. Serves one vendor and opens each tenant's connection credential at key@ for each call | `policy` | `session` (upstream), `exchange`, `console`, `entry` (a push) | `data` (open), `grant`, `mac`, `pseudonym` |
 
 `signer` is not a pure signing oracle. `policy` maps facts to grants with a declared Cedar policy ([0007](/decisions/0007-policy-and-sealed-grants/)). A compromised `entry` reaches only the sockets it routes to, and each receiver checks the request again. A compromised work actor holds no credential at rest: it yields what it is using at that moment and nothing it could replay later ([principle 16](/principles/#16-few-credential-holders)). A compromised adapter reaches its own vendor and the connections that its callers brought grants for.
@@ -109,7 +109,7 @@ Systems that sluis serves but never calls (databases, hosts, cert-manager, GitOp
 A credential minter and a provisioner are effectors by nature, so two conditions keep them from deciding anything:
 
 1. **Core decides, the adapter executes.** An adapter receives a **grant** that `policy` decided and key@ sealed: the decision, the policy digest and the hash of the scope ([0007](/decisions/0007-policy-and-sealed-grants/#sealed-grants)). It refuses a scope the grant does not cover and cannot lengthen the lifetime. A provisioner reconciles to a desired state that a directory adapter wrote as data from `policy`'s answer; for a pass that no caller started it asks `policy` for a grant of its own ([0025](/decisions/0025-integrations/#how-core-authorises-an-effect)).
-2. **Business limits live in core.** Caller caps, mint rates and which group may hold which role are policy or the limit check of [0046](/decisions/0046-usage-records-are-never-dropped-and-balances-live-in-the-product/#limits-and-balances), checked before the adapter is called. An adapter enforces only technical limits: the vendor's API rate and maximum lifetime.
+2. **Business limits live in core.** Caller caps, mint rates and which group may hold which role are policy or the limit check of [0046](/decisions/0046-limits-on-the-request-path-and-usage-in-audit/#limits-and-balances), checked before the adapter is called. An adapter enforces only technical limits: the vendor's API rate and maximum lifetime.
 
 The mint flow, in two steps. Step 1: `exchange` verifies the proof and asks `policy`.
 
@@ -155,7 +155,7 @@ A port is the narrowest interface that every driver can honour and every user ne
 | ---- | -- | ---------- | ----- |
 | **Data** | Every work actor and audit piece | `get`, `list`, `create`, `update` (with `if_version`), `delete`, `apply`, `watch` | One generic store service on the wire, used through typed clients. The store applies the rule of the actor and the kind, and a grant sealed for the tenant on every tenant-scoped write ([0005](/decisions/0005-the-store/#the-store-api)) |
 | **Keys** | Every work actor and audit piece | `Seal`, `Open`, `Sign`, `Mac` | The caller names a key purpose, never a key id or a slot. key@ checks the caller, its rule for the purpose and, for a tenant's `data` and `evidence` keys, the grant ([0006](/decisions/0006-keys-and-sealing/#seal-and-open)) |
-| **Audit emit** | Every actor | Hand a record to the emitter | The record reaches the transport; a request returns once its record is durable there ([0028](/decisions/0028-audit-pieces/#transport)) |
+| **Audit emit** | Every actor | Hand a record to the emitter | The record reaches the transport; a request returns once its record is durable there ([0028](https://github.com/truvity/audit/blob/master/docs/decisions/0002-pieces-and-holders.md)) |
 | **Listener** | `entry` | Accept a request | The one port that faces the edge ([Listeners](/architecture/deployment/#listeners)) |
 | **Provider API**, **fetch** | Adapters; `session` and `exchange` | An outbound call to a vendor or an issuer | Limited to the hosts of the actor's egress classes in the registry |
 | **Config source** | store@ | `Read`, `Capabilities` (`watch`: `none`, `notify` or `poll`) and, for `notify` drivers, a `Watch` stream | Read-only; drivers `file` and `appconfig` |
@@ -163,11 +163,11 @@ A port is the narrowest interface that every driver can honour and every user ne
 | **Durable**, **temp** | store@ | `Get`, `Query` (by prefix), `Transact`, `TailLog` | Drivers `rqlite`, `dynamodb` and `postgres` (the Kubernetes engine, built in the core phase); the two ports may share an engine |
 | **Destination** | exporter@ | A write to a destination | One driver per destination type |
 | **Key store** | key@ | Sign, wrap, unwrap, public key | Drivers for a YubiKey PIV card, AWS KMS and, in development, software |
-| **Blob**, **transport**, **index** | The audit pieces | Conditional write, deliver, search | Audit's own ports ([0028](/decisions/0028-audit-pieces/#four-pieces)) |
+| **Blob**, **transport**, **index** | The audit pieces | Conditional write, deliver, search | Audit's own ports ([0028](https://github.com/truvity/audit/blob/master/docs/decisions/0002-pieces-and-holders.md)) |
 
 ### The data port
 
-Configuration, secrets and data all reach an actor as kinds through the data port. An actor has no configuration loader, no secret source and no storage driver of its own, and never sees a driver. The typed client is `store.Client[T Kind]` in Go and `Store<K: Kind>` in Rust ([0005](/decisions/0005-the-store/#typed-clients)). A watch streams the changes of a kind from a resume point; on Lambda nothing is pushed and a reader re-reads with an ETag ([0005](/decisions/0005-the-store/#watch-and-the-resume-point)). The wire contract, the item keys and the sealed envelope are on [Store API](/reference/store-api/).
+Configuration, secrets and data all reach an actor as kinds through the data port. An actor has no configuration loader, no secret source and no storage driver of its own, and never sees a driver. The typed client is `store.Client[T Kind]` in Go and `Store<K: Kind>` in Rust ([0005](/decisions/0005-the-store/#typed-clients)). A watch streams the changes of a kind from a resume point; on Lambda nothing is pushed and a reader re-reads with an ETag ([0005](https://github.com/truvity/atoom/blob/master/store/docs/store-port.md)). The wire contract, the item keys and the sealed envelope are on [Store API](/reference/store-api/).
 
 ### The keys port
 
@@ -251,7 +251,7 @@ Every kind has exactly one writer. Others read through the store, under the rule
 | Infrastructure as code | Config and secret kinds of the installation: `Boundary`, `KeyPlan`, `Tunables`, `Upstream`, `AuditLog`, `BackupPlan`, `ExportDestination`, `BreakGlassPasskey`, and the secrets such as `UpstreamSecret` |
 | The publishing pipeline | Reviewed, signed config: `Policy`, `RegulatedPartyPolicy`, `GrantVocabulary`, `ExchangeTrust`, `PkiProfile`, `AuditCatalogue` |
 | `session` | Everything about people: `Person`, `UpstreamLink`, `StaffPasskey`; and the temp state of sign-in: `AuthCode`, `SessionChain`, `ClientDocument` |
-| `exchange` | What a tenant has configured: `Tenant`, `TenantClient`, `ClientSecret`, `ClientSecretExport` (retired by [0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/) when KV is built), `PolicyLink`, `PredefinedPolicyLink`; and enrolment: `EnrolmentToken`, `PendingEnrolment` |
+| `exchange` | What a tenant has configured: `Tenant`, `TenantClient`, `ClientSecret`, `ClientSecretExport` (retired by [0047](/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns/) when KV is built), `PolicyLink`, `PredefinedPolicyLink`; and enrolment: `EnrolmentToken`, `PendingEnrolment` |
 | An adapter | What its flow makes: `GitHubApp` and `GitHubInstallation` (`adapter-github`), `SlackConnection` (`adapter-slack`), `EntraConnection` (`adapter-upstream-oidc`); the connections `DirectoryConnection`, `MinterConnection` and `MinterTarget`; and the directory facts |
 | `key@` | `DataKeyWrap`, `KeyCertificate`, `PinReleaseRequest`, `PinRelease` |
 | `ca`, `ssh-ca` | `IssuedCertificate`, `Revocation`, `Crl`, `TrustBundle`; `IssuedSshCertificate`, `SshRevocation`, `Krl` |
@@ -358,11 +358,11 @@ flowchart LR
   agent -->|"sign"| key
 ```
 
-Dashed lines to `writer` are asynchronous emits. On three boards each node's `writer` drains its own spool and keeps its own log, and the other nodes are its peer witnesses through the audit blob ([0029](/decisions/0029-the-audit-log/#witnesses)), so no lease is needed to elect a writer between nodes. The audit pieces run on the same nodes, each with its own drivers ([0011](/decisions/0011-runtimes-and-installations/#installations)). The local installation is the same layout on one node, as containers.
+Dashed lines to `writer` are asynchronous emits. On three boards each node's `writer` drains its own spool and keeps its own log, and the other nodes are its peer witnesses through the audit blob ([0029](https://github.com/truvity/audit/blob/master/docs/decisions/0009-witnesses-and-verification.md)), so no lease is needed to elect a writer between nodes. The audit pieces run on the same nodes, each with its own drivers ([0011](/decisions/0011-runtimes-and-installations/#installations)). The local installation is the same layout on one node, as containers.
 
 ### Lambda
 
-On Lambda the same actors are separate functions with no `sluis-node` and no host card service: the KMS key policy names key@'s role alone, and each function's role is its identity. A work function's role may only invoke other functions and send to the audit transport. The transport is an SQS queue. The audit writer runs with a reserved concurrency of 1 on a standard SQS queue; its correctness comes from the write-once fence on the bucket, not from the limit. The index is `postgres` in the `aurora` mode, which runs on Aurora Serverless v2 with auto-pause; the indexer and the reader connect directly with IAM authentication, without RDS Proxy at first ([0028](/decisions/0028-audit-pieces/#provisioning-modes), decision L1b of 2026-11-18). The edge is Cloudflare proxied to an API Gateway custom domain with mutual TLS, with the default `execute-api` endpoint disabled. Every store read and key open is an invoke, which the latency spike found fast enough ([0037](/decisions/0037-capacity-is-measured-before-it-is-promised/#the-warm-sign-in-on-lambda)). See [Serverless](/runtimes/serverless/).
+On Lambda the same actors are separate functions with no `sluis-node` and no host card service: the KMS key policy names key@'s role alone, and each function's role is its identity. A work function's role may only invoke other functions and send to the audit transport. The transport is an SQS queue. The audit writer runs with a reserved concurrency of 1 on a standard SQS queue; its correctness comes from the write-once fence on the bucket, not from the limit. The index is `postgres` in the `aurora` mode, which runs on Aurora Serverless v2 with auto-pause; the indexer and the reader connect directly with IAM authentication, without RDS Proxy at first ([0028](https://github.com/truvity/audit/blob/master/docs/decisions/0012-search-and-the-reader-api.md), decision L1b of 2026-11-18). The edge is Cloudflare proxied to an API Gateway custom domain with mutual TLS, with the default `execute-api` endpoint disabled. Every store read and key open is an invoke, which the latency spike found fast enough ([0037](/decisions/0037-capacity-is-measured-before-it-is-promised/#the-warm-sign-in-on-lambda)). See [Serverless](/runtimes/serverless/).
 
 ### Kubernetes
 
@@ -370,16 +370,16 @@ Each actor and each holder runs in a pod of its own, with its drivers as native 
 
 ## The audit installation
 
-Audit is the emitter library and four pieces, the writer, the witness, the indexer and the reader, joined by the transport ([Audit](/concepts/audit/), [0028](/decisions/0028-audit-pieces/#four-pieces)). Each emitting unit is a project with its own bucket, writer and log keys ([0029](/decisions/0029-the-audit-log/#projects)). Pieces combined in one installation, even with sluis, keep their own drivers, and the defence-in-depth layers stay per actor.
+Audit is the emitter library and four pieces, the writer, the witness, the indexer and the reader, joined by the transport ([Audit](/concepts/audit/), [0028](https://github.com/truvity/audit/blob/master/docs/decisions/0002-pieces-and-holders.md)). Each emitting unit is a project with its own bucket, writer and log keys ([0029](https://github.com/truvity/audit/blob/master/docs/decisions/0003-the-neutral-model.md)). Pieces combined in one installation, even with sluis, keep their own drivers, and the defence-in-depth layers stay per actor.
 
 | Part | Placement |
 | ---- | --------- |
 | Transport | Per installation: direct, or a queue. The default is a spool on boards, SQS on Lambda and NATS JetStream on Kubernetes; direct mode falls back to a local spool, so it needs a disk |
-| Writer and blob | Exactly one writer per log; a cluster keeps one log per node. A production log needs a compliance lock, or a weaker mode plus a witness ([0029](/decisions/0029-the-audit-log/#lock-modes)) |
+| Writer and blob | Exactly one writer per log; a cluster keeps one log per node. A production log needs a compliance lock, or a weaker mode plus a witness ([0029](https://github.com/truvity/audit/blob/master/docs/decisions/0010-lock-modes-retention-and-compliance-floors.md)) |
 | Witness | Optional everywhere; `sluis config check` warns when there is none |
 | Search | The indexer, the index and the reader; with a `sqlite` index on a cluster the reader runs on the indexer's node |
 
-Every audit installation, also one combined with sluis, has a front of its own: a slim `entry` on its own host, the `reader` as its API, and its own `session` and `console`, the same executables as sluis's ([0028](/decisions/0028-audit-pieces/#the-audit-front)). The [audit explorer](/architecture/audit-explorer/) draws these boxes for each tested installation.
+Every audit installation, also one combined with sluis, has a front of its own: a slim `entry` on its own host, the `reader` as its API, and its own `session` and `console`, the same executables as sluis's ([0028](https://github.com/truvity/audit/blob/master/docs/decisions/0014-the-front-the-console-page-and-audit-verify.md)). The [audit explorer](/architecture/audit-explorer/) draws these boxes for each tested installation.
 
 ## Source layout
 

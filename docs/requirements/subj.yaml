@@ -36,7 +36,7 @@ requirements:
     rationale: "A pairwise subject without a sector would fall back to a global identifier, and a sector per client is one more thing to forget (ADR 0034)."
     level: MUST
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: pairwise subjects per sector are cancelled.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: pairwise subjects per sector are cancelled.
     status: withdrawn
     superseded_by: [REQ-TOKEN-045]
     runtimes: all
@@ -51,7 +51,7 @@ requirements:
     rationale: "A missing sector is a configuration error, and public has to be written down (ADR 0034)."
     level: MUST
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: pairwise subjects per sector are cancelled.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: pairwise subjects per sector are cancelled.
     status: withdrawn
     superseded_by: [REQ-TOKEN-045]
     runtimes: all
@@ -66,7 +66,7 @@ requirements:
     rationale: "A client inherits its tenant's sector, and a machine token carries the machine's own identifier as its subject, so no sector applies to it."
     level: MUST
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: pairwise subjects per sector are cancelled.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: pairwise subjects per sector are cancelled.
     status: withdrawn
     superseded_by: [REQ-TOKEN-045]
     runtimes: all
@@ -95,7 +95,7 @@ requirements:
     rationale: "Sites in different sectors must not be able to join their customer lists."
     level: MUST
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: pairwise subjects per sector are cancelled.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: pairwise subjects per sector are cancelled.
     status: withdrawn
     superseded_by: [REQ-TOKEN-045]
     runtimes: all
@@ -129,7 +129,7 @@ requirements:
     rationale: "A fixed encoding makes the value verifiable by vector."
     level: MUST
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: pairwise subjects per sector are cancelled.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: pairwise subjects per sector are cancelled.
     status: withdrawn
     superseded_by: [REQ-TOKEN-045]
     runtimes: all
@@ -159,7 +159,7 @@ requirements:
     rationale: "Sites in different sectors get different subjects by design, so they cannot correlate a person."
     level: MUST
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: pairwise subjects per sector are cancelled.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: pairwise subjects per sector are cancelled.
     status: withdrawn
     superseded_by: [REQ-TOKEN-045]
     runtimes: all
@@ -174,7 +174,7 @@ requirements:
     rationale: "Relying parties key their records by subject, and single sign-on follows the sluis session, so pairwise subjects do not affect it."
     level: MUST
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: pairwise subjects per sector are cancelled.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: pairwise subjects per sector are cancelled.
     status: withdrawn
     superseded_by: [REQ-TOKEN-045]
     runtimes: all
@@ -220,7 +220,7 @@ requirements:
     rationale: "Such a change would change every stored subject of the sector."
     level: MUST
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: pairwise subjects per sector are cancelled.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: pairwise subjects per sector are cancelled.
     status: withdrawn
     superseded_by: [REQ-TOKEN-045]
     runtimes: all
@@ -235,7 +235,7 @@ requirements:
     rationale: "Subject stability is worth more than key hygiene here."
     level: MUST
     source: stakeholder-ciam
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: pairwise subjects per sector are cancelled.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: pairwise subjects per sector are cancelled.
     status: withdrawn
     superseded_by: [REQ-TOKEN-045]
     runtimes: all
@@ -678,7 +678,7 @@ requirements:
     rationale: "One defined state machine replaces the account states that were withdrawn (ADR 0034)."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -692,7 +692,7 @@ requirements:
     rationale: "After erasure nothing ties an audit pseudonym to a person."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -706,7 +706,7 @@ requirements:
     rationale: "A repeated erasure must be idempotent, and the tombstone says why a stale token is refused."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -720,7 +720,7 @@ requirements:
     rationale: "A stale token must not read as an unknown subject."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -734,7 +734,7 @@ requirements:
     rationale: "The inventory is what an erasure and an export must cover."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -748,7 +748,7 @@ requirements:
     rationale: "An export answers a data-subject request for what sluis holds."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -776,7 +776,7 @@ requirements:
     rationale: "Retention bounds how long records of a person who left are kept."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -849,7 +849,7 @@ requirements:
     rationale: "One product's call must not erase or lock out a person for every boundary (ADR 0034)."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -863,7 +863,7 @@ requirements:
     rationale: "A boundary can drop what it holds without changing the person's state or any other boundary (ADR 0034)."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -877,7 +877,7 @@ requirements:
     rationale: "A boundary's duty to keep a record must not stop the erasure of everything else (ADR 0034)."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -891,7 +891,7 @@ requirements:
     rationale: "A hold only tightens, so only its owner or the owning product may release it (ADR 0034)."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -905,7 +905,7 @@ requirements:
     rationale: "Every step of a hold must be traceable (ADR 0034)."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: customer accounts, lifecycle and tenants are the upstream's.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: customer accounts, lifecycle and tenants are the upstream's.
     status: withdrawn
     superseded_by: [REQ-AUTHN-112]
     runtimes: all
@@ -919,7 +919,7 @@ requirements:
     rationale: "A regulated customer always gets pairwise subjects (ADR 0034)."
     level: MUST
     source: design-decision
-    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0045: pairwise subjects per sector are cancelled.
+    # Withdrawn 2026-11-12: D1 B and D7 A (owner, 2026-11-12), ADR 0032: pairwise subjects per sector are cancelled.
     status: withdrawn
     superseded_by: [REQ-TOKEN-045]
     runtimes: all

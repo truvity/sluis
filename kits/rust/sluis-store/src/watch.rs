@@ -1,4 +1,4 @@
-//! `Watch`: the list-watch loop of [0005 Watch and the resume point](https://sluis.id/decisions/0005-the-store/#watch-and-the-resume-point)
+//! `Watch`: the list-watch loop of [0005 Watch and the resume point](https://github.com/truvity/atoom/blob/master/store/docs/store-port.md)
 //! for one kind, typed like [`Store`], for the actors that follow a kind instead of reading it again
 //! (`exporter@` first; `entry` and `signer` for `KeyRevocation` and `SigningRing`).
 //!

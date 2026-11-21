@@ -12,7 +12,7 @@ This tutorial follows the recipes of a checkout of `truvity/sluis`, as of 2026-1
 
 You run the [local installation](/runtimes/#local) on one workstation: Docker Compose, one container per actor and per driver, an rqlite engine of one node, and software keys. It is the installation for development, continuous integration and the integration tests ([0011](/decisions/0011-runtimes-and-installations/#the-local-installation)). The entry point is one recipe, `just local-up`, run in the project's devbox. You finish with a running installation, a sign-in through a real identity provider (Keycloak, run beside it), a token you have verified yourself, and the audit records of your sign-in.
 
-It is the core installation: the key set carries no `x5c` chain, because the core leaves the token certificate off ([ADR 0006](/decisions/0006-keys-and-sealing/#amendment-of-2026-11-18-the-token-certificate-is-optional-and-off-in-the-core)). [Step 7](#7-the-certificate-preset-is-planned) says what that means for `local-up` today.
+It is the core installation: the key set carries no `x5c` chain, because the core leaves the token certificate off ([ADR 0006](/decisions/0006-keys-and-sealing/#the-token-certificate)). [Step 7](#7-the-certificate-preset-is-planned) says what that means for `local-up` today.
 
 The same path is proven in CI on every pull request: `local-smoke` and `local-person-smoke` run the sign-in, the token and the audit checks of steps 6, 8 and 9 against a fresh installation, so a step that stops working fails the build ([The local installation](/runtimes/local/#recipes)).
 

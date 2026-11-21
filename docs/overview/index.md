@@ -12,7 +12,7 @@ sluis is an open-source identity and access broker for people, robots and extern
 
 sluis is for engineers who run the identity layer of a small organisation, a platform team or a self-hosted lab, and want it small, auditable and cheap to run. The mission is on the [home page](/).
 
-sluis v2 is built in layers. The **core** is what every installation needs (`entry`, `session`, `exchange` and `signer`). It sits on the **core building blocks**: store, key, policy, audit with usage and limits, and KV. A separate layer of **shared building blocks** holds the Cloudflare, AWS and GitHub clients that drivers and add-ons reuse. The **add-ons** are optional: PKI with SSH and database access first, then Cloudflare and GitHub. The core installs and runs without any add-on ([roadmap](/roadmap/#a-core-building-blocks-and-add-ons), [ADR 0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/)).
+sluis v2 is built in layers. The **core** is what every installation needs (`entry`, `session`, `exchange` and `signer`). It sits on the **core building blocks**: store, key, policy, audit with usage and limits, and KV. A separate layer of **shared building blocks** holds the Cloudflare, AWS and GitHub clients that drivers and add-ons reuse. The **add-ons** are optional: PKI with SSH and database access first, then Cloudflare and GitHub. The core installs and runs without any add-on ([roadmap](/roadmap/#a-core-building-blocks-and-add-ons), [ADR 0044](/decisions/0044-sluis-is-a-core-and-add-ons/)).
 
 ```mermaid
 flowchart TB
@@ -38,7 +38,7 @@ flowchart TB
 
 The console is part of the core layer, and it is built in the Parity phase. The `ca` actor is built and stays off until the PKI add-on turns the token certificate on. No core actor calls a shared building block, and a client or a minter is built with its first consumer.
 
-An installation serves one boundary. Its staff and operators sign in with sluis's own passkeys; customers sign in through the upstream identity provider, and the sluis token carries the customer, the organisation and the product ([0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)).
+An installation serves one boundary. Its staff and operators sign in with sluis's own passkeys; customers sign in through the upstream identity provider, and the sluis token carries the customer, the organisation and the product ([0045](/decisions/0032-customer-identity-installations/)).
 
 Every installation runs the same **foundation**: store@ for data, exporter@ for export and key@ for keys. Identity and audit are **modules** on top of it, and an installation runs the modules it needs, such as the audit module alone ([Families](/concepts/families/#the-foundation-and-the-modules)).
 
@@ -62,7 +62,7 @@ The part that holds a key is small and parses no internet input, and the part th
 
 ## What it leaves out
 
-- **It is not a general secrets engine.** It keeps the secrets it generates or receives as sealed or hashed data, reads the secrets an operator gives it from a secret source, and publishes a small typed set of public values. Its KV building block keeps versioned static secrets for others, readable by External Secrets, but it has no transit engine, lease system or dynamic secrets. Use a secrets manager for those ([Data](/concepts/data/), [ADR 0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/)).
+- **It is not a general secrets engine.** It keeps the secrets it generates or receives as sealed or hashed data, reads the secrets an operator gives it from a secret source, and publishes a small typed set of public values. Its KV building block keeps versioned static secrets for others, readable by External Secrets, but it has no transit engine, lease system or dynamic secrets. Use a secrets manager for those ([Data](/concepts/data/), [ADR 0047](/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns/)).
 - **It has no users of its own and holds no roots.** It writes no Kubernetes object, except a Secret that exporter@ writes when an installation chooses the direct path. Roots belong to the sister product [ritueel](https://ritueel.id). The reasons are in [what sluis is, and is not](/principles/#what-sluis-is-and-is-not).
 
 ## v1 and v2

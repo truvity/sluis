@@ -1,10 +1,10 @@
 ---
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import { render } from 'astro:content';
-import { decisionDescription, decisionTitle, editUrl, listDecisions, sourceUrl } from '../../lib-decisions';
+import { decisionDescription, decisionTitle, editUrl, listArchivedDecisions, listDecisions, sourceUrl } from '../../lib-decisions';
 
 export async function getStaticPaths() {
-  const entries = await listDecisions();
+  const entries = [...(await listDecisions()), ...(await listArchivedDecisions())];
   return entries.map((entry) => ({ params: { id: entry.id }, props: { entry } }));
 }
 

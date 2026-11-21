@@ -1,14 +1,12 @@
 # 0031 — CIAM is a broker: a customer-identity product owns the accounts, sluis owns the session and the tokens, and the contract between them is written down
 
-**Status:** Superseded by 0045
+**Status:** Superseded by 0032
 **Layer:** customer identity
 **Date:** 2026-11-12
 
 Proposal: [issue #1023](https://github.com/truvity/sluis/issues/1023).
 
-> Superseded on 2026-11-12 by [0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/): customers sign in through the upstream identity provider, which owns the accounts and the organisations (maintainer decision D1 B, D7 A, 2026-11-12). sluis keeps the session and the token.
-
-> Read with the amendment of 2026-11-18 of [0044](/decisions/0044-sluis-v2-is-a-core-building-blocks-and-add-ons/#amendment-of-2026-11-18-the-order-after-the-core-the-shared-blocks-hardening-the-console-and-kv): the Customer identity phase returns with a narrow scope, the exchange of a token of the trusted realm for a sluis token with customer, org and product ([0045](/decisions/0045-customers-sign-in-upstream-and-the-sluis-token-carries-customer-org-and-product/)). This record stays superseded and nothing in it is built.
+> Archived in the clean rewrite of 2026-11-21. It is kept as it was decided and is superseded by [0032](/decisions/0032-customer-identity-installations/). Nothing in it is built.
 
 ## Context
 
@@ -35,17 +33,17 @@ Where a customer's defaults and a tenant's changes live is settled by the storag
 
 ### What sluis requires of an upstream
 
-Any product that meets this can be the one upstream of a customer installation ([0033](/decisions/0033-customer-connections/#which-upstreams-an-installation-has)); sluis has no code for a named product ([0025](/decisions/0025-integrations/#the-rule)). The tests sign in through a real identity provider run beside the installation ([0011](/decisions/0011-runtimes-and-installations/#the-local-installation)), so sluis keeps no accounts even in tests.
+Any product that meets this can be the one upstream of a customer installation ([0033](/decisions/archive/0033-customer-connections/#which-upstreams-an-installation-has)); sluis has no code for a named product ([0025](/decisions/0025-integrations/#the-rule)). The tests sign in through a real identity provider run beside the installation ([0011](/decisions/0011-runtimes-and-installations/#the-local-installation)), so sluis keeps no accounts even in tests.
 
 1. **OpenID Connect Core and discovery,** the authorization code flow with PKCE (S256), a signed ID token, and the `iss` response parameter of RFC 9207.
 2. **A subject claim that is stable and never reassigned,** at most 255 characters, named in the connection ([0019](/decisions/0019-person-and-upstream-link/#linking-an-upstream-account)). An e-mail address is not one.
-3. **`prompt=none` and `max_age`.** The first lets sluis renew a session silently; the second and `acr_values` carry a step-up ([0018](/decisions/0018-sessions/#customers)).
+3. **`prompt=none` and `max_age`.** The first lets sluis renew a session silently; the second and `acr_values` carry a step-up ([0018](/decisions/0018-sign-in-sessions/#customers)).
 4. **`auth_time`, and `acr` and `amr` where the product can say how the person authenticated.** An absent value is unknown and stays absent ([0020](/decisions/0020-grant-vocabulary-and-token-claims/#the-claims-of-a-token)).
 5. **A single sign-on session that outlasts sluis's 24 hours,** so that the silent renewal has something to renew.
-6. **OpenID Connect back-channel logout with `sid`,** and a way to say that an account is disabled or deleted ([0034](/decisions/0034-end-users-and-upstream-signals/#upstream-signals)).
+6. **OpenID Connect back-channel logout with `sid`,** and a way to say that an account is disabled or deleted ([0034](/decisions/archive/0034-end-users-and-upstream-signals/#upstream-signals)).
 7. **`email_verified` truthfully,** because a policy may read it; sluis never links by it.
 8. **No linking of accounts by e-mail address,** and no merging of two accounts of one person into one `sub` unless the person links them themselves in the upstream. Two upstream accounts are two people to sluis ([0019](/decisions/0019-person-and-upstream-link/#linking-an-upstream-account)).
-9. **A multi-factor proof relayed from a corporate login never raises `acr` in sluis's tokens on its own.** The upstream reports what it verified itself in `acr` and `amr`, and a proof made further behind it travels as a separate claim that sluis does not read for assurance. `acr` in sluis's tokens is the upstream's own `acr`, mapped and capped by the connection's `assurance`; a relayed multi-factor proof never raises it above that cap ([0033](/decisions/0033-customer-connections/#connection-trust), [0017](/decisions/0017-identity-and-sign-in/#step-up)).
+9. **A multi-factor proof relayed from a corporate login never raises `acr` in sluis's tokens on its own.** The upstream reports what it verified itself in `acr` and `amr`, and a proof made further behind it travels as a separate claim that sluis does not read for assurance. `acr` in sluis's tokens is the upstream's own `acr`, mapped and capped by the connection's `assurance`; a relayed multi-factor proof never raises it above that cap ([0033](/decisions/archive/0033-customer-connections/#connection-trust), [0017](/decisions/0017-identity-and-sign-in/#step-up)).
 
 An upstream outage stops new sign-ins and silent renewals; tokens already issued stay valid until they expire ([REQ-OPS-014](/requirements/ops/#REQ-OPS-014)). sluis states no uptime figure for the upstream.
 

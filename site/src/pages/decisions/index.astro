@@ -1,11 +1,12 @@
 ---
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
-import { decisionFacts, decisionLayer, listDecisions } from '../../lib-decisions';
+import { decisionFacts, decisionLayer, listArchivedDecisions, listDecisions } from '../../lib-decisions';
 
 // The status, layer and date come from each record's own header lines, so the index
 // always says what the record says. The template (0000) is not a record.
 const entries = await listDecisions();
 const records = entries.map((e) => ({ ...decisionFacts(e), layer: decisionLayer(e) }));
+const archived = (await listArchivedDecisions()).map((e) => ({ ...decisionFacts(e), layer: decisionLayer(e) }));
 ---
 
 <StarlightPage
@@ -54,6 +55,34 @@ const records = entries.map((e) => ({ ...decisionFacts(e), layer: decisionLayer(
           ))}
         </tbody>
       </table>
+    )
+  }
+  {
+    archived.length > 0 && (
+      <>
+        <h2 id="archive">Archive</h2>
+        <p>Superseded records, kept as they were decided, under their own numbers.</p>
+        <table class="decision-index">
+          <thead>
+            <tr>
+              <th scope="col">Record</th>
+              <th scope="col">Decision</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {archived.map((r) => (
+              <tr data-record={r.id}>
+                <td>{r.number}</td>
+                <td>
+                  <a href={`/decisions/${r.id}/`}>{r.title}</a>
+                </td>
+                <td class="decision-status">{r.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </>
     )
   }
 </StarlightPage>

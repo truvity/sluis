@@ -128,7 +128,7 @@ Every kind has exactly one writer. For a durable or temp kind it is an actor, na
 
 ### Leases and fencing tokens
 
-A **lease** is a temp kind: a conditional create plus a TTL (30 seconds by default). Its version is the **fencing token**: it grows each time the lease changes hands, and the holder passes it with its writes, so a holder that was paused and woke up cannot write over the new one. Only background jobs take a lease (a reconciler, a scheduled adapter, the backup job). A lease needs nothing of its own in the store, and there is no local lock ([ADR 0005](/decisions/0005-the-store/#leases)).
+A **lease** is a temp kind: a conditional create plus a TTL (30 seconds by default). Its version is the **fencing token**: it grows each time the lease changes hands, and the holder passes it with its writes, so a holder that was paused and woke up cannot write over the new one. Only background jobs take a lease (a reconciler, a scheduled adapter, the backup job). A lease needs nothing of its own in the store, and there is no local lock ([ADR 0005](https://github.com/truvity/atoom/blob/master/docs/decisions/0008-blocks.md)).
 
 ## Configuration
 
@@ -138,7 +138,7 @@ Config reaches the store as **signed config documents**, one per config kind ([s
 2. It validates the whole set: each document against its kind's schema, then the checks that span kinds and layers.
 3. It swaps the **snapshot** atomically.
 
-- **A cold start refuses on any failure,** and keeps nothing between starts. At a cold start the store takes the latest validly signed document whatever its sequence number; afterwards the sequence must grow ([ADR 0005](/decisions/0005-the-store/#freshness-at-a-cold-start)).
+- **A cold start refuses on any failure,** and keeps nothing between starts. At a cold start the store takes the latest validly signed document whatever its sequence number; afterwards the sequence must grow ([ADR 0005](/decisions/0005-the-store/#configuration-loading)).
 - **A failed reload keeps the old snapshot in force** and leaves a failure fact in the audit log and a journal line. The new snapshot is all or nothing.
 - **A document may carry several signatures.** A regulated party's policy carries the publisher's and the party's, and the store requires both.
 - **Only the bootstrap file needs a restart.** It is the one local file store@ reads at start: the boundary, one destination per storage class, the driver sockets and the publisher keys that anchor trust. It holds no credential ([bootstrap file](/reference/bootstrap-file/)).
@@ -161,7 +161,7 @@ A check that cannot run is reported as not run, never as passed ([principle 4](/
 
 Read-only secrets come from a **secret source** and are written by infrastructure code. The store fetches a value on first use and holds it in memory only, and it never appears in an audit fact, a log line or a span. A secret source holds its values in the clear for whoever may read it, so they pass through store@ in memory: a compromised store@ yields secret-source values and no sealed data. On AWS, having the actor open at key@ a value that store@ fetched undecrypted is a follow-up ([#1182](https://github.com/truvity/sluis/issues/1182)).
 
-sluis is a store of static secrets and not a general secrets engine. KV, a building block of the core, keeps versioned secrets in **KV stores** that no tenant owns, each under a data key of its own, with policy deciding by path and every successful access a blocking audit fact; External Secrets reads it through a subset of the Vault KV v2 API ([ADR 0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/)). It offers no dynamic secrets, leases or transit. Where a caller needs a credential for a vendor, sluis mints a scoped credential instead of storing the caller's own ([Integrations](/integrations/)).
+sluis is a store of static secrets and not a general secrets engine. KV, a building block of the core, keeps versioned secrets in **KV stores** that no tenant owns, each under a data key of its own, with policy deciding by path and every successful access a blocking audit fact; External Secrets reads it through a subset of the Vault KV v2 API ([ADR 0047](/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns/)). It offers no dynamic secrets, leases or transit. Where a caller needs a credential for a vendor, sluis mints a scoped credential instead of storing the caller's own ([Integrations](/integrations/)).
 
 A read of one secret takes this path. KV is built in the core phase, after the core features and before the shapes, and it needs the slice of workload exchange for a Kubernetes ServiceAccount token:
 
@@ -180,8 +180,8 @@ The caller gets a value only when policy allows the path, and every successful r
 
 **exporter@** publishes the kinds marked exportable to destinations outside sluis ([ADR 0009](/decisions/0009-export/)).
 
-- **Exactly seven kinds are exportable today:** `SigningRing`, `KeyCertificate`, `TrustAnchors`, `Crl`, `Krl`, `TrustBundle` and `ClientSecretExport`. The mark is set in review, and exporter@ refuses any other kind. `ClientSecretExport` is retired by [ADR 0047](/decisions/0047-kv-is-an-add-on-of-stores-that-no-tenant-owns/#secrets-that-sluis-generates-live-in-kv-k4) when KV is built: a generated secret that a consumer reads is a KV entry, and six public kinds stay.
-- **A destination** is a config kind, `ExportDestination`: a store of record that a cluster reads through External Secrets (not the path for consumers once KV is built, [ADR 0009](/decisions/0009-export/#amendment-of-2026-11-18-kv-replaces-the-store-of-record-for-consumers)), a bucket for public material, or, when an installation chooses it, a Kubernetes Secret written directly. A destination may not overlap a secret source.
+- **Exactly seven kinds are exportable today:** `SigningRing`, `KeyCertificate`, `TrustAnchors`, `Crl`, `Krl`, `TrustBundle` and `ClientSecretExport`. The mark is set in review, and exporter@ refuses any other kind. `ClientSecretExport` is retired by [ADR 0047](/decisions/0047-kv-is-a-core-service-of-stores-that-no-tenant-owns/#secrets-that-sluis-generates-live-in-kv) when KV is built: a generated secret that a consumer reads is a KV entry, and six public kinds stay.
+- **A destination** is a config kind, `ExportDestination`: a store of record that a cluster reads through External Secrets (not the path for consumers once KV is built, [ADR 0009](/decisions/0009-export/#what-is-exportable)), a bucket for public material, or, when an installation chooses it, a Kubernetes Secret written directly. A destination may not overlap a secret source.
 - **exporter@ watches the exportable kinds,** opens sealed values at key@ with its own grant, writes with its own destination credential and audits every write. A full reconcile runs at start and daily.
 - **sluis writes no Kubernetes object,** except an exported Secret written by exporter@ on the direct path. Clusters pull, and sluis exports.
 
