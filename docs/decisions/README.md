@@ -18,13 +18,13 @@ A v2 record that replaces a v1 decision says so in its context.
 
 A record is `NNNN-short-title-in-kebab-case.md`. A new record takes the number after the highest one in use, archived records included. A decision that is planned but not written has an issue and no number: prose names the issue, never a future number.
 
-A superseded record is moved to [archive/](archive/) under its own number and name and is never edited again. It is not an index row; the [archive table](#archive) lists it. A record that is superseded only in part stays where it is, and its status says which record supersedes it (`Accepted; partly superseded by NNNN`); the new record names the superseded parts exactly.
+A superseded record is moved to [archive/](archive/) under its own number and name and is never edited again. It is not an index row; the [archive table](#archive) lists it. A record that is superseded only in part stays where it is, and its status says which record supersedes it (`Accepted; partly superseded by NNNN`, or `Proposed; partly superseded by NNNN` for a proposal); the new record names the superseded parts exactly.
 
 ## Format
 
 Every record has these parts, in this order:
 
-- **Status.** One of `Proposed`, `Accepted`, `Rejected`, `Superseded by NNNN`, `Accepted; amended by NNNN` or `Accepted; partly superseded by NNNN`.
+- **Status.** One of `Proposed`, `Accepted`, `Rejected`, `Superseded by NNNN`, `Accepted; amended by NNNN`, `Accepted; partly superseded by NNNN` or `Proposed; partly superseded by NNNN`.
 - **Layer.** Optional. One of `core` or `add-on`: the layer of the product the decision belongs to ([0044](0044-sluis-is-a-core-and-add-ons.md)). A record with no Layer line is core, and so is a record that spans the layers, such as the runtimes or the release train. The layer `customer identity` was withdrawn by [0048](0048-product-apis-take-the-identity-providers-tokens.md); a record that carries it keeps it as decided (`customer identity`), and no new record takes it.
 - **Date.** The day of the latest decision the record states.
 - **Context.** The forces at play. What problem, what constraints, what the reader needs to know.
@@ -129,7 +129,8 @@ The records, grouped in reading order. The Layer column is the record's own `Lay
 | [0023](0023-certificate-authorities.md) | The ca and ssh-ca actors are the certificate authorities; every leaf has a fixed profile and a short lifetime | add-on | Accepted |
 | [0024](0024-root-custody-and-the-signing-api.md) | sluis holds no root: it asks root custody to certify its intermediates, and signs artifacts through a signing API | add-on | Accepted |
 | [0042](0042-sluis-syncs-company-issued-openpgp-keys-to-staff-github-accounts.md) | sluis syncs company-issued OpenPGP keys to staff GitHub accounts | add-on | Proposed |
-| [0043](0043-a-person-binds-their-own-keys-to-their-identity-in-sluis.md) | A person binds their own keys to their identity in sluis | add-on | Proposed |
+| [0043](0043-a-person-binds-their-own-keys-to-their-identity-in-sluis.md) | A person binds their own keys to their identity in sluis | add-on | Proposed; partly superseded by 0052 |
+| [0052](0052-a-customer-has-no-sluis-session-so-0043-binds-staff-keys-only.md) | A customer has no sluis session, so 0043 binds the keys of staff and operators only | add-on | Accepted |
 
 ### Moved to truvity/audit
 

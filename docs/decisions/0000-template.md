@@ -6,7 +6,7 @@
 
 <!--
 Copy this file to NNNN-short-title.md and fill it in. Delete these comments.
-Status: Proposed, Accepted, Rejected, Superseded by NNNN, Accepted; amended by NNNN, or Accepted; partly superseded by NNNN.
+Status: Proposed, Accepted, Rejected, Superseded by NNNN, Accepted; amended by NNNN, Accepted; partly superseded by NNNN, or Proposed; partly superseded by NNNN.
 Layer: core or add-on. Optional: leave the line out for a core record.
 Keep the text public and generic: no private deployment, account, hostname, ticket
 or person other than the maintainer. Use example.com, acme and globex.
