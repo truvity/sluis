@@ -11,6 +11,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -703,5 +705,59 @@ func TestTheExampleConfigParses(t *testing.T) {
 	}
 	if len(c.Tenants) != 2 || c.Tenants[0].ActAs != actA || c.Tenants[1].Profile != mimic.ProfileGoogle {
 		t.Fatalf("the example is not the one documented: %+v", c.Tenants)
+	}
+}
+
+// A secret that the config names and mimic cannot read stops the start: mimic never runs a client with an empty
+// secret, or as a public client in place of a confidential one. That holds for each relying party's secret and for
+// mimic's own secret at the stable sluis, whatever the source: an unset or empty variable, a missing file, or a file
+// with nothing but a newline.
+func TestASecretThatCannotBeReadStopsTheStart(t *testing.T) {
+	dir := t.TempDir()
+	empty := filepath.Join(dir, "empty")
+	newline := filepath.Join(dir, "newline")
+	for p, b := range map[string]string{empty: "", newline: "\n"} {
+		if err := os.WriteFile(p, []byte(b), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("MIMIC_TEST_EMPTY_SECRET", "")
+	sources := map[string]string{
+		"an unset variable":         "env:MIMIC_TEST_NOT_SET_ANYWHERE",
+		"an empty variable":         "env:MIMIC_TEST_EMPTY_SECRET",
+		"a missing file":            "file:" + filepath.Join(dir, "missing"),
+		"an empty file":             "file:" + empty,
+		"a file of a newline alone": "file:" + newline,
+	}
+	for who, set := range map[string]func(*mimic.Config, string){
+		"a relying party's secret":       func(c *mimic.Config, s string) { c.Tenants[1].Clients[0].Secret = s },
+		"the secret at the stable sluis": func(c *mimic.Config, s string) { c.Sluis.ClientSecret = s },
+	} {
+		for how, source := range sources {
+			t.Run(who+", "+how, func(t *testing.T) {
+				c := mimictest.Config(t, "http://127.0.0.1:9", "http://127.0.0.1:9")
+				set(c, source)
+				srv, err := mimic.New(c, mimic.Options{})
+				if err == nil || srv != nil {
+					t.Fatalf("started with %s from %s", who, how)
+				}
+				if strings.Contains(err.Error(), mimictest.ClientSecret) {
+					t.Fatalf("the error names a secret: %v", err)
+				}
+			})
+		}
+	}
+}
+
+// mimic may be a public client of the stable sluis: it then redeems the code with PKCE alone, sends its client id in
+// the form and no secret, and the sign-in works as with a confidential client.
+func TestAPersonSignsInThroughAPublicClientOfTheStableSluis(t *testing.T) {
+	m := mimictest.Start(t, func(c *mimic.Config) { c.Sluis.ClientSecret = "" })
+	m.Sluis.Public = true
+	r := newRP(t, m, "google", "example-b")
+	m.Sluis.SignInNext(mimictest.Person{Sub: "person-9", Groups: []string{actB}})
+	c := r.signIn(m.Browser(), "alice")
+	if act, _ := c["act"].(map[string]any); act["sub"] != "person-9" {
+		t.Fatalf("act = %v", c["act"])
 	}
 }

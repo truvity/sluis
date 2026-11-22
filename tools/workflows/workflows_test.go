@@ -19,7 +19,8 @@ const prOnly = "${{ github.event_name == 'pull_request' }}"
 // serialDeploys are the workflows that run on a push to main and are not CI: a deploy that runs one at a time and
 // lets the newest push win, because an older commit must not be deployed over a newer one.
 var serialDeploys = map[string]string{
-	"site.yaml": "publishes the site: one deploy at a time, the newest push replaces a pending one",
+	"site.yaml":  "publishes the site: one deploy at a time, the newest push replaces a pending one",
+	"mimic.yaml": "publishes mimic's image: one push at a time, the newest push replaces a pending one",
 }
 
 type workflow struct {

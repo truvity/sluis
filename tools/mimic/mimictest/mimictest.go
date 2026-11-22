@@ -53,6 +53,9 @@ type Sluis struct {
 	Server *httptest.Server
 	Issuer string
 	Key    *ecdsa.PrivateKey
+	// Public makes mimic's client a public one: the token endpoint takes the client id in the form and no secret, and
+	// refuses a request that sends one. Set it before the first sign-in.
+	Public bool
 
 	mu    sync.Mutex
 	next  Person
@@ -113,13 +116,19 @@ func (s *Sluis) authorize(w http.ResponseWriter, r *http.Request) {
 
 func (s *Sluis) token(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
-	id, secret, _ := r.BasicAuth()
+	// A confidential client sends its secret by client_secret_basic. A public client authenticates by PKCE alone
+	// (RFC 7636): no Authorization header, its id in the form.
+	id, secret, basic := r.BasicAuth()
+	client := basic && id == SluisClientID && secret == sluisClientSecret
+	if s.Public {
+		client = !basic && r.PostForm.Get("client_id") == SluisClientID
+	}
 	s.mu.Lock()
 	p, ok := s.codes[r.PostForm.Get("code")]
 	delete(s.codes, r.PostForm.Get("code"))
 	s.mu.Unlock()
 	sum := sha256.Sum256([]byte(r.PostForm.Get("code_verifier")))
-	if !ok || id != SluisClientID || secret != sluisClientSecret || r.PostForm.Get("redirect_uri") != p.r ||
+	if !ok || !client || r.PostForm.Get("redirect_uri") != p.r ||
 		base64.RawURLEncoding.EncodeToString(sum[:]) != p.challenge {
 		w.WriteHeader(http.StatusBadRequest)
 		writeJSON(w, map[string]string{"error": "invalid_grant"})
