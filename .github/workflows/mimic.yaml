@@ -1,0 +1,101 @@
+# Publishes the image of mimic, the test identity provider of development (ADR 0054), on a push to main that changes it:
+# ghcr.io/truvity/sluis-mimic:main-<the first 12 characters of the commit>, for linux/amd64 and linux/arm64. mimic is a test
+# tool and not part of a release (ADR 0054, decision 1), so this is not release.yaml: no tag, no package, no candidate.
+# A deployment pins the image by its digest, which the job summary prints. docs/integrations/mimic.md, "The image".
+#
+# Two jobs, as the release keeps them apart (REQ-SUPPLY-041): `build` compiles the executable with no write permission and no
+# token, and `publish` holds packages: write, builds nothing and only copies the executables into a distroless image
+# (deploy/mimic/Dockerfile has no RUN). A pull request never runs this workflow (it has no pull_request trigger); checks.yaml
+# runs mimic's tests on every pull request.
+name: mimic
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tools/mimic/**"
+      - "kits/go/version/**"
+      - "deploy/mimic/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/mimic.yaml"
+  workflow_dispatch:
+
+permissions: {}
+
+# One publish at a time; a newer push does not cancel one that runs.
+concurrency:
+  group: mimic
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build (no token)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: truvity/ci-actions/setup-devbox@82e404675ef3f826755e2939d1072cddcd07ed26 # v3.9.0
+      # The executable of each platform at <os>/<arch>/sluis-mimic, the layout the Dockerfile copies from; `check` of the
+      # example config proves the amd64 build starts as far as its config.
+      - name: Build
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            GOOS=linux GOARCH="$arch" SLUIS_VERSION="0.0.0-main.${SHA:0:12}" devbox run -- just build-mimic
+            mkdir -p "dist/mimic/linux/$arch"
+            mv bin/sluis-mimic "dist/mimic/linux/$arch/sluis-mimic"
+          done
+          dist/mimic/linux/amd64/sluis-mimic version
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mimic-dist
+          path: dist/mimic
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: publish (copy into the image, push)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mimic-dist
+          path: dist/mimic
+      - name: Log in to ghcr.io
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Push the image
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          chmod 0555 dist/mimic/linux/*/sluis-mimic
+          builder="mimic-$GITHUB_RUN_ID"
+          docker buildx create --name "$builder" --driver docker-container \
+            --driver-opt 'image=moby/buildkit:v0.29.0@sha256:0039c1d47e8748b5afea56f4e85f14febaf34452bd99d9552d2daa82262b5cc5' >/dev/null
+          trap 'docker buildx rm --force "$builder" >/dev/null 2>&1 || true' EXIT
+          ref="ghcr.io/truvity/sluis-mimic:main-${SHA:0:12}"
+          docker buildx build --builder "$builder" --platform linux/amd64,linux/arm64 --provenance=false --sbom=false \
+            --label "org.opencontainers.image.revision=$SHA" \
+            --file deploy/mimic/Dockerfile --metadata-file dist/metadata.json --tag "$ref" --push dist/mimic
+          digest=$(jq -r '."containerimage.digest"' dist/metadata.json)
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "mimic: no digest in the build's metadata" >&2; exit 1; }
+          echo "Pushed \`$ref@$digest\`" | tee -a "$GITHUB_STEP_SUMMARY"

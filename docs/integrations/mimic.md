@@ -22,6 +22,10 @@ mimic is a relying party of the **stable sluis**, the released installation that
 
 Run one replica. Authorization codes are held in memory for a minute, so a second replica would refuse the codes of the first. Sessions are sealed cookies, so they survive a restart and a stable sluis that is down.
 
+## The image
+
+mimic is not part of a release (ADR 0054, decision 1), so no release tag publishes it. The workflow `mimic.yaml` builds an image on every push to `main` that changes mimic, and pushes it as `ghcr.io/truvity/sluis-mimic:main-<commit>`, the first 12 characters of the commit, for `linux/amd64` and `linux/arm64`. The run's summary prints the digest; pin the image by it. The image is distroless and runs as a user that is not root, and its default command is `serve -config /etc/mimic/mimic.yaml`. Build the same executable locally with `just build-mimic`.
+
 ## How a subject gets a session
 
 A person:
@@ -111,7 +115,7 @@ tenants:
 | `tenants[].clients[]` | The relying parties: an id, the exact redirect URIs, and a secret, or none for a public client | none |
 | `tenants[].identities[]` | `username` (the `login_hint`), `email` (the local part), `name`, `groups` | `email` is the username |
 
-A key or a secret is a source: `file:<path>` or `env:<NAME>`. A trailing newline is dropped. On development the values come from the installation's secret store, such as AWS SSM Parameter Store, through environment variables or files that the runtime mounts. Make them for mimic alone: nothing is shared with any real identity provider. Keep the secret stable, because a new one gives every identity a new `sub`, and every relying party sees new accounts.
+A key or a secret is a source: `file:<path>` or `env:<NAME>`. A trailing newline is dropped. A source that mimic cannot read stops the start, and so does one that is empty: an unset or empty variable, a missing file, or a file of a newline alone. mimic never runs a client whose secret it could not read, and never runs it as a public client instead. On development the values come from the installation's secret store, such as AWS SSM Parameter Store, through environment variables or files that the runtime mounts. Make them for mimic alone: nothing is shared with any real identity provider. Keep the secret stable, because a new one gives every identity a new `sub`, and every relying party sees new accounts.
 
 `sluis-mimic check -config <file>` reads the config and every source, and exits `0` when mimic would start. `sluis-mimic serve -config <file>` runs it. Unknown keys are refused.
 
