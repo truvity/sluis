@@ -23,7 +23,7 @@ func run(t *testing.T, args ...string) (code int, stdout, stderr string) {
 	t.Helper()
 	var out, errb bytes.Buffer
 	code = cli.Run(context.Background(), "yubikey-piv",
-		cli.Commands{Serve: serve, Check: check, Conformance: conformance}, flags, args, &out, &errb)
+		cli.Commands{Serve: serve, Check: check}, flags, args, &out, &errb)
 	return code, out.String(), errb.String()
 }
 
@@ -137,12 +137,6 @@ func TestVersion(t *testing.T) {
 	code, stdout, _ := run(t, "version")
 	if code != cli.ExitOK || !strings.HasPrefix(stdout, "yubikey-piv ") {
 		t.Fatalf("exit %d; %q", code, stdout)
-	}
-}
-
-func TestConformanceNeedsASocket(t *testing.T) {
-	if code, _, _ := run(t, "conformance"); code != cli.ExitUsage {
-		t.Fatalf("exit %d, want 2", code)
 	}
 }
 

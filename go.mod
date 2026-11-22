@@ -16,7 +16,6 @@ require (
 	github.com/truvity/atoom/common v0.3.0
 	github.com/truvity/atoom/destination v0.3.0
 	github.com/truvity/atoom/key v0.3.0
-	github.com/truvity/atoom/key/conformance v0.3.0
 	github.com/truvity/atoom/key/pinrelease v0.3.0
 	github.com/truvity/atoom/key/slotplan v0.3.0
 	github.com/truvity/atoom/key/software v0.3.0
