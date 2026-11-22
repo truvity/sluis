@@ -5,7 +5,6 @@
 //	yubikey-piv serve --socket PATH --admin-socket PATH --node NAME --environment development|staging|production
 //	              --bootstrap PATH --state-dir PATH [--serial N] [--socket-gid GID]
 //	yubikey-piv check [--serial N]
-//	yubikey-piv conformance --socket PATH
 //	yubikey-piv version
 //
 // The executable that talks to a card is built natively with the tag atoom_card and CGO_ENABLED=1 (`just
@@ -21,8 +20,6 @@ import (
 	"os"
 	"strconv"
 
-	keykit "github.com/truvity/atoom/key/conformance"
-	"github.com/truvity/atoom/key/gen/atoom/key/v1alpha1/keyv1alpha1connect"
 	"github.com/truvity/atoom/key/yubikeypiv"
 
 	"github.com/truvity/sluis/v2/kits/go/cli"
@@ -89,7 +86,7 @@ func refused(err error) error {
 }
 
 func main() {
-	cli.Main("yubikey-piv", cli.Commands{Serve: serve, Check: check, Conformance: conformance}, flags)
+	cli.Main("yubikey-piv", cli.Commands{Serve: serve, Check: check}, flags)
 }
 
 func flags(fs *flag.FlagSet) {
@@ -205,19 +202,4 @@ func check(_ context.Context, f cli.Flags) error {
 		return cli.Usage(errors.New("--serial is required outside development"))
 	}
 	return refused(yubikeypiv.Check(yubikeypiv.Options{Environment: env, Purposes: pinrelease.CardPurposes(), Serial: sn}))
-}
-
-// conformance runs atoom's key kit against the driver on --socket. Since atoom 0.3.0 the kit's cases sign with purposes of its own
-// (conformance.Declaration()), which this host does not declare, so against a driver this host started those cases fail and say so;
-// atoom's CI runs the kit against its drivers.
-func conformance(ctx context.Context, f cli.Flags) error {
-	if f.Socket == "" {
-		return cli.Usage(errors.New("--socket is required"))
-	}
-	hc, url := rpc.Dial(f.Socket)
-	c := keyv1alpha1connect.NewKeyStoreServiceClient(hc, url, rpc.ClientOptions()...)
-	if err := keykit.Run(ctx, c, os.Stdout); err != nil {
-		return cli.Refused(err.Error())
-	}
-	return nil
 }

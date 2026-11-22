@@ -3,7 +3,6 @@
 //
 //	software serve --socket PATH --state-dir DIR --environment development|staging|production [--socket-gid GID]
 //	software check --state-dir DIR
-//	software conformance --socket PATH
 //	software version
 package main
 
@@ -12,11 +11,8 @@ import (
 	"errors"
 	"flag"
 	"net/http"
-	"os"
 	"strconv"
 
-	keykit "github.com/truvity/atoom/key/conformance"
-	"github.com/truvity/atoom/key/gen/atoom/key/v1alpha1/keyv1alpha1connect"
 	"github.com/truvity/atoom/key/purpose"
 	"github.com/truvity/atoom/key/software"
 
@@ -82,7 +78,7 @@ func runDriver(ctx context.Context, env, stateDir string, cfg rpc.ServerConfig) 
 }
 
 func main() {
-	cli.Main("software", cli.Commands{Serve: serve, Check: check, Conformance: conformance}, flags)
+	cli.Main("software", cli.Commands{Serve: serve, Check: check}, flags)
 }
 
 func flags(fs *flag.FlagSet) {
@@ -150,21 +146,6 @@ func check(_ context.Context, f cli.Flags) error {
 			return cli.Refused(pe.Problems...)
 		}
 		return err
-	}
-	return nil
-}
-
-// conformance runs atoom's key kit against the driver on --socket. Since atoom 0.3.0 the kit's cases sign with purposes of its own
-// (conformance.Declaration()), which this host does not declare, so against a driver this host started those cases fail and say so;
-// atoom's CI runs the kit against its drivers.
-func conformance(ctx context.Context, f cli.Flags) error {
-	if f.Socket == "" {
-		return cli.Usage(errors.New("--socket is required"))
-	}
-	hc, url := rpc.Dial(f.Socket)
-	c := keyv1alpha1connect.NewKeyStoreServiceClient(hc, url, rpc.ClientOptions()...)
-	if err := keykit.Run(ctx, c, os.Stdout); err != nil {
-		return cli.Refused(err.Error())
 	}
 	return nil
 }

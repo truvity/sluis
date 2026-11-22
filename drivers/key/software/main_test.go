@@ -15,7 +15,7 @@ func run(t *testing.T, args ...string) (code int, stdout, stderr string) {
 	t.Helper()
 	var out, errb bytes.Buffer
 	code = cli.Run(context.Background(), "software",
-		cli.Commands{Serve: serve, Check: check, Conformance: conformance}, flags, args, &out, &errb)
+		cli.Commands{Serve: serve, Check: check}, flags, args, &out, &errb)
 	return code, out.String(), errb.String()
 }
 
