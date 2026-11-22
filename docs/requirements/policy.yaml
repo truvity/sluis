@@ -340,7 +340,7 @@ requirements:
       - {kind: integration-test, ref: "a rule that names an organisation allows a token that carries it and refuses a token that carries another"}
   - id: REQ-POLICY-025
     area: POLICY
-    statement: "Every reader of a grant name MUST accept three segments, `<scope>:<thing>:<role>`, or five, `<scope>:<vendor>:<project>:<customer>:<role>`, each of 1 to 64 ASCII letters, digits, `-` and `_`, and MUST refuse any other count of segments and an empty segment."
+    statement: "Every reader of a grant name MUST accept three segments, `<scope>:<thing>:<role>`, or five, `<scope>:<vendor>:<project>:<customer>:<role>`, each of 1 to 64 ASCII letters, digits, `-` and `_`, as the only shapes of a grant name, so that any other count of segments and an empty segment are refused."
     rationale: "v1 issues and accepts both forms, so v2 reads the same names at the switch; a name of four segments is refused, so a missing segment shows instead of loading a grant nobody holds (ADR 0055)."
     level: MUST
     source: v1-parity
