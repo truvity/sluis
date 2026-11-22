@@ -58,6 +58,14 @@ entity Workload = {
 // A signing key of a boundary, named by its purpose, such as `release-signing`.
 entity SigningKey in [Boundary];
 
+// One log of a project of the boundary, named `<project>/<kind>` such as `sluis/audit`. The
+// project is the `AuditLog` document's, and the kind is `audit` or `usage`. A read is decided on
+// one log and never on the boundary at large; see "The audit reader" on the policy reference page.
+entity AuditLog in [Boundary] = {
+  project: String,
+  kind: String,
+};
+
 // What the asking actor knows about how the person signed in. A name that the upstream did not
 // send is absent, which a policy reads as unknown.
 type Authentication = {

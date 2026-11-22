@@ -5,7 +5,7 @@
 #   Rust  the same directories                        cargo zigbuild --release --target aarch64-unknown-linux-musl
 #
 # The output keeps the directory: dist/arm64/actors/<a>, dist/arm64/drivers/<owner>/<d>, dist/arm64/cli/<c>
-# (PLAN.md "Board deployment"). Run it from the repository root: `just build-arm64`.
+# (docs/runtimes/bare-metal.md, "Deploy and prove on three boards"). Run it from the repository root: `just build-arm64`.
 # A build that makes no binary, or one that is not a static aarch64 ELF, fails.
 #
 # The executables that link a C library (deploy/boards/native.list: the card driver) are not cross-compiled here, because

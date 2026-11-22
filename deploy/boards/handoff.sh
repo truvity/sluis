@@ -36,7 +36,7 @@ zone=boards.test
 # sluis.dev.boards.test), so one trust domain and one DNS zone below the zone of the root. The same plain lower-case host name is
 # the URI host and the DNS name of the request, with no period at its start, and the whole entry that ritueel's policy would list
 # for the requester. The split: a host alone as a URI constraint means the host alone to OpenSSL but also its subdomains to Go, so a
-# Go verifier and an OpenSSL verifier read it apart (ADR 0023, "The intermediates name constraints"; docs/runtimes/local.md). The
+# Go verifier and an OpenSSL verifier read it apart (ADR 0023, "The intermediate's name constraints"; docs/runtimes/local.md). The
 # test certifier of this directory takes the zone instead.
 names=dev.boards.test
 stem=dev-x509-intermediate

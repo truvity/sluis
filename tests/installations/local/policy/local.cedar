@@ -88,7 +88,7 @@ when {
 // `example-app` of the `dev` boundary wants multi-factor authentication no older than 15
 // minutes. When a request carries no `amr` or no `auth_age`, as with an upstream that sends
 // none, the answer is "not shown", so the person is asked to step up. The annotation tells
-// `session` what to ask for (RFC 9470): the values of `acr_values` and `max_age` that it puts
+// `signin` what to ask for (RFC 9470): the values of `acr_values` and `max_age` that it puts
 // in `insufficient_user_authentication`.
 @id("example-app-fresh-mfa")
 @step_up("acr_values=urn:example:acr:mfa max_age=900")

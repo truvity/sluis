@@ -35,8 +35,8 @@
 #      are refused while a board is pending.
 # Rollback is the same five steps with SLUIS_BOARDS_KEY_DRIVER=software. The software key of a board stays in its state
 # directory when the card is taken, so the board comes back with the same id. The wraps for the id that left the KeyPlan stay
-# in the store, unused until the id is listed again; this script deletes none (0006 deletes the wraps of a lost recipient
-# by a procedure of its own). The signer pre-publishes the new token key of the board for 30 minutes before it signs, so a
+# in the store, unused until the id is listed again; this script deletes none (ADR 0006, "DataKeyWrap", deletes the wraps of a lost
+# recipient by a procedure of its own). The signer pre-publishes the new token key of the board for 30 minutes before it signs, so a
 # smoke right after the switch says the earliest time at which the key is active.
 #
 # The repository names no host. The boards come from the environment (the run.env of the build):
@@ -291,7 +291,7 @@ stage() { # dir
 }
 
 # board_has_tar refuses, with the fix, a board that has no tar: the stage reaches the board as a tar stream over ssh, and the Rocky
-# image of the boards is built without it (docs/runtimes/bare-metal.md, "Rocky 10: what the image lacks"). A board that cannot be
+# image of the boards is built without it (docs/runtimes/bare-metal.md, "What a board needs before the first deploy"). A board that cannot be
 # reached is told apart from one that has no tar.
 board_has_tar() { # board
 	local rc=0

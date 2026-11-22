@@ -2,8 +2,8 @@
 //!
 //! The schema is fixed by sluis and embedded here (policy.md "The schema is sluis's, the policy is
 //! the operator's"). The file `docs/reference/policy-schema.cedarschema` is the schema of the
-//! reference page; the additions below it are decision D-6 of the build plan: the entity `Actor`
-//! and the audit actions, which the page does not have yet.
+//! reference page, with the entity `AuditLog`; the additions below it are the entity `Actor` and the
+//! audit actions, which the page does not have yet.
 
 use std::str::FromStr as _;
 
@@ -12,8 +12,8 @@ use cedar_policy::Schema;
 /// The schema of the reference page, schema version 1.
 const PAGE: &str = include_str!("../../../docs/reference/policy-schema.cedarschema");
 
-/// The additions of this build to the page's schema (decision D-6): the audit pieces are
-/// principals, and their actions get a decision and a grant like any other.
+/// The additions of this build to the page's schema: the audit pieces are principals, and their
+/// actions get a decision and a grant like any other.
 const AUDIT: &str = r#"
 // An actor of sluis that asks for a grant for itself (decision D-6): `writer`, `indexer`,
 // `reader`. Named by its registry name, which the asker cannot choose: `policy` takes it from the
@@ -32,14 +32,6 @@ action "audit.index" appliesTo {
   principal: Actor,
   resource: Boundary,
   context: {},
-};
-
-// One log of a project of the boundary, named `<project>/<kind>` such as `sluis/audit` (ADR 0028 "Access":
-// every call is decided on project x log kind x tenant). The project is the `AuditLog` document's, the kind
-// is `audit` or `usage`.
-entity AuditLog in [Boundary] = {
-  project: String,
-  kind: String,
 };
 
 // A reader asks for a grant to open a tenant's evidence in one log, for itself or for a person. Which
