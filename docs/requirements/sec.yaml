@@ -364,7 +364,8 @@ requirements:
     milestone: core
     gap: partly-built
     runtimes: all
-    standards: []
+    standards:
+      - {id: ST-116, section: "6585 §4; 9110 §10.2.3", depth: Full}
     issues: [916, 1857]
     verification:
       - {kind: integration-test, ref: "limit refusal response test"}

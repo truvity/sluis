@@ -1100,9 +1100,9 @@ terms:
     notes: "A security audit fact may be lost and counted; a usage record may not."
 
   - term: limit check
-    definition: "The check on the request path that compares a counter of usage in the current period with a limit that the product writes, and answers allow or refuse, next to the policy decision. What the counter is keyed by is open."
+    definition: "The check on the request path that compares a counter of usage in the current period with a limit that the product writes, and answers allow or refuse, next to the policy decision. The counter is keyed by the customer and the product of the subject token, or by the tenant and the client when it names neither; never by an organisation."
     category: audit
-    see: ["0046-limits-on-the-request-path-and-usage-in-audit#limits-and-balances"]
+    see: ["0046-limits-on-the-request-path-and-usage-in-audit#limits-and-balances", "0053-the-limit-counter-is-keyed-by-customer-and-product-and-sluis-never-uses-the-organisation"]
     avoid: ['quota check', 'balance check']
     notes: "sluis holds the counter, never a plan, a price or a balance; those live in the product."
 

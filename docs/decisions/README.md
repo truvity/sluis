@@ -90,7 +90,8 @@ The records, grouped in reading order. The Layer column is the record's own `Lay
 |-----|----------|-------|--------|
 | [0048](0048-product-apis-take-the-identity-providers-tokens.md) | Customers sign in at the group's identity provider, product APIs take its tokens, and sluis exchanges one only for calls down to infrastructure | core | Accepted; partly superseded by 0051 |
 | [0050](0050-the-exchanged-token-carries-the-context-realms-pairwise-subject.md) | The token of an infrastructure exchange carries the context realm's pairwise subject, and any subject of sluis's own is derived per boundary | core | Accepted |
-| [0051](0051-exchange-targets-resource-clients-only-and-policy-decides-who-gets-what.md) | Exchange targets resource clients only, for every subject alike, and policy decides who gets what; only staff and operators sign in to sluis; the KV core is built now | core | Accepted |
+| [0051](0051-exchange-targets-resource-clients-only-and-policy-decides-who-gets-what.md) | Exchange targets resource clients only, for every subject alike, and policy decides who gets what; only staff and operators sign in to sluis; the KV core is built now | core | Accepted; partly superseded by 0053 |
+| [0053](0053-the-limit-counter-is-keyed-by-customer-and-product-and-sluis-never-uses-the-organisation.md) | The limit counter is keyed by the customer and the product, or by the tenant and the client, and sluis never uses the organisation | core | Accepted |
 | [0032](0032-customer-identity-installations.md) | Customers sign in through the upstream identity provider, realms follow boundaries, and a customer-identity installation serves one boundary whose tenants each have their own data keys | customer identity | Accepted; partly superseded by 0051 |
 
 ### Integrations and the console
@@ -109,7 +110,7 @@ The records, grouped in reading order. The Layer column is the record's own `Lay
 | [0010](0010-backup-and-recovery.md) | A backup is a logical archive of the authoritative kinds through the store; a regional outage is accepted and a drill measures recovery | core | Accepted |
 | [0047](0047-kv-is-a-core-service-of-stores-that-no-tenant-owns.md) | KV is a core service of stores that no tenant owns: policy decides by path, each store has its own data key, and External Secrets reads it through a Vault KV v2 subset | core | Accepted; partly superseded by 0049 |
 | [0049](0049-ssm-stays-the-only-secret-store-for-now.md) | SSM stays the only secret store for now, and External Secrets reading sluis KV is a later option | core | Accepted; partly superseded by 0051 |
-| [0046](0046-limits-on-the-request-path-and-usage-in-audit.md) | Limits are checked on the request path, balances live in the product, and usage records go to audit | core | Accepted; partly superseded by 0051 |
+| [0046](0046-limits-on-the-request-path-and-usage-in-audit.md) | Limits are checked on the request path, balances live in the product, and usage records go to audit | core | Accepted; partly superseded by 0053 |
 
 ### Runtimes, release, telemetry and the site
 

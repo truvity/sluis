@@ -128,6 +128,7 @@ standards:
   - {id: ST-113, name: "SPIFFE Workload API (later)", group: "Workload", register: true, url: "https://github.com/spiffe/spiffe/blob/main/standards/SPIFFE_Workload_API.md"}
   - {id: ST-114, name: "OCSF 1.x", group: "Transparency", register: true, url: "https://schema.ocsf.io/"}
   - {id: ST-115, name: "FinOps FOCUS", group: "Data", register: true, url: "https://focus.finops.org/"}
+  - {id: ST-116, name: "RFC 6585 §4 and RFC 9110 §10.2.3 429 Too Many Requests and Retry-After", group: "HTTP", register: true, url: "https://www.rfc-editor.org/rfc/rfc6585#section-4"}
   - {id: NC-01, name: "RFC 8176 Authentication Method Reference Values", group: "Candidate", register: true}
   - {id: NC-02, name: "RFC 9562 UUIDv4", group: "Candidate", register: true}
   - {id: NC-03, name: "Security Event Tokens: RFC 8417, 8935 push, 8936 poll", group: "Candidate", register: false}

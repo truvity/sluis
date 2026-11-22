@@ -58,7 +58,7 @@ requirements:
   - id: REQ-QUOTA-097
     area: QUOTA
     statement: "sluis MUST check a limit on the request path against a counter of usage."
-    rationale: "A limit needs a fast check beside the policy decision, while plans, prices and balances stay in the product, and the counter is keyed by the customer and the product of the subject token (ADR 0046, ADR 0051)."
+    rationale: "A limit needs a fast check beside the policy decision, while plans, prices and balances stay in the product, and the counter is keyed by the customer and the product of the subject token, or by the tenant and the client when it names neither (ADR 0046, ADR 0051, ADR 0053)."
     level: MUST
     source: design-decision
     status: planned
@@ -84,7 +84,7 @@ requirements:
   - id: REQ-QUOTA-099
     area: QUOTA
     statement: "The limit check MUST read the customer and the product from the subject token's context realm and its audience or claims, and never from a parameter of the request."
-    rationale: "The caller must not be able to name the counter that it is counted against, and no sluis token carries the customer or the product (ADR 0051, ADR 0048)."
+    rationale: "The caller must not be able to name the counter that it is counted against, and no sluis token carries the customer or the product (ADR 0051, ADR 0053, ADR 0048)."
     level: MUST
     source: design-decision
     status: planned
@@ -94,3 +94,29 @@ requirements:
     issues: [841]
     verification:
       - {kind: integration-test, ref: "a request that names another customer or product as a parameter is counted against the customer and the product of its subject token"}
+  - id: REQ-QUOTA-100
+    area: QUOTA
+    statement: "The limit check MUST key the counter by the tenant and the client of the request when the subject token names no customer and no product."
+    rationale: "Vendor staff and robots have neither, and they are counted like every other caller, so one runaway client cannot pass the limit (ADR 0053)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: quota
+    runtimes: all
+    standards: []
+    issues: [841]
+    verification:
+      - {kind: integration-test, ref: "a sluis sign-in token and a workload token, which name no customer and no product, are counted against the tenant and the client of the request"}
+  - id: REQ-QUOTA-101
+    area: QUOTA
+    statement: "sluis MUST NOT use an organisation, or look one up, in the limit check or in a policy decision."
+    rationale: "Organisation-level control stays with the products, which own that relationship, and a lookup would put a call to another service on the request path (ADR 0053, ADR 0051)."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: quota
+    runtimes: all
+    standards: []
+    issues: [841, 1843]
+    verification:
+      - {kind: integration-test, ref: "a request whose token carries an organisation claim is counted and decided as if it carried none, and the harness sees no call to an organisation service"}

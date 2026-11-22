@@ -20,7 +20,7 @@ import (
 	"github.com/truvity/sluis/v2/kits/go/registry"
 )
 
-// The boards' installation (PLAN.md §6, D-12, D-16). These are the public names of the harness, not of any host.
+// The boards' installation (docs/runtimes/bare-metal.md, "Deploy and prove on three boards"). These are the public names of the harness, not of any host.
 const (
 	boundary = "dev"
 	tenant   = "acme" // the default tenant of the boundary (tests/installations/local/config/boundary.yaml)

@@ -1,6 +1,6 @@
 # 0051 — Exchange targets resource clients only, for every subject alike, and policy decides who gets what
 
-**Status:** Accepted
+**Status:** Accepted; partly superseded by 0053
 **Date:** 2026-11-21
 
 Proposal: [issue #1023](https://github.com/truvity/sluis/issues/1023).

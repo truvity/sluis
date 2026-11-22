@@ -1,5 +1,5 @@
-// Command smoke is the M1 proof of the first working version (PLAN.md §2, "M1, the spine") run against the boards
-// (§6, "Smoke"): `just boards-smoke`.
+// Command smoke is the proof of the first signing and sealing path, run against the boards (docs/runtimes/bare-metal.md,
+// "Deploy and prove on three boards", the `boards-smoke` row): `just boards-smoke`.
 //
 // It goes through the boards named in SLUIS_BOARDS, one after the other, over SSH. On each board it puts the executable
 // of the local smoke (tests/e2e/spine, built for arm64) in a directory only root can write, and runs its `step`

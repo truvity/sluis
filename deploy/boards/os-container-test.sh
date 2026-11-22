@@ -76,7 +76,7 @@ if [ "$fam" = rpm ]; then
 	OS_CREDENTIALS_MAY_BE_MISSING=1
 	OS_CREDENTIALS_MISSING_REASON="the nightly virtual machine test (os-vm-test.sh) proves receipt on Rocky 10"
 fi
-# The real credential driver, when the job built one for this machine (docs/runtimes/bare-metal.md, "What the jobs check"):
+# The real credential driver, when the job built one for this machine (docs/runtimes/bare-metal.md, "Supported operating systems"):
 # SLUIS_OS_CREDENTIAL_DRIVER names a static executable; the job builds it with `cargo zigbuild --release --target
 # x86_64-unknown-linux-musl -p credential`. Without it the unit runs a stand-in that only prints what it received.
 if [ -n "${SLUIS_OS_CREDENTIAL_DRIVER:-}" ]; then
