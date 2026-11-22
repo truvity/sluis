@@ -13,7 +13,8 @@ use crate::yaml::{self, Value};
 /// The `$id` of the schema of schema v1 (policy.md "Format").
 pub const SCHEMA_ID: &str = "https://sluis.id/schema/vocabulary/v1/vocabulary.schema.json";
 
-/// A grant name, `<scope>:<thing>:<role>`, in parts.
+/// A grant name in parts: `<scope>:<thing>:<role>`, or `<scope>:<vendor>:<project>:<customer>:<role>`, whose thing is
+/// the three words between the scope and the role, joined by `:` (ADR 0055).
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GrantName {
     pub scope: String,
@@ -27,6 +28,42 @@ impl GrantName {
     pub fn id(&self) -> String {
         format!("{}:{}:{}", self.scope, self.thing, self.role)
     }
+
+    /// Reads a grant name by its shape alone, declared or not (ADR 0055): three segments or five, each a valid name. The
+    /// scope is the first segment, the role the last, and the thing is everything between them, joined by `:`, so it is one
+    /// word or exactly three. Two segments, four, six or more, an empty segment, a wildcard and any character outside a
+    /// name are not a grant name. `kits/conformance/token/grant-name-vectors.json` fixes the rule.
+    #[must_use]
+    pub fn split(text: &str) -> Option<Self> {
+        let parts: Vec<&str> = text.split(SEPARATOR).collect();
+        if !GRANT_SEGMENTS.contains(&parts.len()) || !parts.iter().all(|p| valid_name(p)) {
+            return None;
+        }
+        let last = parts.len() - 1;
+        Some(Self {
+            scope: parts[0].to_owned(),
+            thing: parts[1..last].join(SEPARATOR),
+            role: parts[last].to_owned(),
+        })
+    }
+}
+
+/// What a grant name is written with between its segments.
+pub const SEPARATOR: &str = ":";
+
+/// The segment counts of a grant name: `<scope>:<thing>:<role>`, and the longer form whose thing is
+/// `<vendor>:<project>:<customer>` (ADR 0055).
+const GRANT_SEGMENTS: [usize; 2] = [3, 5];
+
+/// The segment counts of a thing: one word, or the three of `<vendor>:<project>:<customer>`.
+const THING_SEGMENTS: [usize; 2] = [1, 3];
+
+/// Whether `s` can stand in the thing position of a grant name: one valid name, or exactly three joined by `:` (ADR 0055).
+/// It is the thing [`GrantName::split`] reads back out of a name built from it.
+#[must_use]
+pub fn valid_thing(s: &str) -> bool {
+    let parts: Vec<&str> = s.split(SEPARATOR).collect();
+    THING_SEGMENTS.contains(&parts.len()) && parts.iter().all(|p| valid_name(p))
 }
 
 /// A document that is not a valid vocabulary: the path and the rule.
@@ -147,7 +184,7 @@ impl Vocabulary {
         let mut things = BTreeMap::new();
         for (name, decl) in map(things_v, "things")? {
             let path = format!("things.{name}");
-            if !valid_name(name) {
+            if !valid_thing(name) {
                 return err(&path, "not a valid name");
             }
             let mut roles_v = None;
@@ -300,21 +337,11 @@ impl Vocabulary {
         self.scopes.get(scope).copied().unwrap_or(true)
     }
 
-    /// The grant names text (`dev:example-app:user`) as a name of the vocabulary, or `None` when it is
-    /// not a declared grant name.
+    /// The grant names text (`dev:example-app:user`, or `devel:shared:keycloak:example-a:act-as`) as a name of the
+    /// vocabulary, or `None` when it is not a declared grant name.
     #[must_use]
     pub fn parse_name(&self, text: &str) -> Option<GrantName> {
-        let mut it = text.split(':');
-        let (scope, thing, role) = (it.next()?, it.next()?, it.next()?);
-        if it.next().is_some() {
-            return None;
-        }
-        let g = GrantName {
-            scope: scope.to_owned(),
-            thing: thing.to_owned(),
-            role: role.to_owned(),
-        };
-        self.declares(&g).then_some(g)
+        GrantName::split(text).filter(|g| self.declares(g))
     }
 
     /// The held grant names with every role they imply added, by the ladder, on the same scope and
@@ -371,6 +398,7 @@ mod tests {
         assert!(v.parse_name("dev:example-app:root").is_none());
         assert!(v.parse_name("dev:example-app").is_none());
         assert!(v.parse_name("a:b:c:d").is_none());
+        assert!(v.parse_name("dev:a:example-app:b:user").is_none());
     }
 
     #[test]
@@ -397,6 +425,90 @@ mod tests {
         assert_eq!(v.grants().len(), 2 + 2 + 1);
         assert!(v.parse_name("prod:deploy:debugger").is_none());
         assert!(v.sensitive("prod") && !v.sensitive("dev"));
+    }
+
+    const GRANT_NAMES: &str = include_str!("../../../conformance/token/grant-name-vectors.json");
+
+    /// ADR 0055: a grant name is three segments or five, and the thing is what lies between the scope and the role.
+    ///
+    /// verifies: REQ-POLICY-025
+    #[test]
+    fn a_grant_name_is_three_segments_or_five_by_the_shared_vectors() {
+        let v: serde_json::Value = serde_json::from_str(GRANT_NAMES).unwrap();
+        for case in v["grant_names"]["accepted"].as_array().unwrap() {
+            let name = case["name"].as_str().unwrap();
+            let g = GrantName::split(name).unwrap_or_else(|| panic!("refused {name}"));
+            assert_eq!(g.scope, case["scope"].as_str().unwrap(), "{name}");
+            assert_eq!(g.thing, case["thing"].as_str().unwrap(), "{name}");
+            assert_eq!(g.role, case["role"].as_str().unwrap(), "{name}");
+            assert_eq!(g.id(), name);
+            assert!(valid_thing(&g.thing), "{name}");
+        }
+        for name in v["grant_names"]["refused"].as_array().unwrap() {
+            let name = name.as_str().unwrap();
+            assert_eq!(GrantName::split(name), None, "accepted {name:?}");
+        }
+        for t in v["things"]["accepted"].as_array().unwrap() {
+            assert!(valid_thing(t.as_str().unwrap()), "{t}");
+        }
+        for t in v["things"]["refused"].as_array().unwrap() {
+            assert!(!valid_thing(t.as_str().unwrap()), "{t}");
+        }
+    }
+
+    /// ADR 0055: a thing of three words is declared, granted, laddered and parsed like a thing of one, beside it.
+    ///
+    /// verifies: REQ-POLICY-025
+    #[test]
+    fn a_vocabulary_declares_a_thing_of_three_words_beside_one_of_one() {
+        let v = Vocabulary::parse(
+            b"scopes:\n  devel: {}\n  prod: { sensitive: true }\nthings:\n  example-app:\n    roles:\n      user: []\n  shared:keycloak:example-a:\n    roles:\n      viewer: []\n      act-as: [viewer]\n",
+        )
+        .unwrap();
+        assert_eq!(v.grants().len(), 2 + 2 * 2);
+        let g = v
+            .parse_name("devel:shared:keycloak:example-a:act-as")
+            .unwrap();
+        assert_eq!(
+            (g.scope.as_str(), g.thing.as_str(), g.role.as_str()),
+            ("devel", "shared:keycloak:example-a", "act-as")
+        );
+        let full: Vec<String> = v
+            .expand(&BTreeSet::from([g]))
+            .iter()
+            .map(GrantName::id)
+            .collect();
+        assert_eq!(
+            full,
+            [
+                "devel:shared:keycloak:example-a:act-as",
+                "devel:shared:keycloak:example-a:viewer"
+            ]
+        );
+        assert!(v.parse_name("devel:example-app:user").is_some());
+        // A name of a shape that is not a grant name, or a thing that is not declared, is no name of the vocabulary.
+        assert!(v.parse_name("devel:shared:keycloak:act-as").is_none());
+        assert!(
+            v.parse_name("devel:shared:keycloak:example-b:act-as")
+                .is_none()
+        );
+        assert!(
+            v.parse_name("devel:shared:keycloak:example-a:act-as:x")
+                .is_none()
+        );
+        // A thing of two words, or of four, is refused by its path.
+        for thing in [
+            "shared:keycloak",
+            "shared:keycloak:example-a:x",
+            "shared::example-a",
+        ] {
+            assert_eq!(
+                refused(&format!(
+                    "scopes: {{dev: {{}}}}\nthings:\n  \"{thing}\":\n    roles: {{a: []}}\n"
+                )),
+                format!("things.{thing}: not a valid name")
+            );
+        }
     }
 
     fn refused(doc: &str) -> String {

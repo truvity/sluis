@@ -68,8 +68,9 @@ enum Shape {
     Flag,
     /// An array of authentication method references (RFC 8176): short non-empty strings.
     Methods,
-    /// An array of grant names, `<scope>:<thing>:<role>`, each written with the delimiter of the audience when it declares
-    /// one (ADR 0020 "Grant names and the vocabulary", "The claims of a token").
+    /// An array of grant names, `<scope>:<thing>:<role>` or `<scope>:<vendor>:<project>:<customer>:<role>`, each written
+    /// with the delimiter of the audience when it declares one (ADR 0020 "Grant names and the vocabulary", "The claims of a
+    /// token"; ADR 0055).
     Groups,
 }
 
@@ -327,31 +328,29 @@ fn fits(shape: Shape, v: &Value, delimiter: Option<&str>) -> bool {
     }
 }
 
-/// The longest group a token may carry before the delimiter is known: three names of 64 bytes and two delimiters of 8.
-const GROUP_MAX: usize = 3 * 64 + 2 * 8;
+/// The longest group a token may carry before the delimiter is known: five names of 64 bytes and four delimiters of 8
+/// (ADR 0055).
+const GROUP_MAX: usize = 5 * 64 + 4 * 8;
 
 fn text_ok(s: &str, max: usize) -> bool {
     !s.is_empty() && s.len() <= max && !s.chars().any(char::is_control)
 }
 
-/// A grant name is `<scope>:<thing>:<role>`, each segment a non-empty string of ASCII letters,
-/// digits, `-` and `_` (ADR 0020 "Grant names and the vocabulary"). A wildcard is refused in a token. The parts are
-/// joined by `delimiter` when the audience declares one, and by `:` when it does not (`delimiter` empty). The delimiter
-/// the loader accepts holds no character of a segment, so the parts are found without doubt.
+/// A grant name is `<scope>:<thing>:<role>` or `<scope>:<vendor>:<project>:<customer>:<role>`, three segments or five, each
+/// 1 to 64 ASCII letters, digits, `-` and `_` (ADR 0020 "Grant names and the vocabulary", ADR 0055). Four
+/// segments, six or more, and a wildcard are refused in a token. The parts are joined by `delimiter` when the audience
+/// declares one, and by `:` when it does not (`delimiter` empty). The delimiter the loader accepts holds no character of a
+/// segment, so the parts are found without doubt.
 fn grant_name(s: &str, delimiter: &str) -> bool {
     let delimiter = if delimiter.is_empty() { ":" } else { delimiter };
-    let mut parts = s.split(delimiter);
-    let segment = |p: Option<&str>| {
-        p.is_some_and(|p| {
-            !p.is_empty()
-                && p.bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-        })
-    };
-    segment(parts.next())
-        && segment(parts.next())
-        && segment(parts.next())
-        && parts.next().is_none()
+    let mut count = 0;
+    let all = s.split(delimiter).all(|p| {
+        count += 1;
+        (1..=64).contains(&p.len())
+            && p.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    });
+    all && (count == 3 || count == 5)
 }
 
 impl Shaped {
@@ -463,6 +462,28 @@ mod tests {
         assert_eq!(c.client_id.as_deref(), Some("sluis-cli"));
     }
 
+    /// The shape of a grant name is the shared one (`kits/conformance/token/grant-name-vectors.json`, ADR 0055): three
+    /// segments or five, with the colon and with a delimiter in its place.
+    ///
+    /// verifies: REQ-POLICY-025
+    #[test]
+    fn a_group_is_a_grant_name_by_the_shared_vectors() {
+        let v: Value = serde_json::from_str(include_str!(
+            "../../../kits/conformance/token/grant-name-vectors.json"
+        ))
+        .unwrap();
+        for case in v["grant_names"]["accepted"].as_array().unwrap() {
+            let name = case["name"].as_str().unwrap();
+            assert!(grant_name(name, ""), "{name}");
+            assert!(grant_name(&name.replace(':', "."), "."), "{name}");
+        }
+        for name in v["grant_names"]["refused"].as_array().unwrap() {
+            let name = name.as_str().unwrap();
+            assert!(!grant_name(name, ""), "{name:?}");
+            assert!(!grant_name(&name.replace(':', "."), "."), "{name:?}");
+        }
+    }
+
     /// A group is a grant name written with the audience's delimiter, which is read once the audience is known: shaped
     /// without it, a group need only be a short printable string, and `check_groups` holds it to the name.
     ///
@@ -496,6 +517,37 @@ mod tests {
                 Bad("claims.groups")
             );
         }
+        // Five segments are a grant name too (ADR 0055); four, six and an empty segment are not.
+        for (delimiter, good, bad) in [
+            (
+                "",
+                "devel:shared:keycloak:example-a:act-as",
+                "devel:shared:keycloak:act-as",
+            ),
+            (
+                ".",
+                "devel.shared.keycloak.example-a.act-as",
+                "devel.shared.keycloak.example-a.act-as.x",
+            ),
+            (
+                "~~",
+                "devel~~shared~~keycloak~~example-a~~act-as",
+                "devel~~shared~~~~example-a~~act-as",
+            ),
+        ] {
+            assert!(shape_with(Typ::Id, &with(json!([good])), Some(delimiter)).is_ok());
+            assert_eq!(
+                shape_with(Typ::Id, &with(json!([bad])), Some(delimiter)).unwrap_err(),
+                Bad("claims.groups"),
+                "{bad}"
+            );
+        }
+        let five = (0..5)
+            .map(|_| "a".repeat(64))
+            .collect::<Vec<_>>()
+            .join("~~~~~~~~");
+        assert_eq!(five.len(), GROUP_MAX);
+        assert!(shape_with(Typ::Id, &with(json!([five])), None).is_ok());
         let long = "a".repeat(GROUP_MAX + 1);
         assert!(shape_with(Typ::Id, &with(json!([long])), None).is_err());
         // No groups, nothing to check.

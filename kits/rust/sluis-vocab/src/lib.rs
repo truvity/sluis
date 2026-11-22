@@ -5,4 +5,4 @@
 pub mod vocab;
 pub mod yaml;
 
-pub use vocab::{GrantName, VocabError, Vocabulary};
+pub use vocab::{GrantName, VocabError, Vocabulary, valid_thing};

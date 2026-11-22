@@ -338,3 +338,24 @@ requirements:
     issues: [1843]
     verification:
       - {kind: integration-test, ref: "a rule that names an organisation allows a token that carries it and refuses a token that carries another"}
+  - id: REQ-POLICY-025
+    area: POLICY
+    statement: "Every reader of a grant name MUST accept three segments, `<scope>:<thing>:<role>`, or five, `<scope>:<vendor>:<project>:<customer>:<role>`, each of 1 to 64 ASCII letters, digits, `-` and `_`, and MUST refuse any other count of segments and an empty segment."
+    rationale: "v1 issues and accepts both forms, so v2 reads the same names at the switch; a name of four segments is refused, so a missing segment shows instead of loading a grant nobody holds (ADR 0055)."
+    level: MUST
+    source: v1-parity
+    status: done
+    milestone: core
+    runtimes: all
+    standards: []
+    issues: [1956]
+    tests:
+      - kits/rust/sluis-vocab/src/vocab.rs
+      - kits/go/groupsclaim/groupsclaim_test.go
+      - actors/signer/src/claims.rs
+      - actors/store/tests/config.rs
+      - actors/store/tests/validate.rs
+      - actors/policy/tests/load.rs
+    verification:
+      - {kind: test-vectors, ref: "grant-name-vectors.json: three and five segments read into scope, thing and role; two, four, six or more, an empty segment and a wildcard refused"}
+      - {kind: integration-test, ref: "a five-segment name is declared, bound, required and named by its thing like one of three; an undeclared one is refused with the path"}

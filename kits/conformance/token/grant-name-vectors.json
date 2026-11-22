@@ -1,0 +1,101 @@
+{
+  "about": "The shape of a grant name (ADR 0020, \"Grant names and the vocabulary\"; ADR 0055): three segments, <scope>:<thing>:<role>, or five, <scope>:<vendor>:<project>:<customer>:<role>. Each segment is 1 to 64 ASCII letters, digits, '-' and '_'. The scope is the first segment, the role the last, and the thing is everything between them, joined by ':', so a thing is one word or exactly three. Two segments, four, six or more, an empty segment, a wildcard and any other character are not a grant name, and a thing of two words or of four is not a thing. This is the shape only: whether a name is declared is the vocabulary's question. kits/rust/sluis-vocab (GrantName::split, valid_thing), actors/store (requires, groups), actors/signer (groups) and kits/go/groupsclaim are held to it.",
+  "grant_names": {
+    "accepted": [
+      {
+        "name": "dev:example-app:user",
+        "scope": "dev",
+        "thing": "example-app",
+        "role": "user"
+      },
+      {
+        "name": "all:example-app:admin",
+        "scope": "all",
+        "thing": "example-app",
+        "role": "admin"
+      },
+      {
+        "name": "prod:k8s:viewer",
+        "scope": "prod",
+        "thing": "k8s",
+        "role": "viewer"
+      },
+      {
+        "name": "devel:shared:keycloak:example-a:act-as",
+        "scope": "devel",
+        "thing": "shared:keycloak:example-a",
+        "role": "act-as"
+      },
+      {
+        "name": "prod:example-vendor:landing:example-b:deployer",
+        "scope": "prod",
+        "thing": "example-vendor:landing:example-b",
+        "role": "deployer"
+      },
+      {
+        "name": "all:shared:example-app:internal:viewer",
+        "scope": "all",
+        "thing": "shared:example-app:internal",
+        "role": "viewer"
+      },
+      {
+        "name": "A_1:b-2:C_3",
+        "scope": "A_1",
+        "thing": "b-2",
+        "role": "C_3"
+      },
+      {
+        "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "scope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "thing": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "role": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "refused": [
+      "",
+      "dev",
+      "dev:example-app",
+      "dev:example-app:user:extra",
+      "devel:shared:keycloak:example-a:act-as:extra",
+      "a:b:c:d:e:f:g",
+      ":example-app:user",
+      "dev::user",
+      "dev:example-app:",
+      "devel:shared::example-a:act-as",
+      "devel:shared:keycloak:example-a:",
+      ":shared:keycloak:example-a:act-as",
+      "dev:*:user",
+      "*:example-app:user",
+      "devel:shared:*:example-a:act-as",
+      "dev:example app:user",
+      "dev:example.app:user",
+      "dev:example-app:user ",
+      "dev:example/app:user",
+      "dev:exämple:user",
+      "dev:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:user",
+      "devel:shared:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:example-a:act-as"
+    ]
+  },
+  "things": {
+    "accepted": [
+      "example-app",
+      "k8s",
+      "shared:keycloak:example-a",
+      "example-vendor:landing:example-b",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ],
+    "refused": [
+      "",
+      "shared:keycloak",
+      "shared:keycloak:example-a:extra",
+      "a:b:c:d:e",
+      ":keycloak:example-a",
+      "shared::example-a",
+      "shared:keycloak:",
+      "*",
+      "shared:*:example-a",
+      "example app",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ]
+  }
+}

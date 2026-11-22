@@ -27,6 +27,8 @@ const root = repoRoot();
 const { error, finish } = reporter('check-installations');
 
 const NAME = /^[A-Za-z0-9_-]{1,64}$/;
+// A thing is one name, or the three of <vendor>:<project>:<customer> (ADR 0055), so a grant name has three segments or five.
+const THING = /^[A-Za-z0-9_-]{1,64}(:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64})?$/;
 const SCHEMA_ID = 'https://sluis.id/schema/vocabulary/v1/vocabulary.schema.json';
 const isMap = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -59,7 +61,7 @@ function vocabulary(path) {
   }
   const grants = new Set();
   for (const [t, d] of Object.entries(v.things)) {
-    if (!NAME.test(t)) bad(`things: a thing name is outside the allowed set (${t.length} characters)`);
+    if (!THING.test(t)) bad(`things: a thing name is outside the allowed set (${t.length} characters)`);
     if (!isMap(d)) { bad(`things.${t}: not a mapping`); continue; }
     for (const k of Object.keys(d)) if (k !== 'roles') bad(`things.${t}.${k}: unknown key`);
     if (!isMap(d.roles) || Object.keys(d.roles).length === 0) { bad(`things.${t}.roles: missing or empty`); continue; }

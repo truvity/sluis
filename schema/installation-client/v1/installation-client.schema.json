@@ -48,9 +48,9 @@
           ],
           "items": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}$"
+            "pattern": "^[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}$|^[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}$"
           },
-          "description": "what the client requires of a sign-in: grant names, \u003cscope\u003e:\u003cthing\u003e:\u003crole\u003e, no wildcard"
+          "description": "what the client requires of a sign-in: grant names, \u003cscope\u003e:\u003cthing\u003e:\u003crole\u003e or \u003cscope\u003e:\u003cvendor\u003e:\u003cproject\u003e:\u003ccustomer\u003e:\u003crole\u003e (ADR 0055), no wildcard"
         },
         "ttl_cap": {
           "type": "string",
@@ -94,9 +94,9 @@
           ],
           "items": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            "pattern": "^[A-Za-z0-9_-]{1,64}$|^[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}$"
           },
-          "description": "things whose held grant names this audience's tokens carry in groups in every scope and role, beyond the pairs of requires (ADR 0020, \"The claims of a token\"); each is a thing the vocabulary declares, which the load checks"
+          "description": "things whose held grant names this audience's tokens carry in groups in every scope and role, beyond the pairs of requires (ADR 0020, \"The claims of a token\"); each is a thing the vocabulary declares, which the load checks: one word, or the three of \u003cvendor\u003e:\u003cproject\u003e:\u003ccustomer\u003e (ADR 0055)"
         },
         "groups_delimiter": {
           "type": [

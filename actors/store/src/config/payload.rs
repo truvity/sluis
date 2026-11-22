@@ -926,18 +926,11 @@ fn credential_name(name: &str) -> bool {
         && b.all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.'))
 }
 
-/// A grant name, `<scope>:<thing>:<role>`: three parts, each 1 to 64 ASCII letters, digits, `-` and `_`
-/// (docs/reference/policy.md "Format").
+/// A grant name, `<scope>:<thing>:<role>` or `<scope>:<vendor>:<project>:<customer>:<role>`: three parts or five, each 1 to
+/// 64 ASCII letters, digits, `-` and `_` (docs/reference/policy.md "Format", ADR 0055). The rule is the vocabulary kit's, so
+/// the loader and `policy` read a name the same way.
 fn grant_name(s: &str) -> bool {
-    let parts: Vec<&str> = s.split(':').collect();
-    parts.len() == 3 && parts.iter().all(|p| grant_segment(p))
-}
-
-/// One part of a grant name, a scope, a thing or a role: 1 to 64 ASCII letters, digits, `-` and `_`.
-fn grant_segment(s: &str) -> bool {
-    (1..=64).contains(&s.len())
-        && s.bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    sluis_vocab::GrantName::split(s).is_some()
 }
 
 /// The most characters of a `groups_delimiter`.
@@ -980,7 +973,10 @@ fn installation_client(mut o: Obj, id: &str) -> R<pb::InstallationClient> {
             return err(&at, "a wildcard is not allowed in requires");
         }
         if !grant_name(r) {
-            return err(&at, "is not a grant name, <scope>:<thing>:<role>");
+            return err(
+                &at,
+                "is not a grant name, <scope>:<thing>:<role> or <scope>:<vendor>:<project>:<customer>:<role>",
+            );
         }
     }
     let ttl_cap = o.duration("ttl_cap")?;
@@ -1060,7 +1056,7 @@ fn installation_client(mut o: Obj, id: &str) -> R<pb::InstallationClient> {
         if g.contains('*') {
             return err(&at, "a wildcard is not allowed in groups");
         }
-        if !grant_segment(g) {
+        if !sluis_vocab::valid_thing(g) {
             return err(&at, "is not a thing name");
         }
         if groups[..i].contains(g) {

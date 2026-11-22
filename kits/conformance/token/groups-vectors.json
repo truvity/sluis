@@ -1,5 +1,5 @@
 {
-  "about": "Which grant names reach which audience in the groups claim of a token, and how the claim is spelled (ADR 0020, \"The claims of a token\"; REQ-TOKEN-033, REQ-TOKEN-046, REQ-TOKEN-047). Each audience is a client: requires are its grant names, things its groups override, delimiter its groups_delimiter. held is what the person holds after policy has expanded the ladders. groups is the claim, sorted by the names as written, with no repeats. The rule is the one v1 keeps: a name is kept when its scope:thing pair is a pair of requires, in any role, or when its thing is in the override, in any scope; the delimiter is applied after narrowing and changes how a kept name is written, never which names are kept. v2 has no report mode and no 'all' override. kits/go/groupsclaim, session and exchange are held to narrowing; actors/store is held to delimiters.",
+  "about": "Which grant names reach which audience in the groups claim of a token, and how the claim is spelled (ADR 0020, \"The claims of a token\"; REQ-TOKEN-033, REQ-TOKEN-046, REQ-TOKEN-047). Each audience is a client: requires are its grant names, things its groups override, delimiter its groups_delimiter. held is what the person holds after policy has expanded the ladders. groups is the claim, sorted by the names as written, with no repeats. The rule is the one v1 keeps: a name is kept when its scope:thing pair is a pair of requires, in any role, or when its thing is in the override, in any scope; the delimiter is applied after narrowing and changes how a kept name is written, never which names are kept. A grant name has three segments or five (ADR 0055), and the thing of a five-segment name is the three words between the scope and the role, matched whole. v2 has no report mode and no 'all' override. kits/go/groupsclaim, session and exchange are held to narrowing; actors/store is held to delimiters.",
   "narrowing": [
     {
       "name": "the pair of requires keeps every role of it",
@@ -97,6 +97,38 @@
       "groups": []
     },
     {
+      "name": "a five-segment name keeps the pair of its three-word thing",
+      "held": ["devel:shared:keycloak:example-a:act-as", "devel:shared:keycloak:example-a:viewer", "devel:shared:keycloak:example-b:act-as", "prod:shared:keycloak:example-a:act-as", "devel:keycloak:act-as"],
+      "requires": ["devel:shared:keycloak:example-a:viewer"],
+      "groups": ["devel:shared:keycloak:example-a:act-as", "devel:shared:keycloak:example-a:viewer"]
+    },
+    {
+      "name": "three and five segments side by side",
+      "held": ["dev:example-app:user", "dev:shared:keycloak:example-a:act-as", "dev:example-wiki:user"],
+      "requires": ["dev:example-app:user", "dev:shared:keycloak:example-a:act-as"],
+      "groups": ["dev:example-app:user", "dev:shared:keycloak:example-a:act-as"]
+    },
+    {
+      "name": "an override thing of three words is matched whole",
+      "held": ["dev:shared:keycloak:example-a:act-as", "prod:shared:keycloak:example-a:viewer", "dev:shared:keycloak:example-ab:act-as", "dev:keycloak:act-as", "dev:example-app:user"],
+      "requires": ["dev:example-wiki:user"],
+      "things": ["shared:keycloak:example-a"],
+      "groups": ["dev:shared:keycloak:example-a:act-as", "prod:shared:keycloak:example-a:viewer"]
+    },
+    {
+      "name": "a held name of four or six segments is never kept",
+      "held": ["dev:shared:keycloak:act-as", "dev:shared:keycloak:example-a:act-as:extra", "dev:shared::example-a:act-as", "dev:shared:*:example-a:act-as", "dev:shared:keycloak:example-a:act-as"],
+      "requires": ["dev:shared:keycloak:example-a:act-as"],
+      "things": ["shared:keycloak"],
+      "groups": ["dev:shared:keycloak:example-a:act-as"]
+    },
+    {
+      "name": "a requires entry of four segments names no pair",
+      "held": ["dev:shared:keycloak:example-a:act-as", "dev:shared:keycloak:act-as"],
+      "requires": ["dev:shared:keycloak:act-as"],
+      "groups": []
+    },
+    {
       "name": "the delimiter respells each name of the claim",
       "held": ["dev:example-app:admin", "dev:example-app:user", "dev:example-wiki:admin"],
       "requires": ["dev:example-app:user"],
@@ -131,6 +163,13 @@
       "requires": ["dev:example-app:user"],
       "delimiter": ".",
       "groups": []
+    },
+    {
+      "name": "the delimiter respells each segment of a five-segment name",
+      "held": ["devel:shared:keycloak:example-a:act-as", "devel:example-app:user"],
+      "requires": ["devel:shared:keycloak:example-a:act-as", "devel:example-app:user"],
+      "delimiter": ".",
+      "groups": ["devel.example-app.user", "devel.shared.keycloak.example-a.act-as"]
     }
   ],
   "delimiters": {

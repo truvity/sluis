@@ -60,6 +60,45 @@ func TestGroupsMatchTheVectors(t *testing.T) {
 	}
 }
 
+// The shape of a grant name is the shared one (ADR 0055): three segments or five, the thing being what lies between the
+// scope and the role.
+//
+// verifies: REQ-POLICY-025
+func TestSplitMatchesTheGrantNameVectors(t *testing.T) {
+	raw, err := os.ReadFile("../../conformance/token/grant-name-vectors.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var v struct {
+		GrantNames struct {
+			Accepted []struct {
+				Name  string `json:"name"`
+				Scope string `json:"scope"`
+				Thing string `json:"thing"`
+				Role  string `json:"role"`
+			} `json:"accepted"`
+			Refused []string `json:"refused"`
+		} `json:"grant_names"`
+	}
+	if err := json.Unmarshal(raw, &v); err != nil {
+		t.Fatal(err)
+	}
+	if len(v.GrantNames.Accepted) == 0 || len(v.GrantNames.Refused) == 0 {
+		t.Fatal("the vector file holds no grant name")
+	}
+	for _, c := range v.GrantNames.Accepted {
+		scope, thing, role, ok := groupsclaim.Split(c.Name)
+		if !ok || scope != c.Scope || thing != c.Thing || role != c.Role {
+			t.Errorf("Split(%q) = %q, %q, %q, %v; want %q, %q, %q", c.Name, scope, thing, role, ok, c.Scope, c.Thing, c.Role)
+		}
+	}
+	for _, name := range v.GrantNames.Refused {
+		if _, _, _, ok := groupsclaim.Split(name); ok {
+			t.Errorf("Split(%q) is a grant name, want none", name)
+		}
+	}
+}
+
 // The names of a small world, so that random sets collide often: a collision is where narrowing could go wrong.
 var (
 	scopes = []string{"dev", "acme", "prod"}

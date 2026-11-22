@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -17,7 +18,7 @@ import (
 //   - every schema of the release is still there, at the same path, with the same $id;
 //   - every schema is compatible with its earlier self: whatever the old schema accepted, the new one accepts. A key may
 //     be added and a bound may be looser; a key may not go, a type may not change, a key may not become required, a
-//     pattern may not change, and a bound may not be tighter;
+//     pattern may not change other than by growing an alternative (patternGrows), and a bound may not be tighter;
 //   - a schema under a new path (a new version, a new name) is free: it is a new identifier.
 //
 // Compatibility of arbitrary JSON Schemas is not decidable here, so the judge knows the keywords that the generator writes
@@ -148,6 +149,7 @@ func compatNode(where string, oldRoot, newRoot, o, n map[string]any, depth int) 
 		switch {
 		case nHas && !oHas:
 			out = append(out, fmt.Sprintf("%s: %s is new (the old schema accepted every value of it)", where, k))
+		case nHas && oHas && k == "pattern" && patternGrows(ov, nv):
 		case nHas && oHas && !reflect.DeepEqual(ov, nv):
 			out = append(out, fmt.Sprintf("%s: %s changed", where, k))
 		}
@@ -298,4 +300,21 @@ func sortedKeys(m map[string]any) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// patternGrows reports whether the new pattern is the old one with another alternative after it, `<old>|<more>`, which
+// accepts every string the old one accepted and more: a grant name of five segments beside three (ADR 0055). It holds
+// only when the old pattern is a whole expression on its own, so that the `|` after it is the top-level alternation and not
+// a character of an unclosed class or group or an escaped bar; any other change of a pattern is still a finding.
+func patternGrows(old, cur any) bool {
+	o, ok1 := old.(string)
+	n, ok2 := cur.(string)
+	if !ok1 || !ok2 || !strings.HasPrefix(n, o+"|") || len(n) == len(o)+1 {
+		return false
+	}
+	if _, err := regexp.Compile(o); err != nil {
+		return false
+	}
+	_, err := regexp.Compile(n)
+	return err == nil
 }

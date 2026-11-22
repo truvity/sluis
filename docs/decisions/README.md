@@ -76,7 +76,8 @@ The records, grouped in reading order. The Layer column is the record's own `Lay
 |-----|----------|-------|--------|
 | [0017](0017-identity-and-sign-in.md) | Each boundary has its own issuer, a token has one audience, staff sign in with passkeys and step-up, and break-glass recovery uses passkeys held in config | core | Accepted |
 | [0019](0019-person-and-upstream-link.md) | A person is tied to an upstream account by issuer and subject claim | core | Accepted |
-| [0020](0020-grant-vocabulary-and-token-claims.md) | Grant names come from a declared vocabulary, and a token carries fixed claims for one audience | core | Accepted; partly superseded by 0048 |
+| [0020](0020-grant-vocabulary-and-token-claims.md) | Grant names come from a declared vocabulary, and a token carries fixed claims for one audience | core | Accepted; partly superseded by 0055 |
+| [0055](0055-a-grant-name-is-three-segments-or-five.md) | A grant name is three segments or five, and its thing is one word or three | core | Accepted |
 | [0018](0018-sign-in-sessions.md) | Sign-in sessions have two classes with limits per class, and session chains are temp kinds | core | Accepted; partly superseded by 0051 |
 | [0021](0021-clients.md) | Clients: installation clients are config, tenant clients are durable, and a self-described client is admitted only from allow-listed hosts | core | Accepted; partly superseded by 0051 |
 | [0038](0038-fapi-2-profile.md) | FAPI 2.0 is a profile a client declares, with PAR, DPoP, private-key client authentication and its own signing algorithm, and sender constraint is declared per audience | core | Accepted |

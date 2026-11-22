@@ -3189,6 +3189,7 @@ name = "sluis-vocab"
 version = "0.0.0"
 dependencies = [
  "saphyr-parser",
+ "serde_json",
 ]
 
 [[package]]
