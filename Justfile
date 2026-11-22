@@ -305,6 +305,12 @@ build-cli:
     mkdir -p bin
     CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/truvity/sluis/v2/kits/go/version.Version=${SLUIS_VERSION:-0.0.0-dev}" -o bin/sluis ./cli/sluis
 
+# Build mimic, the test identity provider of development (ADR 0054), into bin/sluis-mimic. It is a test tool and is not
+# part of a release.
+build-mimic:
+    mkdir -p bin
+    CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/truvity/sluis/v2/kits/go/version.Version=${SLUIS_VERSION:-0.0.0-dev}" -o bin/sluis-mimic ./tools/mimic/cmd/sluis-mimic
+
 # Test every Go package with the race detector, uncached. The tag sluis_test adds the test seams (the name
 # resolver of kits/go/rpc) that a normal build does not contain.
 # The run is verbose so that a test that skips shows its `SKIP: <reason>` line in the log (a skip is not a pass).
