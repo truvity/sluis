@@ -26,6 +26,7 @@ import (
 	"github.com/truvity/atoom/key/yubikeypiv"
 
 	"github.com/truvity/sluis/v2/kits/go/cli"
+	"github.com/truvity/sluis/v2/kits/go/pinrelease"
 	"github.com/truvity/sluis/v2/kits/go/registry"
 	"github.com/truvity/sluis/v2/kits/go/rpc"
 	"github.com/truvity/sluis/v2/kits/go/signedconfig"
@@ -33,7 +34,9 @@ import (
 
 // This is the host of the card key driver: sluis's socket with peer credentials, the registry owner, the command line and the check of
 // the signed KeyPlan of a PIN release (keyplan.go). The driver itself, its handler and its logic, is the library
-// github.com/truvity/atoom/key/yubikeypiv; the executable that talks to a card is built natively with the tag atoom_card.
+// github.com/truvity/atoom/key/yubikeypiv; the executable that talks to a card is built natively with the tag atoom_card. The host declares
+// the purposes the driver serves: pinrelease.CardPurposes, the purposes of atoom's purpose.Reference() that a card of sluis serves (the
+// ten rows of version 1, ADR 0006), each in its default slot.
 
 // name is the registry name of the driver's user; its owner is key.
 const name = "driver-key-yubikey-piv"
@@ -183,7 +186,7 @@ func serve(ctx context.Context, f cli.Flags) error {
 			return rpc.Serve(ctx, cfg, rpc.Handler{Path: path, H: h})
 		},
 	}
-	opts := yubikeypiv.Options{Environment: env, Node: node, Boundary: cfg.Boundary, Serial: sn, PeerKeys: peers, StateDir: stateDir, Caller: peerName}
+	opts := yubikeypiv.Options{Environment: env, Purposes: pinrelease.CardPurposes(), Node: node, Boundary: cfg.Boundary, Serial: sn, PeerKeys: peers, StateDir: stateDir, Caller: peerName}
 	return refused(yubikeypiv.Run(ctx, opts, host, admin))
 }
 
@@ -201,9 +204,12 @@ func check(_ context.Context, f cli.Flags) error {
 	if env != yubikeypiv.Development && sn == 0 {
 		return cli.Usage(errors.New("--serial is required outside development"))
 	}
-	return refused(yubikeypiv.Check(yubikeypiv.Options{Environment: env, Serial: sn}))
+	return refused(yubikeypiv.Check(yubikeypiv.Options{Environment: env, Purposes: pinrelease.CardPurposes(), Serial: sn}))
 }
 
+// conformance runs atoom's key kit against the driver on --socket. Since atoom 0.3.0 the kit's cases sign with purposes of its own
+// (conformance.Declaration()), which this host does not declare, so against a driver this host started those cases fail and say so;
+// atoom's CI runs the kit against its drivers.
 func conformance(ctx context.Context, f cli.Flags) error {
 	if f.Socket == "" {
 		return cli.Usage(errors.New("--socket is required"))

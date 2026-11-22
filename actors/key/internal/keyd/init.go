@@ -24,6 +24,7 @@ import (
 	"github.com/truvity/atoom/key/slotplan"
 	configv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/config/v2alpha1"
 	keyv2alpha1 "github.com/truvity/sluis/v2/gen/go/sluis/key/v2alpha1"
+	"github.com/truvity/sluis/v2/kits/go/pinrelease"
 	"github.com/truvity/sluis/v2/kits/go/store"
 )
 
@@ -122,8 +123,8 @@ func checkPlan(plan *configv2alpha1.KeyPlan) error {
 	return nil
 }
 
-// checkStoreSlots refuses, on a card, a KeyPlan whose slots the card driver does not follow. The card driver serves the
-// default slot map and takes no override, so a plan that names another slot, or a card-key purpose the map lacks, would say
+// checkStoreSlots refuses, on a card, a KeyPlan whose slots the card driver does not follow. The card driver serves what its
+// host declares, which is the ten rows of version 1 in their default slots (pinrelease.CardPurposes, ADR 0006), so a plan that names another slot, or a card-key purpose the map lacks, would say
 // one thing while the card did another, or would fail later with a driver error that names no cause. Software and cloud
 // stores have no slots and are not asked.
 func (s *Server) checkStoreSlots(ctx context.Context, plan *configv2alpha1.KeyPlan) error {
@@ -139,7 +140,7 @@ func (s *Server) checkStoreSlots(ctx context.Context, plan *configv2alpha1.KeyPl
 	for _, p := range plan.GetPurposes() {
 		ps = append(ps, slotplan.Purpose{Name: p.GetPurpose(), Algorithm: p.GetAlgorithm(), Slot: p.GetSlot()})
 	}
-	if err := slotplan.CheckCard(ps); err != nil {
+	if err := pinrelease.CheckCard(ps); err != nil {
 		return fmt.Errorf("keyplan/default: %w", err)
 	}
 	return nil

@@ -69,7 +69,7 @@ A data key is a software AES-256 key. key@ makes it, keeps it only wrapped, and 
 - **There is one key per purpose and per algorithm.** An asymmetric key never serves two purposes, and a key that issues certificates never signs tokens. Several audiences of one purpose share its key ([ADR 0006](/decisions/0006-keys-and-sealing/#key-purposes)).
 - **Which actor may use which purpose is a rule of key@,** generated from the actor registry. The audit pieces use `pseudonym` and `evidence` through the same rules.
 - **`chain` and `credential` are a tenant's keys, checked by rule with no grant,** once their key exists. A grant is a decision of `policy`, and `policy` needs these facts to decide, so a grant for every use would be circular. The first key of a tenant is made only under a grant that names the tenant.
-- **The purposes are declared to `seal` by sluis** (O9: the key port takes any purpose its host declares). Planned: the key port has a closed list of purposes today (step B13 of atoom's plan).
+- **The purposes are declared to `seal` by sluis** (O9: the key port takes any purpose its host declares). The key port takes the purposes its host declares since atoom 0.3.0 (step B13 of atoom's plan), and key@'s driver hosts declare sluis's purposes to it today; `seal` itself is planned (step B4).
 
 ### DataKeyWrap
 

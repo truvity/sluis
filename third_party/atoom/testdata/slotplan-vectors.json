@@ -1,5 +1,5 @@
 {
- "about": "Vectors of the card slot map check (key/slotplan). `check` applies to every store, `card` only to a card store. An empty `error` is accepted; otherwise the refusal holds this text. sluis's Rust loader of its signed key plan reads the same file. The default map is version 2 (2026-11-18): the slots 89 to 8f belong to their purposes, 90 to 95 are the rotation spares, and a purpose the map does not hold (`second-intermediate` here) needs a slot that the plan names.",
+ "about": "Vectors of the card slot map check (key/slotplan). `check` applies to every store, `card` only to a card store. An empty `error` is accepted; otherwise the refusal holds this text. sluis's Rust loader of its signed key plan reads the same file. The default map is version 2 (2026-11-18): the slots 89 to 8f belong to their purposes, 90 to 95 are the rotation spares, and a purpose the map does not hold (`second-intermediate` here) needs a slot that the plan names. Since step B13 the card driver serves any purpose a host declares, so the `card` column refuses only an algorithm that a card does not hold (PS256, EdDSA); before it also refused an override of a slot and every purpose outside the ten rows of version 1.",
  "cases": [
   {
    "name": "default map",
@@ -38,7 +38,7 @@
     }
    ],
    "error": "",
-   "card": "the card driver serves no slot for this purpose"
+   "card": ""
   },
   {
    "name": "two purposes name one slot",
@@ -166,7 +166,7 @@
     }
    ],
    "error": "",
-   "card": "differs from the slot of the card driver"
+   "card": ""
   },
   {
    "name": "the default slot repeated",
@@ -380,7 +380,7 @@
     }
    ],
    "error": "",
-   "card": "purposes[1].slot: differs from the slot of the card driver"
+   "card": ""
   },
   {
    "name": "another purpose in the slot 88 of the RS256 purpose",
@@ -409,7 +409,7 @@
     }
    ],
    "error": "",
-   "card": "the card driver serves no slot for this purpose"
+   "card": ""
   },
   {
    "name": "the purposes of version 2 take their own slots by default",
@@ -436,7 +436,7 @@
     }
    ],
    "error": "",
-   "card": "the card driver serves no slot for this purpose"
+   "card": ""
   },
   {
    "name": "the second audit writer instance has slot 8f and the first 84",
@@ -453,7 +453,7 @@
     }
    ],
    "error": "",
-   "card": "purposes[1]: the card driver serves no slot for this purpose"
+   "card": ""
   },
   {
    "name": "a purpose of version 2 in the slot of another",
@@ -499,7 +499,7 @@
     }
    ],
    "error": "",
-   "card": "the card driver serves no slot for this purpose"
+   "card": ""
   },
   {
    "name": "the last rotation spare is 95",
@@ -511,7 +511,7 @@
     }
    ],
    "error": "",
-   "card": "the card driver serves no slot for this purpose"
+   "card": ""
   },
   {
    "name": "the audit key of a second instance listed twice",
@@ -528,6 +528,52 @@
     }
    ],
    "error": "purposes[1]: listed twice",
+   "card": ""
+  },
+  {
+   "name": "RSA-PSS has no key on a card",
+   "check": [
+    {
+     "purpose": "token-signing-ps256",
+     "algorithm": "PS256",
+     "slot": ""
+    }
+   ],
+   "error": "",
+   "card": "purposes[0].algorithm: the card driver holds no key of it"
+  },
+  {
+   "name": "Ed25519 has no key on a card",
+   "check": [
+    {
+     "purpose": "token-signing",
+     "algorithm": "ES384",
+     "slot": "9a"
+    },
+    {
+     "purpose": "witness",
+     "algorithm": "EdDSA",
+     "slot": "8e"
+    }
+   ],
+   "error": "",
+   "card": "purposes[1].algorithm: the card driver holds no key of it"
+  },
+  {
+   "name": "a purpose that the map does not hold, with a spare slot, is a card key",
+   "check": [
+    {
+     "purpose": "client-assertion",
+     "algorithm": "ES256",
+     "slot": "90"
+    },
+    {
+     "purpose": "identity-header",
+     "algorithm": "ES384",
+     "slot": "91"
+    }
+   ],
+   "error": "",
    "card": ""
   }
  ]

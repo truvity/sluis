@@ -17,6 +17,7 @@ import (
 
 	keykit "github.com/truvity/atoom/key/conformance"
 	"github.com/truvity/atoom/key/gen/atoom/key/v1alpha1/keyv1alpha1connect"
+	"github.com/truvity/atoom/key/purpose"
 	"github.com/truvity/atoom/key/software"
 
 	"github.com/truvity/sluis/v2/kits/go/cli"
@@ -25,7 +26,8 @@ import (
 )
 
 // This is the host of the software key driver: sluis's socket with peer credentials, the registry owner and the command line. The driver
-// itself, its handler and its logic, is the library github.com/truvity/atoom/key/software; sluis turns its production floor on.
+// itself, its handler and its logic, is the library github.com/truvity/atoom/key/software; sluis turns its production floor on and declares
+// its purposes: purpose.Reference(), the eleven of docs/architecture/keys.yaml, each with its algorithm and its operations.
 
 // name is the registry name of the driver's user; its owner is key.
 const name = "driver-key-software"
@@ -71,7 +73,7 @@ func runDriver(ctx context.Context, env, stateDir string, cfg rpc.ServerConfig) 
 			return rpc.Serve(ctx, cfg, rpc.Handler{Path: path, H: h})
 		},
 	}
-	err := software.Run(ctx, software.Options{Environment: env, StateDir: stateDir, RefuseProduction: true, Caller: peerName}, host)
+	err := software.Run(ctx, software.Options{Environment: env, StateDir: stateDir, Purposes: purpose.Reference(), RefuseProduction: true, Caller: peerName}, host)
 	var pe *software.Problems
 	if errors.As(err, &pe) {
 		return cli.Refused(pe.Problems...)
@@ -142,7 +144,7 @@ func check(_ context.Context, f cli.Flags) error {
 			return err
 		}
 	}
-	if err := software.Check(dir); err != nil {
+	if err := software.Check(dir, purpose.Reference()); err != nil {
 		var pe *software.Problems
 		if errors.As(err, &pe) {
 			return cli.Refused(pe.Problems...)
@@ -152,6 +154,9 @@ func check(_ context.Context, f cli.Flags) error {
 	return nil
 }
 
+// conformance runs atoom's key kit against the driver on --socket. Since atoom 0.3.0 the kit's cases sign with purposes of its own
+// (conformance.Declaration()), which this host does not declare, so against a driver this host started those cases fail and say so;
+// atoom's CI runs the kit against its drivers.
 func conformance(ctx context.Context, f cli.Flags) error {
 	if f.Socket == "" {
 		return cli.Usage(errors.New("--socket is required"))
