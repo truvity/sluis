@@ -12,7 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/truvity/sluis/v2/kits/go/backoff"
+	"github.com/truvity/atoom/socket/restart"
+
 	"github.com/truvity/sluis/v2/kits/go/cli"
 )
 
@@ -66,9 +67,10 @@ func TestMissingCheckIsNotRunAndExitsTwo(t *testing.T) {
 	if !strings.Contains(r.stdout, "check: not-run") {
 		t.Fatalf("stdout = %q, want not-run", r.stdout)
 	}
+	// The driver conformance command is gone (atoom's CI runs the kits): it is an unknown command now.
 	r = run(t, cli.Commands{}, nil, "conformance")
-	if r.code != 2 || !strings.Contains(r.stdout, "not-run") {
-		t.Fatalf("conformance: exit %d stdout %q", r.code, r.stdout)
+	if r.code != 2 || !strings.Contains(r.stderr, "unknown command") {
+		t.Fatalf("conformance: exit %d stderr %q", r.code, r.stderr)
 	}
 	r = run(t, cli.Commands{}, nil, "check", "--output", "json")
 	if r.code != 2 || !strings.Contains(r.stdout, `"result":"not-run"`) {
@@ -144,7 +146,7 @@ func (c *slowClock) Sleep(_ context.Context, d time.Duration) bool {
 }
 func (c *slowClock) AfterFunc(time.Duration, func()) func() bool { return func() bool { return true } }
 
-func guarded(t *testing.T, g *backoff.Guard, c cli.Commands, args ...string) int {
+func guarded(t *testing.T, g *restart.Guard, c cli.Commands, args ...string) int {
 	t.Helper()
 	var out, errb bytes.Buffer
 	return cli.Guarded(context.Background(), g, "tool", c, nil, args, &out, &errb)
@@ -156,7 +158,7 @@ func guarded(t *testing.T, g *backoff.Guard, c cli.Commands, args ...string) int
 func TestAFailingServeBacksOffUnderSystemd(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "restarts")
 	env := func(k string) string {
-		return map[string]string{"INVOCATION_ID": "x", backoff.EnvFile: file}[k]
+		return map[string]string{"INVOCATION_ID": "x", cli.RestartFileEnv: file}[k]
 	}
 	clk := &slowClock{}
 	failing := cli.Commands{
@@ -164,7 +166,7 @@ func TestAFailingServeBacksOffUnderSystemd(t *testing.T) {
 		Check: func(context.Context, cli.Flags) error { return errors.New("no card") },
 	}
 	for i, args := range [][]string{{"serve"}, {"serve", "--no-such-flag"}, {"serve"}} {
-		if code := guarded(t, backoff.New(env, clk), failing, args...); code == 0 {
+		if code := guarded(t, restart.New(cli.RestartFileEnv, env, clk), failing, args...); code == 0 {
 			t.Fatalf("%v: exit 0", args)
 		}
 		if len(clk.slept) != i+1 {
@@ -175,20 +177,20 @@ func TestAFailingServeBacksOffUnderSystemd(t *testing.T) {
 		t.Errorf("slept %v, want 2s 4s 8s", clk.slept)
 	}
 	for _, args := range [][]string{{"check"}, {"version"}} {
-		guarded(t, backoff.New(env, clk), failing, args...)
+		guarded(t, restart.New(cli.RestartFileEnv, env, clk), failing, args...)
 	}
 	if len(clk.slept) != 3 {
 		t.Errorf("check or version slept: %v", clk.slept)
 	}
 	ok := cli.Commands{Serve: func(context.Context, cli.Flags) error { return nil }}
-	if code := guarded(t, backoff.New(env, clk), ok, "serve"); code != 0 || len(clk.slept) != 3 {
+	if code := guarded(t, restart.New(cli.RestartFileEnv, env, clk), ok, "serve"); code != 0 || len(clk.slept) != 3 {
 		t.Errorf("a serve that ends well: exit %d, slept %v", code, clk.slept)
 	}
 	if _, err := os.Stat(file); !os.IsNotExist(err) {
 		t.Errorf("the count survived a clean exit: %v", err)
 	}
 	// Outside systemd (a nil guard) nothing waits.
-	if code := guarded(t, backoff.New(func(string) string { return "" }, clk), failing, "serve"); code == 0 || len(clk.slept) != 3 {
+	if code := guarded(t, restart.New(cli.RestartFileEnv, func(string) string { return "" }, clk), failing, "serve"); code == 0 || len(clk.slept) != 3 {
 		t.Errorf("outside systemd: exit %d, slept %v", code, clk.slept)
 	}
 }

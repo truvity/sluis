@@ -92,7 +92,7 @@ func TestItemPortSeesItemsOnly(t *testing.T) {
 	// type url) fails here and not only a field named for a kind.
 	want := map[string][]string{
 		"CapabilitiesRequest":  {},
-		"CapabilitiesResponse": {"store", "tail_log"},
+		"CapabilitiesResponse": {"durability", "store", "tail_log"},
 		"DriverItem":           {"expires_at", "indexes", "key", "value", "version"},
 		"ItemGetRequest":       {"key", "linearizable"},
 		"ItemGetResponse":      {"item"},

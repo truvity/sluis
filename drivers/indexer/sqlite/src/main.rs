@@ -2,12 +2,11 @@
 //!
 //! The driver is atoom's (github.com/truvity/atoom, `index/sqlite`, pinned by release: `third_party/atoom/README.md`): the index port over one
 //! SQLite file with FTS5. This file is what is sluis's: the two sockets, one for each caller, with the peer credentials and a check of their
-//! own, the command line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
+//! own, the command line (`serve`, `check`, `version`) and `--socket-gid`.
 //!
 //! ```text
 //! driver-indexer-sqlite serve       --socket PATH --ro-socket PATH --state-dir DIR [--socket-gid GID] [--ro-socket-gid GID]
 //! driver-indexer-sqlite check       --state-dir DIR
-//! driver-indexer-sqlite conformance          # the index port suite over a temporary directory
 //! driver-indexer-sqlite version
 //! ```
 //!
@@ -17,9 +16,9 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use anyhow::{Context, bail};
+use anyhow::bail;
+use atoom_index_sqlite::Index;
 use atoom_index_sqlite::service::{Read, Write};
-use atoom_index_sqlite::{Index, suite};
 use clap::Arg;
 use sluis_kit::cli::{Commands, Flags, Refused, shutdown_signal};
 use sluis_kit::{Allow, ServerConfig};
@@ -119,10 +118,6 @@ impl Commands for Sqlite {
             .and_then(|d| Index::open(&d))
             .and_then(|i| i.ping().map_err(|e| anyhow::anyhow!("{e}")));
         Some(r.map_err(|e| Refused(format!("{e:#}")).into()))
-    }
-
-    async fn conformance(&self, _f: Flags) -> Option<anyhow::Result<()>> {
-        Some(suite::run_temp().context("the index port suite"))
     }
 }
 

@@ -2,13 +2,8 @@ package rpc
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io/fs"
-	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,11 +11,9 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/truvity/atoom/socket"
 	"github.com/truvity/sluis/v2/kits/go/registry"
 )
-
-// shutdownGrace bounds the graceful shutdown of a server (the brief of the kit: 5 s).
-const shutdownGrace = 5 * time.Second
 
 // readMaxBytes bounds a message a server reads and a message a client reads; it is far above any message of the
 // contracts. The peer may be the adversary (key@ reads a signed document from store@), so no reader buffers more.
@@ -88,39 +81,46 @@ type Handler struct {
 	H    http.Handler
 }
 
+// resolver is the uid-to-name table of the server: the registry's, unless a test gave its own.
+func (c ServerConfig) resolver() NameResolver {
+	if c.resolve == nil {
+		return registry.NameForUID
+	}
+	return c.resolve
+}
+
 // ownBlock returns the uid block of this process: the block of the boundary this server serves, taken from the
 // process's own uid as the registry maps it (REQ-ISO-072: uid = 61000 + ordinal + 1000 x block). A caller from
 // another block is refused. It is false when the process's uid is not an actor or driver uid.
 func (c ServerConfig) ownBlock() (uint32, bool) {
-	resolve := c.resolve
-	if resolve == nil {
-		resolve = registry.NameForUID
-	}
-	name, block, ok := resolve(uint32(os.Getuid())) //nolint:gosec // a uid is non-negative
+	name, block, ok := c.resolver()(uint32(os.Getuid())) //nolint:gosec // a uid is non-negative
 	return block, ok && name != ""
 }
 
-func (c ServerConfig) deadline() DeadlineDefault {
-	d := c.DefaultDeadline
-	if d == 0 {
-		d = DefaultDeadlineValue
+func (c ServerConfig) deadline() time.Duration {
+	if c.DefaultDeadline == 0 {
+		return DefaultDeadlineValue
 	}
-	return DeadlineDefault{d}
+	return c.DefaultDeadline
 }
 
 // HandlerOptions returns the options of every generated New<Service>Handler of a server: the interceptor with the
-// default-deny check, the correlation id and the default deadline. The server wraps the handlers in the same
-// check at the HTTP layer, so a refused call is answered before its message is decoded.
+// default-deny check, and the read limit. The server checks every call at the HTTP layer first (atoom's socket
+// guard, with the call graph as its rule), so a refused call is answered before its message is decoded.
 func HandlerOptions(cfg ServerConfig) []connect.HandlerOption {
 	return []connect.HandlerOption{
-		connect.WithInterceptors(interceptor{guard: newGuard(cfg), deadline: cfg.deadline()}),
+		connect.WithInterceptors(interceptor{guard: newGuard(cfg)}),
 		connect.WithReadMaxBytes(readMaxBytes),
 	}
 }
 
-// Serve listens on cfg.Socket (removing a stale socket file, refusing a symlink), sets its mode, reads
-// SO_PEERCRED once per connection, and serves the handlers through h2c with the check in front of every
-// procedure. It returns when ctx ends, after a graceful shutdown bounded by 5 s.
+// Serve serves the handlers on cfg.Socket through atoom's socket transport (github.com/truvity/atoom/socket): the
+// socket is made fresh (a stale socket file is replaced, a symlink refused) with its mode and group, the peer
+// credentials are read once per connection, and every call passes the guard before its message is decoded. The
+// rule of the guard is sluis's: the registry names the peer's uid, the caller must be of this boundary's uid block,
+// and the call graph (cfg.Allow) must allow it. A call that carries no deadline gets cfg's default, and the
+// correlation id of a call reaches its handler's context. It returns when ctx ends, after a graceful shutdown
+// bounded by 5 s.
 func Serve(ctx context.Context, cfg ServerConfig, handlers ...Handler) error {
 	if cfg.Actor == "" {
 		return errors.New("rpc: ServerConfig.Actor is empty")
@@ -132,9 +132,8 @@ func Serve(ctx context.Context, cfg ServerConfig, handlers ...Handler) error {
 	if _, ok := cfg.ownBlock(); !ok {
 		return errors.New("rpc: the uid of this process is not an actor or driver uid of the registry")
 	}
-	ln, err := listen(cfg.Socket, mode, cfg.GID)
-	if err != nil {
-		return err
+	if !filepath.IsAbs(cfg.Socket) {
+		return fmt.Errorf("rpc: socket path %q is not absolute", cfg.Socket)
 	}
 	mux := http.NewServeMux()
 	for _, h := range handlers {
@@ -142,99 +141,16 @@ func Serve(ctx context.Context, cfg ServerConfig, handlers ...Handler) error {
 	}
 	g := newGuard(cfg)
 	defer g.refusals.Close() // what the guard still counts is reported on the way out
-	srv := &http.Server{
-		Handler:           g.middleware(newDenyHandlers(), mux),
-		Protocols:         serverProtocols(),
-		ReadHeaderTimeout: 10 * time.Second,
-		BaseContext:       func(net.Listener) context.Context { return context.WithoutCancel(ctx) },
-		ConnContext: func(c context.Context, conn net.Conn) context.Context {
-			return withPeer(c, peerOf(conn, cfg.resolve))
-		},
-	}
-	errc := make(chan error, 1)
-	go func() { errc <- srv.Serve(ln) }()
-	defer func() { _ = os.Remove(cfg.Socket) }()
-
-	select {
-	case err := <-errc:
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
-		}
-		return fmt.Errorf("rpc: serve %s: %w", cfg.Actor, err)
-	case <-ctx.Done():
-	}
-	sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownGrace)
-	defer cancel()
-	if err := srv.Shutdown(sctx); err != nil {
-		_ = srv.Close()
-		slog.Warn("server shutdown timed out; closed", "actor", cfg.Actor)
-	}
-	if err := <-errc; err != nil && !errors.Is(err, http.ErrServerClosed) {
+	err := socket.Serve(ctx, socket.Config{
+		Socket:          cfg.Socket,
+		Mode:            mode,
+		GID:             cfg.GID,
+		Allow:           socket.AllowFunc(g.rule),
+		OnRefused:       g.onRefused,
+		DefaultDeadline: cfg.deadline(),
+	}, "/", g.named(mux))
+	if err != nil {
 		return fmt.Errorf("rpc: serve %s: %w", cfg.Actor, err)
 	}
 	return nil
-}
-
-// listen makes the socket of a server. A stale socket file is replaced; a symlink, another kind of file, or a
-// socket that a live server holds is refused. The socket is created under a temporary name, given its mode, and
-// renamed to its path, so that it is never reachable with the wrong mode or group.
-func listen(path string, mode os.FileMode, gid uint32) (net.Listener, error) {
-	if !filepath.IsAbs(path) {
-		return nil, fmt.Errorf("rpc: socket path %q is not absolute", path)
-	}
-	fi, err := os.Lstat(path)
-	switch {
-	case err == nil:
-		switch {
-		case fi.Mode()&os.ModeSymlink != 0:
-			return nil, fmt.Errorf("rpc: socket path %q is a symlink", path)
-		case fi.Mode()&os.ModeSocket == 0:
-			return nil, fmt.Errorf("rpc: socket path %q exists and is not a socket", path)
-		}
-		c, derr := net.DialTimeout("unix", path, time.Second)
-		if derr == nil {
-			_ = c.Close()
-			return nil, fmt.Errorf("rpc: socket %q is in use", path)
-		}
-		if !errors.Is(derr, os.ErrNotExist) && !isRefused(derr) {
-			return nil, fmt.Errorf("rpc: socket %q: %w", path, derr)
-		}
-		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("rpc: remove stale socket: %w", err)
-		}
-	case !errors.Is(err, fs.ErrNotExist):
-		return nil, fmt.Errorf("rpc: socket path %q: %w", path, err)
-	}
-
-	var rnd [6]byte
-	if _, err := rand.Read(rnd[:]); err != nil {
-		return nil, err
-	}
-	tmp := path + ".tmp-" + hex.EncodeToString(rnd[:])
-	ln, err := net.Listen("unix", tmp)
-	if err != nil {
-		return nil, fmt.Errorf("rpc: listen: %w", err)
-	}
-	ul := ln.(*net.UnixListener)
-	ul.SetUnlinkOnClose(false)
-	if gid != 0 {
-		// The group is set before the mode, and both before the final name, so that the socket is never reachable by a
-		// group that was not asked for.
-		if err := os.Chown(tmp, -1, int(gid)); err != nil {
-			_ = ul.Close()
-			_ = os.Remove(tmp)
-			return nil, fmt.Errorf("rpc: set the socket group: %w", err)
-		}
-	}
-	if err := os.Chmod(tmp, mode); err != nil {
-		_ = ul.Close()
-		_ = os.Remove(tmp)
-		return nil, fmt.Errorf("rpc: chmod socket: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = ul.Close()
-		_ = os.Remove(tmp)
-		return nil, fmt.Errorf("rpc: place socket: %w", err)
-	}
-	return ln, nil
 }

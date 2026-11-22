@@ -1,6 +1,5 @@
-// Package cli is the one command shape of every Go executable of sluis: serve, check, version and, for a
-// driver, conformance (docs/reference/store-api.md, "The command line and the suite"; docs/reference/cli.md,
-// "Conventions" and "Exit codes").
+// Package cli is the one command shape of every Go executable of sluis: serve, check and version
+// (docs/reference/cli.md, "Conventions" and "Exit codes").
 //
 // The exit codes are those of cli.md: 0 done, 1 failed, 2 usage, 3 refused by a check. A check that cannot run
 // is "not-run" and exits 2: it is never passed.
@@ -19,7 +18,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/truvity/sluis/v2/kits/go/backoff"
+	"github.com/truvity/atoom/socket/restart"
+
 	"github.com/truvity/sluis/v2/kits/go/version"
 )
 
@@ -34,11 +34,14 @@ const (
 // ContractVersions are the contract package versions this build speaks, for the version command.
 var ContractVersions = []string{"v2alpha1"}
 
-// Commands are the commands of an executable. A nil Check or Conformance is "not-run".
+// RestartFileEnv names the file that holds the count of failures in a row of a unit, as the unit sets it
+// (tools/gen/units, RestartFileEnv).
+const RestartFileEnv = "SLUIS_RESTART_FILE"
+
+// Commands are the commands of an executable. A nil Check is "not-run".
 type Commands struct {
-	Serve       func(ctx context.Context, f Flags) error
-	Check       func(ctx context.Context, f Flags) error // nil: "check: not-run" and exit 2
-	Conformance func(ctx context.Context, f Flags) error // drivers only
+	Serve func(ctx context.Context, f Flags) error
+	Check func(ctx context.Context, f Flags) error // nil: "check: not-run" and exit 2
 }
 
 // Flags are the parsed global flags of a command, and its own.
@@ -82,21 +85,21 @@ func (e *usageError) Unwrap() error        { return e.err }
 func (e *usageError) Is(target error) bool { return target == ErrUsage }
 
 // Main runs the command line of the executable name and exits with its code. It parses
-// `serve|check|version|conformance`, sets the JSON logger on standard error, and cancels the context of the command
+// `serve|check|version`, sets the JSON logger on standard error, and cancels the context of the command
 // on SIGTERM and SIGINT. extra adds the executable's own flags to every command's flag set.
 //
 // A serve that fails under systemd sleeps before it exits, 2, 4, 8, 16, 30, 30 ... seconds by the failures in a row, so that
-// the unit's flat RestartSec=2s backs off on every systemd (package backoff). The sleep ends at once on SIGTERM.
+// the unit's flat RestartSec=2s backs off on every systemd (atoom's socket/restart). The sleep ends at once on SIGTERM.
 func Main(name string, c Commands, extra func(*flag.FlagSet)) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	code := Guarded(ctx, backoff.New(os.Getenv, nil), name, c, extra, os.Args[1:], os.Stdout, os.Stderr)
+	code := Guarded(ctx, restart.FromEnv(RestartFileEnv), name, c, extra, os.Args[1:], os.Stdout, os.Stderr)
 	stop()
 	os.Exit(code)
 }
 
 // Guarded is Run with the restart back-off of g (nil: none): a serve that returns a failure, of whatever kind (a usage error
 // of the unit's command line too, which would otherwise restart every 2 s for ever), first waits as g says. Main uses it.
-func Guarded(ctx context.Context, g *backoff.Guard, name string, c Commands, extra func(*flag.FlagSet), args []string, stdout, stderr io.Writer) int {
+func Guarded(ctx context.Context, g *restart.Guard, name string, c Commands, extra func(*flag.FlagSet), args []string, stdout, stderr io.Writer) int {
 	serve := len(args) > 0 && args[0] == "serve"
 	if serve {
 		g.Begin()
@@ -143,7 +146,7 @@ func Run(ctx context.Context, name string, c Commands, extra func(*flag.FlagSet)
 	report := reporter{command: command, stdout: stdout, stderr: stderr}
 
 	switch command {
-	case "serve", "check", "version", "conformance":
+	case "serve", "check", "version":
 	default:
 		_, _ = fmt.Fprintf(stderr, "%s: unknown command %q\n\n%s", name, command, usageText(name))
 		return ExitUsage
@@ -182,12 +185,8 @@ func Run(ctx context.Context, name string, c Commands, extra func(*flag.FlagSet)
 			return report.notRun()
 		}
 		return report.finish(c.Check(ctx, f))
-	default: // conformance
-		if c.Conformance == nil {
-			return report.notRun()
-		}
-		return report.finish(c.Conformance(ctx, f))
 	}
+	return ExitUsage
 }
 
 func parseLevel(s string) (slog.Level, bool) {
@@ -214,7 +213,6 @@ commands:
   serve        serve the contract on --socket
   check        verify the configuration and its reach; exit 3 on a failure
   version      print the version and the contract versions
-  conformance  run the suite of the port (drivers)
 
 flags:
   --boundary NAME     the boundary this process serves

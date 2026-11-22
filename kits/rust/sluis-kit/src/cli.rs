@@ -1,5 +1,5 @@
-//! The one command shape of every Rust executable: `serve`, `check`, `version`, `conformance`,
-//! with the exit codes of cli.md "Exit codes".
+//! The one command shape of every Rust executable: `serve`, `check`, `version`, with the exit
+//! codes of cli.md "Exit codes".
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -9,7 +9,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use clap::{Arg, ArgMatches, Command};
 use tracing_subscriber::EnvFilter;
 
-use crate::backoff::Guard;
+use atoom_socket::restart::Guard;
+
+/// The environment variable that names the file holding the count of failures in a row, as the unit sets it
+/// (`tools/gen/units`, `RestartFileEnv`).
+pub const ENV_FILE: &str = "SLUIS_RESTART_FILE";
 
 /// Exit code: success.
 pub const EXIT_OK: u8 = 0;
@@ -74,12 +78,6 @@ pub trait Commands {
     /// Checks without serving. `None`: this executable has no check, which is "not run" (exit 2),
     /// never a pass. An `Err` holding [`Refused`] exits 3.
     async fn check(&self, f: Flags) -> Option<anyhow::Result<()>> {
-        let _ = f;
-        None
-    }
-
-    /// Runs the driver conformance suite; drivers only. `None` is "not run" (exit 2).
-    async fn conformance(&self, f: Flags) -> Option<anyhow::Result<()>> {
         let _ = f;
         None
     }
@@ -160,7 +158,6 @@ fn command(name: &str) -> Command {
         .subcommand(sub("serve", "Run until SIGTERM"))
         .subcommand(sub("check", "Check without serving"))
         .subcommand(sub("version", "Print the version"))
-        .subcommand(sub("conformance", "Run the driver conformance suite"))
 }
 
 /// Parses the command line, sets up logging and runs the command. Never returns.
@@ -169,7 +166,7 @@ fn command(name: &str) -> Command {
 /// 3 refused by a check ([`Refused`]).
 ///
 /// A `serve` that fails under systemd sleeps before it exits, 2, 4, 8, 16, 30, 30 ... seconds by the failures in a row, so
-/// that the unit's flat `RestartSec=2s` backs off on every systemd ([`crate::backoff`]). The sleep ends at once on SIGTERM.
+/// that the unit's flat `RestartSec=2s` backs off on every systemd (`atoom_socket::restart`). The sleep ends at once on SIGTERM.
 pub fn main(name: &str, c: impl Commands, extra: impl FnOnce(Command) -> Command) -> ! {
     let code = run(
         name,
@@ -178,7 +175,7 @@ pub fn main(name: &str, c: impl Commands, extra: impl FnOnce(Command) -> Command
         std::env::args_os(),
         &mut std::io::stdout(),
         &mut std::io::stderr(),
-        Guard::from_env(),
+        Guard::from_env(ENV_FILE),
     );
     std::process::exit(i32::from(code))
 }
@@ -226,10 +223,7 @@ fn run(
         }
     };
     let Some((sub, sm)) = matches.subcommand() else {
-        let _ = writeln!(
-            err,
-            "{name}: a command is needed: serve, check, version or conformance"
-        );
+        let _ = writeln!(err, "{name}: a command is needed: serve, check or version");
         return EXIT_USAGE;
     };
     let flags = Flags {
@@ -285,7 +279,6 @@ fn run(
                 Some(c.serve(flags).await)
             }
             "check" => c.check(flags).await,
-            "conformance" => c.conformance(flags).await,
             _ => None,
         };
         // A serve that fails, whatever the failure, waits before it exits; one that ends well forgets the count.
@@ -406,6 +399,8 @@ mod tests {
     #[test]
     fn unknown_command_exits_2() {
         assert_eq!(go(Plain, &["frobnicate"]).0, EXIT_USAGE);
+        // The driver conformance command is gone (atoom's CI runs the kits): it is an unknown command now.
+        assert_eq!(go(Plain, &["conformance"]).0, EXIT_USAGE);
         assert_eq!(go(Plain, &[]).0, EXIT_USAGE);
         assert_eq!(go(Plain, &["serve", "--nope"]).0, EXIT_USAGE);
         assert_eq!(go(Plain, &["serve", "--log-level", "[[["]).0, EXIT_USAGE);
@@ -422,9 +417,6 @@ mod tests {
             out.is_empty(),
             "a result goes to standard output only when there is one"
         );
-        let (code, _, err) = go(Plain, &["conformance"]);
-        assert_eq!(code, EXIT_USAGE);
-        assert!(err.contains("not-run"), "{err}");
     }
 
     #[test]
@@ -493,7 +485,7 @@ mod tests {
 
     /// A clock whose sleeps pass at once and are recorded.
     struct Quick(std::sync::Mutex<Vec<std::time::Duration>>);
-    impl crate::backoff::Clock for Quick {
+    impl atoom_socket::restart::Clock for Quick {
         fn now(&self) -> std::time::Duration {
             std::time::Duration::from_secs(1000)
         }
@@ -501,7 +493,7 @@ mod tests {
             &self,
             d: std::time::Duration,
         ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
-            if d != crate::backoff::HEALTHY {
+            if d != atoom_socket::restart::HEALTHY {
                 self.0.lock().unwrap().push(d);
                 return Box::pin(std::future::ready(()));
             }
@@ -518,11 +510,11 @@ mod tests {
         let file = dir.path().join("restarts").to_string_lossy().into_owned();
         let env = |k: &str| match k {
             "INVOCATION_ID" => Some("x".to_owned()),
-            crate::backoff::ENV_FILE => Some(file.clone()),
+            ENV_FILE => Some(file.clone()),
             _ => None,
         };
         let clock = Arc::new(Quick(Default::default()));
-        let guard = || Guard::new(env, Some(clock.clone())).unwrap();
+        let guard = || Guard::new(ENV_FILE, env, Some(clock.clone())).unwrap();
         let slept = || clock.0.lock().unwrap().clone();
         let secs = |v: &[u64]| -> Vec<std::time::Duration> {
             v.iter()

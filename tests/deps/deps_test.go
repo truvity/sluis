@@ -270,9 +270,10 @@ func (g rustGraph) dir(p rustPackage) string {
 	return filepath.ToSlash(rel)
 }
 
-// The crates of atoom's item port that hold an engine, the suite or the plain socket host: a work actor links none of them (it reaches data
-// through the store service).
-var atoomItemCrates = []string{"atoom-store-rqlite", "atoom-store-memory", "atoom-store-conformance", "atoom-socket"}
+// The crates of atoom's item port that hold an engine or the suite: a work actor links none of them (it reaches data through the store
+// service). atoom-socket is not one: since atoom 0.4.0 it is the socket transport under sluis-kit, which every actor links (owner
+// decision C1 A, 2026-11-22).
+var atoomItemCrates = []string{"atoom-store-rqlite", "atoom-store-memory", "atoom-store-conformance"}
 
 // The crates of atoom's source port that hold a driver: a work actor reads its configuration as kinds through the store service and links
 // none of them.
@@ -304,7 +305,7 @@ func (g rustGraph) rustForbidden(actor string, p rustPackage) string {
 		return ""
 	}
 	if slices.Contains(atoomItemCrates, p.Name) {
-		return "an item driver, the conformance kit or the socket host of atoom"
+		return "an item driver or the conformance kit of atoom"
 	}
 	if slices.Contains(atoomSourceCrates, p.Name) {
 		return "a source driver of atoom"

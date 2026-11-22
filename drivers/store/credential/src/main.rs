@@ -2,12 +2,11 @@
 //!
 //! The driver is atoom's (github.com/truvity/atoom, `source/credential`, pinned by release: `third_party/atoom/README.md`): the source contract over
 //! systemd credentials. This file is what is sluis's: the socket with the peer credentials of its caller, the owner check of the registry (only
-//! store@ may open it), the command line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
+//! store@ may open it), the command line (`serve`, `check`, `version`) and `--socket-gid`.
 //!
 //! ```text
 //! credential serve       --socket PATH [--dir DIR] [--socket-gid GID]   # DIR defaults to $CREDENTIALS_DIRECTORY
 //! credential check       [--dir DIR]                                    # opens DIR and reads every credential in it, printing no value
-//! credential conformance                             # the source suite over a temporary directory
 //! credential version
 //! ```
 
@@ -82,10 +81,6 @@ impl Commands for Credential {
             r.map(|n| println!("credentials directory ok: {n} credentials readable"))
                 .map_err(|e| Refused(format!("{e:#}")).into()),
         )
-    }
-
-    async fn conformance(&self, _f: Flags) -> Option<anyhow::Result<()>> {
-        Some(atoom_source_credential::suite::run_temp().context("the source suite"))
     }
 }
 

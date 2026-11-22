@@ -152,7 +152,7 @@ fn check_without_a_file_and_version_and_unknown_commands() {
     assert_eq!(o.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&o.stdout).starts_with("store "));
     assert_eq!(store(&["frobnicate"]).status.code(), Some(2));
-    // A driver's command that store does not have is "not run", never a pass.
+    // The old driver command is gone from every host: an unknown command, a usage error.
     assert_eq!(store(&["conformance"]).status.code(), Some(2));
 }
 

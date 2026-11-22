@@ -25,6 +25,14 @@ message CapabilitiesRequest {}
 message CapabilitiesResponse {
   string store = 1;     // the engine behind the driver: "memory", "rqlite" or "dynamodb"
   bool tail_log = 2;    // true when the driver keeps the change log: TailLog is served, a put or delete with log set is accepted, and a query names a log head and epoch
+  Durability durability = 3;  // what an acknowledged write survives (records 0012 and 0017); unset for a driver that declares none
+}
+
+// Durability is what an acknowledged write survives (record 0012). A consumer refuses a binding that is weaker than its data needs.
+enum Durability {
+  DURABILITY_UNSPECIFIED = 0;  // the driver declares none: a driver from before the field existed
+  DURABILITY_STRICT = 1;       // an acknowledged write survives a crash and a failover
+  DURABILITY_LOSSY = 2;        // a failover, or a restart, can lose acknowledged writes (store/memory loses them all at a restart)
 }
 
 // DriverItem is an item as a driver keeps it; the driver never knows what a kind means.

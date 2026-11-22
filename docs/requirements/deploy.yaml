@@ -716,7 +716,7 @@ requirements:
     runtimes: ["bare-metal"]
     standards: []
     verification:
-      - {kind: integration-test, ref: "kits/go/backoff and kits/rust/sluis-kit backoff, fake clock: 2, 4, 8, 16, 30, 30; the reset; a real SIGTERM ends the sleep; no sleep outside systemd; a file that is no count, a link"}
+      - {kind: integration-test, ref: "atoom socket/restart and atoom_socket::restart, tested in atoom: fake clock 2, 4, 8, 16, 30, 30; the reset; SIGTERM ends the sleep; none outside systemd; a file that is no count, a link"}
       - {kind: integration-test, ref: "kits/go/cli and kits/rust/sluis-kit cli: a serve that fails (a wrong command line too) waits; check and version do not; a clean serve forgets the count"}
       - {kind: integration-test, ref: "tools/gen/units: no generated file names RestartSteps or RestartMaxDelaySec; install tier: systemd-analyze verify passes on Amazon Linux 2023 with no warning forgiven"}
   - id: REQ-DEPLOY-053

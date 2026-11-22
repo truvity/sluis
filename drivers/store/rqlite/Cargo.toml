@@ -16,8 +16,6 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
-atoom-socket.workspace = true
-atoom-store-conformance.workspace = true
 atoom-store-rqlite.workspace = true
 clap = { version = "4", features = ["derive", "string"] }
 sluis-kit = { path = "../../../kits/rust/sluis-kit" }
@@ -28,6 +26,7 @@ tracing = "0.1"
 [dev-dependencies]
 atoom-common.workspace = true
 atoom-store.workspace = true
+atoom-store-conformance.workspace = true
 atoom-store-memory.workspace = true
 # The test-only feature of the kit is a dev edge: no product build has it.
 sluis-kit = { path = "../../../kits/rust/sluis-kit", features = ["test-identities"] }

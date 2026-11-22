@@ -1062,7 +1062,7 @@ func TestUnitsAreRestartedWithoutAStartLimit(t *testing.T) {
 		if !strings.Contains(body, "\nRestart=on-failure\n") || !strings.Contains(body, "\nRestartSec=2s\n") {
 			t.Errorf("%s is not restarted on failure, from 2 s", name)
 		}
-		// The back-off is the program's (kits/go/backoff, kits/rust/sluis-kit backoff), not systemd's: the unit names the file
+		// The back-off is the program's (atoom's socket/restart, through kits/go/cli and kits/rust/sluis-kit cli), not systemd's: the unit names the file
 		// that holds its count, in a directory it writes already. And it never names the keys of systemd 254 (below).
 		m := regexp.MustCompile(`(?m)^Environment=` + RestartFileEnv + `=(\S+)$`).FindStringSubmatch(body)
 		rw := regexp.MustCompile(`(?m)^ReadWritePaths=(\S+)$`).FindStringSubmatch(body)

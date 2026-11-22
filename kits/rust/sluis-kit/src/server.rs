@@ -1,28 +1,23 @@
-//! The server half of the kit: a Unix socket listener, the peer credentials of each connection,
-//! and the guard that refuses a caller outside the call graph before the message is decoded.
+//! The server half of the kit: sluis's call graph as the rule of atoom's socket guard. The socket, the peer
+//! credentials, the deadline and the correlation id are atoom's (`atoom_socket::serve`); what is sluis's is who a
+//! uid is (the registry), the boundary of the caller, and the call graph.
 
 use std::future::Future;
-use std::os::unix::fs::{FileTypeExt, PermissionsExt};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
-use anyhow::{Context, bail};
-use connectrpc::error::ErrorCode;
 use connectrpc::interceptor::{
     Interceptor, Next, NextStream, PayloadStream, StreamRequest, StreamResponse, UnaryRequest,
     UnaryResponse, async_trait,
 };
-use connectrpc::{ConnectError, ConnectRpcService, DeadlinePolicy, RequestContext, Router};
-use hyper_util::rt::{TokioExecutor, TokioIo};
-use hyper_util::server::conn::auto::Builder as AutoBuilder;
-use hyper_util::server::graceful::GracefulShutdown;
-use tokio::net::{UnixListener, UnixStream};
-use tower::Service;
+use connectrpc::{ConnectError, RequestContext, Router};
 
-use crate::correlation_impl::{CorrelationId, INHERITED, Inherited, from_headers};
 use crate::identity::{Identities, Peer};
-use crate::peercred::{self, ConnPeer};
-use atoom_common::refusal::new as refusal;
+
+/// The reason of a refusal of a caller the registry does not know, or of another boundary's uid block.
+const REASON_CALLER: &str = atoom_socket::REASON_CALLER;
+/// The reason of a refusal of a known caller that the call graph does not allow.
+const REASON_CALL_GRAPH: &str = "call_graph";
 
 /// Who may call this server.
 #[derive(Clone, Debug)]
@@ -56,9 +51,6 @@ pub struct ServerConfig {
     /// The deadline of a call that carries none (contracts.md "Every call").
     pub default_deadline: Duration,
 }
-
-/// How long a graceful shutdown waits for calls in flight.
-const GRACE: Duration = Duration::from_secs(5);
 
 /// Serves `router` on `cfg.socket` until `shutdown` resolves, then drains for at most 5 s.
 ///
@@ -101,200 +93,104 @@ async fn serve_inner(
     shutdown: impl Future<Output = ()> + Send,
     identities: Identities,
 ) -> anyhow::Result<()> {
-    let listener = listen(&cfg.socket, cfg.mode, cfg.socket_gid)?;
-    let guard = Guard {
+    let rule = Rule {
         actor: cfg.actor,
-        allow: cfg.allow.clone(),
+        allow: cfg.allow,
         identities,
     };
-    let service = ConnectRpcService::new(router)
-        .with_deadline_policy(DeadlinePolicy::new().with_default_timeout(cfg.default_deadline))
-        .with_interceptor(guard);
+    let (check, namer, observer) = (rule.clone(), rule.clone(), rule);
+    let mut socket = atoom_socket::ServerConfig::new(cfg.socket)
+        .with_allow(atoom_socket::Allow::check(move |p, _| check.decide(p.uid)))
+        .with_interceptor(Namer(namer))
+        .with_on_refused(move |r| observer.log(r));
+    socket.mode = cfg.mode;
+    socket.socket_gid = cfg.socket_gid;
+    socket.default_deadline = cfg.default_deadline;
     tracing::info!(actor = cfg.actor, boundary = %cfg.boundary, "listening");
-
-    let graceful = GracefulShutdown::new();
-    tokio::pin!(shutdown);
-    let result = loop {
-        tokio::select! {
-            () = &mut shutdown => break Ok(()),
-            accepted = listener.accept() => match accepted {
-                Ok((stream, _)) => accept(stream, &service, &graceful),
-                Err(e) => break Err(e).context("accept"),
-            },
-        }
-    };
-    drop(listener);
-    // The file is ours: remove it so that the next start finds no stale socket.
-    let _ = std::fs::remove_file(&cfg.socket);
-    if tokio::time::timeout(GRACE, graceful.shutdown())
-        .await
-        .is_err()
-    {
-        tracing::warn!(
-            actor = cfg.actor,
-            "calls still running after the grace period"
-        );
-    }
-    result
+    atoom_socket::serve(socket, router, shutdown).await
 }
 
-fn accept(stream: UnixStream, service: &ConnectRpcService, graceful: &GracefulShutdown) {
-    let peer = match peercred::read(&stream) {
-        Ok(p) => p,
-        Err(e) => {
-            // Without credentials the connection cannot be named: drop it.
-            tracing::warn!(error = %e, "peer credentials unreadable; connection dropped");
-            return;
-        }
-    };
-    let service = service.clone();
-    let svc = hyper::service::service_fn(move |mut req: http::Request<hyper::body::Incoming>| {
-        req.extensions_mut().insert(peer);
-        let mut service = service.clone();
-        async move { service.call(req).await }
-    });
-    let conn = AutoBuilder::new(TokioExecutor::new())
-        .serve_connection(TokioIo::new(stream), svc)
-        .into_owned();
-    let conn = graceful.watch(conn);
-    tokio::spawn(async move {
-        if let Err(e) = conn.await {
-            tracing::debug!(error = %e, "connection ended with an error");
-        }
-    });
-}
-
-/// Makes the listening socket: a stale file is replaced, a symlink or a non-socket refused, and
-/// the group and the mode are set before the socket gets its final name.
-fn listen(path: &Path, mode: u32, gid: Option<u32>) -> anyhow::Result<UnixListener> {
-    if gid == Some(0) {
-        bail!("the socket group 0 is refused: use None for no group");
-    }
-    match std::fs::symlink_metadata(path) {
-        Ok(m) if m.file_type().is_symlink() => {
-            bail!("{}: a symlink is in the way of the socket", path.display())
-        }
-        Ok(m) if m.file_type().is_socket() => {
-            // A socket file that still has a listener is not stale: never take it over. Only a
-            // refused connection proves that nobody listens.
-            match std::os::unix::net::UnixStream::connect(path) {
-                Ok(_) => bail!(
-                    "{}: a live listener already serves this socket",
-                    path.display()
-                ),
-                Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
-                    std::fs::remove_file(path).context("remove the stale socket")?;
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => {
-                    return Err(e).context("cannot tell whether the socket is stale; left alone");
-                }
-            }
-        }
-        Ok(_) => bail!("{}: exists and is not a socket", path.display()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => return Err(e).context("stat the socket path"),
-    }
-    let parent = path.parent().context("the socket path has no directory")?;
-    let name = path.file_name().context("the socket path has no name")?;
-    // Bind under a temporary name, set the mode, then rename: the socket is never reachable at
-    // its final name with a wider mode than asked for.
-    let mut tmp = name.to_owned();
-    tmp.push(format!(".{}.tmp", std::process::id()));
-    let tmp = parent.join(tmp);
-    let _ = std::fs::remove_file(&tmp);
-    let listener = UnixListener::bind(&tmp).context("bind the socket")?;
-    // The group first, then the mode, both before the final name. A failure leaves no socket behind.
-    let placed = (|| -> anyhow::Result<()> {
-        if let Some(g) = gid {
-            rustix::fs::chown(&tmp, None, Some(rustix::fs::Gid::from_raw(g)))
-                .context("set the socket group")?;
-        }
-        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(mode))
-            .context("set the socket mode")
-    })();
-    if let Err(e) = placed {
-        let _ = std::fs::remove_file(&tmp);
-        return Err(e);
-    }
-    std::fs::rename(&tmp, path).context("put the socket in place")?;
-    Ok(listener)
-}
-
-/// The interceptor in front of every procedure (contracts.md "Errors"; 0003 "The call graph").
-/// It runs after the request head is read and before the message is decoded.
-struct Guard {
+/// The call graph of one server (contracts.md "Errors"; 0003 "The call graph").
+#[derive(Clone)]
+struct Rule {
     actor: &'static str,
     allow: Allow,
     identities: Identities,
 }
 
-impl Guard {
-    /// Names the caller and decides. On success the caller is in the request's extensions.
-    fn check(&self, ctx: &mut RequestContext) -> Result<(), ConnectError> {
-        let procedure = ctx.path().unwrap_or("").to_owned();
-        let conn = ctx.extensions().get::<ConnPeer>().copied();
-        let named = conn.and_then(|c| self.identities.name(c.uid).map(|n| (c, n)));
-        let Some((conn, (name, block))) = named else {
-            tracing::info!(
-                callee = self.actor, procedure = %procedure,
-                caller_uid = conn.map(|c| c.uid), "refused: caller unknown"
-            );
-            return Err(refusal(ErrorCode::PermissionDenied, "caller", ""));
+impl Rule {
+    /// The registry name and uid block of a caller of this boundary, or `None`.
+    fn name(&self, uid: u32) -> Option<(&'static str, u32)> {
+        self.identities
+            .name(uid)
+            .filter(|(_, block)| *block == self.identities.own_block())
+    }
+
+    /// The decision for a caller: admitted, or the reason of the refusal.
+    fn decide(&self, uid: u32) -> Result<(), &'static str> {
+        let Some((name, _)) = self.name(uid) else {
+            return Err(REASON_CALLER);
         };
-        if block != self.identities.own_block() {
-            tracing::info!(
-                callee = self.actor, caller = name, procedure = %procedure,
-                "refused: caller of another boundary"
-            );
-            return Err(refusal(ErrorCode::PermissionDenied, "caller", ""));
-        }
         let allowed = match &self.allow {
             Allow::CallGraph => sluis_registry::may_call(name, self.actor),
             Allow::OwnerOnly(owner) => name == *owner,
             Allow::Exact(only) => name == *only,
         };
-        if !allowed {
-            tracing::info!(
-                callee = self.actor, caller = name, procedure = %procedure,
-                "refused: call graph"
-            );
-            return Err(refusal(ErrorCode::PermissionDenied, "call_graph", ""));
+        if allowed {
+            Ok(())
+        } else {
+            Err(REASON_CALL_GRAPH)
         }
-        let peer = Peer {
-            uid: conn.uid,
-            gid: conn.gid,
-            pid: conn.pid,
-            name,
-            uid_block: block,
-        };
-        let correlation = from_headers(ctx.headers());
-        let ext = ctx.extensions_mut();
-        ext.insert(peer);
-        if let Some(id) = correlation {
-            ext.insert(CorrelationId(id));
-        }
-        Ok(())
     }
 
-    fn inherited(ctx: &RequestContext) -> Inherited {
-        Inherited {
-            correlation: from_headers(ctx.headers()),
-            deadline: ctx.deadline(),
-        }
+    /// The journal line of a refusal, naming the callee and, when the registry knows it, the caller.
+    fn log(&self, r: &atoom_socket::Refused) {
+        let uid = r.peer.map(|p| p.uid);
+        let caller = uid.and_then(|u| self.identities.name(u)).map(|(n, _)| n);
+        tracing::info!(
+            callee = self.actor, caller, caller_uid = uid, reason = r.reason,
+            procedure = %r.procedure, "refused: {}",
+            if r.reason == REASON_CALL_GRAPH { "call graph" } else { "caller" }
+        );
+    }
+}
+
+/// Puts the named caller in the request's extensions, for [`crate::peer`]. It runs after the guard, so only for a
+/// call the rule admitted.
+struct Namer(Rule);
+
+impl Namer {
+    fn name(&self, ctx: &mut RequestContext) -> Result<(), ConnectError> {
+        let conn = atoom_socket::peer(ctx.extensions()).copied();
+        let named = conn.and_then(|c| self.0.name(c.uid).map(|n| (c, n)));
+        // The guard admitted the call, so the caller has a name; a table that changed under it is refused all the same.
+        let Some((conn, (name, block))) = named else {
+            return Err(crate::refusal(
+                connectrpc::error::ErrorCode::PermissionDenied,
+                REASON_CALLER,
+                "",
+            ));
+        };
+        ctx.extensions_mut().insert(Peer {
+            uid: conn.uid,
+            gid: conn.gid,
+            pid: conn.pid.unwrap_or(0),
+            name,
+            uid_block: block,
+        });
+        Ok(())
     }
 }
 
 #[async_trait]
-impl Interceptor for Guard {
+impl Interceptor for Namer {
     async fn intercept_unary(
         &self,
         mut req: UnaryRequest,
         next: Next<'_>,
     ) -> Result<UnaryResponse, ConnectError> {
-        self.check(&mut req.ctx)?;
-        let inherited = Self::inherited(&req.ctx);
-        INHERITED.scope(inherited, next.run(req)).await
+        self.name(&mut req.ctx)?;
+        next.run(req).await
     }
 
     async fn intercept_streaming(
@@ -303,8 +199,7 @@ impl Interceptor for Guard {
         inbound: PayloadStream,
         next: NextStream<'_>,
     ) -> Result<StreamResponse, ConnectError> {
-        self.check(&mut req.ctx)?;
-        let inherited = Self::inherited(&req.ctx);
-        INHERITED.scope(inherited, next.run(req, inbound)).await
+        self.name(&mut req.ctx)?;
+        next.run(req, inbound).await
     }
 }

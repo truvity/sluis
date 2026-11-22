@@ -1417,7 +1417,7 @@ requirements:
       - {kind: integration-test, ref: "a process of a work actor opens the socket of a driver; refused by the file permissions and the unit"}
   - id: REQ-DATA-067
     area: DATA
-    statement: "Every driver MUST offer the commands serve, check, version and conformance."
+    statement: "Every driver MUST offer the commands serve, check and version."
     rationale: "One contract and one command line per port is what lets an installation check a driver before it runs (ADR 0005)."
     level: MUST
     source: design-decision
@@ -1429,7 +1429,7 @@ requirements:
     standards: []
     issues: [862, 851]
     verification:
-      - {kind: conformance-suite, ref: "each shipped driver runs its four commands; check reports a bad configuration without starting"}
+      - {kind: conformance-suite, ref: "each shipped driver runs its three commands; check reports a bad configuration without starting; the conformance kits of the ports run in atoom's CI (owner decision S5 B)"}
   - id: REQ-DATA-069
     area: DATA
     statement: "A durable or temp driver MUST see items only: a key, a version, bytes, a time to live and index entries."

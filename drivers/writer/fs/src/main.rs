@@ -2,21 +2,20 @@
 //!
 //! The driver is atoom's (github.com/truvity/atoom, `blob/fs`, pinned by release: `third_party/atoom/README.md`): the blob port over a local
 //! directory. This file is what is sluis's: the socket with the peer credentials of its caller, the owner check (only `writer` may open it),
-//! the command line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
+//! the command line (`serve`, `check`, `version`) and `--socket-gid`.
 //!
 //! ```text
 //! driver-writer-fs serve       --socket PATH --root DIR [--socket-gid GID]
 //! driver-writer-fs check       --root DIR
-//! driver-writer-fs conformance          # the port suite over a temporary directory
 //! driver-writer-fs version
 //! ```
 
 use std::path::PathBuf;
 use std::time::Duration;
 
-use anyhow::{Context, bail};
+use anyhow::bail;
+use atoom_blob_fs::Fs;
 use atoom_blob_fs::service::Service;
-use atoom_blob_fs::{Fs, suite};
 use clap::Arg;
 use sluis_kit::cli::{Commands, Flags, Refused, shutdown_signal};
 use sluis_kit::{Allow, ServerConfig};
@@ -74,10 +73,6 @@ impl Commands for Fsd {
     async fn check(&self, f: Flags) -> Option<anyhow::Result<()>> {
         let r = root(&f).and_then(|r| Fs::open(&r));
         Some(r.map(|_| ()).map_err(|e| Refused(format!("{e:#}")).into()))
-    }
-
-    async fn conformance(&self, _f: Flags) -> Option<anyhow::Result<()>> {
-        Some(suite::run_temp().context("the blob port suite"))
     }
 }
 

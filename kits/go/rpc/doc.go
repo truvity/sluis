@@ -3,26 +3,11 @@
 // correlation id of every call (ADR 0003, "Transports" and "The call graph"; docs/reference/contracts.md,
 // "Every call").
 //
-// The caller is known from the transport only. The server reads the peer credentials of each connection once
-// (SO_PEERCRED), maps the uid to an actor or driver name through the registry, and refuses every call whose
-// caller the call graph does not allow, before the message is decoded. No request field names a caller.
+// The socket transport is atoom's (github.com/truvity/atoom/socket and common/call): the socket file, the peer
+// credentials, the guard before the message is decoded, the deadline and the correlation id. What is sluis's is
+// the rule of the guard: the server maps the peer's uid to an actor or driver name through the registry, and
+// refuses every call whose caller is of another boundary or that the call graph does not allow. No request field
+// names a caller. The audit of refusals (the rate-limited OnRefused) and the read limit are sluis's too.
 //
 // A unit holds one actor; fusion is not built.
 package rpc
-
-import "net/http"
-
-// unixProtocols is the protocol set of both ends: Connect over HTTP/2 without TLS (h2c), the form the Rust kit
-// speaks too. The standard library does the h2c; the server also accepts HTTP/1.1.
-func serverProtocols() *http.Protocols {
-	p := new(http.Protocols)
-	p.SetHTTP1(true)
-	p.SetUnencryptedHTTP2(true)
-	return p
-}
-
-func clientProtocols() *http.Protocols {
-	p := new(http.Protocols)
-	p.SetUnencryptedHTTP2(true)
-	return p
-}

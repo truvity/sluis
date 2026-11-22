@@ -1,11 +1,6 @@
 package rpc
 
-import (
-	"context"
-	"net"
-
-	"github.com/truvity/sluis/v2/kits/go/registry"
-)
+import "context"
 
 // Peer is the caller of a call, as the transport knows it.
 type Peer struct {
@@ -20,8 +15,8 @@ type NameResolver func(uid uint32) (name string, uidBlock uint32, ok bool)
 
 type peerKey struct{}
 
-// connPeer is what ConnContext stores: the credentials of the connection, and whether they could be read and
-// named. A connection whose credentials could not be read, or whose uid is not in the registry, has known == false.
+// connPeer is what the server stores for a handler: the credentials of the connection, as atoom's socket read them,
+// and whether the registry names the uid. A uid that is not in the registry has known == false.
 type connPeer struct {
 	Peer
 	known bool
@@ -39,31 +34,6 @@ func PeerFromContext(ctx context.Context) (Peer, bool) {
 
 func withPeer(ctx context.Context, p connPeer) context.Context {
 	return context.WithValue(ctx, peerKey{}, p)
-}
-
-// peerOf reads the peer credentials of a connection once and names the uid.
-func peerOf(c net.Conn, resolve NameResolver) connPeer {
-	uc, ok := c.(*net.UnixConn)
-	if !ok {
-		return connPeer{}
-	}
-	cred, err := peerCred(uc)
-	if err != nil {
-		return connPeer{}
-	}
-	p := connPeer{Peer: Peer{UID: cred.uid, GID: cred.gid, PID: cred.pid}}
-	if resolve == nil {
-		resolve = registry.NameForUID
-	}
-	if name, block, ok := resolve(cred.uid); ok && name != "" {
-		p.Name, p.UIDBlock, p.known = name, block, true
-	}
-	return p
-}
-
-type ucred struct {
-	uid, gid uint32
-	pid      int32
 }
 
 // OwnerOnly allows only the owner of a driver: the driver's socket serves nobody else (docs/architecture, the

@@ -2,12 +2,11 @@
 //!
 //! The driver is atoom's (github.com/truvity/atoom, `destination/dir`, pinned by release: `third_party/atoom/README.md`): the destination port
 //! over a local directory that a forwarder serves. This file is what is sluis's: the socket with the peer credentials of its caller, the owner
-//! check (only exporter@ may open it), the command line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
+//! check (only exporter@ may open it), the command line (`serve`, `check`, `version`) and `--socket-gid`.
 //!
 //! ```text
 //! driver-exporter-dir serve       --socket PATH --root DIR --state-dir DIR [--socket-gid GID]
 //! driver-exporter-dir check       --root DIR --state-dir DIR
-//! driver-exporter-dir conformance        # the destination port suite over temporary directories
 //! driver-exporter-dir version
 //! ```
 //!
@@ -20,7 +19,7 @@ use std::time::Duration;
 
 use anyhow::{Context, bail};
 use atoom_destination_conformance::rpc::Service;
-use atoom_destination_dir::{Directory, suite};
+use atoom_destination_dir::Directory;
 use clap::Arg;
 use sluis_kit::cli::{Commands, Flags, Refused, shutdown_signal};
 use sluis_kit::{Allow, ServerConfig};
@@ -83,14 +82,6 @@ impl Commands for Driver {
             open(&f)
                 .map(|_| ())
                 .map_err(|e| Refused(format!("{e:#}")).into()),
-        )
-    }
-
-    async fn conformance(&self, _f: Flags) -> Option<anyhow::Result<()>> {
-        Some(
-            suite::run_temp()
-                .await
-                .context("the destination port suite"),
         )
     }
 }
