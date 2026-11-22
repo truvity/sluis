@@ -101,6 +101,7 @@ The records, grouped in reading order. The Layer column is the record's own `Lay
 | [0025](0025-integrations.md) | Integrations are adapters, work actors that return facts or carry out authorised effects, hold nothing at rest, and mint only for declared targets | core | Accepted |
 | [0026](0026-reconcilers.md) | A reconciler manages membership only, one per target under a lease | core | Accepted |
 | [0027](0027-the-console.md) | The console checks delegation and routes writes, and its pages follow the storage class and profile of what they show | core | Accepted |
+| [0054](0054-mimic-is-a-test-identity-provider-of-fixed-identities-on-development-only.md) | mimic is a test identity provider of fixed identities, on development only, that people and CI jobs reach through the stable sluis | core | Accepted |
 
 ### Export, backup, KV and limits
 
