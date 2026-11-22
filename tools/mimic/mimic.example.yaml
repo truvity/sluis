@@ -1,0 +1,36 @@
+# An example config of mimic, the test identity provider of development (ADR 0054). Every name is an example:
+# a real config names the installation's own hosts, and its keys come from the installation's secret store.
+environment: devel                     # mimic refuses any other value
+public_url: https://mimic.devel.example.com
+listen: 127.0.0.1:8080
+session_ttl: 1h
+keys:
+  signing: file:/run/mimic/signing.pem # PKCS#8 PEM: ECDSA P-256 (ES256) or RSA of 2048 bits or more (RS256)
+  secret: env:MIMIC_SECRET             # at least 32 random bytes; the subject hash and the cookies derive from it
+sluis:                                 # the stable sluis, never the instance under test
+  issuer: https://sluis.example.com
+  client_id: mimic
+  client_secret: env:MIMIC_SLUIS_CLIENT_SECRET
+  algorithms: [ES384]
+  require_amr: [hwk]
+tenants:
+  - name: example-a
+    profile: entra
+    domain: example-a.test             # under .test or .example only
+    # act_as defaults to devel:shared:keycloak:example-a:act-as
+    clients:
+      - id: idp-staff-example-a
+        redirect_uris: [https://idp.devel.example.com/realms/staff-example-a/broker/mimic-entra-example-a/endpoint]
+        secret: env:MIMIC_CLIENT_STAFF_EXAMPLE_A
+    identities:
+      - {username: alice, name: Alice Example, groups: [staff, admins]}
+      - {username: bob, email: bob.builder, name: Bob Example, groups: [staff]}
+  - name: example-b
+    profile: google
+    domain: example-b.test
+    clients:
+      - id: idp-staff-example-b
+        redirect_uris: [https://idp.devel.example.com/realms/staff-example-b/broker/mimic-google-example-b/endpoint]
+        secret: env:MIMIC_CLIENT_STAFF_EXAMPLE_B
+    identities:
+      - {username: carol, name: Carol Example, groups: [staff]}
