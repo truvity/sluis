@@ -95,8 +95,9 @@ message InstallationClient {
   string kind = 2 [(buf.validate.field).required = true, (buf.validate.field).string = {in: ["public", "confidential", "exchange"]}];
   // the allowed redirect URIs: https, or http on a loopback address
   repeated string redirects = 3 [(buf.validate.field).repeated.items.string.pattern = "^https?://."];
-  // what the client requires of a sign-in: grant names, <scope>:<thing>:<role>, no wildcard
-  repeated string requires = 4 [(buf.validate.field).repeated.items.string.pattern = "^[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}$"];
+  // what the client requires of a sign-in: grant names, <scope>:<thing>:<role> or <scope>:<vendor>:<project>:<customer>:<role>
+  // (ADR 0055), no wildcard
+  repeated string requires = 4 [(buf.validate.field).repeated.items.string.pattern = "^[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}$|^[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}$"];
   google.protobuf.Duration ttl_cap = 5;       // the longest token lifetime the client may get
   string profile = 6;                         // the client's profile
   // the name of the client's secret in the secret source (0005 "Secret sources"); empty for a public client
@@ -107,8 +108,9 @@ message InstallationClient {
   // client that checks the nonce of its ID token instead (RFC 9700 section 2.1.1; ADR 0021); only a confidential client
   string pkce = 9 [(buf.validate.field).string.pattern = "^(required|nonce)?$"];
   // things whose held grant names this audience's tokens carry in groups in every scope and role, beyond the pairs of requires
-  // (ADR 0020, "The claims of a token"); each is a thing the vocabulary declares, which the load checks
-  repeated string groups = 10 [(buf.validate.field).repeated.items.string.pattern = "^[A-Za-z0-9_-]{1,64}$"];
+  // (ADR 0020, "The claims of a token"); each is a thing the vocabulary declares, which the load checks: one word, or the
+  // three of <vendor>:<project>:<customer> (ADR 0055)
+  repeated string groups = 10 [(buf.validate.field).repeated.items.string.pattern = "^[A-Za-z0-9_-]{1,64}$|^[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}$"];
   // what replaces each ":" of a grant name in the groups of this audience's tokens, for a verifier that splits a group on
   // ":"; one to eight printable ASCII characters outside letters, digits, "-", "_", ":", a quote and a comma; empty keeps ":"
   string groups_delimiter = 11 [(buf.validate.field).string.pattern = "^[!#-+./;-@\\[-^`{-~]{0,8}$"];

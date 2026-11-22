@@ -3502,6 +3502,33 @@
      "want": null
     },
     {
+     "name": "a grant name of five segments beside one of three",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/requires",
+       "value": [
+        "dev:example-app:user",
+        "devel:shared:keycloak:example-a:act-as"
+       ]
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "five grant name parts of 64 characters",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/requires",
+       "value": [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+       ]
+      }
+     ],
+     "want": null
+    },
+    {
      "name": "a kind missing",
      "ops": [
       {
@@ -3573,6 +3600,39 @@
        "op": "set",
        "path": "/example-app/requires/0",
        "value": "a:b:c:d"
+      }
+     ],
+     "want": "example-app.requires[0]: not in the form the schema requires"
+    },
+    {
+     "name": "a grant name with six parts",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/requires/0",
+       "value": "a:b:c:d:e:f"
+      }
+     ],
+     "want": "example-app.requires[0]: not in the form the schema requires"
+    },
+    {
+     "name": "a grant name of five parts with an empty part",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/requires/0",
+       "value": "devel:shared::example-a:act-as"
+      }
+     ],
+     "want": "example-app.requires[0]: not in the form the schema requires"
+    },
+    {
+     "name": "a grant name of five parts with a wildcard",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/requires/0",
+       "value": "devel:shared:*:example-a:act-as"
       }
      ],
      "want": "example-app.requires[0]: not in the form the schema requires"
@@ -4003,13 +4063,53 @@
      "want": null
     },
     {
+     "name": "a groups override that names a thing of three words",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups",
+       "value": [
+        "example-wiki",
+        "shared:keycloak:example-a"
+       ]
+      }
+     ],
+     "want": null
+    },
+    {
+     "name": "a groups override that names a thing of two words",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups",
+       "value": [
+        "shared:keycloak"
+       ]
+      }
+     ],
+     "want": "example-app.groups[0]: not in the form the schema requires"
+    },
+    {
+     "name": "a groups override that names a thing of four words",
+     "ops": [
+      {
+       "op": "set",
+       "path": "/example-app/groups",
+       "value": [
+        "shared:keycloak:example-a:x"
+       ]
+      }
+     ],
+     "want": "example-app.groups[0]: not in the form the schema requires"
+    },
+    {
      "name": "a groups override that names a grant name",
      "ops": [
       {
        "op": "set",
        "path": "/example-app/groups",
        "value": [
-        "dev:example-wiki:viewer"
+        "dev:shared:keycloak:example-a:viewer"
        ]
       }
      ],

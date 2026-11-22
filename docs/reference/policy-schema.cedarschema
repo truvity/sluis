@@ -11,7 +11,8 @@ entity Account = {
   org: String,
 };
 
-// A grant name of the vocabulary, written `<scope>:<thing>:<role>` (ADR 0020). The entity is
+// A grant name of the vocabulary, written `<scope>:<thing>:<role>` (ADR 0020); a thing of three
+// words, `<vendor>:<project>:<customer>`, makes a name of five segments (ADR 0055). The entity is
 // called Grant; it stands for a grant name and never for the sealed grant of ADR 0007.
 // `sensitive` is true when its scope is sensitive.
 entity Grant = {

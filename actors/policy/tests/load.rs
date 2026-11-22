@@ -302,3 +302,78 @@ fn a_policy_scoped_to_another_boundary_fails_the_build_naming_the_policy() {
     );
     Engine::build(&ok).unwrap();
 }
+
+/// A grant name of five segments (ADR 0055) is a grant name of the vocabulary like one of three: a policy binds it in full
+/// or by its thing, its ladder is expanded on the same scope and thing, a client requires it, and a name of it that the
+/// vocabulary does not declare is refused with the policy.
+///
+/// verifies: REQ-POLICY-010, REQ-POLICY-025
+#[test]
+fn a_grant_name_of_five_segments_is_bound_held_and_required_like_one_of_three() {
+    use common::{accounts, fresh_mfa, requires, token};
+
+    let mut i = with(
+        "@id(\"bind-act-as\")\npermit (principal in Account::\"workforce/u-5001\", action == Action::\"grant.hold\", resource == Grant::\"dev:shared:keycloak:example-a:act-as\");\n\
+         @id(\"bind-keycloak-viewers\")\npermit (principal in Account::\"workforce/u-5002\", action == Action::\"grant.hold\", resource)\nwhen { resource.scope == \"acme\" && resource.thing like \"shared:keycloak:*\" && resource.role == \"viewer\" };",
+    );
+    let things = "things:\n";
+    let vocabulary = String::from_utf8(i.vocabulary.clone()).unwrap();
+    assert!(vocabulary.contains(things));
+    i.vocabulary = vocabulary
+        .replace(
+            things,
+            "things:\n  shared:keycloak:example-a:\n    roles:\n      viewer: []\n      act-as: [viewer]\n",
+        )
+        .into_bytes();
+    let engine = Engine::build(&i).unwrap_or_else(|e| panic!("{e}"));
+
+    let ask = |account: &str, names: &[&str]| {
+        let req = requires(
+            accounts(
+                token("token.issue", &[account], "live", fresh_mfa()),
+                &[account],
+            ),
+            names,
+        );
+        engine.decide("session", &req).unwrap()
+    };
+    let v = ask(
+        "workforce/u-5001",
+        &[
+            "dev:example-app:user",
+            "dev:shared:keycloak:example-a:viewer",
+        ],
+    );
+    assert!(v.allow, "{v:?}");
+    assert_eq!(
+        v.grant_names,
+        [
+            "dev:shared:keycloak:example-a:act-as",
+            "dev:shared:keycloak:example-a:viewer"
+        ]
+    );
+    let v = ask(
+        "workforce/u-5002",
+        &["acme:shared:keycloak:example-a:viewer"],
+    );
+    assert!(v.allow, "{v:?}");
+    assert_eq!(v.grant_names, ["acme:shared:keycloak:example-a:viewer"]);
+    // The act-as role in the scope `acme` is held by nobody, so it admits nobody.
+    let v = ask(
+        "workforce/u-5002",
+        &["acme:shared:keycloak:example-a:act-as"],
+    );
+    assert!(!v.allow, "{v:?}");
+
+    // A five-segment name of a customer nobody declared is refused with the policy that names it.
+    let mut bad = i.clone();
+    bad.policies.push(PolicyDoc {
+        file: "typo".into(),
+        cedar: "@id(\"typo-five\")\npermit (principal in Account::\"workforce/u-1\", action == Action::\"grant.hold\", resource == Grant::\"dev:shared:keycloak:example-b:act-as\");".into(),
+    });
+    let e = refused(&bad);
+    assert!(
+        e.contains("typo-five") && e.contains("the vocabulary does not declare"),
+        "{e}"
+    );
+}

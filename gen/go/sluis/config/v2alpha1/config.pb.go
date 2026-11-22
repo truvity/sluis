@@ -506,7 +506,8 @@ type InstallationClient struct {
 	Kind string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
 	// the allowed redirect URIs: https, or http on a loopback address
 	Redirects []string `protobuf:"bytes,3,rep,name=redirects,proto3" json:"redirects,omitempty"`
-	// what the client requires of a sign-in: grant names, <scope>:<thing>:<role>, no wildcard
+	// what the client requires of a sign-in: grant names, <scope>:<thing>:<role> or <scope>:<vendor>:<project>:<customer>:<role>
+	// (ADR 0055), no wildcard
 	Requires []string             `protobuf:"bytes,4,rep,name=requires,proto3" json:"requires,omitempty"`
 	TtlCap   *durationpb.Duration `protobuf:"bytes,5,opt,name=ttl_cap,json=ttlCap,proto3" json:"ttl_cap,omitempty"` // the longest token lifetime the client may get
 	Profile  string               `protobuf:"bytes,6,opt,name=profile,proto3" json:"profile,omitempty"`             // the client's profile
@@ -518,7 +519,8 @@ type InstallationClient struct {
 	// client that checks the nonce of its ID token instead (RFC 9700 section 2.1.1; ADR 0021); only a confidential client
 	Pkce string `protobuf:"bytes,9,opt,name=pkce,proto3" json:"pkce,omitempty"`
 	// things whose held grant names this audience's tokens carry in groups in every scope and role, beyond the pairs of requires
-	// (ADR 0020, "The claims of a token"); each is a thing the vocabulary declares, which the load checks
+	// (ADR 0020, "The claims of a token"); each is a thing the vocabulary declares, which the load checks: one word, or the
+	// three of <vendor>:<project>:<customer> (ADR 0055)
 	Groups []string `protobuf:"bytes,10,rep,name=groups,proto3" json:"groups,omitempty"`
 	// what replaces each ":" of a grant name in the groups of this audience's tokens, for a verifier that splits a group on
 	// ":"; one to eight printable ASCII characters outside letters, digits, "-", "_", ":", a quote and a comma; empty keeps ":"
@@ -1783,20 +1785,20 @@ const file_sluis_config_v2alpha1_config_proto_rawDesc = "" +
 	"\bid_token\x18\x01 \x01(\v2\x19.google.protobuf.DurationB\x06\xbaH\x03\xc8\x01\x01R\aidToken\x12D\n" +
 	"\faccess_token\x18\x02 \x01(\v2\x19.google.protobuf.DurationB\x06\xbaH\x03\xc8\x01\x01R\vaccessToken\x12W\n" +
 	"\x16human_session_absolute\x18\x03 \x01(\v2\x19.google.protobuf.DurationB\x06\xbaH\x03\xc8\x01\x01R\x14humanSessionAbsolute\x12D\n" +
-	"\frefresh_idle\x18\x04 \x01(\v2\x19.google.protobuf.DurationB\x06\xbaH\x03\xc8\x01\x01R\vrefreshIdle\"\x87\x05\n" +
+	"\frefresh_idle\x18\x04 \x01(\v2\x19.google.protobuf.DurationB\x06\xbaH\x03\xc8\x01\x01R\vrefreshIdle\"\xb2\x06\n" +
 	"\x12InstallationClient\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12<\n" +
 	"\x04kind\x18\x02 \x01(\tB(\xbaH%\xc8\x01\x01r R\x06publicR\fconfidentialR\bexchangeR\x04kind\x125\n" +
-	"\tredirects\x18\x03 \x03(\tB\x17\xbaH\x14\x92\x01\x11\"\x0fr\r2\v^https?://.R\tredirects\x12e\n" +
-	"\brequires\x18\x04 \x03(\tBI\xbaHF\x92\x01C\"Ar?2=^[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}$R\brequires\x122\n" +
+	"\tredirects\x18\x03 \x03(\tB\x17\xbaH\x14\x92\x01\x11\"\x0fr\r2\v^https?://.R\tredirects\x12\xd1\x01\n" +
+	"\brequires\x18\x04 \x03(\tB\xb4\x01\xbaH\xb0\x01\x92\x01\xac\x01\"\xa9\x01r\xa6\x012\xa3\x01^[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}$|^[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}$R\brequires\x122\n" +
 	"\attl_cap\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x06ttlCap\x12\x18\n" +
 	"\aprofile\x18\x06 \x01(\tR\aprofile\x12D\n" +
 	"\x06secret\x18\a \x01(\tB,\xbaH)r'2%^$|^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$R\x06secret\x128\n" +
 	"\vsigning_alg\x18\b \x01(\tB\x17\xbaH\x14r\x122\x10^(ES384|RS256)?$R\n" +
 	"signingAlg\x12.\n" +
-	"\x04pkce\x18\t \x01(\tB\x1a\xbaH\x17r\x152\x13^(required|nonce)?$R\x04pkce\x129\n" +
+	"\x04pkce\x18\t \x01(\tB\x1a\xbaH\x17r\x152\x13^(required|nonce)?$R\x04pkce\x12w\n" +
 	"\x06groups\x18\n" +
-	" \x03(\tB!\xbaH\x1e\x92\x01\x1b\"\x19r\x172\x15^[A-Za-z0-9_-]{1,64}$R\x06groups\x12L\n" +
+	" \x03(\tB_\xbaH\\\x92\x01Y\"WrU2S^[A-Za-z0-9_-]{1,64}$|^[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}$R\x06groups\x12L\n" +
 	"\x10groups_delimiter\x18\v \x01(\tB!\xbaH\x1er\x1c2\x1a^[!#-+./;-@\\[-^`{-~]{0,8}$R\x0fgroupsDelimiter\"J\n" +
 	"\x18InstallationClientSecret\x12\x16\n" +
 	"\x06client\x18\x01 \x01(\tR\x06client\x12\x16\n" +

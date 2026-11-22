@@ -659,9 +659,19 @@ fn the_groups_override_of_a_client_is_a_list_of_thing_names() {
         things("  groups: [example-wiki, Example_CI-2]\n"),
         ["example-wiki", "Example_CI-2"]
     );
+    // A thing of three words, `<vendor>:<project>:<customer>`, is a thing too (ADR 0055).
+    assert_eq!(
+        things("  groups: [example-wiki, \"shared:keycloak:example-a\"]\n"),
+        ["example-wiki", "shared:keycloak:example-a"]
+    );
     for (bad, want) in [
-        ("dev:example-wiki:viewer", "is not a thing name"),
+        ("\"dev:example-wiki:viewer:x\"", "is not a thing name"),
+        (
+            "\"dev:shared:keycloak:example-a:act-as\"",
+            "is not a thing name",
+        ),
         ("dev:example-wiki", "is not a thing name"),
+        ("\"shared::example-a\"", "is not a thing name"),
         ("\"*\"", "a wildcard is not allowed in groups"),
         ("\"example-*\"", "a wildcard is not allowed in groups"),
         ("\"\"", "must be a non-empty string"),
@@ -2154,7 +2164,7 @@ fn an_audit_catalogue_the_writer_could_not_use_is_refused_with_its_path() {
     }
 }
 
-/// verifies: REQ-POLICY-012
+/// verifies: REQ-POLICY-012, REQ-POLICY-025
 #[test]
 fn a_wildcard_or_a_malformed_name_in_a_clients_requires_is_refused_with_its_path_and_never_its_value()
  {
@@ -2167,6 +2177,10 @@ fn a_wildcard_or_a_malformed_name_in_a_clients_requires_is_refused_with_its_path
         payload::decode(kind("InstallationClient"), client(requires).as_bytes()).is_ok()
     };
     assert!(ok("[\"dev:app:user\", \"acme:billing:admin\"]"));
+    // Five segments are a grant name too, beside three (ADR 0055).
+    assert!(ok(
+        "[\"dev:app:user\", \"devel:shared:keycloak:example-a:act-as\"]"
+    ));
     // An empty list admits nobody, which is a slip and not a client (REQ-CLIENT-050).
     assert!(!ok("[]"));
     for (bad, want) in [
@@ -2192,6 +2206,18 @@ fn a_wildcard_or_a_malformed_name_in_a_clients_requires_is_refused_with_its_path
             "app.requires[0]: is not a grant name",
         ),
         ("[\"dev::user\"]", "app.requires[0]: is not a grant name"),
+        (
+            "[\"devel:shared:keycloak:extra\"]",
+            "app.requires[0]: is not a grant name",
+        ),
+        (
+            "[\"devel:shared:keycloak:example-a:act-as:extra\"]",
+            "app.requires[0]: is not a grant name",
+        ),
+        (
+            "[\"devel:shared::example-a:act-as\"]",
+            "app.requires[0]: is not a grant name",
+        ),
         (
             "[\"dev:app:user \"]",
             "app.requires[0]: is not a grant name",

@@ -645,7 +645,23 @@
    "shape": [
     "$v:example-app:user",
     "dev:$v:user",
-    "dev:example-app:$v"
+    "dev:example-app:$v",
+    "$v:shared:keycloak:example-a:act-as",
+    "devel:$v:keycloak:example-a:act-as",
+    "devel:shared:$v:example-a:act-as",
+    "devel:shared:keycloak:$v:act-as",
+    "devel:shared:keycloak:example-a:$v"
+   ],
+   "domain": "grant_part"
+  },
+  {
+   "schema": "installation-client/v1/installation-client.schema.json",
+   "path": "/example-app/groups",
+   "shape": [
+    "$v",
+    "$v:keycloak:example-a",
+    "shared:$v:example-a",
+    "shared:keycloak:$v"
    ],
    "domain": "grant_part"
   },

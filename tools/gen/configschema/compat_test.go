@@ -72,6 +72,7 @@ func TestACompatibleChangeIsAllowedAndAnIncompatibleOneIsNot(t *testing.T) {
 		{"a maximum goes", func(d map[string]any) { delete(props(d)["name"].(map[string]any), "maxLength") }, ""},
 		{"a minimum falls", func(d map[string]any) { props(d)["name"].(map[string]any)["minLength"] = 0.0 }, ""},
 		{"a pattern goes", func(d map[string]any) { delete(props(d)["name"].(map[string]any), "pattern") }, ""},
+		{"a pattern grows an alternative", func(d map[string]any) { props(d)["name"].(map[string]any)["pattern"] = "^[a-z]+$|^[a-z]+:[a-z]+$" }, ""},
 		{"a value is added to an enum", func(d map[string]any) { props(d)["mode"].(map[string]any)["enum"] = []any{"a", "b", "c"} }, ""},
 		{"a required key becomes optional", func(d map[string]any) { d["required"] = []any{"name"} }, ""},
 		{"the retired key is gone", func(d map[string]any) { delete(props(d), "old") }, ""},
@@ -82,6 +83,9 @@ func TestACompatibleChangeIsAllowedAndAnIncompatibleOneIsNot(t *testing.T) {
 		{"a key is retired", func(d map[string]any) { props(d)["mode"] = false }, "mode: the key is retired now"},
 		{"a type changes", func(d map[string]any) { props(d)["name"].(map[string]any)["type"] = "integer" }, "type changed"},
 		{"a pattern changes", func(d map[string]any) { props(d)["name"].(map[string]any)["pattern"] = "^[a-z0-9]+$" }, "pattern changed"},
+		{"a pattern gains an alternative before it", func(d map[string]any) { props(d)["name"].(map[string]any)["pattern"] = "^[0-9]+$|^[a-z]+$" }, "pattern changed"},
+		{"a pattern gains an empty alternative", func(d map[string]any) { props(d)["name"].(map[string]any)["pattern"] = "^[a-z]+$|" }, "pattern changed"},
+		{"a pattern is narrowed after a bar", func(d map[string]any) { props(d)["name"].(map[string]any)["pattern"] = "^[a-z]+$|(" }, "pattern changed"},
 		{"a pattern is new", func(d map[string]any) { props(d)["mode"].(map[string]any)["pattern"] = "^a" }, "pattern is new"},
 		{"a key becomes required", func(d map[string]any) { d["required"] = []any{"name", "dest", "keys"} }, "the key was optional and is required now"},
 		{"a key of a definition becomes required", func(d map[string]any) {

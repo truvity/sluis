@@ -346,6 +346,76 @@ fn a_client_whose_groups_override_names_a_thing_the_vocabulary_does_not_declare_
     }
 }
 
+/// A grant name of five segments, `<scope>:<vendor>:<project>:<customer>:<role>`, is declared, required and named in a
+/// `groups` override like one of three, beside it (ADR 0055): the thing is the three words between the scope and the role.
+/// A five-segment name or a three-word thing the vocabulary does not declare is refused as a three-segment one is.
+///
+/// verifies: REQ-CLIENT-049, REQ-POLICY-025
+#[test]
+fn a_grant_name_of_five_segments_loads_beside_one_of_three() {
+    let vocabulary = source("grant-vocabulary");
+    let things = "things:\n";
+    assert!(vocabulary.contains(things));
+    let vocabulary = vocabulary.replace(
+        things,
+        "things:\n  shared:keycloak:example-a:\n    roles:\n      viewer: []\n      act-as: [viewer]\n",
+    );
+    let clients = source("installation-client");
+    let anchor = r#"requires: ["dev:example-app:user", "acme:example-app:user"]"#;
+    assert!(clients.contains(anchor));
+    let with = |extra: &str, groups: &str| {
+        clients.replace(
+            anchor,
+            &format!(
+                r#"requires: ["dev:example-app:user", "acme:example-app:user", "{extra}"]
+  groups: [{groups}]"#
+            ),
+        )
+    };
+    let e = env();
+    e.sign("grant-vocabulary", &vocabulary);
+    e.sign(
+        "installation-client",
+        &with(
+            "dev:shared:keycloak:example-a:act-as",
+            "\"shared:keycloak:example-a\"",
+        ),
+    );
+    let (code, _, all) = run(&e.bootstrap(), e.docs.path());
+    assert_eq!(code, Some(0), "{all}");
+    for (name, extra, groups, want) in [
+        (
+            "an undeclared customer",
+            "dev:shared:keycloak:example-b:act-as",
+            "\"shared:keycloak:example-a\"",
+            "set : InstallationClient: sluis-cli.requires[2]: not a grant name the vocabulary declares",
+        ),
+        (
+            "an undeclared role",
+            "dev:shared:keycloak:example-a:admin",
+            "\"shared:keycloak:example-a\"",
+            "set : InstallationClient: sluis-cli.requires[2]: not a grant name the vocabulary declares",
+        ),
+        (
+            "an undeclared three-word thing",
+            "dev:shared:keycloak:example-a:act-as",
+            "\"shared:keycloak:example-b\"",
+            "set : InstallationClient: sluis-cli.groups[0]: not a thing the vocabulary declares",
+        ),
+    ] {
+        let e = env();
+        e.sign("grant-vocabulary", &vocabulary);
+        e.sign("installation-client", &with(extra, groups));
+        let (code, checks, all) = run(&e.bootstrap(), e.docs.path());
+        assert_eq!(code, Some(3), "{name}: {all}");
+        assert_eq!(failures(&checks), [want], "{name}: {all}");
+        assert!(
+            !all.contains("example-b"),
+            "{name}: the value was printed: {all}"
+        );
+    }
+}
+
 /// A client that wants its ID tokens signed with RS256 needs a key for it, and the key exists only where the KeyPlan lists the
 /// purpose with that algorithm (ADR 0006, "Key purposes": enabled on use). The set is refused with one failed `set` line that
 /// names the client and the field, and no value.

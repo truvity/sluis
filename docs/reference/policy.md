@@ -8,7 +8,7 @@ sidebar:
 
 `policy` decides every question of the form "does this person hold this grant name", "may this person have a token for this client" and "may this workflow have the release key sign" ([0007](/decisions/0007-policy-and-sealed-grants/)). It holds no key and no data of its own, and every fact it needs arrives in the request. It reads the reviewed policy through the store. Cedar itself, the signed policy bundle and the rules for loading it are atoom's ([below](#what-atoom-supplies)). This page fixes what sluis adds: what the request holds, the Cedar schema the policy is written against, how the grant names of a person are found, how template links reach `policy`, the vocabulary of grant names, and one policy file with test vectors. Who calls `policy` is in the [actor registry](/reference/actors/#policy). The policy documents are the config kinds `Policy` and `RegulatedPartyPolicy`, and the vocabulary is the config kind `GrantVocabulary` ([Kinds](/reference/kinds/)).
 
-A **grant name** is an entry of the vocabulary, `<scope>:<thing>:<role>`. A **sealed grant** is one decision of `policy`, sealed by key@ ([0007](/decisions/0007-policy-and-sealed-grants/#sealed-grants)). The two are different things. The Cedar entity `Grant` below stands for a grant name, and this page says "grant" alone only for the sealed grant.
+A **grant name** is an entry of the vocabulary, `<scope>:<thing>:<role>`, or `<scope>:<vendor>:<project>:<customer>:<role>` whose thing is the three words between the scope and the role ([0055](/decisions/0055-a-grant-name-is-three-segments-or-five/)). A **sealed grant** is one decision of `policy`, sealed by key@ ([0007](/decisions/0007-policy-and-sealed-grants/#sealed-grants)). The two are different things. The Cedar entity `Grant` below stands for a grant name, and this page says "grant" alone only for the sealed grant.
 
 ## What atoom supplies
 
@@ -39,7 +39,8 @@ entity Account = {
   org: String,
 };
 
-// A grant name of the vocabulary, written `<scope>:<thing>:<role>` (ADR 0020). The entity is
+// A grant name of the vocabulary, written `<scope>:<thing>:<role>` (ADR 0020); a thing of three
+// words, `<vendor>:<project>:<customer>`, makes a name of five segments (ADR 0055). The entity is
 // called Grant; it stands for a grant name and never for the sealed grant of ADR 0007.
 // `sensitive` is true when its scope is sensitive.
 entity Grant = {
@@ -159,7 +160,7 @@ The types follow the [actor registry](/reference/actors/) and the [kinds](/refer
 |---|---|---|---|
 | `Account` | An account of an upstream, named by the pair that links a person: the upstream's declared name and the value of its subject claim ([0019](/decisions/0019-person-and-upstream-link/#linking-an-upstream-account)) | `signin` or `exchange`, from the `UpstreamLink` of the person | `<upstream>/<claim value>`, such as `workforce/u-1001`; never an e-mail address |
 | `Person` | A person who signed in, `in` the `Account` they are linked by | The asker, from the sign-in session and the `Person` item | The opaque subject ([0019](/decisions/0019-person-and-upstream-link/#the-records)) |
-| `Grant` | A grant name of the vocabulary, with its scope, thing, role and whether the scope is sensitive | `policy`, from the vocabulary | `<scope>:<thing>:<role>`, such as `dev:example-app:user` ([0020](/decisions/0020-grant-vocabulary-and-token-claims/#grant-names-and-the-vocabulary)) |
+| `Grant` | A grant name of the vocabulary, with its scope, thing, role and whether the scope is sensitive | `policy`, from the vocabulary | `<scope>:<thing>:<role>`, such as `dev:example-app:user` ([0020](/decisions/0020-grant-vocabulary-and-token-claims/#grant-names-and-the-vocabulary)), or five segments, such as `devel:shared:keycloak:example-a:act-as`, whose `thing` is `shared:keycloak:example-a` ([0055](/decisions/0055-a-grant-name-is-three-segments-or-five/)) |
 | `Client` | A client of an issuer, and the resource of a token request | The asker, from the `InstallationClient` or `TenantClient` it read ([0021](/decisions/0021-clients/#the-client-declaration)) | `<boundary>/<client id>`, such as `dev/example-app` |
 | `Boundary` | A boundary, and the place a link is made in | The asker, from the `Boundary` config kind | The boundary's name |
 | `Workload` | A workload that proved its identity: in the core a Kubernetes ServiceAccount token (the slice that KV needs), and with the GitHub add-on a GitHub Actions job, checked by the `github-oidc` verifier | `exchange`, from the verified proof | `<verifier>/<proof subject>` |
@@ -325,7 +326,7 @@ A company is a tenant: its accounts and its grant names carry its `org`, and its
 
 ## The grant vocabulary
 
-A grant name is `<scope>:<thing>:<role>`, and every grant name a policy, a client or a token can name is declared in one document, the **vocabulary** ([0020](/decisions/0020-grant-vocabulary-and-token-claims/#grant-names-and-the-vocabulary)). It is the config kind `GrantVocabulary`: Fixed, written by the publishing pipeline, and read by `policy`, `exchange`, `signin`, `signer` and the console. This section fixes its shape for the core, schema v1. How grant names are found, bound and checked at run time is above.
+A grant name is `<scope>:<thing>:<role>`, or `<scope>:<vendor>:<project>:<customer>:<role>` ([0055](/decisions/0055-a-grant-name-is-three-segments-or-five/)), and every grant name a policy, a client or a token can name is declared in one document, the **vocabulary** ([0020](/decisions/0020-grant-vocabulary-and-token-claims/#grant-names-and-the-vocabulary)). It is the config kind `GrantVocabulary`: Fixed, written by the publishing pipeline, and read by `policy`, `exchange`, `signin`, `signer` and the console. This section fixes its shape for the core, schema v1. How grant names are found, bound and checked at run time is above.
 
 Schema v1 has only the keys that code of the core reads ([principle 8](/principles/#8-nothing-without-a-consumer)). Adding a key or a value is compatible; removing or changing one is a new schema version beside v1.
 
@@ -333,7 +334,7 @@ Schema v1 has only the keys that code of the core reads ([principle 8](/principl
 
 - **The document is YAML read by the same strict profile as every config document:** one document, plain JSON data, no anchors, aliases, merge keys, tags or duplicate keys ([Bootstrap file](/reference/bootstrap-file/#format)). It is signed like the others ([Signed config](/reference/signed-config/)).
 - **The schema is the JSON Schema generated from the Protobuf message,** with the `$id` `https://sluis.id/schema/vocabulary/v1/vocabulary.schema.json`, embedded in `policy` and in the `sluis` command ([0004](/decisions/0004-the-data-model/#schemas-are-protobuf)). `unevaluatedProperties: false` is on every object, so an unknown key is an error that names its path. An error never shows a value. `$schema` may name the `$id`, for editors; a document that names another `$id` is refused.
-- **Names.** A scope, a thing and a role are each 1 to 64 characters of ASCII letters, digits, `-` and `_`, as in a grant name. The colon and `*` are not in the set, so a name cannot be split wrongly and a wildcard cannot be a name.
+- **Names.** A scope and a role are each 1 to 64 characters of ASCII letters, digits, `-` and `_`, as in a grant name. A thing is one such name, or exactly three joined by `:`, `<vendor>:<project>:<customer>` ([0055](/decisions/0055-a-grant-name-is-three-segments-or-five/)). A grant name is therefore three segments or five: the scope is the first, the role the last, and the thing is what lies between. `*` is in no name, and the colon is in none but a thing of three words, so a name cannot be split wrongly and a wildcard cannot be a name; a thing of two words or of four is refused, so a grant name of four segments or six never loads.
 
 ### Keys
 
@@ -355,7 +356,7 @@ A scope with no field is written `{}`.
 
 #### `things`
 
-A thing is a system, a project or an application.
+A thing is a system, a project or an application. A project of a vendor and a customer is a thing of three words, written as a plain key with its colons (`shared:keycloak:example-a:`), and its grant names have five segments, such as `devel:shared:keycloak:example-a:act-as`. A thing of three words and a thing of one are different things: neither implies the other.
 
 | Field | Required | Meaning |
 |---|---|---|
@@ -377,7 +378,7 @@ The two forms mean the same when the long form leaves `scopes` out, and the docu
 
 ### What the document declares
 
-The grant names of an installation are the combinations the document lists: for every thing, every role of it, and every scope the role exists in, the grant name `<scope>:<thing>:<role>`. `policy` builds one `Grant` entity for each, with its `scope`, `thing`, `role` and `sensitive` ([Entity types](#entity-types)), and finds the held grant names of a person by that set. A name that is not among them is not a grant name: a policy document, a client's `requires`, a binding or a link that names one is refused when the snapshot loads.
+The grant names of an installation are the combinations the document lists: for every thing, every role of it, and every scope the role exists in, the grant name `<scope>:<thing>:<role>`, which has five segments when the thing has three words. `policy` builds one `Grant` entity for each, with its `scope`, `thing`, `role` and `sensitive` ([Entity types](#entity-types)), and finds the held grant names of a person by that set. A name that is not among them is not a grant name: a policy document, a client's `requires`, a binding or a link that names one is refused when the snapshot loads.
 
 A role ladder is explicit. It never inherits across scopes: the roles a role implies are the ones of the same scope and thing. Implication is transitive, and the held set a token is narrowed from has the whole ladder expanded ([0020](/decisions/0020-grant-vocabulary-and-token-claims/#the-claims-of-a-token)).
 
