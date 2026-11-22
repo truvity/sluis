@@ -1,4 +1,4 @@
-//! The `entry` executable: `serve | check | version | conformance` (cli.md, `sluis-kit::cli`).
+//! The `entry` executable: `serve | check | version` (cli.md, `sluis-kit::cli`).
 
 use std::path::PathBuf;
 

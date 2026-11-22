@@ -2,13 +2,12 @@
 //!
 //! The driver is atoom's (github.com/truvity/atoom, `store/rqlite`, pinned by release: `third_party/atoom/README.md`): the item contract
 //! over rqlite, the sweeper and the flags. This file is what is sluis's: the socket with the peer credentials of its caller, the owner
-//! check of the registry (only store@ may open it), the command line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
+//! check of the registry (only store@ may open it), the command line (`serve`, `check`, `version`) and `--socket-gid`.
 //!
 //! ```text
 //! rqlite serve --socket P --rqlite-url URL --namespace durable|temp [--sweep-interval 30s]
 //!              [--changelog-retention 1h] [--basic-auth-file F] [--socket-gid GID]
 //! rqlite check --rqlite-url URL --namespace durable|temp [--basic-auth-file F]
-//! rqlite conformance --socket P
 //! rqlite version
 //! ```
 
@@ -76,10 +75,6 @@ impl Commands for Rqlite {
     async fn check(&self, f: Flags) -> Option<anyhow::Result<()>> {
         Some(check(&f).await)
     }
-
-    async fn conformance(&self, f: Flags) -> Option<anyhow::Result<()>> {
-        Some(conformance(&f).await)
-    }
 }
 
 /// Connects, reads `SELECT 1`-level proof at `linearizable` (the schema version read is one), and
@@ -90,17 +85,6 @@ async fn check(f: &Flags) -> anyhow::Result<()> {
         .driver
         .verify_schema(Level::Linearizable)
         .await
-        .map_err(|e| Refused(format!("{e:#}")).into())
-}
-
-/// Runs the item suite against the driver serving on `--socket`. Any failed case, and no case at
-/// all, is a failure.
-async fn conformance(f: &Flags) -> anyhow::Result<()> {
-    if f.socket.as_os_str().is_empty() {
-        bail!("--socket is required");
-    }
-    let cases = atoom_store_conformance::item_suite(atoom_socket::dial(&f.socket)).await;
-    atoom_store_conformance::report(&cases, &mut std::io::stdout())
         .map_err(|e| Refused(format!("{e:#}")).into())
 }
 

@@ -266,8 +266,9 @@ func TestCorrelationIDReachesTheHandlerAndNestedCalls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := res.Header().Get(rpc.HeaderCorrelation); got != id {
-		t.Fatalf("response header %s = %q, want %q", rpc.HeaderCorrelation, got, id)
+	// The server does not echo the id in its response, as the Rust kit and atoom do not (Q-echo A).
+	if got := res.Header().Get(rpc.HeaderCorrelation); got != "" {
+		t.Fatalf("response header %s = %q, want none", rpc.HeaderCorrelation, got)
 	}
 	if got := recv(t, recA.corr); got != id {
 		t.Fatalf("handler A saw %q, want %q", got, id)

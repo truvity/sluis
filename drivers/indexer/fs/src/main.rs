@@ -3,12 +3,11 @@
 //! The driver is atoom's (github.com/truvity/atoom, `blob/fsreadonly`, pinned by release: `third_party/atoom/README.md`): `Get` and `List` of the
 //! directory that `blob/fs` keeps. This file is what is sluis's: the two sockets, one for each caller, with the peer credentials and a
 //! check of their own, the uid that must own the directory (the writer's driver in this process's uid block, from the registry), the command
-//! line (`serve`, `check`, `conformance`, `version`) and `--socket-gid`.
+//! line (`serve`, `check`, `version`) and `--socket-gid`.
 //!
 //! ```text
 //! driver-indexer-fs serve       --socket PATH --reader-socket PATH --root DIR [--socket-gid GID] [--reader-socket-gid GID]
 //! driver-indexer-fs check       --root DIR
-//! driver-indexer-fs conformance          # the read side of the blob port suite over a temporary directory
 //! driver-indexer-fs version
 //! ```
 //!
@@ -21,7 +20,7 @@ use std::time::Duration;
 
 use anyhow::{Context, bail};
 use atoom_blob_fsdir::Fs;
-use atoom_blob_fsreadonly::{ReadOnly, suite};
+use atoom_blob_fsreadonly::ReadOnly;
 use clap::Arg;
 use sluis_kit::cli::{Commands, Flags, Refused, shutdown_signal};
 use sluis_kit::{Allow, ServerConfig};
@@ -135,10 +134,6 @@ impl Commands for Fsd {
     async fn check(&self, f: Flags) -> Option<anyhow::Result<()>> {
         let r = root(&f).and_then(|r| open(&r));
         Some(r.map(|_| ()).map_err(|e| Refused(format!("{e:#}")).into()))
-    }
-
-    async fn conformance(&self, _f: Flags) -> Option<anyhow::Result<()>> {
-        Some(suite::run_temp().context("the blob port suite, read side"))
     }
 }
 

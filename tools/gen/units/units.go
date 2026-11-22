@@ -1141,8 +1141,8 @@ func (b *unitText) harden(noNetwork bool, noExec []string, readsClock bool) {
 // stay up, not systemd giving up on it.
 func (b *unitText) noStartLimit() { b.line("StartLimitIntervalSec=0") }
 
-// RestartFileEnv is the variable that names the file in which a program counts its failures in a row (kits/go/backoff,
-// kits/rust/sluis-kit backoff), which is how its restarts back off.
+// RestartFileEnv is the variable that names the file in which a program counts its failures in a row (kits/go/cli and
+// kits/rust/sluis-kit cli, over atoom's socket/restart), which is how its restarts back off.
 const RestartFileEnv = "SLUIS_RESTART_FILE"
 
 // restartPolicy restarts a unit on failure, flat, every two seconds, and leaves the back-off to the program (owner decision 24 A,

@@ -3,12 +3,11 @@
 //! The driver is atoom's (github.com/truvity/atoom, `transport/spool`, pinned by release: `third_party/atoom/README.md`): the transport port
 //! over a local, fsync'd, bounded queue. This file is what is sluis's: the two sockets with the peer credentials and the call graph, the
 //! name of an emitter (`<actor>@<boundary>`, from the peer, which is the function atoom's `Emit` asks), the command line (`serve`,
-//! `check`, `conformance`, `version`) and `--socket-gid`.
+//! `check`, `version`) and `--socket-gid`.
 //!
 //! ```text
 //! driver-writer-spool serve   --boundary B --socket-dir DIR --root DIR [--socket-gid GID] [--limit-bytes N] [--segment-bytes N]
 //! driver-writer-spool check   --root DIR
-//! driver-writer-spool conformance          # the transport suite over a temporary directory
 //! driver-writer-spool version
 //! ```
 //!
@@ -19,9 +18,9 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use anyhow::{Context, bail};
+use anyhow::bail;
 use atoom_transport_spool::service::{Consume, Emit};
-use atoom_transport_spool::{Config, Spool, check_root, suite};
+use atoom_transport_spool::{Config, Spool, check_root};
 use clap::Arg;
 use sluis_kit::cli::{Commands, Flags, Refused, shutdown_signal};
 use sluis_kit::{Allow, ServerConfig, peer};
@@ -128,10 +127,6 @@ impl Commands for Spoold {
         // A check does not recover: recovery cuts a torn tail, and a check changes nothing.
         let r = root(&f).and_then(|r| check_root(&r));
         Some(r.map_err(|e| Refused(format!("{e:#}")).into()))
-    }
-
-    async fn conformance(&self, _f: Flags) -> Option<anyhow::Result<()>> {
-        Some(suite::run_temp().context("the transport suite"))
     }
 }
 

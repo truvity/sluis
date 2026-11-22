@@ -178,7 +178,7 @@ func TestAnOpenForATenantWithNoKeyDoesNotWaitForTheMakers(t *testing.T) {
 	opens := []open{
 		{"session", "chain", "session-chain", chain}, {"exchange", "chain", "session-chain", chain}, {"session", "credential", "staff-passkey", credential},
 	}
-	clients := make([]keyv2alpha1connect.KeyServiceClient, len(opens)) // made first: the identity of a client is read when it connects
+	clients := make([]keyv2alpha1connect.KeyServiceClient, len(opens))
 	for i, o := range opens {
 		clients[i] = n.client(o.actor)
 		if _, err := open1(clients[i], o.purpose, o.kind, "acme", vecID, o.env, nil); err != nil {
@@ -187,14 +187,15 @@ func TestAnOpenForATenantWithNoKeyDoesNotWaitForTheMakers(t *testing.T) {
 	}
 	n.srv.loadMu.Lock() // a slow cold load is in progress
 	defer n.srv.loadMu.Unlock()
-	done := make(chan error, len(opens))
+	// The test's resolver names every call by the actor set last (the caller is named per call), so the opens run one
+	// after the other, each as its own actor; each must come back without the lock.
 	for i, o := range opens {
+		n.who.set(o.actor)
+		done := make(chan error, 1)
 		go func() {
 			_, err := open1(clients[i], o.purpose, o.kind, "ghost-corp", vecID, o.env, nil)
 			done <- err
 		}()
-	}
-	for range opens {
 		select {
 		case err := <-done:
 			wantRefusal(t, err, connect.CodePermissionDenied, "open")
