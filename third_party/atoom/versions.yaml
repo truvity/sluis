@@ -1,4 +1,4 @@
-# The pinned runtimes of the whole repository (docs/plan.md, "Pinned runtimes"). Every library uses these values, and sluis and
+# The pinned runtimes of the whole repository (docs/archive/extraction-plan.md, "Pinned runtimes"). Every library uses these values, and sluis and
 # session pin the same ones. The order of a bump is always atoom first (released), then the consumers.
 #
 # `just check-versions` holds the files that spell a pin (devbox.json, rust-toolchain.toml, go.work, every go.mod and Cargo.toml)

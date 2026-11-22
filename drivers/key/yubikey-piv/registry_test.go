@@ -11,11 +11,14 @@ import (
 
 	"github.com/truvity/atoom/key/slotplan"
 	"github.com/truvity/atoom/key/yubikeypiv"
+
+	"github.com/truvity/sluis/v2/kits/go/pinrelease"
 )
 
-// The slot plan is atoom's (github.com/truvity/atoom/key/slotplan is the check, yubikeypiv.SlotPlan is the card driver's table), and the
-// registry of the purposes and their slots, docs/architecture/keys.yaml, is sluis's. These tests hold the two to each other: the tables
-// agree with the registry, slot for slot and algorithm for algorithm.
+// The slot plan is atoom's (github.com/truvity/atoom/key/slotplan is the check and the reference map, yubikeypiv.SlotPlan is the table the
+// card driver makes of the purposes the host declares), and the registry of the purposes and their slots, docs/architecture/keys.yaml, is
+// sluis's. The host declares pinrelease.CardPurposes() (main.go). These tests hold the two to each other: the tables agree with the registry,
+// slot for slot and algorithm for algorithm.
 
 var hexSlot = regexp.MustCompile(`^[0-9a-f]{2}$`)
 
@@ -70,13 +73,20 @@ func readKeysYAML(t *testing.T) keysYAML {
 // The default slot plan of the card driver gives each key its own slot (ADR 0006, "The slot plan"). Three things are
 // checked together: no slot holds two purposes and no purpose sits in two slots, so no key shares a card slot with
 // another; the slot of each purpose is the slot that docs/architecture/keys.yaml gives it, with the algorithm that
-// the card holds there; and a purpose of the registry's slot plan that the driver has no row for yet (the slots 89 to 8f of
-// version 2) is not served from a slot of the default map. The installation's own slot map is checked where it is read, by
+// the card holds there; and a purpose of the registry's slot plan that the host does not declare (the slots 89 to 8f of
+// version 2) has no row. The installation's own slot map is checked where it is read, by
 // DecodeSlotMap (kits/go/pinrelease).
 //
 // verifies: REQ-KEYS-046
 func TestTheDefaultSlotPlanGivesEveryKeyASlotOfItsOwn(t *testing.T) {
-	rows := yubikeypiv.SlotPlan()
+	rows, err := yubikeypiv.SlotPlan(pinrelease.CardPurposes())
+	if err != nil {
+		t.Fatalf("the card driver refuses the host's declaration: %v", err)
+	}
+	declared := map[string]bool{}
+	for _, d := range pinrelease.CardPurposes() {
+		declared[d.Name] = true
+	}
 	bySlot, byPurpose := map[uint8]string{}, map[string]bool{}
 	for _, e := range rows {
 		if other, dup := bySlot[slotOf(e.Slot)]; dup {
@@ -106,9 +116,9 @@ func TestTheDefaultSlotPlanGivesEveryKeyASlotOfItsOwn(t *testing.T) {
 		seen[purpose] = true
 		e, ok := planFor(rows, purpose)
 		if !ok {
-			// The slots of version 2 that the driver does not serve yet: the map holds them, the card does not.
-			if slotplan.CardServed[purpose] {
-				t.Errorf("keys.yaml puts %s in slot %s, and the driver has no row for it, though the kit says the card serves it", purpose, slot)
+			// The slots of version 2 that the host does not declare: the map holds them, the card does not.
+			if declared[purpose] {
+				t.Errorf("keys.yaml puts %s in slot %s, and the driver has no row for it, though the host declares it", purpose, slot)
 			}
 			unserved++
 			continue
@@ -149,8 +159,8 @@ func TestTheDefaultSlotPlanGivesEveryKeyASlotOfItsOwn(t *testing.T) {
 			pinned++
 			e, ok := planFor(rows, p.Name)
 			if !ok {
-				// A purpose of version 2 that the driver does not serve yet: its slot is the kit's, and no row is the driver's.
-				if slotplan.CardServed[p.Name] {
+				// A purpose of version 2 that the host does not declare: its slot is the kit's, and no row is the driver's.
+				if declared[p.Name] {
 					t.Errorf("%s: keys.yaml gives it slot %s, and the driver has no row", p.Name, p.Board.Slot)
 				}
 				if got := slotplan.Default[p.Name]; got != p.Board.Slot {
@@ -196,7 +206,8 @@ func TestTheDefaultSlotPlanGivesEveryKeyASlotOfItsOwn(t *testing.T) {
 }
 
 // The default map is the one in docs/architecture/keys.yaml, slot for slot, version 2: the slots 89 to 8f hold their purposes,
-// the rotation spares 90 to 95 hold none, and the card driver serves a subset of the map (the ten rows of version 1).
+// the rotation spares 90 to 95 hold none, a card can hold every row of the map but the three whose algorithm no card generates
+// (PS256 in 8b, EdDSA in 8d and 8e), and the host declares the ten rows of version 1 (ADR 0006), each one a card can hold.
 //
 // verifies: REQ-KEYS-046, REQ-KEYS-278
 func TestTheDefaultMapIsTheRegistrys(t *testing.T) {
@@ -249,13 +260,30 @@ func TestTheDefaultMapIsTheRegistrys(t *testing.T) {
 			t.Errorf("%s: slot %s is no board slot", purpose, slot)
 		}
 	}
-	// What a card serves is part of the map.
+	// What a card can hold is part of the map, and is all of it but PS256 and EdDSA.
 	for purpose := range slotplan.CardServed {
 		if _, ok := slotplan.Default[purpose]; !ok {
-			t.Errorf("the card serves %s, which the default map lacks", purpose)
+			t.Errorf("a card holds %s, which the default map lacks", purpose)
 		}
 	}
-	if len(slotplan.CardServed) != 10 {
-		t.Errorf("the card driver serves %d purposes; this change serves none of the new ones (version 1's ten)", len(slotplan.CardServed))
+	for _, slot := range []string{"8b", "8d", "8e"} {
+		if p := k.SlotPlan.Slots[slot]; slotplan.CardServed[p] {
+			t.Errorf("%s (slot %s): a card holds it, but no card generates its algorithm", p, slot)
+		}
+	}
+	if len(slotplan.CardServed) != len(slotplan.Default)-3 {
+		t.Errorf("a card holds %d purposes of the %d of the map, want all but three", len(slotplan.CardServed), len(slotplan.Default))
+	}
+	decl := pinrelease.CardPurposes()
+	for _, d := range decl {
+		if !slotplan.CardServed[d.Name] {
+			t.Errorf("the host declares %s, which a card cannot hold", d.Name)
+		}
+		if v1[d.Name] != d.Slot {
+			t.Errorf("the host declares %s in slot %q, version 1 has %q", d.Name, d.Slot, v1[d.Name])
+		}
+	}
+	if len(decl) != len(v1) || len(pinrelease.CardServed) != len(v1) {
+		t.Errorf("the host declares %d purposes (%d served), want version 1's %d", len(decl), len(pinrelease.CardServed), len(v1))
 	}
 }

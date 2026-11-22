@@ -1,5 +1,5 @@
-// The item contract: the port `store` (docs/item-port.md). Moved from sluis proto/sluis/port/item/v2alpha1/item.proto (see
-// PROVENANCE.md); the package is renamed, the fields and their numbers are unchanged.
+// The item contract: the port `store` (docs/store-port.md). Moved from sluis proto/sluis/port/item/v2alpha1/item.proto (see
+// docs/provenance.md); the package is renamed, the fields and their numbers are unchanged.
 syntax = "proto3";
 
 package atoom.store.v1alpha1;
@@ -9,7 +9,7 @@ import "atoom/common/v1alpha1/common.proto";
 
 // ItemService is served by the item drivers: rqlite, memory and dynamodb.
 service ItemService {
-  rpc Capabilities(CapabilitiesRequest) returns (CapabilitiesResponse); // what the driver offers: the optional calls it declares (docs/item-port.md "Capabilities")
+  rpc Capabilities(CapabilitiesRequest) returns (CapabilitiesResponse); // what the driver offers: the optional calls it declares (docs/store-port.md "Capabilities")
   rpc Get(ItemGetRequest) returns (ItemGetResponse);                // key -> item; not_found if absent or expired
   rpc Query(QueryRequest) returns (QueryResponse);                  // items by key prefix, or by index entry, paged
   rpc Transact(TransactRequest) returns (TransactResponse);         // conditions, puts and deletes, all or none

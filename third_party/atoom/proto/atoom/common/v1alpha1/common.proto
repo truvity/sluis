@@ -1,5 +1,5 @@
 // The types every atoom port and driver speaks: the detail of an error (Refusal) and one declared index of an item (IndexEntry).
-// Moved from sluis proto/sluis/type/v2alpha1/type.proto (see common/PROVENANCE.md); the package is renamed, the fields and their numbers
+// Moved from sluis proto/sluis/type/v2alpha1/type.proto (see docs/provenance.md); the package is renamed, the fields and their numbers
 // are unchanged.
 syntax = "proto3";
 
