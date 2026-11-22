@@ -96,6 +96,7 @@ Every page has the same parts: what it is for, the kinds it plays, what sluis as
 | [GitHub](/integrations/github/) | `WorkloadVerifier`, `FactsSource`, `CredentialMinter`, `Provisioner` | A CI job gets a token for one repository that lives minutes; teams follow the directory. |
 | [Google Workspace](/integrations/google-workspace/) | `Upstream`, `FactsSource` | People sign in with the account they have; policy names directory groups. |
 | [Generic OIDC and peer sluis](/integrations/oidc-upstream/) | `Upstream`; a peer adds `WorkloadVerifier` | A partner signs in with their own provider; another sluis vouches for its people. |
+| [mimic, the test upstream](/integrations/mimic/) | `Upstream`, on development only | Development tests sign-in through Google Workspace or Entra ID with fixed identities, each tied to a real person or CI job. |
 | [AWS](/integrations/aws/) | `WorkloadVerifier`, plus accounts that trust sluis | People and CI jobs assume roles without stored keys. |
 | [Cloudflare](/integrations/cloudflare/) | `CredentialMinter` | A job gets a DNS token for one zone for an hour. |
 | [Kubernetes API server](/integrations/kubernetes/) | `WorkloadVerifier`, plus clusters that trust sluis | `kubectl` with directory groups in RBAC; a ServiceAccount calls another cluster. |
