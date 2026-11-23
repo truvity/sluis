@@ -1,0 +1,26 @@
+{
+  "$id": "https://schemas.example/access-roster/v1/device-authorization.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "user_agent": {
+      "type": "string",
+      "description": "The User-Agent the device sent when it asked for the code, cut to 256 characters: what the approval page showed the person.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "requested_from": {
+      "type": "string",
+      "description": "The address the device asked for the code from, as the deployment's proxies vouch for it: what the approval page showed the person. On an approval or a denial, whose own address is in the record's context.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
+    "expires_at": {
+      "type": "string",
+      "description": "When the code stops being answerable: ten minutes after it was issued.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "format": "date-time"
+    }
+  }
+}

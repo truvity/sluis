@@ -92,6 +92,11 @@ func every() []*record.Record {
 		audit.SignedInSession(person, "grafana", "google", "interactive", time.Time{}, audit.Denied("not entitled")),
 		audit.RecoverySignedIn(audit.RecoveryIdentity("system:serviceaccount:access:recovery"), "console", "recovery", audit.Succeeded()),
 		audit.TokenExchanged(audit.CI("github:example/app"), "aws", "ci", audit.Denied("no group admits it")),
+		audit.DeviceIssued(audit.Device{Client: "sluisctl", UserAgent: "sluisctl/1.0", From: "192.0.2.1", Expires: time.Unix(1, 0)}, audit.Succeeded()),
+		audit.DeviceIssued(audit.Device{Client: "sluisctl", From: "192.0.2.1"}, audit.Denied("the client does not allow device_authorization")),
+		audit.DeviceApproved(person, audit.Device{Client: "sluisctl", UserAgent: "sluisctl/1.0", From: "192.0.2.1"}, audit.Succeeded()),
+		audit.DeviceDenied(person, audit.Device{Client: "sluisctl", UserAgent: "sluisctl/1.0", From: "192.0.2.1"}, audit.Succeeded()),
+		audit.DeviceExpired(audit.Device{Client: "sluisctl", UserAgent: "sluisctl/1.0", From: "192.0.2.1", Expires: time.Unix(1, 0)}),
 		audit.TokenExchangeRefused(audit.Person("ada@north.example"), "aws:1111:power", "person", audit.Denied("the proof holds no group this client requires"),
 			audit.Refusal{
 				Code: "not_admitted", Audience: "aws:1111:power", Missing: []string{"mgmt:k8s:admin"}, Held: []string{"devel:k8s:viewer"},

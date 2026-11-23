@@ -138,6 +138,51 @@ func TokenExchanged(actor Actor, audience, proof string, o Outcome) *record.Reco
 		subjectOf(actor), []*record.Target{targetClient(audience)}, data{"proof": proof})
 }
 
+// Device is what the device authorization grant (RFC 8628) records about one
+// device code: what the device sent when it asked, which is what the
+// approval page shows the person. Never the device code or the user code.
+type Device struct {
+	// Client is the client the code signs a person in to.
+	Client string
+	// UserAgent is the User-Agent of the device's request, already cut.
+	UserAgent string
+	// From is the address the device asked from.
+	From string
+	// Expires is when the code stops being answerable.
+	Expires time.Time
+}
+
+func (d Device) data() data {
+	out := data{"user_agent": d.UserAgent, "requested_from": d.From}
+	if !d.Expires.IsZero() {
+		out["expires_at"] = d.Expires.UTC().Format(time.RFC3339)
+	}
+	return out
+}
+
+// DeviceIssued is a device code issued to a device, or refused. The device
+// has proved nothing, so the actor is anonymous; its address is in the
+// record's context.
+func DeviceIssued(d Device, o Outcome) *record.Record {
+	return build("roster.device.issued", Anonymous(), o, nil, []*record.Target{targetClient(d.Client)}, d.data())
+}
+
+// DeviceApproved is a signed-in person approving a device code.
+func DeviceApproved(actor Actor, d Device, o Outcome) *record.Record {
+	return build("roster.device.approved", actor, o, subjectOf(actor), []*record.Target{targetClient(d.Client)}, d.data())
+}
+
+// DeviceDenied is a signed-in person denying a device code.
+func DeviceDenied(actor Actor, d Device, o Outcome) *record.Record {
+	return build("roster.device.denied", actor, o, subjectOf(actor), []*record.Target{targetClient(d.Client)}, d.data())
+}
+
+// DeviceExpired is a device code that ran out unanswered, recorded once,
+// at the first poll after it did.
+func DeviceExpired(d Device) *record.Record {
+	return build("roster.device.expired", System(), Succeeded(), nil, []*record.Target{targetClient(d.Client)}, d.data())
+}
+
 // Refusal is the policy's evaluation behind a refused token exchange or
 // sign-in: why, for which audience, what was missing, what was held. The
 // caller is told "not authorised" and a request id; this is what the record

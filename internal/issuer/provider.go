@@ -202,9 +202,23 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	if signIn.Return == nil {
 		signIn.Return = op.AuthCallbackURL(provider)
 	}
+	// A sign-in started from the device page goes back to it.
+	if own, ok := storage.(*Storage); ok {
+		signIn.Return = own.deviceReturn(signIn.Return)
+	}
 
 	mux := http.NewServeMux()
 	SignInRoutes(mux, signIn)
+
+	// The device authorization grant (RFC 8628), served for the clients that
+	// declare `device_authorization` and for nobody otherwise: see
+	// [deviceFlow]. The verification page is one of this issuer's own pages;
+	// the two protocol endpoints are answered in front of the library below.
+	device := newDeviceFlow(iss, storage, signIn)
+	if device != nil {
+		mux.HandleFunc("GET "+devicePath, device.devicePage)
+		mux.HandleFunc("POST "+devicePath, device.devicePage)
+	}
 
 	// The issuer's own contract: what sessions it is holding, and ending
 	// them. Mounted here rather than in a service of its own because it
@@ -285,13 +299,13 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 	// it, so none of them can see one value where the library takes another.
 	// The installation-token claims below take their client from HTTP Basic
 	// and read no parameter the library also reads.
-	protocol := withoutUnserved(bindAuthorization(signIn, singleValued(challenges(iss.Config().URL, refusedAuthorize(
+	protocol := withoutUnserved(bindAuthorization(signIn, singleValued(deviceProtocol(device, challenges(iss.Config().URL, refusedAuthorize(
 		loopbackRedirects(storage.GetClientByClientID, authorizeSurface(storage.GetClientByClientID, defaultScope(resourceIndicators(
 			iss.Policy().Resource, storage.GetClientByClientID, requirePKCE(iss.Policy, presentedClients(
 				endSession(signIn, storage.GetClientByClientID, endSessionHints(
 					iss.Config().URL, provider.IDTokenHintVerifier, knownClient(iss, storage)), truthfulDiscovery(
 					iss.Config().URL, func() bool { return iss.Policy().ClientDocuments().Enabled() }, iss.ConformanceOn,
-					refusalFilter(provider))))))))))))))
+					device.served, refusalFilter(provider)))))))))))))))
 	// An installation token for a catalogue App is claimed in front of the
 	// library, which can only mint tokens this issuer signs. The storage
 	// is the concrete one wherever a deployment runs; a test's stand-in
@@ -350,6 +364,8 @@ func neverCached(next http.Handler) http.Handler {
 		"/revoke":      true,
 		"/userinfo":    true,
 		"/oauth/token": true,
+		// RFC 8628 3.2: the device code is a credential until redeemed.
+		deviceAuthorizationPath: true,
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -761,6 +777,9 @@ var authorizationServerFields = []string{
 	"op_tos_uri",
 	"revocation_endpoint",
 	"revocation_endpoint_auth_methods_supported",
+	// RFC 8628 4: the device authorization grant's endpoint, an RFC 8414
+	// member, present only while a client declares the grant.
+	"device_authorization_endpoint",
 	"code_challenge_methods_supported",
 	"authorization_response_iss_parameter_supported",
 	"client_id_metadata_document_supported",
@@ -841,8 +860,9 @@ var unservedDiscoveryFields = []string{
 // served as discovery and the corrected document is then narrowed to the
 // members RFC 8414 defines, so headers, status and content come from one
 // place.
-func truthfulDiscovery(issuerURL string, documentClientsEnabled, conformanceOn func() bool, next http.Handler) http.Handler {
+func truthfulDiscovery(issuerURL string, documentClientsEnabled, conformanceOn, deviceServed func() bool, next http.Handler) http.Handler {
 	asPath := authorizationServerURI(issuerURL)
+	device := deviceDiscovery(issuerURL, deviceServed)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		asMetadata := r.URL.Path == asPath
 		if r.URL.Path != discoveryPath && !asMetadata {
@@ -884,9 +904,12 @@ func truthfulDiscovery(issuerURL string, documentClientsEnabled, conformanceOn f
 		// OpenID Connect Discovery 3 reads as `query` and `fragment`.
 		doc["response_modes_supported"] = servedResponseModes
 		// The library advertises a device endpoint from its own defaults,
-		// whatever the configuration says. The grant is gone,
-		// so the address of it is a promise to nobody.
+		// whatever the configuration says. The grant is served only while a
+		// client declares `device_authorization`, and the endpoint and the
+		// grant type are advertised then and never otherwise: an address
+		// nobody may use is a promise to nobody.
 		delete(doc, "device_authorization_endpoint")
+		device(doc)
 		// Nor does it stop at the device grant. Introspection is not
 		// served (the tokens are JWTs, verified offline against the key
 		// set), and the library advertises its endpoint anyway. The

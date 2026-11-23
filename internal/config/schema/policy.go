@@ -125,6 +125,7 @@ func clientSchema() m {
 		"requires":               strList("The groups a caller must hold, any of them."),
 		"ttl_cap":                duration("The longest a token for it lives.", ""),
 		"sign_in_exchange":       boolean("It may exchange a sign-in for a token of its own."),
+		"device_authorization":   boolean("It may sign a person in with the device authorization grant (RFC 8628): `/device_authorization`, approval at `/device`, then `/token`. Off by default; `public` only, with `redirects`, and refused with `session: agent`."),
 		"backchannel_logout_uri": str("Where a back-channel logout is posted."),
 		"signing_alg":            str("The algorithm its tokens are signed with, when it cannot verify the default: RS256, ES256 or ES384."),
 		"groups":                 groupsOverride(),
@@ -134,7 +135,7 @@ func clientSchema() m {
 			"description": "Whether it must use PKCE (RFC 7636, RFC 9700 2.1.1): `required` refuses an authorization request with no S256 `code_challenge` and a code redeemed with no `code_verifier`. A public client is always `required` and refuses `optional`; absent is `optional` for a confidential client. Refused on an exchange client.",
 		},
 		"harness": boolean("A conformance or test harness signs in through it: the only kind of client the conformance account (`conformance.enabled`) may sign in to. Refused on an exchange client."),
-		"session": sessionClass("Its refresh chains", "Refused on an exchange client and, as `agent`, with `sign_in_exchange`."),
+		"session": sessionClass("Its refresh chains", "Refused on an exchange client and, as `agent`, with `sign_in_exchange` or `device_authorization`."),
 	}, "kind")
 }
 

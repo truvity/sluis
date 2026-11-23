@@ -3,7 +3,7 @@ import type { Sentences } from "@truvity/audit";
 
 export const roster: Sentences = {
   "source": "roster",
-  "version": "1.25.0",
+  "version": "1.26.0",
   "locales": [
     "en"
   ],
@@ -114,6 +114,30 @@ export const roster: Sentences = {
       "summary": "sluis deleted the expired Cloudflare tokens it had minted for a preset (only its own, by the ids it recorded).",
       "message": {
         "en": "expired {targets_0_id} Cloudflare tokens were deleted"
+      }
+    },
+    "roster.device.approved": {
+      "summary": "A signed-in person approved a device code, so the device that asked for it is signed in to the client as them, or the approval was refused.",
+      "message": {
+        "en": "{outcome, select, success {{actor} approved a device sign-in to {targets_0_id}} denied {{actor} was refused approving a device sign-in to {targets_0_id}} other {{actor} could not approve a device sign-in to {targets_0_id}}}"
+      }
+    },
+    "roster.device.denied": {
+      "summary": "A signed-in person denied a device code, so the device that asked for it is told access_denied and signs nobody in.",
+      "message": {
+        "en": "{outcome, select, success {{actor} denied a device sign-in to {targets_0_id}} other {{actor} could not deny a device sign-in to {targets_0_id}}}"
+      }
+    },
+    "roster.device.expired": {
+      "summary": "A device code ran out before anybody approved or denied it; the device that polled for it was told expired_token.",
+      "message": {
+        "en": "a device code for {targets_0_id} expired unanswered"
+      }
+    },
+    "roster.device.issued": {
+      "summary": "A device asked for a device code to sign a person in to a client (RFC 8628), or was refused one. Never the code; the request's address is in the record's context.",
+      "message": {
+        "en": "{outcome, select, success {a device code was issued for {targets_0_id}} denied {a device code for {targets_0_id} was refused} other {a device code for {targets_0_id} could not be issued}}"
       }
     },
     "roster.github_app.created": {

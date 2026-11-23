@@ -66,6 +66,8 @@ var rows5 = []struct{ key, module, kind, id string }{
 	{"issuer:code:c1", "oidc", "code", "c1"},
 	{"issuer:code-session:r1", "oidc", "code-session", "r1"},
 	{"issuer:code-spent:9f86d081", "oidc", "code-spent", "9f86d081"},
+	{"issuer:device:9f86d081", "oidc", "device", "9f86d081"},
+	{"issuer:device-user:9f86d081", "oidc", "device-user", "9f86d081"},
 	{"issuer:token:5b0f1f0e", "oidc", "token", "5b0f1f0e"},
 	{"issuer:sso:s1", "oidc", "sso", "s1"},
 	{"issuer:sso-of:ada@acme.example", "oidc", "sso-of", "ada@acme.example"},

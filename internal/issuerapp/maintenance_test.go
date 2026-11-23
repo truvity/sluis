@@ -29,6 +29,7 @@ groups:
 lifetimes: { default: 12h }
 clients:
   console: { kind: public, requires: [platform], redirects: ["https://console.example/callback"] }
+  cli: { kind: public, requires: [platform], redirects: ["http://127.0.0.1/callback"], device_authorization: true }
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -80,6 +81,8 @@ func TestTheIssuerRefusesWritesUnderMaintenanceAndKeepsDiscoveryAndKeys(t *testi
 		{http.MethodPost, "/logout"},
 		{http.MethodPost, "/.access/client-secrets/console"},
 		{http.MethodPost, "/device_authorization"},
+		{http.MethodGet, "/device?user_code=BCDF-GHJK"},
+		{http.MethodPost, "/device"},
 	} {
 		w := status(h, c.method, c.path)
 		if w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") == "" {
@@ -102,6 +105,15 @@ func TestTheIssuerServesAgainWhenTheFlagIsCleared(t *testing.T) {
 	}
 	if w := status(h, http.MethodGet, "/login"); w.Code == http.StatusServiceUnavailable {
 		t.Fatalf("no flag, and the sign-in page refused with 503")
+	}
+	// A device code is a write like an authorization code: served without
+	// the flag, refused with it (above).
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/device_authorization", strings.NewReader("client_id=cli&scope=openid"))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"device_code"`) {
+		t.Fatalf("no flag, and device_authorization = %d %s", w.Code, w.Body.String())
 	}
 }
 
@@ -129,6 +141,8 @@ func TestAMigrationFreezeServesReadsAndTheReadOnlyGrants(t *testing.T) {
 		{http.MethodPost, "/logout"},
 		{http.MethodPost, "/.access/client-secrets/console"},
 		{http.MethodPost, "/device_authorization"},
+		{http.MethodGet, "/device?user_code=BCDF-GHJK"},
+		{http.MethodPost, "/device"},
 	} {
 		w := status(h, c.method, c.path)
 		if w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") == "" {

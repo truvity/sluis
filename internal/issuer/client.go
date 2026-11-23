@@ -70,16 +70,17 @@ func (c *client) ResponseTypes() []oidc.ResponseType {
 	return []oidc.ResponseType{oidc.ResponseTypeCode}
 }
 
-// GrantTypes is the whole of what this issuer will honour, for every
-// client, confidential or not. Three grants cover the three
-// needs: a browser reaching a web UI, a CLI on a laptop with a browser to
-// confirm in, and a machine that already holds a token.
+// GrantTypes is what the library itself honours, for every client,
+// confidential or not: the code flow for a browser reaching a web UI or a CLI
+// on a laptop with a browser to confirm in, its refresh, and token exchange
+// for a machine that already holds a token.
 //
-// Four are deliberately absent, and each was served through 0.11:
+// The DEVICE grant (RFC 8628) is not here, and is not the library's: it is
+// answered in front of it ([deviceProtocol]) for a client that declares
+// `device_authorization`, and redeems a code of the code flow underneath, so
+// its tokens are this list's. Three are deliberately absent, and each was
+// served through 0.11:
 //
-//   - the DEVICE flow is for a machine with no browser. Nobody signs in
-//     from one here: the two headless cases are a CI job and a workload,
-//     and both are token exchange.
 //   - CLIENT CREDENTIALS is a machine with a stored secret, which is the
 //     thing this whole design exists not to have.
 //   - JWT BEARER is a subset of token exchange with a different spelling,

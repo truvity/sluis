@@ -147,6 +147,10 @@
                 "minLength": 1,
                 "type": "string"
               },
+              "device_authorization": {
+                "description": "It may sign a person in with the device authorization grant (RFC 8628): `/device_authorization`, approval at `/device`, then `/token`. Off by default; `public` only, with `redirects`, and refused with `session: agent`.",
+                "type": "boolean"
+              },
               "display_name": {
                 "description": "What the sign-in page calls it. Public.",
                 "minLength": 1,
@@ -232,7 +236,7 @@
               },
               "session": {
                 "default": "interactive",
-                "description": "Its refresh chains: `interactive` (a person at a browser, the installation's `lifetimes`) or `agent` (software that holds its refresh token and works in the background, the service's `lifetimes.agent`). Recorded on each chain when its authorization completes (docs/decisions/0040). Refused on an exchange client and, as `agent`, with `sign_in_exchange`.",
+                "description": "Its refresh chains: `interactive` (a person at a browser, the installation's `lifetimes`) or `agent` (software that holds its refresh token and works in the background, the service's `lifetimes.agent`). Recorded on each chain when its authorization completes (docs/decisions/0040). Refused on an exchange client and, as `agent`, with `sign_in_exchange` or `device_authorization`.",
                 "enum": [
                   "interactive",
                   "agent"

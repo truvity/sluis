@@ -188,11 +188,16 @@ func (e *exporter) add(ctx context.Context, s backup.Section, m port.Module, rec
 // every table), not of no module, and never the maintenance record or the
 // recovery switch: a restore must not roll back the disable of a break-glass door.
 // An exchange of the SRP sign-in (kind `srp`) is two minutes of a server's private
-// value and is never carried.
+// value and is never carried, and neither is a device code (kinds `device` and
+// `device-user`): twenty minutes at most, and once approved it holds a code and
+// its verifier, which a restore must not hand back to a device.
 func owned(m port.Module, key string) bool {
 	a, err := port.Locate5(key)
-	return err == nil && a.Module == m && a.Kind != "maintenance" && a.Kind != "recovery" && a.Kind != "srp"
+	return err == nil && a.Module == m && !neverCarried[a.Kind]
 }
+
+// neverCarried are the kinds a backup leaves out.
+var neverCarried = map[string]bool{"maintenance": true, "recovery": true, "srp": true, "device": true, "device-user": true}
 
 func (e *exporter) state(ctx context.Context, u unit) (int, error) {
 	n := 0

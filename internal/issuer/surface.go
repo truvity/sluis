@@ -27,13 +27,16 @@ import (
 // features this issuer does not offer. None is advertised, and each answered
 // something: introspection, `{"active":false}` for every token once a client
 // authenticated (the tokens are JWTs, verified offline against the key set);
-// the device authorization endpoint, an error from a storage method that is
-// not implemented. An endpoint that answers without meaning it is a question
+// the library's own device authorization endpoint, which nothing here
+// implements. An endpoint that answers without meaning it is a question
 // somebody can build a client on, so they are not routes.
+//
+// `/device_authorization` is not here: it is this issuer's own, answered by
+// [deviceProtocol] for a client that declares `device_authorization` and a
+// 404 while none does.
 var unservedPaths = map[string]bool{
 	"/oauth/introspect":           true,
 	"/introspect":                 true,
-	"/device_authorization":       true,
 	"/oauth/device_authorization": true,
 }
 

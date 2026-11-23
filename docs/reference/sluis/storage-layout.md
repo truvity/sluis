@@ -91,6 +91,8 @@ One table per module, `ports.dynamodb.tables`, by default `sluis-<instance>-<mod
 | `issuer:code:<id>`, `code.<id>` | `oidc` | `code` | `<id>` | an authorization code |
 | `issuer:code-session:<id>`, `codesess.<id>` | `oidc` | `code-session` | `<id>` | legacy: the session a code opened; no longer written |
 | `issuer:code-spent:<sha256>` | `oidc` | `code-spent` | `<sha256>` | the tombstone of a redeemed code: the access token and session it issued |
+| `issuer:device:<sha256>` | `oidc` | `device` | `<sha256>` | a device code (RFC 8628), keyed by its SHA-256: the client, scopes, what the device sent, where it stands. Never exported by a backup |
+| `issuer:device-user:<sha256>` | `oidc` | `device-user` | `<sha256>` | a user code's SHA-256, pointing to its device code's. Never exported by a backup |
 | `srp.<handle>` | `oidc` | `srp` | `<handle>` | the half of a password sign-in exchange (SRP) that outlives its first request, for one use and two minutes. Never exported by a backup |
 | `issuer:token:<jti>`, `tok.<jti>` | `oidc` | `token` | `<jti>` | a minted token's record |
 | `issuer:sso:<id>`, `sso.<id>` | `oidc` | `sso` | `<id>` | the browser's SSO session |

@@ -101,7 +101,7 @@ A policy file maps directory groups to access everywhere ([concepts](docs/concep
 | [RFC 9101 JAR](https://www.rfc-editor.org/rfc/rfc9101.html) | Not implemented | `request` answers `request_not_supported` |
 | [RFC 9126 PAR](https://www.rfc-editor.org/rfc/rfc9126.html), [RFC 9449 DPoP](https://www.rfc-editor.org/rfc/rfc9449.html), [RFC 8705 mTLS](https://www.rfc-editor.org/rfc/rfc8705.html) | Not served, chosen | Surface without a consumer |
 | [RFC 7591 Dynamic registration](https://www.rfc-editor.org/rfc/rfc7591.html) | Not served, chosen | Client ID Metadata Documents replace it |
-| [RFC 8628 Device grant](https://www.rfc-editor.org/rfc/rfc8628.html) | Not served, chosen | Token exchange covers CI jobs and workloads |
+| [RFC 8628 Device grant](https://www.rfc-editor.org/rfc/rfc8628.html) | Full, opt-in per client | Only for a `public` client that declares `device_authorization: true` (`sluisctl login --device`). Approval at `/device` behind the normal sign-in. CI jobs and workloads use token exchange |
 | [OAuth 2.1 draft](https://datatracker.ietf.org/doc/draft-ietf-oauth-v2-1/) | Almost full | As RFC 9700 |
 | [Client ID Metadata Documents (draft)](https://datatracker.ietf.org/doc/draft-ietf-oauth-client-id-metadata-document/) | Almost full | Only `client_name` and `redirect_uris` are read. A document that declares a secret is refused |
 | MCP authorization ([2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), [2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)) | Almost full | Metadata, `resource`, PKCE S256, `iss` and metadata documents. No dynamic registration or step-up |

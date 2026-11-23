@@ -190,24 +190,25 @@ type AccessRole struct {
 // whatever deploys it; they take no part in the policy
 // and are accepted so that one row serves both.
 type AccessClient struct {
-	Name              string         `yaml:"name"`
-	Kind              string         `yaml:"kind"`
-	DisplayName       string         `yaml:"displayName,omitempty"`
-	Description       string         `yaml:"description,omitempty"`
-	Secret            string         `yaml:"secret,omitempty"`
-	SecretKey         string         `yaml:"secretKey,omitempty"`
-	Redirects         []string       `yaml:"redirects,omitempty"`
-	SignedOut         []string       `yaml:"signedOut,omitempty"`
-	BackchannelLogout string         `yaml:"backchannelLogout,omitempty"`
-	TTLCap            Duration       `yaml:"ttlCap,omitempty"`
-	SigningAlg        string         `yaml:"signingAlg,omitempty"`
-	GroupsDelimiter   string         `yaml:"groupsDelimiter,omitempty"`
-	SignInExchange    bool           `yaml:"signInExchange,omitempty"`
-	Requires          []string       `yaml:"requires,omitempty"`
-	Groups            GroupsOverride `yaml:"groups,omitempty"`
-	Session           string         `yaml:"session,omitempty"`
-	PKCE              string         `yaml:"pkce,omitempty"`
-	Harness           bool           `yaml:"harness,omitempty"`
+	Name                string         `yaml:"name"`
+	Kind                string         `yaml:"kind"`
+	DisplayName         string         `yaml:"displayName,omitempty"`
+	Description         string         `yaml:"description,omitempty"`
+	Secret              string         `yaml:"secret,omitempty"`
+	SecretKey           string         `yaml:"secretKey,omitempty"`
+	Redirects           []string       `yaml:"redirects,omitempty"`
+	SignedOut           []string       `yaml:"signedOut,omitempty"`
+	BackchannelLogout   string         `yaml:"backchannelLogout,omitempty"`
+	TTLCap              Duration       `yaml:"ttlCap,omitempty"`
+	SigningAlg          string         `yaml:"signingAlg,omitempty"`
+	GroupsDelimiter     string         `yaml:"groupsDelimiter,omitempty"`
+	SignInExchange      bool           `yaml:"signInExchange,omitempty"`
+	DeviceAuthorization bool           `yaml:"deviceAuthorization,omitempty"`
+	Requires            []string       `yaml:"requires,omitempty"`
+	Groups              GroupsOverride `yaml:"groups,omitempty"`
+	Session             string         `yaml:"session,omitempty"`
+	PKCE                string         `yaml:"pkce,omitempty"`
+	Harness             bool           `yaml:"harness,omitempty"`
 
 	Hostname string `yaml:"hostname,omitempty"`
 	Prefix   string `yaml:"prefix,omitempty"`
@@ -519,7 +520,7 @@ func (a Access) clients() (map[string]Client, error) {
 			Redirects: c.Redirects, SignedOut: c.SignedOut, Requires: c.Requires, TTLCap: c.TTLCap,
 			SignInExchange: c.SignInExchange, BackChannelLogout: c.BackchannelLogout, SigningAlg: c.SigningAlg,
 			Groups: c.Groups, GroupsDelimiter: c.GroupsDelimiter, Session: c.Session, PKCE: c.PKCE,
-			Harness: c.Harness,
+			Harness: c.Harness, DeviceAuthorization: c.DeviceAuthorization,
 		}
 	}
 	return out, nil

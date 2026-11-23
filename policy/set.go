@@ -174,6 +174,22 @@ func (s *Set) BrowserFacingAgents() []string {
 	return out
 }
 
+// DeviceClients lists, sorted, the clients that declare
+// `device_authorization: true`: the ones the device authorization grant
+// (RFC 8628) is served for. Empty means the grant is not served at all, and
+// discovery does not advertise it.
+func (s *Set) DeviceClients() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []string
+	for _, id := range slices.Sorted(maps.Keys(s.declared.Clients)) {
+		if s.declared.Clients[id].DeviceAuthorization {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 // ClientDocuments returns the document-client policy in force.
 func (s *Set) ClientDocuments() ClientDocuments {
 	s.mu.RLock()

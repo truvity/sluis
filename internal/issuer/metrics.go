@@ -204,6 +204,8 @@ func Route(r *http.Request) string {
 		return "end_session"
 	case "/device_authorization":
 		return "device_authorization"
+	case "/device":
+		return "device"
 	case "/login":
 		return "login_chooser"
 	case "/login/recovery":
