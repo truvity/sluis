@@ -97,5 +97,5 @@ $ sluis pg --service orders -- psql
 
 The command uses the cached sign-in, requests a certificate, writes the key, certificate and CA to a private directory, and starts `psql` with the standard libpq variables (`PGSSLCERT`, `PGSSLKEY`, `PGUSER`, `PGSSLROOTCERT`). A machine presents its workload proof in a token exchange instead.
 
-PostgreSQL 18's native OAuth is not used: it needs a validator module on every server and device login, which is postponed ([#855](https://github.com/truvity/sluis/issues/855)).
+PostgreSQL 18's native OAuth is not used: it needs a validator module on every server and device login, which is not built yet ([#855](https://github.com/truvity/sluis/issues/855)).
 

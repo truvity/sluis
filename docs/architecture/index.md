@@ -105,7 +105,7 @@ flowchart LR
 
 | Party | What they do with sluis |
 | ----- | ----------------------- |
-| **People** | From a browser or a CLI, sign in through an upstream identity provider, refresh, list and revoke their sign-in sessions, and sign out. Device login for headless machines is postponed ([#855](https://github.com/truvity/sluis/issues/855)) |
+| **People** | From a browser or a CLI, sign in through an upstream identity provider, refresh, list and revoke their sign-in sessions, and sign out. Device login for headless machines is planned in the core ([#855](https://github.com/truvity/sluis/issues/855)) |
 | **Robots** | CI jobs, workloads and services present a platform token (a GitHub Actions token, a Kubernetes ServiceAccount token, an AWS web-identity token) and exchange it for an access token, a downstream credential, or a certificate |
 | **Relying parties** | Apps and cloud APIs read discovery and the key set, then verify tokens offline with any standard JOSE library. sluis needs no client library |
 | **Operators** | Through the console and the CLI, connect integrations, manage clients and secrets, and, once the optional token certificate is on (off in the core), request and install the certificates of the intermediates (`sluis key request`, `install`, `status`). Backup is a job of exporter@; a restore is the operator's command `sluis restore` ([0010](/decisions/0010-backup-and-recovery/#restore)) |
@@ -180,7 +180,7 @@ sluis runs a **generic WebAuthn relying party**: a passkey is the fast sign-in p
 
 These operations are new in v2; their paths and RPC names are fixed when each is built:
 
-- device login (RFC 8628), postponed ([#855](https://github.com/truvity/sluis/issues/855)): `POST /device_authorization`, `GET /device` and the `device_code` grant, with a verification page that needs a session with upstream MFA;
+- device login (RFC 8628), planned in the core ([#855](https://github.com/truvity/sluis/issues/855)): `POST /device_authorization`, `GET /device` and the `device_code` grant, with a verification page that needs a session with upstream MFA;
 - certificates for workloads, people and hosts, in the PKI, SSH and database add-on after parity: a Connect call for cert-manager's external-issuer library, and `sluis pki` and `sluis ssh` ([0023](/decisions/0023-certificate-authorities/));
 - static publication: public `GET` of CA certificates, CRLs, trust bundles, SSH CA keys and the key revocation list, exported by exporter@ with the directory driver in the core, and with the bucket driver and the edge purge in the Cloudflare add-on ([0009](/decisions/0009-export/#what-is-exportable));
 - limits: the limit check on the request path, with limits that the product writes, and usage records that go to audit ([0046](/decisions/0046-limits-on-the-request-path-and-usage-in-audit/)); there is no allowance or balance in sluis;
@@ -201,7 +201,7 @@ Every use case also emits an audit fact through the emit port, which the matrix 
 | Use case | Keys at key@ | Config, secret | Durable | Temp | External |
 | -------- | ------------ | -------------- | ------- | ---- | -------- |
 | Sign in through an upstream | open r, seal r, sign r | get r | get, create, update r | get, create, update, delete r | fetch r |
-| Device login (postponed) | open r, seal r, sign r | get r | get r | get, create, update r | fetch r |
+| Device login (planned) | open r, seal r, sign r | get r | get r | get, create, update r | fetch r |
 | Refresh, UserInfo, revoke, sign out, sign-in sessions | open r, sign r, mac r | get r | get r | get, list, update, delete r | call b |
 | Agent sessions and resources | open r, sign r | get r | get r | create, get r | fetch r |
 | Recovery sign-in | open r, sign r | get r | get r | create, get r | call r |

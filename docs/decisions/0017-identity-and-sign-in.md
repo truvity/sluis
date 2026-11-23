@@ -145,7 +145,7 @@ sluis claims a conformance plan only when it passes, and discovery says only wha
 - **Third-party-initiated login is not served.** A client's `initiate_login_uri` is not accepted. It comes back only if the console gets an app launcher.
 - **Front-channel logout is not supported.** Back-channel logout, with RP-Initiated Logout, is the logout path; discovery does not advertise front-channel logout, and a registration that names a `frontchannel_logout_uri` is refused by the configuration check. Back-channel and RP-initiated logout are planned.
 - **CIBA is not served.** It is added only when a real consumer exists, in poll mode only. The person would approve with a passkey on the approving device; a notification tap alone is not an approval. Until then discovery does not advertise CIBA and its endpoint is not served.
-- **Device login (RFC 8628) is not served** ([#855](https://github.com/truvity/sluis/issues/855)); the standards register lists it as planned.
+- **Device login (RFC 8628) is planned in the core** ([#855](https://github.com/truvity/sluis/issues/855)), and is not served until it is built.
 - **FAPI 2.0 is a profile that a client declares,** for the core issuer ([0038](/decisions/0038-fapi-2-profile/)). It is planned.
 
 ### Break-glass recovery
