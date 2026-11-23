@@ -142,7 +142,10 @@ func TestUnservedRoutesAreNotFound(t *testing.T) {
 	got := &reached{}
 	handler := withoutUnserved(got.handler())
 
-	for _, path := range []string{"/oauth/introspect", "/introspect", "/device_authorization", "/oauth/device_authorization"} {
+	// `/device_authorization` is the issuer's own while a client declares
+	// `device_authorization`, and a 404 otherwise: [TestTheDeviceGrantIsNotServedWithoutAClientThatDeclaresIt].
+	// The library's own spelling of it is never served.
+	for _, path := range []string{"/oauth/introspect", "/introspect", "/oauth/device_authorization"} {
 		for _, method := range []string{http.MethodGet, http.MethodPost} {
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, httptest.NewRequest(method, path, nil))

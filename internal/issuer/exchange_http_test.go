@@ -357,8 +357,9 @@ func TestDiscoveryDescribesWhatIsServed(t *testing.T) {
 	// honoured is an error arriving in a browser redirect where nobody
 	// sees the reason. Each of these was served through 0.11.
 	//
-	//   - device: for a machine with no browser. Both headless cases
-	//     here — a CI job and a workload — are token exchange.
+	//   - device: served only for a client that declares
+	//     `device_authorization`, which this policy has none of
+	//     (device_test.go covers the policy that does).
 	//   - client credentials: a machine with a stored secret.
 	//   - JWT bearer: token exchange with a different spelling.
 	for _, gone := range []string{
@@ -375,8 +376,8 @@ func TestDiscoveryDescribesWhatIsServed(t *testing.T) {
 		t.Errorf("grant_types_supported = %v, want exactly the three that are served", grants)
 	}
 
-	// The device endpoint goes with the grant. An endpoint that answers
-	// after its grant is withdrawn is surface nobody is keeping honest.
+	// The device endpoint goes with the grant: absent while no client
+	// declares it.
 	if _, ok := doc["device_authorization_endpoint"]; ok {
 		t.Error("discovery still advertises a device authorization endpoint")
 	}
@@ -462,8 +463,8 @@ func TestTheWithdrawnGrantsDoNotAnswer(t *testing.T) {
 	server, _ := serveIssuer(t)
 
 	for _, tc := range []struct{ name, grant string }{
-		// A machine with no browser. Both headless cases here — a CI job
-		// and a workload — are token exchange instead.
+		// A machine with no browser: served only for a client that
+		// declares `device_authorization`, and this policy has none.
 		{"device", string(oidc.GrantTypeDeviceCode)},
 		// A machine with a stored secret, which is the thing this design
 		// exists not to have.
@@ -483,7 +484,8 @@ func TestTheWithdrawnGrantsDoNotAnswer(t *testing.T) {
 		}
 	}
 
-	// The device authorization endpoint itself.
+	// The device authorization endpoint itself is not a route while no
+	// client declares the grant.
 	resp, err := server.Client().PostForm(server.URL+"/device_authorization",
 		url.Values{"client_id": {"console"}})
 	if err != nil {
@@ -491,8 +493,8 @@ func TestTheWithdrawnGrantsDoNotAnswer(t *testing.T) {
 	}
 	body, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
-	if resp.StatusCode == http.StatusOK {
-		t.Errorf("the device authorization endpoint still answers: %s", body)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("the device authorization endpoint answers %d with no client declaring it: %s", resp.StatusCode, body)
 	}
 }
 

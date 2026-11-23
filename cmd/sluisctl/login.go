@@ -22,18 +22,23 @@ import (
 	"time"
 )
 
-// login runs the browser flow once and caches what came back.
+// login signs in once and caches what came back.
 //
-// Authorization code with PKCE on a LOOPBACK port, which is the only
-// browser flow left: the device flow was withdrawn because
-// nobody signs in from a machine with no browser here. A loopback
-// redirect is what makes a public client safe without a secret — the
-// code comes back to a port only this process is listening on, and PKCE
-// means a code seen by anything else cannot be redeemed.
+// Two ways in. The default is authorization code with PKCE on a LOOPBACK
+// port: the code comes back to a port only this process is listening on, and
+// PKCE means a code seen by anything else cannot be redeemed, which is what
+// makes a public client safe without a secret. The other is the device
+// authorization grant (RFC 8628) with `--device`, and on its own on a machine
+// with no browser to open (an SSH session, or Linux with no display): the
+// issuer gives a short code, the person approves it in a browser anywhere,
+// and this process polls until it is approved. Both end in the same token
+// response for the same client, cached the same way.
 func login(args []string) error {
 	flags := flag.NewFlagSet("login", flag.ContinueOnError)
 	issuer := flags.String("issuer", "", "the sluis issuer, e.g. https://access.example")
 	clientID := flags.String("client", "", "the client to sign in as (default "+DefaultClientID+", else "+LegacyClientID+" if the issuer does not know it)")
+	device := flags.Bool("device", false, "sign in with a code approved in a browser on any device, instead of a browser on this machine "+
+		"(the default where there is no browser to open: an SSH session, or Linux with no display)")
 	if err := flags.Parse(args); err != nil {
 		return usageError{err}
 	}
@@ -47,40 +52,12 @@ func login(args []string) error {
 		cfg.ClientID = chooseDefaultClient(context.Background(), cfg.Issuer, os.Stderr)
 	}
 
-	// Port zero: the kernel picks, so two laptops and two shells do not
-	// fight over one number, and the redirect is registered as a pattern
-	// rather than an exact port.
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return fmt.Errorf("listen on loopback: %w", err)
+	var session Session
+	if *device || noBrowser(os.Getenv, runtime.GOOS) {
+		session, err = deviceLogin(context.Background(), cfg, stdout, sleepContext)
+	} else {
+		session, err = loopbackLogin(cfg)
 	}
-	defer func() { _ = listener.Close() }()
-	redirect := fmt.Sprintf("http://127.0.0.1:%d/callback", listener.Addr().(*net.TCPAddr).Port)
-
-	verifier := random()
-	state := random()
-	query := url.Values{
-		"client_id":             {cfg.ClientID},
-		"response_type":         {"code"},
-		"scope":                 {loginScope},
-		"redirect_uri":          {redirect},
-		"state":                 {state},
-		"code_challenge":        {challenge(verifier)},
-		"code_challenge_method": {"S256"},
-	}
-	where := cfg.Issuer + "/authorize?" + query.Encode()
-
-	_, _ = fmt.Fprintln(stdout, "Opening your browser to sign in.")
-	_, _ = fmt.Fprintln(stdout, "If it does not open, go to:")
-	_, _ = fmt.Fprintln(stdout, "  "+where)
-	openBrowser(where)
-
-	code, err := waitForCode(listener, state)
-	if err != nil {
-		return err
-	}
-
-	session, err := redeem(context.Background(), cfg, code, verifier, redirect)
 	if err != nil {
 		return err
 	}
@@ -118,6 +95,46 @@ func login(args []string) error {
 	}
 	_, _ = fmt.Fprintf(stdout, "Signed in as %s.\n", who)
 	return nil
+}
+
+// loopbackLogin is the browser on this machine: authorization code with PKCE
+// on a loopback port.
+func loopbackLogin(cfg Config) (Session, error) {
+	// Port zero: the kernel picks, so two laptops and two shells do not
+	// fight over one number, and the redirect is registered as a pattern
+	// rather than an exact port.
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return Session{}, fmt.Errorf("listen on loopback: %w", err)
+	}
+	defer func() { _ = listener.Close() }()
+	redirect := fmt.Sprintf("http://127.0.0.1:%d/callback", listener.Addr().(*net.TCPAddr).Port)
+
+	verifier := random()
+	state := random()
+	query := url.Values{
+		"client_id":             {cfg.ClientID},
+		"response_type":         {"code"},
+		"scope":                 {loginScope},
+		"redirect_uri":          {redirect},
+		"state":                 {state},
+		"code_challenge":        {challenge(verifier)},
+		"code_challenge_method": {"S256"},
+	}
+	where := cfg.Issuer + "/authorize?" + query.Encode()
+
+	_, _ = fmt.Fprintln(stdout, "Opening your browser to sign in.")
+	_, _ = fmt.Fprintln(stdout, "If it does not open, go to:")
+	_, _ = fmt.Fprintln(stdout, "  "+where)
+	_, _ = fmt.Fprintln(stdout, "No browser here? Run `sluisctl login --device` and approve a code on another device.")
+	openBrowser(where)
+
+	code, err := waitForCode(listener, state)
+	if err != nil {
+		return Session{}, err
+	}
+
+	return redeem(context.Background(), cfg, code, verifier, redirect)
 }
 
 // waitForCode serves the one request the browser is about to make.
@@ -224,13 +241,20 @@ func redeem(ctx context.Context, cfg Config, code, verifier, redirect string) (S
 		return Session{}, fmt.Errorf("the issuer refused the code: %s", strings.TrimSpace(string(body)))
 	}
 
+	return sessionFrom(body)
+}
+
+// sessionFrom reads a token response into the session this tool caches. The
+// loopback sign-in and the device sign-in both end here, so what is cached
+// does not depend on how the person signed in.
+func sessionFrom(body []byte) (Session, error) {
 	var granted struct {
 		RefreshToken string `json:"refresh_token"`
 		AccessToken  string `json:"access_token"`
 		IDToken      string `json:"id_token"`
 		ExpiresIn    int64  `json:"expires_in"`
 	}
-	if err = json.Unmarshal(body, &granted); err != nil {
+	if err := json.Unmarshal(body, &granted); err != nil {
 		return Session{}, fmt.Errorf("parse the token response: %w", err)
 	}
 	if granted.RefreshToken == "" {

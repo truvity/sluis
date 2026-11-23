@@ -657,6 +657,22 @@ type Client struct {
 	// party. Only a public client may carry it -- a CLI on the person's own
 	// machine, whose tokens go nowhere but back to this issuer.
 	SignInExchange bool `yaml:"sign_in_exchange,omitempty"`
+	// DeviceAuthorization lets this client sign a person in with the OAuth
+	// 2.0 device authorization grant (RFC 8628): the client asks
+	// `/device_authorization` for a user code, the person approves it at
+	// `/device` in any browser after the normal sign-in, and the client
+	// polls `/token` with the device code. The tokens are the ones a
+	// loopback sign-in to the same client gets, because the approval
+	// completes an authorization request for it and the poll redeems that
+	// request's code.
+	//
+	// OFF unless declared, and only on a `public` client: a CLI a person
+	// runs on a machine they are not sitting at (`sluisctl login
+	// --device`). A code shown on one screen and typed on another is a
+	// phishing surface a loopback redirect does not have, so it is opened
+	// for the one client that needs it and nowhere by default. Refused
+	// with `session: agent`.
+	DeviceAuthorization bool `yaml:"device_authorization,omitempty"`
 	// BackChannelLogout is where this client is TOLD that a session it
 	// holds has ended (OIDC Back-Channel Logout 1.0). The issuer posts a
 	// signed logout token there, server to server, at the moment of
@@ -1252,6 +1268,13 @@ func (c Client) validate(id string, p Policy) error {
 	if c.SignInExchange && c.Kind != KindPublic {
 		return fmt.Errorf("client %q allows sign_in_exchange but is %s: only a public client, a CLI, may trade its sign-in", id, c.Kind)
 	}
+	if c.DeviceAuthorization && c.Kind != KindPublic {
+		return fmt.Errorf("client %q allows device_authorization but is %s: only a public client, a CLI, signs in with a device code", id, c.Kind)
+	}
+	if c.DeviceAuthorization && len(c.Redirects) == 0 {
+		return fmt.Errorf("client %q allows device_authorization and declares no redirects: the approval completes an "+
+			"authorization request for one of them, as a loopback sign-in does", id)
+	}
 	switch c.PKCE {
 	case "", PKCERequired:
 	case PKCEOptional:
@@ -1279,6 +1302,10 @@ func (c Client) validate(id string, p Policy) error {
 		return fmt.Errorf("client %q declares session: agent and sign_in_exchange: true: a sign-in that is "+
 			"traded for cluster and cloud credentials is a person's CLI, and a month-long chain there would "+
 			"make every credential traded from it a month long in effect", id)
+	}
+	if c.Agent() && c.DeviceAuthorization {
+		return fmt.Errorf("client %q declares session: agent and device_authorization: true: a code approved on "+
+			"another screen must not open a month-long chain", id)
 	}
 	for _, uri := range c.Redirects {
 		if err := plainHTTPOnLoopback(uri); err != nil {

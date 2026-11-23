@@ -10,7 +10,7 @@ Each entry shipped or was asked for, and is not here. Check the reason before yo
 | the console layer of the policy and the `memberships` table | a second source of truth beside git. The key is refused now, not ignored |
 | `SetOAuthClient` | the client is a Secret, delivered like every other credential |
 | the `/account` page | the console is same-origin and already shows both halves |
-| the device flow | both headless cases, a CI job and a workload, use token exchange |
+| the device flow, for every client | both headless cases, a CI job and a workload, use token exchange. It is back, opt-in per client (`device_authorization: true`), for a person signing in from a machine they are not sitting at: [endpoints](../../reference/sluis/endpoints.md) |
 | client credentials | a machine with a stored secret is what this design avoids |
 | a client secret an operator makes up and delivers | the issuer generates it (`secret: {generate: true}`): [how to](../../guides/sluis/let-the-issuer-generate-a-clients-secret.md). The named input stays |
 | JWT bearer (RFC 7523) | token exchange with a different spelling |

@@ -142,10 +142,9 @@ func TestDiscoveryDescribesWhatIsActuallyServed(t *testing.T) {
 			t.Errorf("%s = %q, want it under the issuer URL", field, value)
 		}
 	}
-	// The device flow is not served: nobody signs in from a
-	// machine with no browser here, because both headless cases — a CI
-	// job and a workload — are token exchange. Its address advertised is
-	// a promise to nobody.
+	// The device flow is served only for a client that declares
+	// `device_authorization`, and this policy has none: its address
+	// advertised would be a promise to nobody.
 	if _, ok := document["device_authorization_endpoint"]; ok {
 		t.Error("the device flow is advertised and not served")
 	}

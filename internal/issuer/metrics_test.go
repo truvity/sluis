@@ -169,6 +169,9 @@ func TestRouteIsAFixedSet(t *testing.T) {
 		{"GET", "/console/assets/index-abc.js", "console_assets"},
 		{"GET", "/console/", "console"},
 		{"GET", "/connect/github/callback", "connect_callback"},
+		{"POST", "/device_authorization", "device_authorization"},
+		{"GET", "/device?user_code=BCDF-GHJK", "device"},
+		{"POST", "/device", "device"},
 		{"GET", "/something/with/alice@example.com", "other"},
 		{"GET", "/", "other"},
 	} {

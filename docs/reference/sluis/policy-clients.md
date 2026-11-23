@@ -30,6 +30,7 @@ A client's id is the `aud`, unless the request named a [resource](#resources).
 | `pkce` | `required` or `optional`; see [PKCE per client](#pkce) |
 | `harness` | `true` marks a client the conformance test account may sign in to (`conformance.enabled`); refused on `exchange`. Not gitops's `harness` (no portal card): gitops must pass it into the sluis policy |
 | `sign_in_exchange` | `true` lets a sign-in be a token-exchange proof (`access_token`) while its session lives; `public` only |
+| `device_authorization` | `true` serves the RFC 8628 device grant for this client ([endpoints](endpoints.md)): `public` only, with `redirects`, not with `session: agent`. Off by default; declare it on the CLI's client alone |
 | `display_name`, `description` | [sign-in page text](#what-the-sign-in-page-calls-a-client) |
 | `backchannel_logout_uri` | receives a signed `logout+jwt` naming the `sid` when a sign-in ends; unusable behind [oauth2-proxy](../../guides/sluis/connect/oauth2-proxy.md) |
 | `groups` | [groups override](#groups-override) |
@@ -205,7 +206,7 @@ All three are positive; shortening is allowed. Set them in [the service configur
 | Shortening tokens | `absolute_cap` only ceilings an agent chain; `ttl_cap` of client, `client_documents` and resource still apply |
 | Class source | installation policy only, never a fetched document |
 | `client_documents.session` | applies to every document client; declare a mixed set as `clients` rows |
-| Refused at load | `session` on `exchange`; `session: agent` with `sign_in_exchange: true` |
+| Refused at load | `session` on `exchange`; `session: agent` with `sign_in_exchange: true` or `device_authorization: true` |
 | Warned at start | `session: agent` with `signed_out` or `backchannel_logout_uri` |
 | Consent page | once per authorization; names client, origin, return host, class, deadline |
 | `prompt=none` | `consent_required` |

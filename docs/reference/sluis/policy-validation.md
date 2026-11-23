@@ -13,10 +13,10 @@ Conflicts across files are refused when the layers merge. The merged policy is v
 | Members | an address without a domain |
 | Claims | a scalar conflict across two `claims` fragments |
 | Matchers | no field; `service_account` without `namespace` and `name`; `aws` without a twelve-digit `account` or with a pattern that does not compile; `github` `visibility` other than `public`, `private`, `internal` |
-| Clients | `display_name` or `description` that is not one bounded line; `sign_in_exchange` on a non-`public` client; a confidential client without `secret`; an empty `requires` |
+| Clients | `display_name` or `description` that is not one bounded line; `sign_in_exchange` or `device_authorization` on a non-`public` client; `device_authorization` without `redirects`; a confidential client without `secret`; an empty `requires` |
 | PKCE | `pkce` other than `required` or `optional`; `pkce: optional` on a `public` client; `pkce` on an `exchange` client |
 | Harness | `harness` on an `exchange` client |
-| Session | `session` on an `exchange` client; `session: agent` with `sign_in_exchange: true` |
+| Session | `session` on an `exchange` client; `session: agent` with `sign_in_exchange: true` or `device_authorization: true` |
 | Resources | an id that is not an absolute URI without a fragment; a `requires` naming no declared group |
 | `client_documents` | an origin with a scheme, path or wildcard; `origins` without `requires`; `requires` or `ttl_cap` without `origins` |
 | Version | `version` other than 1; `apiVersion` other than `sluis.truvity.github.io/policy/v2` |

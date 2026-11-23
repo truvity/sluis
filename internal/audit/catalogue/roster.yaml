@@ -19,7 +19,7 @@
 # A change to what an action carries is a new version. The installation keeps
 # every version it was sent, so records already written keep their meaning.
 source: roster
-version: "1.25.0"
+version: "1.26.0"
 locales: [en]
 
 actor_kinds:
@@ -149,6 +149,50 @@ actions:
     data_schema: https://schemas.example/access-roster/v1/token-exchanged.json
     message:
       en: "{outcome, select, success {{actor} exchanged a token for {targets_0_id}} denied {{actor} was refused a token for {targets_0_id}} other {{actor} could not exchange a token for {targets_0_id}}}"
+
+  roster.device.issued:
+    summary: A device asked for a device code to sign a person in to a client (RFC 8628), or was refused one. Never the code; the request's address is in the record's context.
+    operation: create
+    categories: [authentication]
+    category: security
+    target_types: [client]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/device-authorization.json
+    message:
+      en: "{outcome, select, success {a device code was issued for {targets_0_id}} denied {a device code for {targets_0_id} was refused} other {a device code for {targets_0_id} could not be issued}}"
+
+  roster.device.approved:
+    summary: A signed-in person approved a device code, so the device that asked for it is signed in to the client as them, or the approval was refused.
+    operation: authentication
+    categories: [authentication, authorization_decision]
+    category: security
+    target_types: [client]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/device-authorization.json
+    message:
+      en: "{outcome, select, success {{actor} approved a device sign-in to {targets_0_id}} denied {{actor} was refused approving a device sign-in to {targets_0_id}} other {{actor} could not approve a device sign-in to {targets_0_id}}}"
+
+  roster.device.denied:
+    summary: A signed-in person denied a device code, so the device that asked for it is told access_denied and signs nobody in.
+    operation: authentication
+    categories: [authentication]
+    category: security
+    target_types: [client]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/device-authorization.json
+    message:
+      en: "{outcome, select, success {{actor} denied a device sign-in to {targets_0_id}} other {{actor} could not deny a device sign-in to {targets_0_id}}}"
+
+  roster.device.expired:
+    summary: A device code ran out before anybody approved or denied it; the device that polled for it was told expired_token.
+    operation: authentication
+    categories: [authentication]
+    category: security
+    target_types: [client]
+    delivery: async
+    data_schema: https://schemas.example/access-roster/v1/device-authorization.json
+    message:
+      en: "a device code for {targets_0_id} expired unanswered"
 
   roster.github_token.minted:
     summary: A GitHub App installation token was minted, or refused. Never the token.

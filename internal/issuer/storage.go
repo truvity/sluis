@@ -146,6 +146,12 @@ type authRequest struct {
 	// completed before classes existed has it, is interactive.
 	Class SessionClass `json:"class,omitempty"`
 
+	// Device is the user code of the device code this request was made for
+	// ([deviceFlow]), empty for every other request. A sign-in that completes
+	// it returns to the device page rather than to the library's callback,
+	// and its code is saved only when the person approves the device.
+	Device string `json:"device,omitempty"`
+
 	// Session is the session this request opened, learned when the code
 	// is redeemed and used one step later to put `sid` in the ID token.
 	// It is not written down with the rest: the library hands the SAME

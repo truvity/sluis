@@ -194,6 +194,10 @@ var rules5 = []rule5{
 	// The tombstone of a redeemed authorization code, keyed by the code's
 	// SHA-256: what its redemption issued, for a reuse to revoke.
 	r5(ModuleOIDC, "code-spent", "issuer:code-spent:", convID),
+	// A device code of the device authorization grant (RFC 8628), keyed by
+	// the code's SHA-256, and the pointer from its user code's SHA-256.
+	r5(ModuleOIDC, "device", "issuer:device:", convID),
+	r5(ModuleOIDC, "device-user", "issuer:device-user:", convID),
 	r5(ModuleOIDC, "token", "issuer:token:", convID),
 	r5(ModuleOIDC, "sso", "issuer:sso:", convID),
 	r5(ModuleOIDC, "sso-of", "issuer:sso-of:", convID),
