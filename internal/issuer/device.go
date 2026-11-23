@@ -428,7 +428,7 @@ func (d *deviceFlow) authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.iss.record(r.Context(), audit.DeviceIssued(grant.audit(), audit.Succeeded()))
-	slog.Default().InfoContext(r.Context(), "issued a device code", slog.String("client", id),
+	slog.Default().InfoContext(r.Context(), "issued a device code", logattr.SafeString("client", id),
 		logattr.SafeString("from", from))
 
 	verification := strings.TrimSuffix(d.iss.Config().URL, "/") + devicePath
@@ -864,8 +864,8 @@ func (d *deviceFlow) decide(w http.ResponseWriter, r *http.Request) {
 	session, ok := standingSignIn(d.signIn, w, r, "", 0)
 	if !ok {
 		_ = writePage(w, http.StatusBadRequest, "Sign in again",
-			`<p>Your sign-in here has ended, so nothing was decided. <a href="`+devicePath+`?user_code=`+
-				url.QueryEscape(shownUserCode(code))+`">Open the code again</a>.</p>`)
+			`<p>Your sign-in here has ended, so nothing was decided. <a href="`+
+				html.EscapeString(devicePath+"?user_code="+url.QueryEscape(shownUserCode(code)))+`">Open the code again</a>.</p>`)
 		return
 	}
 
