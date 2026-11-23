@@ -198,6 +198,7 @@ var rules5 = []rule5{
 	// the code's SHA-256, and the pointer from its user code's SHA-256.
 	r5(ModuleOIDC, "device", "issuer:device:", convID),
 	r5(ModuleOIDC, "device-user", "issuer:device-user:", convID),
+	r5(ModuleOIDC, "device-poll", "issuer:device-poll:", convID),
 	r5(ModuleOIDC, "token", "issuer:token:", convID),
 	r5(ModuleOIDC, "sso", "issuer:sso:", convID),
 	r5(ModuleOIDC, "sso-of", "issuer:sso-of:", convID),

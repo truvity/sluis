@@ -290,6 +290,10 @@ type Storage struct {
 	// what an agent-consent acceptance is verified against
 	// ([Storage.UseSignInState]). Nil completes no agent-class request.
 	signInState *access.StateCodec
+
+	// deviceDecided runs, when set, between a device approval's or denial's
+	// read of its grant and its write: a test's hook, nil in a deployment.
+	deviceDecided func()
 }
 
 // The authentication context classes this issuer can report. Custom

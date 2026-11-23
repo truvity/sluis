@@ -52,11 +52,24 @@ func login(args []string) error {
 		cfg.ClientID = chooseDefaultClient(context.Background(), cfg.Issuer, os.Stderr)
 	}
 
+	// `--device` either way is the person's choice; only without it does
+	// the absence of a browser decide, and then an issuer that does not
+	// serve the grant gets the browser sign-in as before.
+	named := false
+	flags.Visit(func(f *flag.Flag) { named = named || f.Name == "device" })
+	auto := !named && withoutBrowser()
+
 	var session Session
-	if *device || noBrowser(os.Getenv, runtime.GOOS) {
+	switch {
+	case *device || auto:
 		session, err = deviceLogin(context.Background(), cfg, stdout, sleepContext)
-	} else {
-		session, err = loopbackLogin(cfg)
+		if auto && errors.Is(err, errDeviceNotServed) {
+			_, _ = fmt.Fprintf(os.Stderr, "sluisctl: %s does not offer device sign-in for %q; signing in with a browser instead.\n",
+				cfg.Issuer, cfg.ClientID)
+			session, err = browserLogin(cfg)
+		}
+	default:
+		session, err = browserLogin(cfg)
 	}
 	if err != nil {
 		return err
@@ -96,6 +109,13 @@ func login(args []string) error {
 	_, _ = fmt.Fprintf(stdout, "Signed in as %s.\n", who)
 	return nil
 }
+
+// withoutBrowser and browserLogin are what `login` asks and does: variables
+// so that a test can say there is no browser, and stand in for one.
+var (
+	withoutBrowser = func() bool { return noBrowser(os.Getenv, runtime.GOOS) }
+	browserLogin   = loopbackLogin
+)
 
 // loopbackLogin is the browser on this machine: authorization code with PKCE
 // on a loopback port.

@@ -27,6 +27,10 @@ const (
 	deviceSlowDown        = 5 * time.Second
 )
 
+// errDeviceNotServed is an issuer that answers 404 at /device_authorization:
+// none of its clients, or not this one, declares the grant.
+var errDeviceNotServed = errors.New("the issuer does not offer device sign-in")
+
 // noBrowser reports whether there is no browser this process could open: a
 // session over SSH, wherever it runs, or a Linux or other Unix desktop-less
 // host (no X11 `DISPLAY` and no `WAYLAND_DISPLAY`). macOS and Windows always
@@ -120,8 +124,8 @@ func askDeviceCode(ctx context.Context, cfg Config) (deviceAuthorization, error)
 	}
 	switch {
 	case status == http.StatusNotFound:
-		return deviceAuthorization{}, fmt.Errorf("%s does not offer device sign-in: its client %q needs `device_authorization: true`, "+
-			"or sign in with a browser on this machine (`sluisctl login` without --device)", cfg.Issuer, cfg.ClientID)
+		return deviceAuthorization{}, fmt.Errorf("%w: %s, client %q: the client needs `device_authorization: true`, "+
+			"or sign in with a browser on this machine (`sluisctl login --device=false`)", errDeviceNotServed, cfg.Issuer, cfg.ClientID)
 	case status != http.StatusOK:
 		return deviceAuthorization{}, fmt.Errorf("the issuer refused a device code: %s", strings.TrimSpace(string(body)))
 	}

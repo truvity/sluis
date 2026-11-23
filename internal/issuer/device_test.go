@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -66,9 +67,10 @@ func (c *clock) advance(d time.Duration) {
 }
 
 type deviceServer struct {
-	server *httptest.Server
-	clock  *clock
-	trail  *audittest.Recorder
+	server  *httptest.Server
+	clock   *clock
+	trail   *audittest.Recorder
+	storage *issuer.Storage
 }
 
 // newDeviceServer is the issuer with its sign-in pages under a policy, with
@@ -109,7 +111,7 @@ func newDeviceServer(t *testing.T, policyYAML string) *deviceServer {
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
-	return &deviceServer{server: server, clock: at, trail: trail}
+	return &deviceServer{server: server, clock: at, trail: trail, storage: storage}
 }
 
 // signInAs is a provider whose answer is the code it is handed back, so
@@ -228,6 +230,26 @@ func signInFromDevicePage(t *testing.T, b *browser, path string) string {
 	return body
 }
 
+// signInFromDevicePageStatus is [signInFromDevicePage] for a page that
+// answers with a status other than 200 once signed in.
+func signInFromDevicePageStatus(t *testing.T, b *browser, path string, want int) string {
+	t.Helper()
+
+	status, where, body := b.do(http.MethodGet, path)
+	if status != http.StatusFound || !strings.HasPrefix(where, "/login?auth=") {
+		t.Fatalf("an unsigned browser at %s = %d %q %s, want the sign-in", path, status, where, body)
+	}
+	_, where, _ = b.do(http.MethodGet, where)
+	_, toProvider, _ := b.do(http.MethodGet, where)
+	state := toProvider[strings.Index(toProvider, "state=")+len("state="):]
+	_, back, _ := b.do(http.MethodGet, "/login/google/callback?code=x&state="+state)
+	status, _, body = b.do(http.MethodGet, back)
+	if status != want {
+		t.Fatalf("the device page after sign-in = %d %s, want %d", status, body, want)
+	}
+	return body
+}
+
 var (
 	deviceCSRF          = regexp.MustCompile(`name="csrf" value="([^"]+)"`)
 	deviceUserCodeField = regexp.MustCompile(`name="user_code" value="([^"]+)"`)
@@ -292,6 +314,7 @@ func TestADeviceIsSignedInOnceThePersonApproves(t *testing.T) {
 	for _, want := range []string{
 		"The &lt;b&gt;CLI&lt;/b&gt;", "ada@north.example", got.UserCode, "127.0.0.1",
 		"sluisctl/1.0 &lt;script&gt;alert(1)&lt;/script&gt;", "UTC", "Approve", "Deny",
+		"Program (as the device describes itself)",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the approval page does not show %q:\n%s", want, page)
@@ -345,9 +368,15 @@ func TestADeviceIsSignedInOnceThePersonApproves(t *testing.T) {
 	if approved.GetActor().GetId() != "ada@north.example" || approved.GetData().GetFields()["requested_from"].GetStringValue() != "127.0.0.1" {
 		t.Errorf("the approval record = %v", approved)
 	}
-	// The first sign-in at the device page and the approval are one sign-in.
-	if n := len(d.trail.Find("roster.person.signed_in")); n != 1 {
-		t.Errorf("sign-in records = %d, want 1", n)
+	// The issue and the approval join up by the device code's reference.
+	ref := d.trail.Find("roster.device.issued")[0].GetData().GetFields()["device"].GetStringValue()
+	if len(ref) != 16 || approved.GetData().GetFields()["device"].GetStringValue() != ref {
+		t.Errorf("device references: issued %q, approved %v", ref, approved.GetData().GetFields()["device"])
+	}
+	// The sign-in at the device page, and the approval's own sign-in to the
+	// device's client.
+	if n := len(d.trail.Find("roster.person.signed_in")); n != 2 {
+		t.Errorf("sign-in records = %d, want 2", n)
 	}
 }
 
@@ -420,9 +449,30 @@ func TestAnUnansweredCodeExpires(t *testing.T) {
 	}
 
 	b := newBrowser(t, d.server)
-	status, _, page := b.do(http.MethodGet, "/device?user_code="+got.UserCode)
-	if status != http.StatusBadRequest || !strings.Contains(page, "expired") {
-		t.Errorf("an expired code at the page = %d %s", status, page)
+	page := signInFromDevicePageStatus(t, b, "/device?user_code="+got.UserCode, http.StatusBadRequest)
+	if !strings.Contains(page, "expired") {
+		t.Errorf("an expired code at the page = %s", page)
+	}
+	if n := len(d.trail.Find("roster.device.expired")); n != 1 {
+		t.Errorf("expiry records after the page = %d, want still 1", n)
+	}
+}
+
+// With no poll after the expiry, a signed-in visit to the page records it,
+// joined to the issue by the device code's reference.
+func TestAPageVisitRecordsTheExpiry(t *testing.T) {
+	t.Parallel()
+	d := newDeviceServer(t, devicePolicy)
+	got := d.issue(t, "cli")
+
+	d.clock.advance(10*time.Minute + time.Second)
+	b := newBrowser(t, d.server)
+	signInFromDevicePageStatus(t, b, "/device?user_code="+got.UserCode, http.StatusBadRequest)
+	expired := d.trail.Find("roster.device.expired")
+	issued := d.trail.Find("roster.device.issued")
+	if len(expired) != 1 || expired[0].GetData().GetFields()["device"].GetStringValue() !=
+		issued[0].GetData().GetFields()["device"].GetStringValue() {
+		t.Errorf("expiry records = %v", expired)
 	}
 }
 
@@ -570,12 +620,35 @@ func TestAnApprovalBySomebodyNotAdmittedIsRefused(t *testing.T) {
 	wantError(t, status, answer, http.StatusBadRequest, "authorization_pending")
 }
 
-// A user code is short, so a source that types codes that name nothing is
-// stopped after a few; and a source asking for many codes is slowed.
-func TestGuessingAndFloodingAreLimited(t *testing.T) {
+// Nobody who is not signed in has a code looked up: a real code and one that
+// names nothing get the same answer, the sign-in.
+func TestAnAnonymousVisitorLearnsNothingAboutACode(t *testing.T) {
 	t.Parallel()
 	d := newDeviceServer(t, devicePolicy)
+	got := d.issue(t, "cli")
 	b := newBrowser(t, d.server)
+
+	for _, code := range []string{got.UserCode, "BCDF-GHJK", "BCDF-GHJL"} {
+		status, where, _ := b.do(http.MethodGet, "/device?user_code="+code)
+		if status != http.StatusFound || !strings.HasPrefix(where, "/login?auth=") {
+			t.Errorf("%s anonymously = %d %q, want the sign-in", code, status, where)
+		}
+	}
+	// A malformed code says only that it is malformed, escaped.
+	status, _, body := b.do(http.MethodGet, "/device?user_code=%3Cscript%3E")
+	if status != http.StatusOK || strings.Contains(body, "<script>") || !strings.Contains(body, "not a code") {
+		t.Errorf("a malformed code = %d %s", status, body)
+	}
+}
+
+// A signed-in person who types codes that name nothing is stopped after a
+// few; their own approval of a code they were shown is not.
+func TestGuessingIsLimitedPerAccountAndSourceAndNotForTheApproval(t *testing.T) {
+	t.Parallel()
+	d := newDeviceServer(t, devicePolicy)
+	got := d.issue(t, "cli")
+	b := newBrowser(t, d.server)
+	page := signInFromDevicePage(t, b, "/device?user_code="+got.UserCode)
 
 	for i := range 5 {
 		status, _, body := b.do(http.MethodGet, "/device?user_code=BCDF-GHJ"+string("KLMNP"[i]))
@@ -586,11 +659,26 @@ func TestGuessingAndFloodingAreLimited(t *testing.T) {
 	if status, _, _ := b.do(http.MethodGet, "/device?user_code=BCDF-GHJQ"); status != http.StatusTooManyRequests {
 		t.Errorf("the sixth wrong code = %d, want 429", status)
 	}
-	// A form with a code that cannot be one is a guess too, and is escaped.
-	if status, _, body := b.do(http.MethodGet, "/device?user_code=%3Cscript%3E"); status != http.StatusTooManyRequests || strings.Contains(body, "<script>") {
-		t.Errorf("a malformed code = %d %s", status, body)
+	if status, answer := decide(t, b, page, "approve"); status != http.StatusOK {
+		t.Errorf("the approval after the guesses = %d %s, want it to go through", status, answer)
 	}
+	d.clock.advance(time.Minute)
+	if status, _, _ := b.do(http.MethodGet, "/device?user_code=BCDF-GHJQ"); status != http.StatusOK {
+		t.Errorf("a minute later = %d", status)
+	}
+}
 
+// Only a request that would be issued counts toward a source's share of
+// codes: unknown clients and bad forms spend none of it.
+func TestFloodingIsLimitedAndJunkDoesNotCount(t *testing.T) {
+	t.Parallel()
+	d := newDeviceServer(t, devicePolicy)
+
+	for range 20 {
+		d.post(t, "/device_authorization", url.Values{"client_id": {"nobody"}})
+		d.post(t, "/device_authorization", url.Values{"client_id": {"local-dev"}})
+		d.post(t, "/device_authorization", url.Values{"client_id": {"cli"}, "scope": {"admin"}})
+	}
 	for i := range 10 {
 		if status, body, _ := d.post(t, "/device_authorization", url.Values{"client_id": {"cli"}}); status != http.StatusOK {
 			t.Fatalf("code %d = %d %v", i, status, body)
@@ -603,6 +691,89 @@ func TestGuessingAndFloodingAreLimited(t *testing.T) {
 	d.clock.advance(time.Minute)
 	if status, _, _ := d.post(t, "/device_authorization", url.Values{"client_id": {"cli"}}); status != http.StatusOK {
 		t.Errorf("a code a minute later = %d", status)
+	}
+}
+
+// A poll that lands between the approval's read of the code and its write
+// does not stand in its way: polls keep their bookkeeping apart.
+func TestAPollDuringTheApprovalDoesNotStopIt(t *testing.T) {
+	t.Parallel()
+	d := newDeviceServer(t, devicePolicy)
+	got := d.issue(t, "cli")
+	b := newBrowser(t, d.server)
+	page := signInFromDevicePage(t, b, "/device?user_code="+got.UserCode)
+
+	polled := make(chan string, 1)
+	issuer.SetDeviceDecided(d.storage, func() {
+		_, body := d.poll(t, "cli", got.DeviceCode)
+		answer, _ := body["error"].(string)
+		polled <- answer
+	})
+	if status, answer := decide(t, b, page, "approve"); status != http.StatusOK || !strings.Contains(answer, "Device approved") {
+		t.Fatalf("approve with a poll in between = %d %s", status, answer)
+	}
+	if answer := <-polled; answer != "authorization_pending" {
+		t.Errorf("the poll in between = %q", answer)
+	}
+	d.clock.advance(11 * time.Second)
+	if status, tokens := d.poll(t, "cli", got.DeviceCode); status != http.StatusOK {
+		t.Errorf("the poll after = %d %v", status, tokens)
+	}
+}
+
+// When the code is decided elsewhere between the approval's read and its
+// write, the approval re-reads it, finds it no longer waiting, says so and
+// records a failure; the device sees the other decision.
+func TestADecisionElsewhereDuringTheApprovalWins(t *testing.T) {
+	t.Parallel()
+	d := newDeviceServer(t, devicePolicy)
+	got := d.issue(t, "cli")
+	first := newBrowser(t, d.server)
+	approvePage := signInFromDevicePage(t, first, "/device?user_code="+got.UserCode)
+	second := newBrowser(t, d.server)
+	denyPage := signInFromDevicePage(t, second, "/device?user_code="+got.UserCode)
+
+	// The hook runs again inside the deny it makes, so only the first call
+	// acts (a sync.Once would wait for itself).
+	var fired atomic.Bool
+	issuer.SetDeviceDecided(d.storage, func() {
+		if fired.Swap(true) {
+			return
+		}
+		if status, answer := decide(t, second, denyPage, "deny"); status != http.StatusOK {
+			t.Errorf("the deny in between = %d %s", status, answer)
+		}
+	})
+	status, answer := decide(t, first, approvePage, "approve")
+	if status != http.StatusBadRequest || !strings.Contains(answer, "denied") {
+		t.Errorf("the approval that lost = %d %s", status, answer)
+	}
+	status, body := d.poll(t, "cli", got.DeviceCode)
+	wantError(t, status, body, http.StatusBadRequest, "access_denied")
+	approved := d.trail.Find("roster.device.approved")
+	if len(approved) != 1 || approved[0].GetOutcome().GetResult().String() != "RESULT_FAILURE" {
+		t.Errorf("approval records = %v", approved)
+	}
+}
+
+// The callback guard reads the id the library acts on: a POST body's wins
+// over the query, so a device request named in the body is refused, and an
+// id in the body this browser did not start is refused as started elsewhere.
+func TestTheCallbackGuardReadsTheIDTheLibraryActsOn(t *testing.T) {
+	t.Parallel()
+	d := newDeviceServer(t, devicePolicy)
+	got := d.issue(t, "cli")
+	b := newBrowser(t, d.server)
+	_, where, _ := b.do(http.MethodGet, "/device?user_code="+got.UserCode)
+	device := strings.TrimPrefix(where, "/login?auth=")
+
+	status, location, body, _ := b.post("/authorize/callback?id=another", url.Values{"id": {device}})
+	if status != http.StatusBadRequest || location != "" || !strings.Contains(body, "device") {
+		t.Errorf("POST ?id=another with the device request in the body = %d %q %s", status, location, body)
+	}
+	status, location, body, _ = b.post("/authorize/callback?id="+url.QueryEscape(device), url.Values{"id": {"another"}})
+	if status != http.StatusBadRequest || location != "" || !strings.Contains(body, "started in another browser") {
+		t.Errorf("POST ?id=<device> with another id in the body = %d %q %s", status, location, body)
 	}
 }
 
