@@ -649,7 +649,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: backlog
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-06, section: "3", depth: Full}
@@ -661,19 +661,19 @@ requirements:
   - id: REQ-AUTHN-047
     area: AUTHN
     split_from: REQ-AUTHN-017
-    statement: "A device authorization MUST use a high-entropy user code."
-    rationale: "A short guessable code can be brute-forced."
+    statement: "A device authorization MUST use a random user code of 8 characters from an alphabet without look-alike characters, such as the 20 consonants of RFC 8628 section 6.1."
+    rationale: "A short guessable code can be brute-forced, and 8 characters of 20 give about 34 bits, which the rate limits of REQ-AUTHN-118 keep out of reach within the code's lifetime."
     level: MUST
     source: design-decision
     status: planned
-    milestone: backlog
+    milestone: core
     runtimes: all
     standards:
-      - {id: ST-06, section: "3", depth: Full}
+      - {id: ST-06, section: "5.1, 6.1", depth: Full}
       - {id: ST-14, section: "4", depth: Partial}
     issues: [855]
     verification:
-      - {kind: integration-test, ref: "user-code entropy and alphabet test"}
+      - {kind: integration-test, ref: "user-code length and alphabet test: 8 characters, none outside the alphabet, no repeat over a large sample"}
   - id: REQ-AUTHN-048
     area: AUTHN
     split_from: REQ-AUTHN-017
@@ -682,7 +682,7 @@ requirements:
     level: MUST
     source: design-decision
     status: planned
-    milestone: backlog
+    milestone: core
     runtimes: all
     standards:
       - {id: ST-06, section: "3", depth: Full}
@@ -693,19 +693,114 @@ requirements:
   - id: REQ-AUTHN-049
     area: AUTHN
     split_from: REQ-AUTHN-017
-    statement: "A device code and its user code MUST expire after a bounded lifetime."
-    rationale: "An unbounded code is a standing credential."
+    statement: "A device code and its user code MUST expire at most 10 minutes after the device authorization that issued them."
+    rationale: "An unbounded code is a standing credential, and ten minutes is enough to walk to a browser and sign in."
     level: MUST
     source: design-decision
     status: planned
-    milestone: backlog
+    milestone: core
     runtimes: all
     standards:
-      - {id: ST-06, section: "3", depth: Full}
+      - {id: ST-06, section: "3.2, 3.5, 5.2", depth: Full}
       - {id: ST-14, section: "4", depth: Partial}
     issues: [855]
     verification:
-      - {kind: integration-test, ref: "expiry test"}
+      - {kind: integration-test, ref: "expiry test: expires_in is at most 600, a poll after it gets expired_token, and the user code is refused at the verification page"}
+  - id: REQ-AUTHN-116
+    area: AUTHN
+    split_from: REQ-AUTHN-017
+    statement: "The device verification page MUST accept a user code only in a sign-in session that passed the normal sign-in, with its multi-factor authentication."
+    rationale: "An approval hands a token to another machine, so it needs the same assurance as a sign-in in the browser."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-06, section: "3.3", depth: Full}
+      - {id: ST-06, section: "5.3", depth: Partial}
+    issues: [855]
+    verification:
+      - {kind: integration-test, ref: "the verification page without a session redirects to the normal sign-in, and a session without multi-factor authentication is sent to step-up before the code is accepted"}
+  - id: REQ-AUTHN-117
+    area: AUTHN
+    split_from: REQ-AUTHN-017
+    statement: "Before approval the device verification page MUST show the requesting client, the requesting IP address, the request time and the device's user-agent, with an approve and a deny action."
+    rationale: "Remote phishing is the main threat to the device grant, and the facts of the request let the person see that the request is not their own."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-06, section: "3.3", depth: Full}
+      - {id: ST-06, section: "5.3-5.4", depth: Partial}
+    issues: [855]
+    verification:
+      - {kind: integration-test, ref: "the page names the client, the IP address, the time and the user-agent of the device authorization request; deny ends it with access_denied and approve issues the token"}
+      - {kind: manual, ref: "review of the page against RFC 8628 section 5.3"}
+  - id: REQ-AUTHN-118
+    area: AUTHN
+    split_from: REQ-AUTHN-017
+    statement: "Device authorization requests MUST be rate limited per IP address, and user-code entries per IP address and per user code."
+    rationale: "A user code is short enough to type, so only a limit on attempts keeps a guess from succeeding within its lifetime."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-06, section: "5.1-5.2", depth: Full}
+    issues: [855]
+    verification:
+      - {kind: integration-test, ref: "rate-limit test: requests over the limit from one address are refused, and entries over the limit from one address or for one user code are refused without approving the code"}
+  - id: REQ-AUTHN-119
+    area: AUTHN
+    split_from: REQ-AUTHN-017
+    statement: "A token from the device grant MUST have the same lifetime, scopes and claims as a token from the loopback sign-in of the same client for the same person."
+    rationale: "The device grant is another way to the same sign-in, not a way to a broader or longer-lived token."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-06, section: "3.5", depth: Partial}
+      - {id: ST-14, section: "2.3", depth: Partial}
+    issues: [855]
+    verification:
+      - {kind: integration-test, ref: "one person signs in to one client by the loopback sign-in and by the device grant; the two tokens have the same lifetime, scopes and claims apart from their identifiers and times"}
+  - id: REQ-AUTHN-120
+    area: AUTHN
+    split_from: REQ-AUTHN-017
+    statement: "The device grant MUST be off for a client unless the configuration of that client turns it on."
+    rationale: "Each client that takes device approvals widens the room for remote phishing, so a client opts in and none has it by default."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-06, section: "3.1", depth: Partial}
+      - {id: ST-14, section: "4", depth: Partial}
+    issues: [855]
+    verification:
+      - {kind: integration-test, ref: "a client without the setting is refused at the device authorization endpoint with unauthorized_client, and the same client with it passes the flow"}
+  - id: REQ-AUTHN-121
+    area: AUTHN
+    split_from: REQ-AUTHN-017
+    statement: "sluis MUST write an audit record when a device authorization is issued, approved, denied or expires."
+    rationale: "An approval on another machine is what a phishing attempt leaves behind, so every step of a device authorization needs a trail."
+    level: MUST
+    source: design-decision
+    status: planned
+    milestone: core
+    runtimes: all
+    standards:
+      - {id: ST-06, section: "3.1-3.5", depth: Partial}
+    issues: [855]
+    verification:
+      - {kind: integration-test, ref: "audit test: one record each for an issued, an approved, a denied and an expired device authorization, naming the client and, once known, the person, and never the device code"}
   - id: REQ-AUTHN-018
     area: AUTHN
     statement: "A WebAuthn relying-party implementation MUST require user verification."

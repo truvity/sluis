@@ -161,7 +161,7 @@ Only the token signing row is built; the others are planned.
 - **Reported attributes and cloud tags may grant.** Whoever can tag an instance could move it into a policy.
 - **Lines that never expire, or `AuthorizedPrincipalsCommand` at each login.** A removed person keeps access on a host that stopped refreshing, or a moving part sits in the login path.
 - **An emergency certificate from sluis as break-glass.** Useless when sluis is down, which is when break-glass is needed.
-- **The person's name as CN mapped to a role, or PostgreSQL 18 OAuth.** A map per database listing people, or a validator module on every server plus device login, which is postponed.
+- **The person's name as CN mapped to a role, or PostgreSQL 18 OAuth.** A map per database listing people, or a validator module on every server plus device login, which is not built yet.
 - **An OCSP responder.** An online service on the trust path for a control that short lifetimes already give; REQ-PKI-008 keeps it out until a record decides it.
 - **A CRL distribution point in every leaf.** Few clients fetch it, and a client that does would make sluis's bucket a dependency of every TLS handshake.
 - **Day-long workload certificates.** Simpler renewal, but a stolen workload key would stay useful for a day where an hour suffices for SPIFFE practice.
