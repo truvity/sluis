@@ -129,7 +129,7 @@ export const roster: Sentences = {
       }
     },
     "roster.device.expired": {
-      "summary": "A device code ran out before anybody approved or denied it; the device that polled for it was told expired_token.",
+      "summary": "A device code ran out before anybody approved or denied it. Recorded once, when a poll or a visit to the device page after the expiry sees it; a code nobody asks about again leaves no record of its expiry.",
       "message": {
         "en": "a device code for {targets_0_id} expired unanswered"
       }

@@ -544,7 +544,7 @@ a067fd77e84214d56286bfb427e2c6f24e6ee875d1be44129fb95c76ebb5d4da  roster-1.25.0/
 26386c108650f5dda38fe9dbdc1ad03d1f871bda09899cf49a863a4f67e266d7  roster-1.25.0/workspace-connected.json
 6693708a9ea205ec916addea995b9e590033b08aa49f6dd6492590d3b2fff19a  roster-1.25.0/workspace-domains.json
 b0487df3c1c4e5d2bec56f7e44e3b30630445b3d9896fef1796ce7adc8fc71ac  roster-1.25.0/workspace-groups.json
-2ede511e590192be76dca6d861d9f815535b057d9220eae13f26370b0bd39020  roster-1.26.0.yaml
+d890ebcc2502251f25afa98581eeeded6e16e9ea4bb4d3a639c549330413034d  roster-1.26.0.yaml
 751195085512405ab46639bc7b27a3f2b8bab81935f885bca1b6a2be736b1612  roster-1.26.0/access-explained.json
 b3130cc917dd33d1f0c85fd0085603508e87c8ce6aefcfb994be6a8185a0e5cb  roster-1.26.0/app-created.json
 ad5e394e77f2329927042d19c4b6436886d986df790bb4f3f1904d9854f39d70  roster-1.26.0/app-disconnected.json
@@ -555,7 +555,7 @@ bbc450eb3f17d032ad471832d70ec93ac51a30ecd90a0aeb42c26e96f0f496b1  roster-1.26.0/
 9c6551b52ab07f0e84338e7ed810036bffb91e508f4767f58684d888d66b0356  roster-1.26.0/backup-run.json
 b6f69950ca2c1984123cd25dee778f2058e091c0a1616e1a3c3df4f84c04ebec  roster-1.26.0/client-secret.json
 0cbd60bf87a3859cce1f3de251c473e39937e8bb0ec0538d396922176cecc846  roster-1.26.0/cloudflare-token.json
-2dc331e3dac82ff4f126bd7b175351766d19e0fea6554c538f0eec51ea365151  roster-1.26.0/device-authorization.json
+031bfd19d9ddb7a8625e68d4118fddb6b7b7c55bca5b436754cca91a87d6833a  roster-1.26.0/device-authorization.json
 23797b002dda43f89df373caf650bc6dc92f95e54b68d20d3826d586cf9d5af1  roster-1.26.0/github-org-connected.json
 c2309e9c0b49c4fb0cf58e7149be8d1567208e499e225072955032ed91828fe6  roster-1.26.0/github-org-setting.json
 1a22fb15c35976aa3b4d4bd231d2a67f7ff0f3d29e174301f4d04a15e77bf58b  roster-1.26.0/github-org-settings-refused.json

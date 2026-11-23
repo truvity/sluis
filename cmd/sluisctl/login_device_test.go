@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -49,6 +50,7 @@ type fakeDeviceIssuer struct {
 	polls   int
 	forms   []map[string]string
 	agent   string
+	paths   []string
 }
 
 func (f *fakeDeviceIssuer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -60,6 +62,7 @@ func (f *fakeDeviceIssuer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		form[k] = r.PostForm.Get(k)
 	}
 	f.forms = append(f.forms, form)
+	f.paths = append(f.paths, r.URL.Path)
 	f.agent = r.UserAgent()
 	w.Header().Set("Content-Type", "application/json")
 	switch r.URL.Path {
@@ -193,7 +196,7 @@ func TestTheDeviceLoginNamesTheClientFlagWhenNotServed(t *testing.T) {
 	server := httptest.NewServer(http.NotFoundHandler())
 	t.Cleanup(server.Close)
 	_, err := deviceLogin(t.Context(), Config{Issuer: server.URL, ClientID: "sluisctl"}, &bytes.Buffer{}, sleepContext)
-	if err == nil || !strings.Contains(err.Error(), "device_authorization: true") {
+	if !errors.Is(err, errDeviceNotServed) || !strings.Contains(err.Error(), "device_authorization: true") {
 		t.Errorf("err = %v", err)
 	}
 }
@@ -222,5 +225,94 @@ func TestLoginWithDeviceCachesTheSession(t *testing.T) {
 	}
 	if session.RefreshToken != "rt" || session.Email != "ada@north.example" {
 		t.Errorf("cached session = %+v", session)
+	}
+}
+
+// stubLogin says whether this machine has a browser, stands in for the
+// loopback sign-in, and silences stdout, for the tests of which way `login`
+// goes.
+func stubLogin(t *testing.T, noBrowser bool) *int {
+	t.Helper()
+	choiceEnv(t)
+	savedDetect, savedBrowser, savedOut := withoutBrowser, browserLogin, stdout
+	out, err := os.Create(filepath.Join(t.TempDir(), "stdout"))
+	if err != nil {
+		t.Fatalf("create stdout: %v", err)
+	}
+	stdout = out
+	calls := 0
+	withoutBrowser = func() bool { return noBrowser }
+	browserLogin = func(Config) (Session, error) {
+		calls++
+		return Session{RefreshToken: "loopback"}, nil
+	}
+	t.Cleanup(func() { withoutBrowser, browserLogin, stdout = savedDetect, savedBrowser, savedOut })
+	return &calls
+}
+
+// `--device=false` is the person's choice too: the browser sign-in, even
+// where none could be opened, and the issuer is never asked for a code.
+func TestAnExplicitDeviceFalseUsesTheBrowser(t *testing.T) {
+	calls := stubLogin(t, true)
+	f := &fakeDeviceIssuer{}
+	server := httptest.NewServer(f)
+	t.Cleanup(server.Close)
+
+	if err := login([]string{"--device=false", "--issuer", server.URL, "--client", "sluisctl"}); err != nil {
+		t.Fatalf("login --device=false: %v", err)
+	}
+	if *calls != 1 {
+		t.Errorf("browser sign-ins = %d, want 1", *calls)
+	}
+	for i, path := range f.paths {
+		if path == "/device_authorization" || f.forms[i]["grant_type"] == deviceGrantType {
+			t.Errorf("the issuer was asked for the device flow: %v %v", f.paths, f.forms)
+		}
+	}
+}
+
+// Picked because there is no browser, the device sign-in falls back to the
+// browser one when the issuer does not serve the grant.
+func TestNoBrowserFallsBackToTheBrowserWhenTheGrantIsNotServed(t *testing.T) {
+	calls := stubLogin(t, true)
+	server := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(server.Close)
+
+	if err := login([]string{"--issuer", server.URL, "--client", "sluisctl"}); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if *calls != 1 {
+		t.Errorf("browser sign-ins = %d, want the fallback", *calls)
+	}
+	session, err := loadSession(server.URL)
+	if err != nil || session.RefreshToken != "loopback" {
+		t.Errorf("session = %+v, %v", session, err)
+	}
+}
+
+// Asked for by name, it does not fall back: the person said device.
+func TestAnExplicitDeviceDoesNotFallBack(t *testing.T) {
+	calls := stubLogin(t, false)
+	server := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(server.Close)
+
+	err := login([]string{"--device", "--issuer", server.URL, "--client", "sluisctl"})
+	if !errors.Is(err, errDeviceNotServed) || *calls != 0 {
+		t.Errorf("err = %v, browser sign-ins = %d; want the refusal and no fallback", err, *calls)
+	}
+}
+
+// With a browser and no flag, the loopback sign-in it always was.
+func TestABrowserMachineUsesTheBrowser(t *testing.T) {
+	calls := stubLogin(t, false)
+	f := &fakeDeviceIssuer{}
+	server := httptest.NewServer(f)
+	t.Cleanup(server.Close)
+
+	if err := login([]string{"--issuer", server.URL, "--client", "sluisctl"}); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if *calls != 1 {
+		t.Errorf("browser sign-ins = %d, want 1", *calls)
 	}
 }

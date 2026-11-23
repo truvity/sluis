@@ -83,7 +83,8 @@ func bindAuthorization(deps SignInDeps, next http.Handler) http.Handler {
 		case authorizePath:
 			next.ServeHTTP(&bindingWriter{ResponseWriter: w, r: r, deps: deps}, r)
 		case authorizeCallbackPath:
-			if !boundHere(deps, r, r.URL.Query().Get("id")) {
+			// The id the library will act on, read as it reads it.
+			if !boundHere(deps, r, callbackID(r)) {
 				startedElsewhere(w, r)
 				return
 			}

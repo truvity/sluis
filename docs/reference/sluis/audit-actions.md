@@ -24,7 +24,7 @@ Catalogue version 1.26.0, 109 actions.
 | `roster.device.issued` | create | client | async | A device asked for a device code to sign a person in to a client (RFC 8628), or was refused one. Never the code; the request's address is in the record's context. |
 | `roster.device.approved` | authentication | client | async | A signed-in person approved a device code, so the device that asked for it is signed in to the client as them, or the approval was refused. |
 | `roster.device.denied` | authentication | client | async | A signed-in person denied a device code, so the device that asked for it is told access_denied and signs nobody in. |
-| `roster.device.expired` | authentication | client | async | A device code ran out before anybody approved or denied it; the device that polled for it was told expired_token. |
+| `roster.device.expired` | authentication | client | async | A device code ran out before anybody approved or denied it. Recorded once, when a poll or a visit to the device page after the expiry sees it; a code nobody asks about again leaves no record of its expiry. |
 | `roster.github_token.minted` | create | github_app | async | A GitHub App installation token was minted, or refused. Never the token. |
 | `roster.cloudflare.token.minted` | create | cloudflare_preset | async | A Cloudflare API token or R2 credential was minted from a preset's prototype, either stored for the preset (by sluis on its schedule) or on demand for a caller. Never the value. |
 | `roster.cloudflare.token.refused` | create | cloudflare_preset | async | A Cloudflare token was not minted, for a caller who was not granted the preset or because the preset's prototype or the account refused it. |

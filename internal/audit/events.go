@@ -142,6 +142,10 @@ func TokenExchanged(actor Actor, audience, proof string, o Outcome) *record.Reco
 // device code: what the device sent when it asked, which is what the
 // approval page shows the person. Never the device code or the user code.
 type Device struct {
+	// Ref joins the records of one device code: a short hash of the hash it
+	// is kept under, the same on its issue, approval or denial and expiry.
+	// It opens nothing.
+	Ref string
 	// Client is the client the code signs a person in to.
 	Client string
 	// UserAgent is the User-Agent of the device's request, already cut.
@@ -153,7 +157,7 @@ type Device struct {
 }
 
 func (d Device) data() data {
-	out := data{"user_agent": d.UserAgent, "requested_from": d.From}
+	out := data{"device": d.Ref, "user_agent": d.UserAgent, "requested_from": d.From}
 	if !d.Expires.IsZero() {
 		out["expires_at"] = d.Expires.UTC().Format(time.RFC3339)
 	}

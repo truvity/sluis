@@ -18,6 +18,7 @@ func TestABackupLeavesOutShortLivedCredentials(t *testing.T) {
 		"srp.h1":                  false,
 		"issuer:device:9f86d081":  false,
 		"issuer:device-user:9f86": false,
+		"issuer:device-poll:9f86": false,
 		"rec.maintenance":         false,
 	} {
 		if got := owned(port.ModuleOIDC, key); got != want {

@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -85,7 +86,7 @@ const (
 	deviceUserCodeLength = 8
 	// deviceUserAgentLimit is how much of a device's User-Agent is kept and
 	// shown.
-	deviceUserAgentLimit = 256
+	deviceUserAgentLimit = 128
 	// deviceFormLimit is the largest form either endpoint reads.
 	deviceFormLimit = 4 << 10
 
@@ -125,10 +126,16 @@ type deviceGrant struct {
 	From      string `json:"from"`
 	UserAgent string `json:"userAgent,omitempty"`
 
+	// Ref is a short, stable reference to this code for the audit trail
+	// (the first 16 hex digits of the SHA-256 of the device code's key), so
+	// that its issue, approval or denial and expiry join up. It opens nothing.
+	Ref string `json:"ref"`
+
 	Status deviceStatus `json:"status"`
-	// Interval is the poll interval in seconds, raised by each slow_down.
-	Interval int       `json:"interval"`
-	LastPoll time.Time `json:"lastPoll,omitzero"`
+	// Interval is the poll interval the code was issued with, in seconds.
+	// What polls do to it is kept apart, in [devicePoll], so that a poll
+	// never moves the revision an approval or a denial writes over.
+	Interval int `json:"interval"`
 	// ExpiryRecorded says the expiry has been audited, which happens once.
 	ExpiryRecorded bool `json:"expiryRecorded,omitempty"`
 
@@ -146,10 +153,25 @@ type deviceGrant struct {
 }
 
 func (g *deviceGrant) audit() audit.Device {
-	return audit.Device{Client: g.ClientID, UserAgent: g.UserAgent, From: g.From, Expires: g.Expires}
+	return audit.Device{Ref: g.Ref, Client: g.ClientID, UserAgent: g.UserAgent, From: g.From, Expires: g.Expires}
+}
+
+// devicePoll is a device code's poll bookkeeping: when it was last polled
+// and the interval it is held to, raised by each slow_down. It lives under a
+// key of its own ([devicePollKey]) and is written with plain writes: two
+// polls racing each other lose nothing that matters, and the grant's own
+// revision belongs to the person deciding.
+type devicePoll struct {
+	LastPoll time.Time `json:"lastPoll,omitzero"`
+	Interval int       `json:"interval"`
 }
 
 func deviceKey(hash string) string { return "issuer:device:" + hash }
+
+func devicePollKey(hash string) string { return "issuer:device-poll:" + hash }
+
+// deviceRef is the audit reference of a device code's key hash.
+func deviceRef(hash string) string { return hashHex(hash)[:16] }
 
 func deviceUserKey(userCode string) string { return "issuer:device-user:" + hashHex(userCode) }
 
@@ -211,9 +233,13 @@ func pkceChallenge(verifier string) string {
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
-// deviceUserAgent is the User-Agent kept for a device: valid UTF-8, no
-// control characters, at most [deviceUserAgentLimit] runes. It is shown on a
-// page (escaped there) and written in an audit record.
+// deviceUserAgent is the User-Agent kept for a device: valid UTF-8 with every
+// control and format character dropped -- C0 and C1 controls (Cc), and the
+// bidirectional overrides and isolates and the zero-width characters (Cf),
+// which would let a device make the text it shows read as something else --
+// and at most [deviceUserAgentLimit] runes. It is shown on a page (escaped
+// there) and written in an audit record, both as what the device says about
+// itself and nothing more.
 func deviceUserAgent(raw string) string {
 	var out strings.Builder
 	n := 0
@@ -221,13 +247,13 @@ func deviceUserAgent(raw string) string {
 		if n == deviceUserAgentLimit {
 			break
 		}
-		if r == utf8.RuneError || r < 0x20 || r == 0x7f {
-			r = '?'
+		if r == utf8.RuneError || unicode.Is(unicode.Cc, r) || unicode.Is(unicode.Cf, r) {
+			continue
 		}
 		out.WriteRune(r)
 		n++
 	}
-	return out.String()
+	return strings.TrimSpace(out.String())
 }
 
 // deviceFlow serves the grant over one issuer's storage and sign-in.
@@ -238,12 +264,20 @@ type deviceFlow struct {
 	now     func() time.Time
 	// issuing counts device codes issued per source, and refuses a source
 	// that asks for more than its share a minute: every code is a write, and
-	// the endpoint answers anyone.
+	// the endpoint answers anyone. Only a request that would be issued counts
+	// (a declared client with the grant, a well-formed form), so a stream of
+	// junk cannot spend anybody's share.
 	issuing *throttle.Limiter
-	// guesses counts user codes a source typed that name nothing, and stops
-	// answering it once it has spent its share: a user code is short, and
-	// this is what keeps guessing one slower than its lifetime.
+	// guesses counts the user codes a signed-in person typed that name
+	// nothing, per account and per source and never across all of them, and
+	// stops looking codes up for either once it has spent its share: a user
+	// code is short, and this is what keeps guessing one slower than its
+	// lifetime. Nobody who is not signed in gets a code looked up at all.
 	guesses *throttle.Limiter
+
+	// decided, when set, runs between an approval's or a denial's read of
+	// the grant and its write: for a test to land a poll in between.
+	decided func()
 }
 
 // newDeviceFlow returns the flow over a concrete storage, or nil over a
@@ -257,7 +291,12 @@ func newDeviceFlow(iss *Issuer, storage op.Storage, signIn SignInDeps) *deviceFl
 		iss: iss, storage: own, signIn: signIn,
 		now:     func() time.Time { return own.now() },
 		issuing: throttle.New(10, 600, time.Minute, 0, func() time.Time { return own.now() }),
-		guesses: throttle.New(5, 100, time.Minute, 0, func() time.Time { return own.now() }),
+		guesses: throttle.New(5, 0, time.Minute, 0, func() time.Time { return own.now() }),
+		decided: func() {
+			if own.deviceDecided != nil {
+				own.deviceDecided()
+			}
+		},
 	}
 }
 
@@ -286,7 +325,7 @@ func deviceProtocol(d *deviceFlow, next http.Handler) http.Handler {
 			d.authorize(w, r)
 		case tokenPaths[r.URL.Path] && r.Method == http.MethodPost && r.PostFormValue("grant_type") == grantDeviceCode:
 			d.token(w, r, next)
-		case r.URL.Path == authorizeCallbackPath && d != nil && d.deviceRequest(r.Context(), r.URL.Query().Get("id")):
+		case r.URL.Path == authorizeCallbackPath && d != nil && d.deviceRequest(r.Context(), callbackID(r)):
 			// A request made for a device is approved at /device, never
 			// handed to its redirect by the library's callback.
 			_ = writePage(w, http.StatusBadRequest, "Use the device page",
@@ -295,6 +334,18 @@ func deviceProtocol(d *deviceFlow, next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		}
 	})
+}
+
+// callbackID is the authorization request the library's callback acts on,
+// read the way the library reads it ([op.ParseAuthorizeCallbackRequest]):
+// from the parsed form, where a value in a POST body wins over the query. A
+// guard that read the query alone would judge one request while the library
+// completed another.
+func callbackID(r *http.Request) string {
+	if err := r.ParseForm(); err != nil {
+		return ""
+	}
+	return r.Form.Get("id")
 }
 
 // deviceRequest reports whether an authorization request was made for a
@@ -379,14 +430,6 @@ func (d *deviceFlow) authorize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	source := requestSource(r)
-	if d.issuing.Blocked(source) {
-		logRefusal(r, http.StatusTooManyRequests, "this source has asked for too many device codes", nil, nil)
-		w.Header().Set("Retry-After", "60")
-		deviceError(w, r, http.StatusTooManyRequests, errSlowDown)
-		return
-	}
-	d.issuing.Refused(source)
-
 	id, declared, refused := d.deviceClient(r)
 	noteClient(r.Context(), id)
 	from, agent := source, deviceUserAgent(r.UserAgent())
@@ -409,6 +452,15 @@ func (d *deviceFlow) authorize(w http.ResponseWriter, r *http.Request) {
 		deviceError(w, r, http.StatusBadRequest, string(oidc.InvalidScope))
 		return
 	}
+
+	// Counted only now, for a request that would be issued.
+	if d.issuing.Blocked(source) {
+		logRefusal(r, http.StatusTooManyRequests, "this source has asked for too many device codes", nil, nil)
+		w.Header().Set("Retry-After", "60")
+		deviceError(w, r, http.StatusTooManyRequests, errSlowDown)
+		return
+	}
+	d.issuing.Refused(source)
 
 	now := d.now()
 	grant := &deviceGrant{
@@ -483,6 +535,7 @@ func (d *deviceFlow) issue(ctx context.Context, grant *deviceGrant) (string, err
 	}
 	grant.Verifier = verifier
 	hash := hashHex(deviceCode)
+	grant.Ref = deviceRef(hash)
 
 	for attempt := 0; ; attempt++ {
 		if attempt == 5 {
@@ -542,10 +595,13 @@ func (d *deviceFlow) save(ctx context.Context, hash string, grant *deviceGrant, 
 	if err != nil {
 		return err
 	}
-	// What is left of the record's own life, measured on the same clock
-	// that issued it.
-	ttl := max(deviceKept-d.now().Sub(grant.Issued), time.Minute)
-	return replace(ctx, d.storage.state, deviceKey(hash), raw, ttl, version)
+	return replace(ctx, d.storage.state, deviceKey(hash), raw, d.remaining(grant), version)
+}
+
+// remaining is what is left of a grant's records' life, measured on the same
+// clock that issued it.
+func (d *deviceFlow) remaining(grant *deviceGrant) time.Duration {
+	return max(deviceKept-d.now().Sub(grant.Issued), time.Minute)
 }
 
 // token is RFC 8628 3.4 and 3.5: a device polls with its code.
@@ -602,15 +658,10 @@ func (d *deviceFlow) token(w http.ResponseWriter, r *http.Request, next http.Han
 	case grant.Status == deviceDenied:
 		deviceError(w, r, http.StatusBadRequest, errAccessDenied)
 	case !now.Before(grant.Expires):
-		if !grant.ExpiryRecorded && grant.Status == devicePending {
-			grant.ExpiryRecorded = true
-			if d.save(ctx, hash, grant, version) == nil {
-				d.iss.record(ctx, audit.DeviceExpired(grant.audit()))
-			}
-		}
+		d.noteExpiry(ctx, hash, grant, version)
 		deviceError(w, r, http.StatusBadRequest, errExpiredToken)
 	case grant.Status == devicePending:
-		d.pending(w, r, hash, grant, version, now)
+		d.pending(w, r, hash, grant, now)
 	case grant.Status == deviceApproved:
 		d.redeem(w, r, hash, grant, version, next)
 	default:
@@ -618,20 +669,42 @@ func (d *deviceFlow) token(w http.ResponseWriter, r *http.Request, next http.Han
 	}
 }
 
+// noteExpiry records, once, that a code ran out before anybody decided: when
+// a poll or a visit to the device page first sees it. Nothing sweeps for it,
+// so a code nobody asks about again leaves no record of its expiry.
+func (d *deviceFlow) noteExpiry(ctx context.Context, hash string, grant *deviceGrant, version string) {
+	if grant.ExpiryRecorded || grant.Status != devicePending {
+		return
+	}
+	grant.ExpiryRecorded = true
+	if d.save(ctx, hash, grant, version) == nil {
+		d.iss.record(ctx, audit.DeviceExpired(grant.audit()))
+	}
+}
+
 // pending answers a poll before anybody has decided: `authorization_pending`,
 // or `slow_down` with five more seconds on the interval for a device that
 // polled sooner than it was told to (RFC 8628 3.5).
-func (d *deviceFlow) pending(w http.ResponseWriter, r *http.Request, hash string, grant *deviceGrant, version string, now time.Time) {
-	early := !grant.LastPoll.IsZero() && now.Sub(grant.LastPoll) < time.Duration(grant.Interval)*time.Second
+func (d *deviceFlow) pending(w http.ResponseWriter, r *http.Request, hash string, grant *deviceGrant, now time.Time) {
+	ctx := r.Context()
+	poll, err := getJSON[devicePoll](ctx, d.storage.state, devicePollKey(hash))
+	if err != nil {
+		logRefusal(r, http.StatusInternalServerError, "the device code's polls could not be read", err, nil)
+		deviceError(w, r, http.StatusInternalServerError, string(oidc.ServerError))
+		return
+	}
+	if poll == nil {
+		poll = &devicePoll{Interval: grant.Interval}
+	}
 	answer := errAuthorizationPending
-	if early {
-		grant.Interval += int(deviceSlowDown / time.Second)
+	if !poll.LastPoll.IsZero() && now.Sub(poll.LastPoll) < time.Duration(poll.Interval)*time.Second {
+		poll.Interval += int(deviceSlowDown / time.Second)
 		answer = errSlowDown
 	}
-	grant.LastPoll = now
-	// A write that loses to an approval or another poll is not an error:
-	// the device asks again in a moment and reads what won.
-	if err := d.save(r.Context(), hash, grant, version); err != nil && !errors.Is(err, errMoved) && !errors.Is(err, errGone) {
+	poll.LastPoll = now
+	// Its own key, never the grant's: a poll does not move the revision an
+	// approval or a denial writes over.
+	if err = setJSON(ctx, d.storage.state, devicePollKey(hash), poll, d.remaining(grant)); err != nil {
 		logRefusal(r, http.StatusInternalServerError, "the device code's poll could not be recorded", err, nil)
 		deviceError(w, r, http.StatusInternalServerError, string(oidc.ServerError))
 		return
@@ -706,16 +779,24 @@ func (d *deviceFlow) devicePage(w http.ResponseWriter, r *http.Request) {
 		d.entry(w, "")
 		return
 	}
-
-	source := requestSource(r)
-	if d.guesses.Blocked(source) {
-		d.tooMany(w, r)
-		return
-	}
+	// The shape alone says nothing about any code, so it is checked first.
 	code := normalUserCode(typed)
 	if code == "" {
-		d.guesses.Refused(source)
 		d.entry(w, `<p class="warn">That is not a code this service issues. Check it and type it again.</p>`)
+		return
+	}
+
+	// Nobody who is not signed in gets a code looked up: whatever they
+	// typed, they are sent to the same sign-in and learn nothing.
+	session, ok := standingSignIn(d.signIn, w, r, "", 0)
+	if !ok {
+		d.toSignIn(w, r, code)
+		return
+	}
+
+	source, account := requestSource(r), "account:"+strings.ToLower(session.Identity)
+	if d.guesses.Blocked(account) || d.guesses.Blocked(source) {
+		d.tooMany(w, r)
 		return
 	}
 	grant, hash, version, err := d.byUserCode(r.Context(), code)
@@ -724,18 +805,18 @@ func (d *deviceFlow) devicePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if grant == nil {
-		d.guesses.Refused(source)
+		// Per account and per source, never across everybody: one
+		// person's guessing must not lock out another's approval.
+		d.guesses.RefusedBySource(account)
+		d.guesses.RefusedBySource(source)
 		d.entry(w, `<p class="warn">No device is waiting with that code. It may have expired: start again on the device.</p>`)
 		return
 	}
+	if !d.now().Before(grant.Expires) {
+		d.noteExpiry(r.Context(), hash, grant, version)
+	}
 	if grant.Status != devicePending || !d.now().Before(grant.Expires) {
 		d.closed(w, grant)
-		return
-	}
-
-	session, ok := standingSignIn(d.signIn, w, r, "", 0)
-	if !ok {
-		d.toSignIn(w, r, hash, grant, version)
 		return
 	}
 	d.confirm(w, r, grant, session)
@@ -775,19 +856,31 @@ func (d *deviceFlow) closed(w http.ResponseWriter, grant *deviceGrant) {
 }
 
 // toSignIn sends a browser with no standing sign-in through the normal
-// sign-in: an authorization request for the device's client, made here and
-// bound to this browser as `/authorize` binds one, which the sign-in
-// completes and then returns to this page ([Storage.deviceReturn]).
-// Completing it issues nothing: a code is saved for it only on approval.
-func (d *deviceFlow) toSignIn(w http.ResponseWriter, r *http.Request, hash string, grant *deviceGrant, version string) {
-	request, err := d.storage.deviceAuthRequest(r.Context(), grant)
+// sign-in, and back to this page with the code it typed
+// ([Storage.deviceReturn]): an authorization request made here and bound to
+// this browser as `/authorize` binds one. The code is not looked up first, so
+// the sign-in is the same whatever was typed: to the first client (sorted)
+// that declares the grant, which an installation that declares it on its CLI
+// alone, as it should, makes the CLI. Completing that request issues
+// nothing; the approval completes a request of its own.
+func (d *deviceFlow) toSignIn(w http.ResponseWriter, r *http.Request, code string) {
+	clients := d.iss.Policy().DeviceClients()
+	declared, ok := d.iss.Policy().Client(clients[0])
+	if !ok {
+		refusalPage(w, r, http.StatusInternalServerError, "the device sign-in has no client", nil)
+		return
+	}
+	verifier, err := randomToken(deviceCodeBytes)
 	if err != nil {
 		refusalPage(w, r, http.StatusInternalServerError, "the device sign-in could not be started", err)
 		return
 	}
-	grant.Request = request
-	if err = d.save(r.Context(), hash, grant, version); err != nil {
-		refusalPage(w, r, http.StatusConflict, "the device code changed while the sign-in was being started", err)
+	request, err := d.storage.deviceAuthRequest(r.Context(), &deviceGrant{
+		ClientID: clients[0], Scopes: []string{oidc.ScopeOpenID}, RedirectURI: declared.Redirects[0],
+		Verifier: verifier, UserCode: code,
+	})
+	if err != nil {
+		refusalPage(w, r, http.StatusInternalServerError, "the device sign-in could not be started", err)
 		return
 	}
 
@@ -827,7 +920,7 @@ func (d *deviceFlow) confirm(w http.ResponseWriter, r *http.Request, grant *devi
 	_ = writePage(w, http.StatusOK, "Approve a device?", fmt.Sprintf(
 		`<p>A device asked to sign in to <strong>%s</strong> as you, <strong>%s</strong>.</p>
 	<p>Code <strong class="host">%s</strong></p>
-	<p class="note">Asked from <span class="host">%s</span> at %s<br>Program <span class="host">%s</span></p>
+	<p class="note">Asked from <span class="host">%s</span> at %s<br>Program (as the device describes itself) <span class="host">%s</span></p>
 	<p class="warn">Approve only if you started this yourself, just now, on a device you trust. Whoever holds that device will act as you.</p>
 	<form method="post" action="%s">
 		<input type="hidden" name="csrf" value="%s">
@@ -840,16 +933,14 @@ func (d *deviceFlow) confirm(w http.ResponseWriter, r *http.Request, grant *devi
 		html.EscapeString(agent), devicePath, html.EscapeString(token), html.EscapeString(shownUserCode(grant.UserCode))))
 }
 
-// decide is the approval form's POST.
+// decide is the approval form's POST. It is not held to the guess limit: its
+// token was minted for this sign-in and this code, on a page that showed the
+// code, so it is not a guess, and a limit shared with anybody else must not
+// stand between a signed-in person and their own approval.
 func (d *deviceFlow) decide(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, deviceFormLimit)
 	if err := r.ParseForm(); err != nil {
 		refusalPage(w, r, http.StatusBadRequest, "the device approval is not a form", err)
-		return
-	}
-	source := requestSource(r)
-	if d.guesses.Blocked(source) {
-		d.tooMany(w, r)
 		return
 	}
 	code := normalUserCode(r.PostForm.Get("user_code"))
@@ -869,6 +960,11 @@ func (d *deviceFlow) decide(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	decision := r.PostForm.Get("decision")
+	if decision != "approve" && decision != "deny" {
+		refusalPage(w, r, http.StatusBadRequest, "the device decision is neither approve nor deny", nil)
+		return
+	}
 	ctx := r.Context()
 	grant, hash, version, err := d.byUserCode(ctx, code)
 	if err != nil {
@@ -876,7 +972,6 @@ func (d *deviceFlow) decide(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if grant == nil {
-		d.guesses.Refused(source)
 		d.entry(w, `<p class="warn">No device is waiting with that code. It may have expired: start again on the device.</p>`)
 		return
 	}
@@ -888,60 +983,39 @@ func (d *deviceFlow) decide(w http.ResponseWriter, r *http.Request) {
 	if isRecovery(session.How) {
 		actor = audit.RecoveryIdentity(session.Identity)
 	}
+	subject := strings.ToLower(session.Identity)
 
-	switch r.PostForm.Get("decision") {
-	case "deny":
-		grant.Status, grant.Subject = deviceDenied, strings.ToLower(session.Identity)
-		if err = d.save(ctx, hash, grant, version); err != nil {
-			refusalPage(w, r, http.StatusConflict, "the device code changed while it was being denied", err)
-			return
+	if decision == "deny" {
+		if d.settle(w, r, hash, grant, version, func(g *deviceGrant) { g.Status, g.Subject = deviceDenied, subject }) {
+			d.iss.record(ctx, audit.DeviceDenied(actor, grant.audit(), audit.Succeeded()))
+			_ = writePage(w, http.StatusOK, "Device denied",
+				`<p>The device was refused and signs nobody in. You can close this page.</p>`)
+		} else {
+			d.iss.record(ctx, audit.DeviceDenied(actor, grant.audit(), audit.Failed("the denial could not be saved")))
 		}
-		d.iss.record(ctx, audit.DeviceDenied(actor, grant.audit(), audit.Succeeded()))
-		_ = writePage(w, http.StatusOK, "Device denied",
-			`<p>The device was refused and signs nobody in. You can close this page.</p>`)
-	case "approve":
-		d.approve(w, r, hash, grant, version, session, actor)
-	default:
-		refusalPage(w, r, http.StatusBadRequest, "the device decision is neither approve nor deny", nil)
+		return
 	}
-}
 
-// approve completes an authorization request for the device's client as the
-// person signed in here -- the one the sign-in from this page completed, when
-// it is theirs, or a new one -- and saves a code for it that the device's
-// next poll redeems.
-func (d *deviceFlow) approve(w http.ResponseWriter, r *http.Request, hash string, grant *deviceGrant, version string,
-	session SSOSession, actor audit.Actor,
-) {
-	ctx := r.Context()
+	// Approve: an authorization request for the device's client, completed
+	// as the person signed in here exactly as a sign-in at /authorize
+	// completes one, and a code for it that the device's next poll redeems.
 	who := Authenticated{Subject: session.Identity, AuthTime: session.AuthTime, SSO: session.ID, How: session.How}
-
-	request := ""
-	if grant.Request != "" {
-		if req, err := d.storage.request(ctx, grant.Request); err == nil && req.IsDone && req.Device == grant.UserCode &&
-			req.Subject == strings.ToLower(who.Subject) && req.SSO == who.SSO {
-			request = req.ID
-		}
+	request, err := d.storage.deviceAuthRequest(ctx, grant)
+	if err != nil {
+		d.iss.record(ctx, audit.DeviceApproved(actor, grant.audit(), audit.Failed("the approval could not be made")))
+		refusalPage(w, r, http.StatusInternalServerError, "the device approval could not be made", err)
+		return
 	}
-	if request == "" {
-		made, err := d.storage.deviceAuthRequest(ctx, grant)
-		if err != nil {
-			refusalPage(w, r, http.StatusInternalServerError, "the device approval could not be made", err)
-			return
+	if err = d.storage.Complete(ctx, request, who); err != nil {
+		status, why := http.StatusBadRequest, "the device approval could not be completed"
+		if errors.Is(err, ErrNotEntitled) {
+			status, why = http.StatusForbidden, "the person is not admitted to the device's client"
 		}
-		if err = d.storage.Complete(ctx, made, who); err != nil {
-			status, why := http.StatusBadRequest, "the device approval could not be completed"
-			if errors.Is(err, ErrNotEntitled) {
-				status, why = http.StatusForbidden, "the person is not admitted to the device's client"
-			}
-			d.iss.record(ctx, audit.DeviceApproved(actor, grant.audit(), audit.Denied(why)))
-			refusalPage(w, r, status, why, err)
-			return
-		}
-		request = made
+		d.iss.record(ctx, audit.DeviceApproved(actor, grant.audit(), audit.Denied(why)))
+		refusalPage(w, r, status, why, err)
+		return
 	}
-
-	code, err := randomToken(deviceCodeBytes)
+	code, err = randomToken(deviceCodeBytes)
 	if err == nil {
 		err = d.storage.SaveAuthCode(ctx, request, code)
 	}
@@ -950,15 +1024,54 @@ func (d *deviceFlow) approve(w http.ResponseWriter, r *http.Request, hash string
 		refusalPage(w, r, http.StatusInternalServerError, "the device approval could not be saved", err)
 		return
 	}
-	grant.Status, grant.Code, grant.Request, grant.Subject = deviceApproved, code, request, strings.ToLower(session.Identity)
-	if err = d.save(ctx, hash, grant, version); err != nil {
-		refusalPage(w, r, http.StatusConflict, "the device code changed while it was being approved", err)
+	if !d.settle(w, r, hash, grant, version, func(g *deviceGrant) {
+		g.Status, g.Code, g.Request, g.Subject = deviceApproved, code, request, subject
+	}) {
+		d.iss.record(ctx, audit.DeviceApproved(actor, grant.audit(), audit.Failed("the approval could not be saved")))
 		return
 	}
 	d.iss.record(ctx, audit.DeviceApproved(actor, grant.audit(), audit.Succeeded()))
 	recordLoginSuccess(ctx, "device")
 	_ = writePage(w, http.StatusOK, "Device approved",
 		`<p>The device signs in within a few seconds. You can close this page.</p>`)
+}
+
+// settle writes a decision over the grant as it was read. A poll never moves
+// that revision ([devicePoll]); when something else did, the grant is read
+// again and the decision applied once more while it is still waiting, a few
+// times at most. It reports whether the decision was written, and has
+// answered the browser when it was not.
+func (d *deviceFlow) settle(w http.ResponseWriter, r *http.Request, hash string, grant *deviceGrant, version string,
+	decide func(*deviceGrant),
+) bool {
+	ctx := r.Context()
+	if d.decided != nil {
+		d.decided()
+	}
+	for attempt := 0; ; attempt++ {
+		decide(grant)
+		err := d.save(ctx, hash, grant, version)
+		if err == nil {
+			return true
+		}
+		if !errors.Is(err, errMoved) || attempt == 3 {
+			refusalPage(w, r, http.StatusInternalServerError, "the device decision could not be saved", err)
+			return false
+		}
+		again, at, err := d.load(ctx, hash)
+		switch {
+		case err != nil:
+			refusalPage(w, r, http.StatusInternalServerError, "the device code could not be read", err)
+			return false
+		case again == nil:
+			_ = writePage(w, http.StatusBadRequest, "Code no longer waiting", `<p>This code has expired. Start again on the device.</p>`)
+			return false
+		case again.Status != devicePending || !d.now().Before(again.Expires):
+			d.closed(w, again)
+			return false
+		}
+		*grant, version = *again, at
+	}
 }
 
 // deviceAuthRequest writes the authorization request a device's approval

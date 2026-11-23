@@ -3,9 +3,15 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "device": {
+      "type": "string",
+      "description": "A short reference to the device code, the same on its issue, approval or denial and expiry, so that they join up: 16 hex digits of a hash of the hash it is kept under. It opens nothing.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none"
+    },
     "user_agent": {
       "type": "string",
-      "description": "The User-Agent the device sent when it asked for the code, cut to 256 characters: what the approval page showed the person.",
+      "description": "The User-Agent the device sent when it asked for the code, with control and format characters dropped and cut to 128 characters: what the approval page showed the person.",
       "x-audit-class": "shared",
       "x-audit-pii": "none"
     },
