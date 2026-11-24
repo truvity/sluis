@@ -122,7 +122,8 @@ func (t *tenant) identity(username string) *Identity {
 // handleAuthorize is the authorization endpoint: the code flow with PKCE S256 only. The client and the redirect URI
 // are checked first, and an error before that is shown here, never sent to an unchecked address (RFC 6749 section
 // 4.1.2.1). Without a session, the person signs in at the stable sluis first. The identity is the login_hint, or the
-// tenant's one identity; the session's groups must hold the tenant's act-as group.
+// tenant's one identity, or the one the person picks on the chooser (chooser.go); the session's groups must hold the
+// tenant's act-as group.
 func (t *tenant) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	cl := t.client(q.Get("client_id"))
@@ -178,8 +179,13 @@ func (t *tenant) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		}
 	case len(t.cfg.Identities) == 1:
 		id = &t.cfg.Identities[0]
+	case q.Get("prompt") == "none":
+		// A silent request cannot show the chooser. The person is signed in, so this is not login_required; the
+		// request lacks the choice of an account (OIDC Core section 3.1.2.6).
+		fail("account_selection_required", "login_hint: name the identity")
+		return
 	default:
-		fail("login_required", "login_hint: name the identity")
+		t.showChooser(w, r, ses)
 		return
 	}
 	code := random(32)
