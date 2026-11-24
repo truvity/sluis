@@ -798,9 +798,7 @@ impl<K: Kind> Watch<K> {
         Err(Error::Protocol("list: more pages than the limit"))
     }
 
-    /// Opens the stream. The future owns what it needs and holds no borrow of the watch, which holds a stream that is
-    /// not `Sync` (atoom's response body is `Send` only), so that a watch can be followed from a spawned task.
-    fn open(&self) -> impl std::future::Future<Output = Result<Stream, Error>> + Send + 'static {
+    async fn open(&self) -> Result<Stream, Error> {
         let req = WatchRequest {
             kind: self.store.segment.to_owned(),
             tenant: self.wire_tenant.clone(),
@@ -808,8 +806,7 @@ impl<K: Kind> Watch<K> {
             log_epoch: self.point.epoch,
             ..WatchRequest::default()
         };
-        let client = self.store.client.clone();
-        async move { Ok(client.watch(req).await?) }
+        Ok(self.store.client.watch(req).await?)
     }
 
     /// The point is gone: list again, after a wait when this keeps happening.
