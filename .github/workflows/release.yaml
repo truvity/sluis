@@ -67,7 +67,7 @@ jobs:
     permissions:
       contents: write
       packages: write
-    uses: truvity/ci-workflows/.github/workflows/release-public.yaml@3b638f8747ba9fc43f6006f360c96275b190a9cc # v6.5.2
+    uses: truvity/ci-workflows/.github/workflows/release-public.yaml@c2c911c51fcdf47d7685f8ea409144cc61e8444a # v6.6.0
     with:
       # Charts are published here, NOT by goreleaser, so this list is a second
       # place the set of shipped artifacts is written down.
@@ -91,11 +91,11 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: truvity/ci-actions/public-runners@576891256d95a4b615dcbbf63cabd71fad9bfa4f # v3.14.2
+      - uses: truvity/ci-actions/public-runners@3152a8b146886d783af7d999cd1b594c4d89d228 # v3.15.0
         with:
           runners: ubuntu-latest
           visibility: ${{ github.event.repository.visibility }}
-      - uses: truvity/ci-actions/setup-devbox@576891256d95a4b615dcbbf63cabd71fad9bfa4f # v3.14.2
+      - uses: truvity/ci-actions/setup-devbox@3152a8b146886d783af7d999cd1b594c4d89d228 # v3.15.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: ko-build/setup-ko@61b4d1d396f5b2e7d6bb6fefdce3dc38d1a13445 # v0.10
@@ -124,7 +124,7 @@ jobs:
           gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/checksums.txt" --clobber
       # The charts and the flake read dist/ of the checkout goreleaser built in.
       - run: rm -rf dist && cp -a audit/dist dist
-      - uses: truvity/ci-actions/publish-charts@576891256d95a4b615dcbbf63cabd71fad9bfa4f # v3.14.2
+      - uses: truvity/ci-actions/publish-charts@3152a8b146886d783af7d999cd1b594c4d89d228 # v3.15.0
         with:
           charts: '["audit"]'
           chart-root: charts
@@ -134,7 +134,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
       # The CLI as a Nix flake, so that another repository's devbox pins
       # `audit verify` by hash.
-      - uses: truvity/ci-actions/publish-nix-flakes@576891256d95a4b615dcbbf63cabd71fad9bfa4f # v3.14.2
+      - uses: truvity/ci-actions/publish-nix-flakes@3152a8b146886d783af7d999cd1b594c4d89d228 # v3.15.0
         with:
           flakes: '["audit"]'
           flake-dir: ${{ runner.temp }}/nix-flakes
@@ -156,11 +156,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: truvity/ci-actions/public-runners@576891256d95a4b615dcbbf63cabd71fad9bfa4f # v3.14.2
+      - uses: truvity/ci-actions/public-runners@3152a8b146886d783af7d999cd1b594c4d89d228 # v3.15.0
         with:
           runners: ubuntu-latest
           visibility: ${{ github.event.repository.visibility }}
-      - uses: truvity/ci-actions/setup-devbox@576891256d95a4b615dcbbf63cabd71fad9bfa4f # v3.14.2
+      - uses: truvity/ci-actions/setup-devbox@3152a8b146886d783af7d999cd1b594c4d89d228 # v3.15.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Log in to GHCR
@@ -253,11 +253,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: truvity/ci-actions/public-runners@576891256d95a4b615dcbbf63cabd71fad9bfa4f # v3.14.2
+      - uses: truvity/ci-actions/public-runners@3152a8b146886d783af7d999cd1b594c4d89d228 # v3.15.0
         with:
           runners: ubuntu-latest
           visibility: ${{ github.event.repository.visibility }}
-      - uses: truvity/ci-actions/setup-devbox@576891256d95a4b615dcbbf63cabd71fad9bfa4f # v3.14.2
+      - uses: truvity/ci-actions/setup-devbox@3152a8b146886d783af7d999cd1b594c4d89d228 # v3.15.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download the release assets
@@ -367,11 +367,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: truvity/ci-actions/public-runners@576891256d95a4b615dcbbf63cabd71fad9bfa4f # v3.14.2
+      - uses: truvity/ci-actions/public-runners@3152a8b146886d783af7d999cd1b594c4d89d228 # v3.15.0
         with:
           runners: ubuntu-latest
           visibility: ${{ github.event.repository.visibility }}
-      - uses: truvity/ci-actions/setup-devbox@576891256d95a4b615dcbbf63cabd71fad9bfa4f # v3.14.2
+      - uses: truvity/ci-actions/setup-devbox@3152a8b146886d783af7d999cd1b594c4d89d228 # v3.15.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Log in to GHCR
@@ -433,7 +433,7 @@ jobs:
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
-      - uses: truvity/ci-actions/token-exchange@576891256d95a4b615dcbbf63cabd71fad9bfa4f # v3.14.2
+      - uses: truvity/ci-actions/token-exchange@3152a8b146886d783af7d999cd1b594c4d89d228 # v3.15.0
         id: app
         if: vars.ACCESS_ROSTER_ISSUER != ''
         with:
