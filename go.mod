@@ -11,18 +11,18 @@ require (
 	github.com/go-webauthn/webauthn v0.18.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/transparency-dev/formats v0.1.1
-	github.com/truvity/atoom/blob v0.4.0
-	github.com/truvity/atoom/common v0.4.0
-	github.com/truvity/atoom/destination v0.4.0
-	github.com/truvity/atoom/key v0.4.0
-	github.com/truvity/atoom/key/pinrelease v0.4.0
-	github.com/truvity/atoom/key/slotplan v0.4.0
-	github.com/truvity/atoom/key/software v0.4.0
-	github.com/truvity/atoom/key/yubikeypiv v0.4.0
-	github.com/truvity/atoom/socket v0.4.0
-	github.com/truvity/atoom/source v0.4.0
-	github.com/truvity/atoom/store v0.4.0
-	github.com/truvity/atoom/transport v0.4.0
+	github.com/truvity/atoom/blob v0.5.0
+	github.com/truvity/atoom/common v0.5.0
+	github.com/truvity/atoom/destination v0.5.0
+	github.com/truvity/atoom/key v0.5.0
+	github.com/truvity/atoom/key/pinrelease v0.5.0
+	github.com/truvity/atoom/key/slotplan v0.5.0
+	github.com/truvity/atoom/key/software v0.5.0
+	github.com/truvity/atoom/key/yubikeypiv v0.5.0
+	github.com/truvity/atoom/socket v0.5.0
+	github.com/truvity/atoom/source v0.5.0
+	github.com/truvity/atoom/store v0.5.0
+	github.com/truvity/atoom/transport v0.5.0
 	github.com/truvity/audit/emitter v0.18.0
 	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/mod v0.42.0
