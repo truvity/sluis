@@ -48,14 +48,20 @@ The session lasts `session_ttl`, one hour by default. `POST /logout` ends it.
 
 A tenant names one group, `act_as`, whose holders may use its identities. mimic reads it from the `groups` claim of the stable sluis's token, the claim sluis puts grant names in. When the config names no group, it is `devel:shared:keycloak:<tenant>:act-as`. Grant names are narrowed to the audience, so mimic's client at the stable sluis lists the act-as things in its `groups` override. Without that, the group never reaches mimic.
 
-The identity is the `login_hint` of the authorization request. A tenant with one identity needs none. Any other request is refused back to the relying party:
+The identity is the `login_hint` of the authorization request. A tenant with one identity needs none. In a tenant of two or more identities, a request without a `login_hint` gets the chooser ([0056](/decisions/0056-mimic-shows-a-chooser-of-fixed-identities-when-none-is-named/)): a plain page that lists the tenant's identities, each by name and username. A choice resumes the same authorization request with that identity as its `login_hint`, and every check below runs on it again. CI names the identity and never sees the chooser.
+
+Each choice is a form that posts to `<issuer>/authorize/choose` with a token, an HMAC of the session cookie, the tenant and the request under a key derived from `keys.secret`. A choice whose token does not match the browser's own session is answered `403`, so a page on another site cannot pick an identity for a person. The chooser is shown only after the client, the redirect URI, PKCE, the session and the act-as group are checked, and it loads nothing and cannot be framed.
+
+Any other request is refused back to the relying party:
 
 | Request | Error |
 |---|---|
 | The session's groups do not hold the tenant's `act_as` | `access_denied` |
-| The `login_hint` names no identity of the tenant | `access_denied` |
-| No `login_hint` in a tenant of two or more identities | `login_required` |
+| The `login_hint` names no identity of the tenant, or the choice names none | `access_denied` |
+| `prompt=none` and no `login_hint` in a tenant of two or more identities | `account_selection_required` |
 | `prompt=none` with no session | `login_required` |
+
+With a session, the person is signed in and only the choice of an identity is missing, so a silent request gets `account_selection_required` (OpenID Connect Core 1.0, section 3.1.2.6), not `login_required`.
 
 ## Config
 
@@ -128,6 +134,7 @@ Each tenant is one issuer, `<public_url>/<profile>/<tenant>`, for example `https
 | `/.well-known/openid-configuration` | Discovery: S256 only, `authorization_response_iss_parameter_supported: true` |
 | `/jwks` | The key set: one key, its `kid` the RFC 7638 thumbprint |
 | `/authorize` | The code flow, with `response_type=code`, an S256 `code_challenge` and `openid` in the scope; answers with `code`, `state` and `iss` (RFC 9207) |
+| `POST /authorize/choose` | A choice of the chooser: the request, the identity's username as `login_hint`, and the token of the session |
 | `/token` | Redeems a code once, within a minute, for the client, the redirect URI and the PKCE verifier it was issued for; client authentication `client_secret_basic`, `client_secret_post` or `none` |
 | `/userinfo` | The claims for an access token of this issuer |
 
@@ -161,7 +168,7 @@ Add an identity provider of the type OpenID Connect v1.0 to the realm, one per m
 1. Set the discovery endpoint to `<issuer>/.well-known/openid-configuration`, and give the provider an alias such as `mimic-entra-example-a`.
 2. Set the client id and secret to the tenant's client in mimic, with client authentication "Client secret sent as basic auth".
 3. Turn PKCE on, with the method S256.
-4. Turn on passing `login_hint`, so a test can name the identity.
+4. Turn on passing `login_hint`, so a test can name the identity. A person who signs in by hand without one picks the identity on mimic's chooser.
 5. Add the realm's redirect URI, `https://<keycloak>/realms/<realm>/broker/<alias>/endpoint`, to `redirect_uris` of the tenant's client in mimic.
 6. Map the claims. Take the username from `email` or `preferred_username`, and the subject from `sub`. Use an attribute importer of the claim `act.sub` to keep the real subject on the user for the audit trail. Map `groups` as the realm maps its real upstream's groups.
 7. In a browser test, open the relying party with `kc_idp_hint=<alias>` and `login_hint=<username>`, after the hand-off of the CI job's token.

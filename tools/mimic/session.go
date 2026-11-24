@@ -16,8 +16,11 @@ const (
 	loginCookie   = "mimic_login"
 )
 
-// session is what the session cookie carries: who signed in at the stable sluis, how, and until when.
+// session is what the session cookie carries: who signed in at the stable sluis, how, and until when. SID is random,
+// so that two sessions of the same subject started in the same second still differ, and the chooser's token of one
+// (chooser.go) is no good for the other.
 type session struct {
+	SID    string   `json:"sid"`
 	Sub    string   `json:"sub"`
 	Groups []string `json:"groups"`
 	Via    string   `json:"via"` // "person" or "ci"
@@ -76,7 +79,7 @@ func (s *Server) clearCookie(w http.ResponseWriter, name string) {
 func (s *Server) startSession(w http.ResponseWriter, sub *subject, via string) error {
 	now := s.now()
 	exp := now.Add(s.cfg.SessionTTL)
-	v, err := s.keys.seal(SessionCookie, session{Sub: sub.Sub, Groups: sub.Groups, Via: via, Auth: now.Unix(), Exp: exp.Unix()})
+	v, err := s.keys.seal(SessionCookie, session{SID: random(16), Sub: sub.Sub, Groups: sub.Groups, Via: via, Auth: now.Unix(), Exp: exp.Unix()})
 	if err != nil {
 		return err
 	}

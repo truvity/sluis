@@ -27,12 +27,14 @@ type keys struct {
 	public  jose.JSONWebKey
 	subject []byte // the subject hash and the stable UUIDs
 	session []byte // the MAC of the session and sign-in cookies
+	choice  []byte // the token of the identity chooser's form
 }
 
 // The labels of the keys derived from the secret (RFC 5869 info).
 const (
 	infoSubject = "sluis-mimic subject v1"
 	infoSession = "sluis-mimic session v1"
+	infoChoice  = "sluis-mimic choice v1"
 )
 
 func loadKeys(k Keys) (*keys, error) {
@@ -69,7 +71,11 @@ func newKeys(signer crypto.Signer, alg jose.SignatureAlgorithm, secret []byte) (
 	if err != nil {
 		return nil, err
 	}
-	return &keys{signer: signer, alg: alg, kid: pub.KeyID, public: pub, subject: sub, session: ses}, nil
+	choice, err := hkdf.Key(sha256.New, secret, nil, infoChoice, 32)
+	if err != nil {
+		return nil, err
+	}
+	return &keys{signer: signer, alg: alg, kid: pub.KeyID, public: pub, subject: sub, session: ses, choice: choice}, nil
 }
 
 // parseSigningKey reads a PKCS#8 PEM private key: ECDSA P-256 signs ES256, RSA of 2048 bits or more signs RS256.

@@ -331,9 +331,9 @@ func TestTheActAsGroupDecidesWhoMayUseATenant(t *testing.T) {
 			t.Fatalf("not refused: %v", q)
 		}
 	})
-	t.Run("no login_hint in a tenant of two identities", func(t *testing.T) {
-		q := a.authorize(m.HandOff("person-1", []string{actA}), nil)
-		if q.Get("error") != "login_required" || q.Get("code") != "" {
+	t.Run("no login_hint in a tenant of two identities, with prompt=none", func(t *testing.T) {
+		q := a.authorize(m.HandOff("person-1", []string{actA}), func(q url.Values) { q.Set("prompt", "none") })
+		if q.Get("error") != "account_selection_required" || q.Get("code") != "" {
 			t.Fatalf("not refused: %v", q)
 		}
 	})

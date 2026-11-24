@@ -111,6 +111,7 @@ func (s *Server) routes() {
 		m.HandleFunc("GET "+p+"/.well-known/openid-configuration", t.handleDiscovery)
 		m.HandleFunc("GET "+p+"/jwks", t.handleJWKS)
 		m.HandleFunc("GET "+p+"/authorize", t.handleAuthorize)
+		m.HandleFunc("POST "+p+"/authorize/choose", t.handleChoose)
 		m.HandleFunc("POST "+p+"/token", t.handleToken)
 		m.HandleFunc("GET "+p+"/userinfo", t.handleUserinfo)
 		m.HandleFunc("POST "+p+"/userinfo", t.handleUserinfo)

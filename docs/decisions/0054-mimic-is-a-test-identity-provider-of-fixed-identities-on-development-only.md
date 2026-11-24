@@ -1,6 +1,6 @@
 # 0054 — mimic is a test identity provider of fixed identities, on development only, that people and CI jobs reach through the stable sluis
 
-**Status:** Accepted
+**Status:** Accepted; partly superseded by 0056
 **Date:** 2026-11-22
 
 Proposal: [issue #1950](https://github.com/truvity/sluis/issues/1950).
