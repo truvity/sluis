@@ -90,7 +90,7 @@ pub fn search(o: &Outcome<'_>) -> Event {
         caller: o.caller.into(),
         operation: "Search".into(),
         policy,
-        sluis,
+        product_object: sluis,
         ..Event::default()
     }
 }

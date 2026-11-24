@@ -437,7 +437,7 @@ requirements:
     standards:
       - {id: ST-97, section: "1", depth: Partial}
     issues: [802]
-    tests: [kits/go/audit/emitter_test.go, kits/go/audit/lost_test.go, kits/rust/sluis-audit/tests/emit.rs, drivers/writer/spool/tests/spool.rs]
+    tests: [kits/rust/sluis-audit/tests/emit.rs, drivers/writer/spool/tests/spool.rs]
     verification:
       - {kind: integration-test, ref: "a failing transport in both kits returns the error, is not retried and is not sent later; through the real spool, a full or an absent spool refuses both calls and the spool holds only what it took"}
   - id: REQ-AUDIT-186
@@ -453,7 +453,7 @@ requirements:
     runtimes: all
     standards: []
     issues: [802]
-    tests: [kits/go/audit/lost_test.go, kits/rust/sluis-audit/tests/emit.rs, drivers/writer/spool/tests/spool.rs, actors/writer/internal/writerd/writer_test.go, actors/key/main_test.go, actors/signer/tests/sign.rs, kits/go/rpc/limiter_test.go, actors/key/internal/keyd/refusal_close_test.go, actors/key/internal/keyd/refusal_loss_test.go]
+    tests: [kits/rust/sluis-audit/tests/emit.rs, drivers/writer/spool/tests/spool.rs, actors/writer/internal/writerd/writer_test.go, actors/key/main_test.go, actors/signer/tests/sign.rs, kits/go/rpc/limiter_test.go, actors/key/internal/keyd/refusal_close_test.go, actors/key/internal/keyd/refusal_loss_test.go]
     verification:
       - {kind: test-vectors, ref: "record vectors with lost: the same bytes and SHA-384 in the Go and Rust kits, and a record of a caller that writes lost is refused (kits/conformance/audit)"}
       - {kind: integration-test, ref: "a failure then a success carries the total and stops; per tenant, bounded; a delivered but errored record repeats it harmlessly; the real spool, full and absent; the writer stores the record as it is"}
@@ -472,7 +472,7 @@ requirements:
     runtimes: all
     standards: []
     issues: [802]
-    tests: [actors/key/internal/keyd/declaration_test.go, actors/signer/tests/sign.rs, kits/go/audit/lost_test.go]
+    tests: [actors/key/internal/keyd/declaration_test.go, actors/signer/tests/sign.rs]
     verification:
       - {kind: integration-test, ref: "a revocation with the audit transport down stands and its answer says Audited=false; a ring change stands when the spool is full; a fact of a failed operation is not counted"}
   - id: REQ-AUDIT-014
@@ -1193,7 +1193,6 @@ requirements:
     issues: [839]
     tests:
       - actors/reader/tests/search.rs
-      - kits/rust/sluis-audit/src/record.rs
     verification:
       - {kind: integration-test, ref: "read audit test: a read of several tenants carries an authorizations entry for each decision, and policy names the decision that denied it"}
   - id: REQ-AUDIT-075
@@ -1384,7 +1383,6 @@ requirements:
     issues: [1120]
     tests:
       - kits/go/audit/vectors_test.go
-      - kits/rust/sluis-audit/src/tests.rs
     verification:
       - {kind: test-vectors, ref: "the record vectors and the example of every action, built by the Go and Rust emitters to the same bytes, and every example through the OCSF toolkit in CI (just ocsf-check)"}
   - id: REQ-AUDIT-091
@@ -1642,7 +1640,7 @@ requirements:
     standards:
       - {id: ST-78, section: "8785", depth: Full}
     issues: [1121]
-    tests: [kits/go/audit/vectors_test.go, actors/writer/internal/writerd/record_test.go]
+    tests: [actors/writer/internal/writerd/record_test.go]
     verification:
       - {kind: test-vectors, ref: "RFC 8785 test data and non-canonical records"}
   - id: REQ-AUDIT-107
@@ -1791,7 +1789,6 @@ requirements:
     issues: [1120]
     tests:
       - kits/go/audit/vectors_test.go
-      - kits/rust/sluis-audit/src/tests.rs
     verification:
       - {kind: test-vectors, ref: "the record vectors and the example of every action, built by the Go and Rust emitters to the same bytes, and every example through the OCSF toolkit in CI (just ocsf-check)"}
   - id: REQ-AUDIT-117
@@ -1809,7 +1806,6 @@ requirements:
     issues: [1120]
     tests:
       - kits/go/audit/vectors_test.go
-      - kits/rust/sluis-audit/src/tests.rs
     verification:
       - {kind: test-vectors, ref: "the record vectors and the example of every action, built by the Go and Rust emitters to the same bytes, and every example through the OCSF toolkit in CI (just ocsf-check)"}
   - id: REQ-AUDIT-118
@@ -1856,7 +1852,6 @@ requirements:
     issues: [1120]
     tests:
       - kits/go/audit/vectors_test.go
-      - kits/rust/sluis-audit/src/tests.rs
       - tools/ocsf/ocsf_test.go
     verification:
       - {kind: test-vectors, ref: "the record vectors and the example of every action, built by the Go and Rust emitters to the same bytes, and every example through the OCSF toolkit in CI (just ocsf-check)"}
@@ -2655,7 +2650,6 @@ requirements:
     issues: [1120]
     tests:
       - kits/go/audit/vectors_test.go
-      - kits/rust/sluis-audit/src/tests.rs
       - tools/ocsf/ocsf_test.go
       - actors/key/internal/keyd/audit_ocsf_test.go
       - actors/entry/tests/edge.rs

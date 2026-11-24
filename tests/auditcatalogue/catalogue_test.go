@@ -224,8 +224,8 @@ func TestEveryRowOfTheTableIsEmittedByItsActor(t *testing.T) {
 			t.Errorf("the row %q is emitted by no actor: remove it from docs/architecture/audit-actions.yaml, or emit it", name)
 			continue
 		}
-		if !strings.Contains(filepath.ToSlash(f), "actors/"+row.Actor+"/") {
-			t.Errorf("the row %q names the actor %q, and it is emitted in %s", name, row.Actor, f)
+		if !strings.Contains(filepath.ToSlash(f), "actors/"+row.Component+"/") {
+			t.Errorf("the row %q names the actor %q, and it is emitted in %s", name, row.Component, f)
 		}
 	}
 }

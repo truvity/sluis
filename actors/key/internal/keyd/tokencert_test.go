@@ -940,7 +940,7 @@ func recordOf(t *testing.T, ev Event) error {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec, err := audit.BuildRecord("key", testBoundary, "0.0.0-test", "01950000-0000-7000-8000-000000000001", 1793750400000, "req-7f3a_01", "", out)
+	rec, err := audit.BuildRecord(audit.RecordInput{Component: "key", Scope: testBoundary, Release: "0.0.0-test", UID: "01950000-0000-7000-8000-000000000001", TimeMS: 1793750400000, Correlation: "req-7f3a_01", Event: out})
 	if err != nil {
 		return err
 	}

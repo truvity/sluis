@@ -440,7 +440,7 @@ fn test_table() -> Arc<Table> {
         .iter()
         .map(|n| Row {
             name: n,
-            actor: "entry",
+            component: "entry",
             class: 6003,
             activities: if *n == "key.sign" {
                 &[Activity {

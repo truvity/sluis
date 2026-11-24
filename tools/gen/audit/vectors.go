@@ -151,7 +151,7 @@ func buildCase(a action) (vecCase, error) {
 	ae := audit.Event{
 		Caller: ex.Caller, Operation: ex.Operation,
 		Action: audit.Action{Name: a.Name, ClassUID: a.Class, ActivityID: ac.ID, ActivityName: ac.Name},
-		Status: audit.Status(status), StatusCode: ex.StatusCode, Tenant: ex.Tenant, Sluis: ev.Sluis,
+		Status: audit.Status(status), StatusCode: ex.StatusCode, Tenant: ex.Tenant, ProductObject: ev.Sluis,
 	}
 	if x := ex.Entity; x != nil {
 		ev.Entity = &vecEntity{Type: a.Entity.Type, Name: x.Name, UID: x.UID, Version: x.Version}
@@ -163,7 +163,10 @@ func buildCase(a action) (vecCase, error) {
 	if p := ev.Policy; p != nil {
 		ae.Policy = &audit.PolicyRef{DecisionID: p.DecisionID, Digest: p.Digest, PolicyIDs: p.PolicyIDs, Decision: audit.Decision(p.Decision)}
 	}
-	rec, err := audit.BuildRecord(a.Actor, vecBoundary, vecRelease, vecUID, vecTimeMS, vecCorrelation, pseudonym, ae)
+	rec, err := audit.BuildRecord(audit.RecordInput{
+		Component: a.Actor, Scope: vecBoundary, Release: vecRelease, UID: vecUID, TimeMS: vecTimeMS,
+		Correlation: vecCorrelation, Pseudonym: pseudonym, Event: ae,
+	})
 	if err != nil {
 		return vecCase{}, fmt.Errorf("action %s: %w", a.Name, err)
 	}

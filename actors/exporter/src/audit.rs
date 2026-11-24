@@ -113,7 +113,7 @@ impl Auditor {
                 activity_name: String::new(),
             },
             status: Status::Success,
-            sluis,
+            product_object: sluis,
             ..Event::default()
         };
         self.emit("exporter.start", ev).await;
@@ -137,7 +137,7 @@ impl Auditor {
             },
             status: Status::Success,
             entity: document(w.document),
-            sluis,
+            product_object: sluis,
             ..Event::default()
         };
         self.emit("exporter.write", ev).await;
@@ -162,7 +162,7 @@ impl Auditor {
             },
             status_code: reason.unwrap_or_default().into(),
             entity: document(document_name),
-            sluis,
+            product_object: sluis,
             ..Event::default()
         };
         self.emit("exporter.unverified", ev).await;
@@ -183,7 +183,7 @@ impl Auditor {
             status: Status::Failure,
             status_code: reason.into(),
             entity: document(document_name),
-            sluis,
+            product_object: sluis,
             ..Event::default()
         };
         self.emit("exporter.refused", ev).await;

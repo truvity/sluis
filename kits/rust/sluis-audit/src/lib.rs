@@ -1,225 +1,75 @@
-//! The audit emitter library (ADR 0028 "Four pieces"): it lives inside each emitting process,
-//! holds no credential, and from one call builds one message, an OCSF 1.9.0 audit record as
-//! RFC 8785 canonical JSON (ADR 0030 "The record format"), then hands it to the audit transport on
-//! the emit socket.
+//! sluis's side of the audit emitter. The emitter itself (the record, its canonical form, the
+//! schemas and their policy, the ids, the pseudonym's form, the count of lost facts and the
+//! transport) is the crate `audit-emitter` of truvity/audit, and this crate re-exports it. What
+//! stays here is what is sluis's own:
 //!
-//! A person is never named in a record. The emitter asks key@ for `Mac` under the tenant's
-//! pseudonym key before the record leaves the process (ADR 0029 "Pseudonyms"), so a [`Subject`]
-//! becomes `p1.<YYYYMM>.<first 128 bits of the MAC>`.
+//! - the action table of sluis, generated from `docs/architecture/audit-actions.yaml` by
+//!   `tools/gen/audit` into `generated.rs` ([`SluisTable::sluis`]);
+//! - the `Mac` of the `pseudonym` purpose over key@, with sluis's domain label
+//!   [`PSEUDONYM_LABEL`];
+//! - sluis's names for audit's neutral model: the product is [`PRODUCT`], an actor is a
+//!   component, a boundary is the scope ([`Config`]).
 //!
-//! [`Emitter::emit`] hands the message over and returns; [`Emitter::emit_blocking`] returns only
-//! when the transport says the message is durable (ADR 0029 "Sealing"). Delivery is at least once
-//! and the writer removes a repeat by `metadata.uid`. The library keeps no queue and does not
-//! retry: the spool driver behind the socket is the durable buffer, and a failure is returned to
-//! the caller, who logs it.
+//! A person is never named in a record: the emitter asks key@ for `Mac` under the tenant's
+//! pseudonym key before the record leaves the process (ADR 0029 "Pseudonyms"). The product's own
+//! facts are `unmapped.sluis`, which an event carries in [`Event::product_object`].
 //!
-//! A best-effort fact that cannot be delivered ([`Emitter::emit`], or
-//! [`Emitter::emit_blocking_best_effort`]) is lost, and the emitter counts it in memory, for the
-//! tenant of the event. A record of that tenant carries the running total of the process as
-//! `unmapped.sluis.lost` (`process`, `total`, `since`) until a record that carries the current
-//! total has been delivered, so a repeat is harmless and a reader takes the highest total of a
-//! process and never sums (ADR 0029 "Facts that are lost are counted"). The total is not a queue
-//! and nothing is resent; a process that exits with an unreported total takes it with it. A call
-//! that is dropped before it finishes (a caller's timeout) counts as a failure.
-//! [`Emitter::emit_required`] is `emit` for a caller that fails its operation on an error: that
-//! fact is not lost and is not counted.
-//!
-//! The Go package `kits/go/audit` produces the same bytes from the same input
-//! (`kits/conformance/audit`).
+//! The Go package `kits/go/audit` is the same wrapper over the Go module of truvity/audit, and the
+//! vectors of `kits/conformance/audit` hold both to the same bytes.
 
-mod canonical;
 #[rustfmt::skip]
 mod generated;
-mod policy;
-mod record;
-mod table;
-mod uuid;
 
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex, PoisonError};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock};
+use std::time::SystemTime;
 
-use base64::Engine as _;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use connectrpc::ConnectError;
-use connectrpc::error::ErrorCode;
-use serde_json::{Map, Value};
-use sluis_kit::{Transport, dial, refusal};
-use sluis_proto::atoom::transport::v1alpha1::{AuditMessage, EmitRequest, TransportServiceClient};
-use sluis_proto::sluis::key::v2alpha1::{KeyServiceClient, MacRequest};
+use sluis_kit::{Transport, dial};
+use sluis_proto::sluis::key::v2alpha1::KeyServiceClient;
 
-pub use canonical::canonical;
-pub use policy::{POLICY_VERSION, check_policy, max_cost, valid_release};
-pub use table::{Activity, DEFS_NAME, Row, Table, check_documents};
-pub use uuid::new_uuid_v7;
+pub use audit_emitter::{
+    Action, Activity, DEFS_NAME, Decided, Decision, Entity, Event, Mac, MacFuture, MacRequest,
+    OCSF_VERSION, POLICY_VERSION, PSEUDONYM_PURPOSE, PolicyRef, Pseudonyms, RECORD_MAX,
+    RESULTS_MAX, Result, Row, STRING_MAX, Status, Subject, Table, canonical, check_documents,
+    check_policy, max_cost, new_uuid_v7, valid_release,
+};
 
-/// The result of every call: a Connect error with the `Refusal` detail (contracts.md "Errors").
-pub type Result<T> = std::result::Result<T, ConnectError>;
+/// The product every record of sluis names: `metadata.product.name`, and the product object
+/// `unmapped.sluis`.
+pub const PRODUCT: &str = "sluis";
 
-/// The OCSF release every record pins (0030: the first release pins 1.9.0).
-pub const OCSF_VERSION: &str = "1.9.0";
-/// The longest string a record may carry, in bytes (0029: free text is bounded).
-pub const STRING_MAX: usize = 1024;
-/// The largest record, in bytes.
-pub const RECORD_MAX: usize = 16 << 10;
+/// sluis's domain label of a pseudonym (ADR 0029 "Pseudonyms"), which key@ binds into the MAC. A
+/// changed label changes every pseudonym.
+pub const PSEUDONYM_LABEL: &str = "sluis-pseudonym-v1";
 
-const PSEUDONYM_PURPOSE: &str = "pseudonym";
-const PSEUDONYM_LABEL: &str = "sluis-pseudonym-v1";
-const PSEUDONYM_BYTES: usize = 16;
-
-/// OCSF's `status_id`.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-#[repr(i64)]
-pub enum Status {
-    /// The action succeeded.
-    #[default]
-    Success = 1,
-    /// The action failed.
-    Failure = 2,
+/// The action table of sluis itself.
+pub trait SluisTable {
+    /// The table of sluis, generated from `docs/architecture/audit-actions.yaml`, built once per
+    /// process and shared.
+    fn sluis() -> Arc<Table>;
 }
 
-/// One row of an actor's action table (0030: the table is code).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Action {
-    /// `metadata.event_code`, e.g. `key.sign`.
-    pub name: String,
-    /// The OCSF class, e.g. 6003 API Activity.
-    pub class_uid: u32,
-    /// The OCSF activity within the class, e.g. 99 Other.
-    pub activity_id: u32,
-    /// `activity_name`. Required when `activity_id` is 99 (0030: "activity_name only for activity
-    /// 99 or where the table names one"), e.g. `Sign` or `Open` for key use.
-    pub activity_name: String,
-}
-
-/// The person or external actor an event concerns.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Subject {
-    /// The tenant whose pseudonym key is used.
-    pub tenant: String,
-    /// The kind of identity (0029 "Pseudonyms"), e.g. `person`, `workload` or `client`. It is part
-    /// of the pseudonym's input, so the same identifier of two kinds gives two pseudonyms. Required.
-    pub kind: String,
-    /// The stable identifier of that kind: the sluis subject of a person; the upstream's issuer and
-    /// subject for an identity sluis has assigned no subject; the SPIFFE ID or client id of a
-    /// workload or client; a product's own subject id for a person of a product. The emitter turns
-    /// it into a pseudonym and never sends it.
-    pub value: String,
-}
-
-/// The outcome of a policy decision: OCSF's `security_control` `action_id`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(i64)]
-pub enum Decision {
-    /// Allowed (`action_id` 1).
-    Allowed = 1,
-    /// Denied (`action_id` 2).
-    Denied = 2,
-}
-
-impl Decision {
-    pub(crate) fn caption(self) -> &'static str {
-        match self {
-            Decision::Allowed => "Allowed",
-            Decision::Denied => "Denied",
-        }
+impl SluisTable for Table {
+    fn sluis() -> Arc<Table> {
+        static SLUIS: OnceLock<Arc<Table>> = OnceLock::new();
+        Arc::clone(SLUIS.get_or_init(|| {
+            #[allow(clippy::expect_used)]
+            // a broken generated table is a build error, caught by the tests
+            Arc::new(
+                Table::new(generated::ROWS, generated::SCHEMAS)
+                    .expect("the generated action table is broken"),
+            )
+        }))
     }
 }
 
-/// The decision that gated an action (0030 "The class mapping": part of the record of the action).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct PolicyRef {
-    /// The decision id: `policy.uid`. Required, because the OCSF policy object needs a uid; a
-    /// digest or a list of policies without one is refused.
-    pub decision_id: String,
-    /// The digest of the policy bundle: `policy.version`.
-    pub digest: String,
-    /// The policies that took part: `authorizations[].policy.uid`.
-    pub policy_ids: Vec<String>,
-    /// `action_id` and `authorizations[].decision`; `None` records none.
-    pub decision: Option<Decision>,
-    /// The authorization results of an action that several decisions gated, such as a read of several tenants that
-    /// asked policy once for each (REQ-AUDIT-074). When it is not empty these are `authorizations`, one entry for
-    /// each, in this order, and `policy_ids` is not used; `policy` and `action_id` stay the one decision named above,
-    /// which the caller chooses as the one that settled the action (the denying one when one denied). With none here
-    /// the record is as it always was. At most [`RESULTS_MAX`].
-    pub results: Vec<Decided>,
-}
-
-/// The most results one record names (the `authorizations` of the generated schemas hold 128).
-pub const RESULTS_MAX: usize = 128;
-
-/// One entry of `authorizations`: the verdict of a decision and the policy that determined it.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Decided {
-    /// `authorizations[].policy.uid`; empty for a decision no policy determined, which has the verdict alone.
-    pub policy_id: String,
-    /// `authorizations[].decision`.
-    pub decision: Option<Decision>,
-}
-
-/// The thing an Entity Management action changed (OCSF `entity`): a key of the signing ring, a data key and the wrap of
-/// it for a recipient, a document at an export destination. `kind` is a closed word that names the kind of thing and
-/// is the row's own (the schema of the row holds it to that word). `name`, `uid` and `version` identify it; at least one
-/// of `name` and `uid` is required. They are names, ids and counts the actor knows, never text a request carried.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Entity {
-    /// `entity.type`.
-    pub kind: String,
-    /// `entity.name`; empty for none.
-    pub name: String,
-    /// `entity.uid`; empty for none.
-    pub uid: String,
-    /// `entity.version`: a decimal number, such as the generation of a data key; empty for none.
-    pub version: String,
-}
-
-/// One audit event.
-#[derive(Clone, Debug, Default)]
-pub struct Event {
-    /// The action.
-    pub action: Action,
-    /// The outcome.
-    pub status: Status,
-    /// A closed reason, e.g. `grant`; empty on success.
-    pub status_code: String,
-    /// `metadata.tenant_uid`; empty is the operator's own tenant (the writer fills it).
-    pub tenant: String,
-    /// The person concerned, as `user.uid` (a pseudonym).
-    pub subject: Option<Subject>,
-    /// The decision that gated this action.
-    pub policy: Option<PolicyRef>,
-    /// `unmapped.sluis`: strings, booleans, integers within +-(2^53-1), lists of strings and nested
-    /// objects. A float, a null or a list of anything else is refused.
-    pub sluis: Map<String, Value>,
-    /// The correlation id for `metadata.correlation_uid`. When `None`, the emitter takes
-    /// `sluis_kit::correlation::current()`, the id of the call being served, so a handler need not
-    /// pass it. An id that is not 1 to 64 characters of `[A-Za-z0-9_-]` is dropped.
-    pub correlation_id: Option<String>,
-    /// The thing an Entity Management action (class 3004) changed; required there and refused elsewhere.
-    pub entity: Option<Entity>,
-    /// The source of an API Activity action (class 6003; OCSF `src_endpoint.name`): the peer the transport named
-    /// (`SO_PEERCRED` through the registry, such as `session` or `signer`, or `admin` for the root-only socket), the node whose
-    /// request a fact answers, or the actor's own name for what it started itself. `unknown` says the transport could not
-    /// name the peer. Never an address, and never text a request carried. Required for API Activity, refused elsewhere.
-    pub caller: String,
-    /// What an API Activity action did (class 6003; OCSF `api.operation`): the Connect method, the store verb or the route, a
-    /// closed word the actor chooses and never text a request carried. Required for API Activity, refused elsewhere.
-    pub operation: String,
-    /// Says the record is worth more than the name of its subject: when key@ cannot make the pseudonym, the record is
-    /// written as if it had no subject (`user.uid` `unknown` in an Authentication), and one warning says so. It is for a
-    /// refusal, which ADR 0005 has audited whatever else fails; a fact that must name its subject leaves it `false` and
-    /// fails when the pseudonym cannot be made.
-    pub subject_best_effort: bool,
-}
-
-/// What an [`Emitter`] needs.
+/// What an [`Emitter`] of sluis needs, in sluis's words.
 #[derive(Clone, Debug)]
 pub struct Config {
-    /// The emitting actor's registry name (or a product's service name).
+    /// The emitting actor's registry name (or a product's service name): audit's component.
     pub actor: String,
-    /// The boundary.
+    /// The boundary: audit's scope.
     pub boundary: String,
     /// The release (`sluis_version`).
     pub release: String,
@@ -232,465 +82,97 @@ pub struct Config {
     pub now: Option<fn() -> SystemTime>,
 }
 
-/// Builds audit messages and hands them to the transport. It is cheap to clone and safe to share;
-/// the clones share one process name and one set of totals of lost facts.
+/// The emitter of `audit-emitter`, configured for sluis. It is cheap to clone and safe to share;
+/// the clones share one process name and one set of totals of lost facts. Every method of the
+/// emitter is reached through `Deref`.
 #[derive(Clone)]
-pub struct Emitter {
-    actor: String,
-    boundary: String,
-    release: String,
-    transport: TransportServiceClient<Transport>,
-    keys: Option<KeyServiceClient<Transport>>,
-    now: fn() -> SystemTime,
-    lost: Arc<Lost>,
-    table: Arc<Table>,
-}
-
-/// The tenants an emitter keeps a total for at most, so that a caller cannot grow the map with
-/// tenants of its choosing. Past the bound a loss for another tenant is counted in the operator's
-/// own bucket (key `""`), and one warning says so.
-pub(crate) const MAX_LOST_TENANTS: usize = 256;
-
-/// The running total for one tenant since the process started. `since` is the time of the first
-/// loss that has not been reported yet; `reported` is the largest total a delivered record has
-/// carried.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct TenantLoss {
-    pub(crate) total: i64,
-    pub(crate) since: i64,
-    pub(crate) reported: i64,
-}
-
-#[derive(Default)]
-pub(crate) struct LostState {
-    pub(crate) by_tenant: HashMap<String, TenantLoss>,
-    overflow: bool,
-    /// The time (Unix ms) of the last warning that a record went without its subject, and how many records did since.
-    subject_warned: Option<i64>,
-    subject_unnamed: i64,
-}
-
-/// The least time between two warnings that a subject could not be named: while key@ is down every refusal of session is such
-/// a record, and a warning for each would be the flood the best-effort record is there to avoid.
-pub(crate) const SUBJECT_WARN_EVERY_MS: i64 = 60_000;
-
-/// The name of one emitter for the life of its process (16 random hex digits), and its totals.
-pub(crate) struct Lost {
-    process: String,
-    state: Mutex<LostState>,
-}
-
-/// What a record carries: the process, its running total for the record's tenant, and the time of
-/// the first loss not yet reported. The zero total is none.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct LostNote {
-    pub(crate) process: String,
-    pub(crate) total: i64,
-    pub(crate) since: i64,
-}
-
-impl LostState {
-    /// The key a loss of the tenant is counted under: the tenant, or the operator's own bucket for a
-    /// tenant too long to be one or when the bound is hit.
-    pub(crate) fn bucket(&mut self, tenant: &str, process: &str) -> String {
-        if self.by_tenant.contains_key(tenant) {
-            return tenant.to_owned();
-        }
-        if tenant.len() > STRING_MAX || self.by_tenant.len() >= MAX_LOST_TENANTS {
-            if !self.overflow && !tenant.is_empty() {
-                self.overflow = true;
-                tracing::warn!(
-                    process,
-                    bound = MAX_LOST_TENANTS,
-                    "audit: too many tenants have lost facts; further losses are counted in the operator's own tenant"
-                );
-            }
-            return String::new();
-        }
-        tenant.to_owned()
-    }
-
-    pub(crate) fn record_loss(&mut self, tenant: &str, at: i64, process: &str) {
-        let k = self.bucket(tenant, process);
-        let l = self.by_tenant.entry(k).or_default();
-        if l.total == l.reported {
-            l.since = at; // a new run of losses starts
-        }
-        l.total = l.total.saturating_add(1).min(canonical::MAX_SAFE_INT);
-    }
-}
-
-impl Lost {
-    fn new() -> Self {
-        let mut b = [0u8; 8];
-        uuid::os_random(&mut b);
-        Self {
-            process: b.iter().map(|x| format!("{x:02x}")).collect(),
-            state: Mutex::default(),
-        }
-    }
-
-    fn state(&self) -> std::sync::MutexGuard<'_, LostState> {
-        self.state.lock().unwrap_or_else(PoisonError::into_inner)
-    }
-
-    /// Logs, at most once in [`SUBJECT_WARN_EVERY_MS`], that a record was written without its subject, with how many others
-    /// were written without one since the last warning. Tenant-free on purpose: the log of the process is read by the
-    /// operator, whoever the tenant is.
-    fn warn_subject_unnamed(&self, now_ms: i64, action: &str) {
-        let since_last = {
-            let mut st = self.state();
-            if st
-                .subject_warned
-                .is_some_and(|at| now_ms.saturating_sub(at) < SUBJECT_WARN_EVERY_MS)
-            {
-                st.subject_unnamed += 1;
-                return;
-            }
-            st.subject_warned = Some(now_ms);
-            std::mem::take(&mut st.subject_unnamed)
-        };
-        tracing::warn!(
-            process = self.process.as_str(),
-            action,
-            since_last_warning = since_last,
-            "audit: a subject could not be named; the record is written without it"
-        );
-    }
-
-    /// The note a record of the tenant carries: its own total, while a record that carries it has
-    /// not been delivered, and never another tenant's.
-    fn note_for(&self, tenant: &str) -> LostNote {
-        match self.state().by_tenant.get(tenant) {
-            Some(l) if l.total > l.reported => LostNote {
-                process: self.process.clone(),
-                total: l.total,
-                since: l.since,
-            },
-            _ => LostNote::default(),
-        }
-    }
-
-    /// Records that a record carrying `n` reached the transport, and says so in the log.
-    fn reported(&self, tenant: &str, n: &LostNote) {
-        if n.total == 0 {
-            return;
-        }
-        {
-            let mut st = self.state();
-            match st.by_tenant.get_mut(tenant) {
-                Some(l) if n.total > l.reported => l.reported = n.total,
-                _ => return,
-            }
-        }
-        // Tenant-free on purpose: the log of the process is read by the operator, whoever the tenant is.
-        tracing::warn!(
-            process = n.process.as_str(),
-            total = n.total,
-            since = n.since,
-            "audit: facts were lost and a record now reports them"
-        );
-    }
-}
-
-/// One emit in flight. A best-effort attempt that does not reach the transport adds one to the
-/// total of its tenant when it is dropped, whether it failed or was cut off (a caller's timeout):
-/// that is why this is a guard and not a `match` on the result.
-struct Attempt<'a> {
-    emitter: &'a Emitter,
-    tenant: String,
-    /// The fact is lost when this attempt fails (best effort).
-    counted: bool,
-    delivered: bool,
-}
-
-impl Drop for Attempt<'_> {
-    fn drop(&mut self) {
-        if self.delivered || !self.counted {
-            return;
-        }
-        let at = unix_ms((self.emitter.now)());
-        let lost = &self.emitter.lost;
-        lost.state().record_loss(&self.tenant, at, &lost.process);
-    }
-}
-
-fn valid_correlation(id: &str) -> bool {
-    (1..=64).contains(&id.len())
-        && id
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
-}
-
-fn unix_ms(t: SystemTime) -> i64 {
-    t.duration_since(UNIX_EPOCH)
-        .ok()
-        .and_then(|d| i64::try_from(d.as_millis()).ok())
-        .unwrap_or(0)
-}
-
-/// `YYYYMM` of a Unix time in milliseconds, in UTC (days to civil date by Howard Hinnant's
-/// algorithm).
-fn epoch_of(ms: i64) -> String {
-    let z = ms.div_euclid(86_400_000) + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = yoe + era * 400 + i64::from(month <= 2);
-    format!("{year:04}{month:02}")
-}
+pub struct Emitter(audit_emitter::Emitter);
 
 impl Emitter {
-    /// Returns an emitter. Nothing is dialled until the first call, so a transport that is not up
-    /// yet does not fail construction.
+    /// Returns an emitter with the table of sluis, the product `sluis`, the actor as the
+    /// component, the boundary as the scope, and key@'s `Mac` when a key socket is given. Nothing
+    /// is dialled until the first call, so a transport that is not up yet does not fail
+    /// construction.
     ///
     /// # Errors
     ///
-    /// `invalid_argument` when the actor, the boundary or the release is empty or too long.
+    /// `invalid_argument` when the actor (`component`), the boundary (`scope`) or the release is
+    /// empty or too long.
     pub fn new(cfg: Config) -> Result<Self> {
-        for (v, path) in [
-            (&cfg.actor, "actor"),
-            (&cfg.boundary, "boundary"),
-            (&cfg.release, "release"),
-        ] {
-            if v.is_empty() {
-                return Err(refusal(ErrorCode::InvalidArgument, "schema", path));
-            }
-            if v.len() > STRING_MAX {
-                return Err(refusal(ErrorCode::InvalidArgument, "bound", path));
-            }
-        }
-        let t = dial(&cfg.transport_socket);
-        let keys = cfg.key_socket.as_deref().map(|p| {
-            let k = dial(p);
-            KeyServiceClient::new(k.transport(), k.config())
+        let pseudonyms = cfg.key_socket.as_deref().map(|p| Pseudonyms {
+            mac: Arc::new(KeyMac::dial(p)),
+            label: PSEUDONYM_LABEL.into(),
         });
-        Ok(Self {
-            actor: cfg.actor,
-            boundary: cfg.boundary,
+        Self::with_pseudonyms(cfg, pseudonyms)
+    }
+
+    /// [`Emitter::new`] with the pseudonyms given, in place of key@'s: the tests of this crate give a `Mac` of their own.
+    pub(crate) fn with_pseudonyms(cfg: Config, pseudonyms: Option<Pseudonyms>) -> Result<Self> {
+        audit_emitter::Emitter::new(audit_emitter::Config {
+            product: PRODUCT.into(),
             release: cfg.release,
-            transport: TransportServiceClient::new(t.transport(), t.config()),
-            keys,
-            now: cfg.now.unwrap_or(SystemTime::now),
-            lost: Arc::new(Lost::new()),
+            scope: cfg.boundary,
+            component: cfg.actor,
             table: Table::sluis(),
+            transport_socket: cfg.transport_socket,
+            pseudonyms,
+            correlation: Some(sluis_kit::correlation::current),
+            now: cfg.now,
+        })
+        .map(Self)
+    }
+
+    /// Uses the action table of another project's release instead of the table of sluis (ADR 0030:
+    /// a product's release has a catalogue of its own).
+    #[must_use]
+    pub fn with_table(self, table: Arc<Table>) -> Self {
+        Self(self.0.with_table(table))
+    }
+
+    /// The emitter of `audit-emitter` behind this one.
+    #[must_use]
+    pub fn into_inner(self) -> audit_emitter::Emitter {
+        self.0
+    }
+}
+
+impl Deref for Emitter {
+    type Target = audit_emitter::Emitter;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/// The `Mac` of the `pseudonym` purpose over key@ (`KeyService.Mac`): key@ holds the tenant's
+/// pseudonym key and binds the label in; the emitter holds no key.
+struct KeyMac(KeyServiceClient<Transport>);
+
+impl KeyMac {
+    fn dial(socket: &Path) -> Self {
+        let k = dial(socket);
+        Self(KeyServiceClient::new(k.transport(), k.config()))
+    }
+}
+
+impl Mac for KeyMac {
+    fn mac(&self, r: MacRequest) -> MacFuture<'_> {
+        Box::pin(async move {
+            let resp = self
+                .0
+                .mac(sluis_proto::sluis::key::v2alpha1::MacRequest {
+                    purpose: r.purpose,
+                    tenant: r.tenant,
+                    label: r.label,
+                    input: r.input,
+                    epoch: r.epoch,
+                    ..Default::default()
+                })
+                .await?
+                .into_owned();
+            Ok(resp.mac.to_vec())
         })
     }
-
-    /// Uses the action table of another project's release instead of the table of sluis (ADR 0030: a product's
-    /// release has a catalogue of its own). The emitter refuses an action that is not a row of the table and a record
-    /// that does not validate against the schema of its row.
-    #[must_use]
-    pub fn with_table(mut self, table: Arc<Table>) -> Self {
-        self.table = table;
-        self
-    }
-
-    /// Hands the event to the transport and returns once the transport has accepted it
-    /// (`EmitRequest.blocking` is false). An error is returned to the caller; the library neither
-    /// buffers nor retries.
-    ///
-    /// This is for a best-effort fact: when it fails the fact is gone, so the emitter counts it for
-    /// the event's tenant, and the next record of that tenant carries the total (ADR 0029 "Facts
-    /// that are lost are counted"). A call that is dropped before it finishes counts as a failure.
-    /// A caller that fails its operation when the emit fails uses
-    /// [`emit_required`](Self::emit_required).
-    ///
-    /// # Errors
-    ///
-    /// A refusal of the event, key@'s error, or the transport's.
-    pub async fn emit(&self, ev: Event) -> Result<()> {
-        self.send(ev, false, true).await
-    }
-
-    /// As [`emit`](Self::emit), for a caller that fails its operation when the emit fails: the
-    /// fact is not lost, because the operation did not happen, so a failure is not counted.
-    ///
-    /// # Errors
-    ///
-    /// As [`emit`](Self::emit).
-    pub async fn emit_required(&self, ev: Event) -> Result<()> {
-        self.send(ev, false, false).await
-    }
-
-    /// Returns only when the transport says the message is durable (ADR 0029 "Sealing";
-    /// `blocking` is true). The caller decides what a failure means; the library does not retry.
-    /// A failure is not counted as a lost fact: the caller fails the operation the fact belongs
-    /// to. A caller that carries on when this fails uses
-    /// [`emit_blocking_best_effort`](Self::emit_blocking_best_effort).
-    ///
-    /// # Errors
-    ///
-    /// As [`emit`](Self::emit).
-    pub async fn emit_blocking(&self, ev: Event) -> Result<()> {
-        self.send(ev, true, false).await
-    }
-
-    /// Waits for durability like [`emit_blocking`](Self::emit_blocking), for a caller that carries
-    /// on when it fails (a revocation, which a full spool must never block: REQ-AUDIT-015). The
-    /// fact is then lost, so a failure is counted as for [`emit`](Self::emit).
-    ///
-    /// # Errors
-    ///
-    /// As [`emit`](Self::emit).
-    pub async fn emit_blocking_best_effort(&self, ev: Event) -> Result<()> {
-        self.send(ev, true, true).await
-    }
-
-    /// The total of best-effort facts this process has failed to deliver, over all tenants, since
-    /// it started. It names no tenant; an actor can export it as a metric.
-    #[must_use]
-    pub fn lost(&self) -> i64 {
-        self.lost
-            .state()
-            .by_tenant
-            .values()
-            .fold(0_i64, |n, l| n.saturating_add(l.total))
-            .min(canonical::MAX_SAFE_INT)
-    }
-
-    /// Builds the record with the note its tenant owes, and sends it. Nothing is taken or put
-    /// back: a total only grows, and a record that carries it and reaches the transport, even if
-    /// its caller then times out, is repeated harmlessly by the next record.
-    async fn send(&self, ev: Event, blocking: bool, counted: bool) -> Result<()> {
-        let tenant = ev.tenant.clone();
-        let mut attempt = Attempt {
-            emitter: self,
-            tenant: tenant.clone(),
-            counted,
-            delivered: false,
-        };
-        let note = self.lost.note_for(&tenant);
-        let (record, uid, carried) = self.build(ev, note).await?;
-        let req = EmitRequest {
-            message: AuditMessage {
-                uid,
-                record,
-                ..AuditMessage::default()
-            }
-            .into(),
-            blocking,
-            ..EmitRequest::default()
-        };
-        self.transport.emit(req).await?;
-        attempt.delivered = true;
-        self.lost.reported(&tenant, &carried);
-        Ok(())
-    }
-
-    /// Builds the message of an event without sending it: the record as RFC 8785 bytes, and its
-    /// `metadata.uid`. Tests and the command line use it. It carries no note and changes no total.
-    ///
-    /// # Errors
-    ///
-    /// A refusal of the event, or key@'s error.
-    pub async fn record(&self, ev: Event) -> Result<(Vec<u8>, String)> {
-        let (rec, uid, _) = self.build(ev, LostNote::default()).await?;
-        Ok((rec, uid))
-    }
-
-    /// Makes the record. When the note makes it larger than `RECORD_MAX`, the record is built
-    /// without it and the note stays owed: a fact is never lost to the note, and the note is not
-    /// lost to a large fact. Returns the note the record carries.
-    async fn build(&self, ev: Event, note: LostNote) -> Result<(Vec<u8>, String, LostNote)> {
-        record::validate_event(&ev)?;
-        // REQ-AUDIT-022: an action that is not in the table has no schema to hold its record to.
-        self.table.check_action(&ev.action)?;
-        let time_ms = unix_ms((self.now)());
-        let pseudonym = match &ev.subject {
-            Some(s) => match self.pseudonym(s, time_ms).await {
-                Ok(p) => Some(p),
-                Err(_) if ev.subject_best_effort => {
-                    self.lost.warn_subject_unnamed(time_ms, &ev.action.name);
-                    None
-                }
-                Err(e) => return Err(e),
-            },
-            None => None,
-        };
-        let uid = new_uuid_v7(time_ms);
-        let ambient = sluis_kit::correlation::current();
-        let correlation = ev
-            .correlation_id
-            .as_deref()
-            .or(ambient.as_deref())
-            .filter(|c| valid_correlation(c));
-        let input = |lost: LostNote| record::RecordInput {
-            actor: &self.actor,
-            boundary: &self.boundary,
-            release: &self.release,
-            uid: &uid,
-            time_ms,
-            correlation,
-            pseudonym: pseudonym.as_deref(),
-            ev: &ev,
-            lost,
-        };
-        let (rec, carried) = match record::build_record(&input(note.clone())) {
-            Ok(rec) => (rec, note),
-            Err(_) if note.total > 0 => (
-                record::build_record(&input(LostNote::default()))?,
-                LostNote::default(),
-            ),
-            Err(e) => return Err(e),
-        };
-        // REQ-AUDIT-099: the record, the note of lost facts included, validates against the schema of its action
-        // before it leaves the process.
-        self.table.validate(&rec)?;
-        Ok((rec, uid.clone(), carried))
-    }
-
-    /// Asks key@ for the `Mac` of the subject under the tenant's pseudonym key, with the epoch of
-    /// the record's month, and formats it by ADR 0029 "Pseudonyms":
-    /// `p1.<YYYYMM>.<first 128 bits, base64url, no padding>`.
-    async fn pseudonym(&self, s: &Subject, time_ms: i64) -> Result<String> {
-        let Some(keys) = &self.keys else {
-            // Never fall back to the raw subject.
-            return Err(refusal(ErrorCode::FailedPrecondition, "keys", "subject"));
-        };
-        let epoch = epoch_of(time_ms);
-        let resp = keys
-            .mac(MacRequest {
-                purpose: PSEUDONYM_PURPOSE.into(),
-                tenant: s.tenant.clone(),
-                label: PSEUDONYM_LABEL.into(),
-                input: pseudonym_input(&self.boundary, s),
-                epoch: epoch.clone(),
-                ..MacRequest::default()
-            })
-            .await?
-            .into_owned();
-        let mac: &[u8] = &resp.mac;
-        if mac.len() < PSEUDONYM_BYTES {
-            return Err(refusal(ErrorCode::Internal, "schema", "subject"));
-        }
-        Ok(format_pseudonym(&epoch, mac))
-    }
-}
-
-/// The `Mac` input of a pseudonym (0029 "Pseudonyms"): the boundary, the tenant, the kind of
-/// identity and its identifier, each with a 4-byte big-endian length in front. The label
-/// `sluis-pseudonym-v1` is the request's label, which key@ binds in. The length prefixes make the
-/// parts unambiguous: ("ab","c") and ("a","bc") differ.
-pub(crate) fn pseudonym_input(boundary: &str, s: &Subject) -> Vec<u8> {
-    let mut b = Vec::new();
-    for part in [boundary, &s.tenant, &s.kind, &s.value] {
-        // Every part is at most STRING_MAX bytes (checked before this is called).
-        b.extend_from_slice(&u32::try_from(part.len()).unwrap_or(u32::MAX).to_be_bytes());
-        b.extend_from_slice(part.as_bytes());
-    }
-    b
-}
-
-/// `p1.<epoch>.<first 128 bits of the MAC, base64url, no padding>`; `mac` holds at least 16 bytes.
-fn format_pseudonym(epoch: &str, mac: &[u8]) -> String {
-    format!(
-        "p1.{epoch}.{}",
-        URL_SAFE_NO_PAD.encode(&mac[..PSEUDONYM_BYTES])
-    )
 }
 
 #[cfg(test)]

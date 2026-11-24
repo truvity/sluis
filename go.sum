@@ -66,6 +66,8 @@ github.com/truvity/atoom/store v0.4.0 h1:lC46fJqq5U15ej++q/pH1j80CeD8GIg7Xhr0EMO
 github.com/truvity/atoom/store v0.4.0/go.mod h1:sNZRi8xGg5pQZLGzzyHoQ76L63ZZ6FZ8F80QMlsBMww=
 github.com/truvity/atoom/transport v0.4.0 h1:DSGp+qyKK+6OE6xykHywf7+W1Qxv976zFmEuE/vpMXA=
 github.com/truvity/atoom/transport v0.4.0/go.mod h1:0fE//9Kq2obuoUYZcKabFYoJ02j+ceNiBoWzQqlizMM=
+github.com/truvity/audit/emitter v0.18.0 h1:+IpasZ4MvWFBrRNbmFfmLspLySVXdp3u1zZGSLkO89E=
+github.com/truvity/audit/emitter v0.18.0/go.mod h1:HJQuo7+RnszDhVDr+jb9dO62ZMIC/vd7HBQa48QFDWk=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
 github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=
 go.uber.org/mock v0.6.0 h1:hyF9dfmbgIX5EfOdasqLsWD6xqpNZlXblLB/Dbnwv3Y=

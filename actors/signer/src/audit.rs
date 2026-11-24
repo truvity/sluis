@@ -67,7 +67,7 @@ impl Auditor {
             // class requires".
             caller: caller.into(),
             operation: method.into(),
-            sluis,
+            product_object: sluis,
             ..Event::default()
         };
         self.emit("signer.refused", ev).await;
@@ -90,7 +90,7 @@ impl Auditor {
             status: Status::Success,
             caller: caller.into(),
             operation: "SignToken".into(),
-            sluis,
+            product_object: sluis,
             ..Event::default()
         };
         self.emit("signer.sign", ev).await;
@@ -137,7 +137,7 @@ impl Auditor {
                 uid: c.key_id.clone(),
                 ..Entity::default()
             }),
-            sluis,
+            product_object: sluis,
             ..Event::default()
         };
         // The change stands if the fact is lost, so the emitter counts the loss for the next record.

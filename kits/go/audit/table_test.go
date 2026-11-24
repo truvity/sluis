@@ -38,10 +38,7 @@ func TestEveryActionHasAnExampleThatValidatesAgainstItsSchema(t *testing.T) {
 	for _, c := range actionCases(t) {
 		t.Run(c.Name, func(t *testing.T) {
 			seen[c.Name] = true
-			got, err := buildRecord(c.input(t))
-			if err != nil {
-				t.Fatal(err)
-			}
+			got := c.build(t)
 			if string(got) != c.Expected {
 				t.Fatalf("the library builds\n%s\nthe vector holds\n%s", got, c.Expected)
 			}
@@ -213,7 +210,7 @@ func TestTheEmitterRefusesARecordThatDoesNotValidateBeforeItEmitsIt(t *testing.T
 		"a name with a space":       with("key_id", "a secret value"),
 		"an integer for a string":   with("purpose", int64(7)),
 	} {
-		err := e.Emit(context.Background(), Event{Action: sign, Status: StatusSuccess, Sluis: s, Caller: "signer", Operation: "Sign"})
+		err := e.Emit(context.Background(), Event{Action: sign, Status: StatusSuccess, ProductObject: s, Caller: "signer", Operation: "Sign"})
 		var ce *connect.Error
 		if r, _ := refusal.Reason(err); err == nil || r != "schema" || !errors.As(err, &ce) || ce.Code() != connect.CodeInvalidArgument {
 			t.Errorf("%s: err = %v", name, err)
@@ -226,7 +223,7 @@ func TestTheEmitterRefusesARecordThatDoesNotValidateBeforeItEmitsIt(t *testing.T
 	if len(tr.reqs) != 0 {
 		t.Fatalf("%d messages reached the transport", len(tr.reqs))
 	}
-	if err := e.Emit(context.Background(), Event{Action: sign, Status: StatusSuccess, Sluis: good, Caller: "signer", Operation: "Sign"}); err != nil {
+	if err := e.Emit(context.Background(), Event{Action: sign, Status: StatusSuccess, ProductObject: good, Caller: "signer", Operation: "Sign"}); err != nil {
 		t.Fatalf("a record that validates is emitted: %v", err)
 	}
 	if len(tr.reqs) != 1 {
@@ -245,11 +242,15 @@ func TestTheRecordThatCarriesTheNoteOfLostFactsValidates(t *testing.T) {
 		t.Fatal(err)
 	}
 	begin := Action{Name: "upstream.begin", ClassUID: 3002, ActivityID: 99, ActivityName: "Upstream Begin"}
-	e.recordLoss("", fixedNow.UnixMilli(), 1)
+	tr.err = connect.NewError(connect.CodeUnavailable, errors.New("down"))
+	if err := e.Emit(context.Background(), Event{Action: begin, Status: StatusSuccess}); err == nil {
+		t.Fatal("the emit that loses a fact did not fail")
+	}
+	tr.err = nil
 	if err := e.Emit(context.Background(), Event{Action: begin, Status: StatusSuccess}); err != nil {
 		t.Fatalf("a record with the note: %v", err)
 	}
-	if len(tr.reqs) != 1 || !bytes.Contains(tr.reqs[0].GetMessage().GetRecord(), []byte(`"lost":{"process":`)) {
+	if len(tr.reqs) != 2 || !bytes.Contains(tr.reqs[1].GetMessage().GetRecord(), []byte(`"lost":{"process":`)) {
 		t.Fatalf("the record does not carry the note: %v", tr.reqs)
 	}
 }

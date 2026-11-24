@@ -1,21 +1,13 @@
-// Package audit is the audit emitter library (0028 "Four pieces"): it lives inside each emitting process, holds no
-// credential, and from one call builds one message, an OCSF 1.9.0 audit record as RFC 8785 canonical JSON
-// (0030 "The record format"), then hands it to the audit transport on the emit socket.
+// Package audit is sluis's thin wrapper over audit's emitter (github.com/truvity/audit/emitter): the library inside each
+// emitting process that builds one OCSF 1.9.0 record as RFC 8785 canonical JSON from one call and hands it to atoom's
+// transport port on the emit socket. The canonical form, the record, the schemas and their policy, the ids, the count of
+// lost facts and the transport are audit's, and so are their rules (see the emitters page of truvity/audit).
 //
-// A person is never named in a record. The emitter asks key@ for Mac under the tenant's pseudonym key before the
-// record leaves the process (0029 "Pseudonyms"), so a Subject becomes "p1.<YYYYMM>.<first 128 bits of the MAC>" (the label sluis-pseudonym-v1 over the length-prefixed boundary, tenant, kind and identifier).
+// sluis keeps three things here: its action table and the schemas generated from it (zz_table.go, made by tools/gen/audit
+// from docs/architecture/audit-actions.yaml), its configuration in its own words (Config: an actor of a boundary, which New
+// maps to audit's component and scope, with the product sluis), and the Mac of key@ that makes pseudonyms under the label
+// sluis-pseudonym-v1.
 //
-// Emit hands the message over and returns; EmitBlocking returns only when the transport says the message is
-// durable (0029 "Sealing"). Delivery is at least once, and the writer removes a repeat by metadata.uid. The library
-// keeps no queue and does not retry: the spool driver behind the socket is the durable buffer, and a failure is
-// returned to the caller, who logs it.
-//
-// A best-effort fact that cannot be delivered (Emit, or EmitBlockingBestEffort) is lost, and the emitter counts it in
-// memory, for the tenant of the event. A record of that tenant carries the running total of the process as
-// unmapped.sluis.lost ({process, total, since}) until a record that carries the current total has been delivered, so a
-// repeat is harmless and a reader takes the highest total of a process and never sums (0029 "Facts that are lost are
-// counted"). The note is not a queue and nothing is resent; a process that exits with an unreported total takes it with
-// it. EmitRequired is Emit for a caller that fails its operation on an error: that fact is not lost and is not counted.
-//
-// The Rust crate sluis-audit produces the same bytes from the same input (kits/conformance/audit).
+// The Rust crate sluis-audit is the same wrapper over audit's crate audit-emitter, and both produce the same bytes from the
+// same input (kits/conformance/audit).
 package audit

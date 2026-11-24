@@ -77,7 +77,7 @@ impl Auditor {
             caller: r.caller.into(),
             // The route is the operation: a closed word of the route table, never a path, a query or a parameter value.
             operation: r.route.into(),
-            sluis,
+            product_object: sluis,
             correlation_id: Some(r.correlation.into()),
             ..Event::default()
         };
