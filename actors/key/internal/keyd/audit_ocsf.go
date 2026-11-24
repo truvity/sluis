@@ -22,7 +22,12 @@ func ToAudit(ev Event) (audit.Event, error) {
 		return audit.Event{}, fmt.Errorf("key: no action %q in the action table", ev.Action)
 	}
 	entity, cause := entityOf(ev)
-	out := audit.Event{Status: audit.StatusSuccess, Tenant: ev.Tenant, Sluis: ev.Fields, Entity: entity}
+	out := audit.Event{Status: audit.StatusSuccess, Tenant: ev.Tenant, ProductObject: ev.Fields, Entity: entity}
+	// A summary of the refusal limiter stands for the calls it folded in (unmapped.sluis.suppressed): when it is lost, the
+	// emitter counts that many lost facts, not one.
+	if n, ok := ev.Fields["suppressed"].(int64); ok {
+		out.Facts = n
+	}
 	out.Action = act // the row of the table, whose name is ev.Action: the sweep of the facts of key@ looks for the constants in an Event literal
 	if act.ClassUID == classAPIActivity {
 		var ok bool

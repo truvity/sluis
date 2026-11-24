@@ -13,7 +13,7 @@ import (
 func openAuditTable(t testing.TB) *audit.Table {
 	t.Helper()
 	row := func(name string) audit.Row {
-		return audit.Row{Name: name, Actor: "key", Class: 6003, Activities: []audit.Activity{{ID: 99, Name: "Sign"}},
+		return audit.Row{Name: name, Component: "key", Class: 6003, Activities: []audit.Activity{{ID: 99, Name: "Sign"}},
 			Outcomes: []audit.Status{audit.StatusSuccess, audit.StatusFailure}}
 	}
 	tb, err := audit.NewTable(

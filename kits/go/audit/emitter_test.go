@@ -6,12 +6,10 @@ import (
 	"crypto/hmac"
 	"crypto/sha512"
 	"encoding/base64"
-	"encoding/hex"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -258,84 +256,6 @@ func TestAnExternalActorIsRecordedUnderAKeyedPseudonym(t *testing.T) {
 	})
 }
 
-var uuidV7RE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
-
-// The identifier of a record, metadata.uid, is a UUIDv7 in the lower-case form of RFC 9562 (version 7, variant 10),
-// its first 48 bits are the emitter's clock in milliseconds, and the emitter sets it: the event has no member for an
-// id, two identical events get two ids that increase, and the message carries the id the record holds.
-//
-// verifies: REQ-AUDIT-051
-func TestTheRecordIdIsAUUIDv7TheEmitterSets(t *testing.T) {
-	tr := &fakeTransport{}
-	e := newTestEmitter(t, tr, nil)
-	for range 3 {
-		if err := e.Emit(context.Background(), signEvent); err != nil {
-			t.Fatal(err)
-		}
-	}
-	_, viaRecord, err := e.Record(context.Background(), signEvent)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ids := []string{}
-	for _, r := range tr.reqs {
-		var rec struct {
-			Metadata struct {
-				UID string `json:"uid"`
-			} `json:"metadata"`
-		}
-		if err := json.Unmarshal(r.GetMessage().GetRecord(), &rec); err != nil {
-			t.Fatal(err)
-		}
-		if rec.Metadata.UID != r.GetMessage().GetUid() {
-			t.Errorf("metadata.uid = %q, message uid = %q", rec.Metadata.UID, r.GetMessage().GetUid())
-		}
-		ids = append(ids, rec.Metadata.UID)
-	}
-	ids = append(ids, viaRecord)
-	for i, id := range ids {
-		if !uuidV7RE.MatchString(id) {
-			t.Fatalf("id %q is not a UUIDv7 in the form of RFC 9562", id)
-		}
-		ms, err := strconv.ParseUint(strings.ReplaceAll(id[:13], "-", ""), 16, 64)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if ms != uint64(fixedNow.UnixMilli()) {
-			t.Errorf("id %q carries %d ms, want the emitter's clock %d", id, ms, fixedNow.UnixMilli())
-		}
-		if i > 0 && id <= ids[i-1] {
-			t.Errorf("id %q does not follow %q", id, ids[i-1])
-		}
-	}
-}
-
-func TestPseudonymVectors(t *testing.T) {
-	var f recordFile
-	readVectors(t, "record-vectors.json", &f)
-	if len(f.Pseudonyms) == 0 {
-		t.Fatal("no pseudonym vectors")
-	}
-	for _, v := range f.Pseudonyms {
-		mac, err := hex.DecodeString(v.MacHex)
-		if err != nil {
-			t.Fatal(err)
-		}
-		keys := &fakeKeys{mac: mac}
-		e, err := New(Config{Actor: "key", Boundary: "dev", Release: "r", Transport: &fakeTransport{}, Keys: keys, Table: openTable(t), Now: func() time.Time { return time.UnixMilli(v.TimeMS) }})
-		if err != nil {
-			t.Fatal(err)
-		}
-		got, err := e.pseudonym(context.Background(), Subject{Tenant: "acme", Kind: "person", Value: "x"}, e.now())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got != v.Expected || keys.reqs[0].GetEpoch() != v.Epoch {
-			t.Errorf("pseudonym = %s (epoch %s), want %s (epoch %s)", got, keys.reqs[0].GetEpoch(), v.Expected, v.Epoch)
-		}
-	}
-}
-
 // verifies: REQ-AUDIT-023
 func TestSubjectWithoutKeysIsAnErrorAndNothingIsSent(t *testing.T) {
 	tr := &fakeTransport{}
@@ -446,126 +366,6 @@ func TestASuccessCannotLeaveItsSubjectBestEffort(t *testing.T) {
 	}
 }
 
-// warnLog collects the records of the default logger for the length of a test.
-type warnLog struct {
-	mu   sync.Mutex
-	recs []slog.Record
-}
-
-func (w *warnLog) Enabled(context.Context, slog.Level) bool { return true }
-func (w *warnLog) Handle(_ context.Context, r slog.Record) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.recs = append(w.recs, r)
-	return nil
-}
-func (w *warnLog) WithAttrs([]slog.Attr) slog.Handler { return w }
-func (w *warnLog) WithGroup(string) slog.Handler      { return w }
-
-// verifies: REQ-AUDIT-188
-//
-// While key@ is down every refusal of session goes without its subject, and a warning for each would be a flood: one in a
-// minute, with how many others went without a subject since the last.
-func TestTheWarningThatASubjectWentUnnamedIsLimited(t *testing.T) {
-	logs := &warnLog{}
-	prev := slog.Default()
-	slog.SetDefault(slog.New(logs))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-
-	now := fixedNow
-	keys := &fakeKeys{err: connect.NewError(connect.CodeUnavailable, errors.New("down"))}
-	tr := &fakeTransport{}
-	e, err := New(Config{Actor: "session", Boundary: "dev", Release: "0.0.0-test", Transport: tr, Keys: keys, Now: func() time.Time { return now }})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ev := Event{Action: Action{Name: "session.signin", ClassUID: 3002, ActivityID: 1}, Status: StatusFailure, StatusCode: "client", Tenant: "acme",
-		Subject: &Subject{Tenant: "acme", Kind: "client", Value: "c"}, SubjectBestEffort: true}
-	warnings := func() (n int, since int64) {
-		logs.mu.Lock()
-		defer logs.mu.Unlock()
-		for _, r := range logs.recs {
-			if r.Level == slog.LevelWarn && strings.Contains(r.Message, "could not be named") {
-				n++
-				r.Attrs(func(a slog.Attr) bool {
-					if a.Key == "since_last_warning" {
-						since = a.Value.Int64()
-					}
-					return true
-				})
-			}
-		}
-		return n, since
-	}
-	for range 5 {
-		if err := e.Emit(context.Background(), ev); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if n, _ := warnings(); n != 1 {
-		t.Fatalf("%d warnings for 5 records in one instant, want 1", n)
-	}
-	now = now.Add(subjectWarnEvery + time.Second)
-	if err := e.Emit(context.Background(), ev); err != nil {
-		t.Fatal(err)
-	}
-	if n, since := warnings(); n != 2 || since != 4 {
-		t.Fatalf("%d warnings, the last saying %d others since the first; want 2 and 4", n, since)
-	}
-	if len(tr.reqs) != 6 {
-		t.Fatalf("%d records sent, want all 6: the warning limit is not a record limit", len(tr.reqs))
-	}
-}
-
-func TestEmitAndEmitBlockingSetTheFlagAndSendTheRecordOnce(t *testing.T) {
-	tr := &fakeTransport{}
-	e := newTestEmitter(t, tr, nil)
-	if err := e.Emit(context.Background(), signEvent); err != nil {
-		t.Fatal(err)
-	}
-	if err := e.EmitBlocking(context.Background(), signEvent); err != nil {
-		t.Fatal(err)
-	}
-	if len(tr.reqs) != 2 || tr.reqs[0].GetBlocking() || !tr.reqs[1].GetBlocking() {
-		t.Fatalf("requests = %v", tr.reqs)
-	}
-	for _, r := range tr.reqs {
-		var md struct {
-			Metadata struct {
-				UID string `json:"uid"`
-			} `json:"metadata"`
-		}
-		if err := json.Unmarshal(r.GetMessage().GetRecord(), &md); err != nil {
-			t.Fatal(err)
-		}
-		if md.Metadata.UID == "" || md.Metadata.UID != r.GetMessage().GetUid() {
-			t.Errorf("message uid %q, record uid %q", r.GetMessage().GetUid(), md.Metadata.UID)
-		}
-		if len(r.GetMessage().GetUsage()) != 0 {
-			t.Error("a usage part was sent")
-		}
-	}
-	if tr.reqs[0].GetMessage().GetUid() == tr.reqs[1].GetMessage().GetUid() {
-		t.Error("two emits share a uid")
-	}
-}
-
-// verifies: REQ-AUDIT-033
-func TestATransportFailureIsReturnedAndNeverRetried(t *testing.T) {
-	want := connect.NewError(connect.CodeUnavailable, errors.New("spool full"))
-	tr := &fakeTransport{err: want}
-	e := newTestEmitter(t, tr, nil)
-	for _, call := range []func(context.Context, Event) error{e.Emit, e.EmitBlocking} {
-		err := call(context.Background(), signEvent)
-		if connect.CodeOf(err) != connect.CodeUnavailable || !errors.Is(err, want) {
-			t.Fatalf("err = %v", err)
-		}
-	}
-	if len(tr.reqs) != 2 {
-		t.Fatalf("Emit calls = %d, want one per call (no retry)", len(tr.reqs))
-	}
-}
-
 func TestNewRefusesAnIncompleteConfig(t *testing.T) {
 	ok := Config{Actor: "key", Boundary: "dev", Release: "r", Transport: &fakeTransport{}, Table: openTable(t)}
 	if _, err := New(ok); err != nil {
@@ -583,112 +383,14 @@ func TestNewRefusesAnIncompleteConfig(t *testing.T) {
 	}
 }
 
-func TestEventChecks(t *testing.T) {
-	cases := map[string]func(*Event){
-		"no action name":     func(e *Event) { e.Action.Name = "" },
-		"class below 1000":   func(e *Event) { e.Action.ClassUID = 3 },
-		"activity above 99":  func(e *Event) { e.Action.ActivityID = 100 },
-		"status 0":           func(e *Event) { e.Status = 0 },
-		"long status code":   func(e *Event) { e.StatusCode = string(make([]byte, StringMax+1)) },
-		"e-mail in tenant":   func(e *Event) { e.Tenant = "a@b.example" },
-		"e-mail in decision": func(e *Event) { e.Policy = &PolicyRef{DecisionID: "a@b.example"} },
-		"empty subject":      func(e *Event) { e.Subject = &Subject{Tenant: "acme", Kind: "person"} },
-		"unsupported int":    func(e *Event) { e.Sluis = map[string]any{"n": 3} },
-		"a float":            func(e *Event) { e.Sluis = map[string]any{"n": 1.5} },
-		"a list of any":      func(e *Event) { e.Sluis = map[string]any{"n": []any{"a"}} },
+// pseudonymInput is the Mac input of a pseudonym as audit's record 0011 ("Pseudonyms") lays it out: the boundary (audit's
+// scope), the tenant, the kind and the identifier, each with a 4-byte big-endian length in front. The mac_inputs vectors
+// hold it to the bytes key@ is asked for.
+func pseudonymInput(boundary string, s Subject) []byte {
+	var b []byte
+	for _, part := range []string{boundary, s.Tenant, s.Kind, s.Value} {
+		b = binary.BigEndian.AppendUint32(b, uint32(len(part))) //nolint:gosec // every part is at most StringMax bytes
+		b = append(b, part...)
 	}
-	for name, mod := range cases {
-		ev := signEvent
-		mod(&ev)
-		if err := validateEvent(ev); err == nil {
-			t.Errorf("%s accepted", name)
-		}
-	}
-	// An e-mail address is a fine subject: it is hashed, and the record never carries it.
-	ev := signEvent
-	ev.Subject = &Subject{Tenant: "acme", Kind: "person", Value: "alice@example.com"}
-	if err := validateEvent(ev); err != nil {
-		t.Errorf("an e-mail address as the subject value: %v", err)
-	}
-}
-
-func TestTheRecordIsTheSameWhateverTheMapOrder(t *testing.T) {
-	e := newTestEmitter(t, &fakeTransport{}, nil)
-	ev := signEvent
-	ev.Sluis = map[string]any{"b": int64(1), "a": "x", "c": map[string]any{"z": true, "y": []string{"2", "1"}}}
-	var first []byte
-	for range 20 {
-		rec, _, err := e.Record(context.Background(), ev)
-		if err != nil {
-			t.Fatal(err)
-		}
-		// The uid differs per call; compare the part after it.
-		var m map[string]any
-		_ = json.Unmarshal(rec, &m)
-		delete(m["metadata"].(map[string]any), "uid")
-		b, _ := Canonical(m)
-		if first == nil {
-			first = b
-		} else if string(first) != string(b) {
-			t.Fatalf("records differ:\n%s\n%s", first, b)
-		}
-	}
-}
-
-func TestSubjectNeedsAKindAndTheActivityNeedsAName(t *testing.T) {
-	ev := signEvent
-	ev.Subject = &Subject{Tenant: "acme", Value: "x"}
-	if err := validateEvent(ev); err == nil {
-		t.Error("a subject without a kind was accepted")
-	}
-	ev = signEvent
-	ev.Action.ActivityName = ""
-	if err := validateEvent(ev); err == nil {
-		t.Error("activity 99 without an activity name was accepted")
-	}
-}
-
-// verifies: REQ-AUDIT-120
-func TestThePolicyDeclaresItsProfileAndNeedsADecisionID(t *testing.T) {
-	e := newTestEmitter(t, &fakeTransport{}, nil)
-	ev := signEvent
-	ev.Policy = &PolicyRef{DecisionID: "d-1", Digest: "sha384:x", PolicyIDs: []string{"p-1"}, Decision: DecisionDenied}
-	rec, _, err := e.Record(context.Background(), ev)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got struct {
-		Metadata struct {
-			Profiles []string `json:"profiles"`
-		} `json:"metadata"`
-		ActionID       int `json:"action_id"`
-		Policy         struct{ UID, Version string }
-		Authorizations []struct {
-			Decision string
-			Policy   struct{ UID string }
-		}
-	}
-	if err := json.Unmarshal(rec, &got); err != nil {
-		t.Fatal(err)
-	}
-	if len(got.Metadata.Profiles) != 1 || got.Metadata.Profiles[0] != "security_control" || got.ActionID != 2 ||
-		len(got.Authorizations) != 1 || got.Authorizations[0].Decision != "Denied" || got.Authorizations[0].Policy.UID != "p-1" {
-		t.Errorf("record = %s", rec)
-	}
-	// Without a policy the record declares no profile.
-	rec, _, err = e.Record(context.Background(), signEvent)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bytes.Contains(rec, []byte("profiles")) || bytes.Contains(rec, []byte("action_id")) {
-		t.Errorf("a record without a policy declares a profile: %s", rec)
-	}
-	ev.Policy = &PolicyRef{Digest: "sha384:x"}
-	if err := validateEvent(ev); err == nil {
-		t.Error("a digest without a decision id was accepted")
-	}
-	ev.Policy = &PolicyRef{DecisionID: "d", Decision: 7}
-	if err := validateEvent(ev); err == nil {
-		t.Error("an unknown decision was accepted")
-	}
+	return b
 }

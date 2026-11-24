@@ -2,15 +2,19 @@ package audit
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"math"
 	"os"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -31,21 +35,9 @@ func readVectors(t *testing.T, name string, into any) {
 	}
 }
 
-// decode parses JSON keeping numbers exact.
-func decode(t *testing.T, raw json.RawMessage) any {
-	t.Helper()
-	d := json.NewDecoder(bytes.NewReader(raw))
-	d.UseNumber()
-	var v any
-	if err := d.Decode(&v); err != nil {
-		t.Fatalf("decode %s: %v", raw, err)
-	}
-	return convert(v, false)
-}
-
 // convert turns decoded JSON into the types Canonical and Event.Sluis take: an integer is int64, a number that is
 // not an integer (or does not fit int64) is float64, which the library must refuse, and with strict a list of
-// strings is []string.
+// strings, or an empty list, is []string.
 func convert(v any, strict bool) any {
 	switch x := v.(type) {
 	case json.Number:
@@ -66,7 +58,7 @@ func convert(v any, strict bool) any {
 				allStr = false
 			}
 		}
-		if strict && allStr {
+		if strict && (allStr || len(x) == 0) {
 			ss := make([]string, len(out))
 			for i := range out {
 				ss[i] = out[i].(string)
@@ -114,65 +106,6 @@ func expandRepeat(v any) any {
 	case []string, []any:
 	}
 	return v
-}
-
-type jcsFile struct {
-	Vectors []struct {
-		Name     string          `json:"name"`
-		Input    json.RawMessage `json:"input"`
-		Expected string          `json:"expected"`
-	} `json:"vectors"`
-	Refused []struct {
-		Name  string          `json:"name"`
-		Input json.RawMessage `json:"input"`
-	} `json:"refused"`
-}
-
-// verifies: REQ-AUDIT-106
-func TestCanonicalVectors(t *testing.T) {
-	var f jcsFile
-	readVectors(t, "jcs-vectors.json", &f)
-	if len(f.Vectors) == 0 || len(f.Refused) == 0 {
-		t.Fatal("the vector file is empty")
-	}
-	for _, v := range f.Vectors {
-		t.Run(v.Name, func(t *testing.T) {
-			got, err := Canonical(decode(t, v.Input))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if string(got) != v.Expected {
-				t.Fatalf("got  %q\nwant %q", got, v.Expected)
-			}
-		})
-	}
-	for _, v := range f.Refused {
-		t.Run("refused "+v.Name, func(t *testing.T) {
-			if got, err := Canonical(decode(t, v.Input)); err == nil {
-				t.Fatalf("accepted: %s", got)
-			}
-		})
-	}
-}
-
-func TestCanonicalRefusesWhatIsNotJSONData(t *testing.T) {
-	for name, v := range map[string]any{
-		"float64": 1.5, "float32": float32(1), "uint": uint(1), "struct": struct{}{}, "map of another type": map[string]int{"a": 1},
-		"invalid UTF-8 string": "a\xffb", "invalid UTF-8 key": map[string]any{"a\xff": 1},
-		"int64 above the bound": int64(1) << 53, "int below the bound": -(1 << 53),
-	} {
-		if got, err := Canonical(v); err == nil {
-			t.Errorf("%s accepted: %s", name, got)
-		}
-	}
-	// A value nested deeper than the bound is refused, not recursed into.
-	deep := any("x")
-	for range maxDepth + 2 {
-		deep = []any{deep}
-	}
-	if _, err := Canonical(deep); err == nil {
-		t.Error("a deeply nested value was accepted")
-	}
 }
 
 // repeatable is a string, or {"$repeat": "a", "times": n} for n copies, so a vector can hold a long string.
@@ -231,7 +164,7 @@ func (e eventJSON) event(t *testing.T) Event {
 	t.Helper()
 	ev := Event{
 		Action: Action{Name: e.Action.Name, ClassUID: e.Action.ClassUID, ActivityID: e.Action.ActivityID, ActivityName: string(e.Action.ActivityName)},
-		Status: Status(e.Status), StatusCode: e.StatusCode, Tenant: e.Tenant, Sluis: sluisFrom(t, e.Sluis),
+		Status: Status(e.Status), StatusCode: e.StatusCode, Tenant: e.Tenant, ProductObject: sluisFrom(t, e.Sluis),
 	}
 	if e.Policy != nil {
 		ev.Policy = &PolicyRef{DecisionID: e.Policy.DecisionID, Digest: e.Policy.Digest, PolicyIDs: e.Policy.PolicyIDs, Decision: Decision(e.Policy.Decision)}
@@ -267,16 +200,59 @@ type recordCase struct {
 	SHA384   string `json:"sha384"`
 }
 
-func (c recordCase) input(t *testing.T) recordInput {
+func (c recordCase) input(t *testing.T) RecordInput {
 	t.Helper()
-	in := recordInput{
-		actor: c.Actor, boundary: c.Boundary, release: c.Release, uid: c.UID, timeMS: c.TimeMS,
-		correlation: c.Correlation, pseudonym: c.Pseudonym, ev: c.Event.event(t),
+	return RecordInput{
+		Component: c.Actor, Scope: c.Boundary, Release: c.Release, UID: c.UID, TimeMS: c.TimeMS,
+		Correlation: c.Correlation, Pseudonym: c.Pseudonym, Event: c.Event.event(t),
 	}
-	if c.Lost != nil {
-		in.lost = lostNote{process: c.Lost.Process, total: c.Lost.Total, since: c.Lost.Since}
+}
+
+// build makes the record of the case. A case without a note is audit's pure serialiser. A case with a note of lost facts is
+// made by an emitter of sluis, as it happens in a process: one emit of the event that stands for Lost.Total facts fails at
+// Lost.Since, and the next emit, at TimeMS, carries the note. The emitter's own process and metadata.uid are random, so
+// they are put back to the case's before the bytes are compared.
+func (c recordCase) build(t *testing.T) []byte {
+	t.Helper()
+	if c.Lost == nil {
+		got, err := BuildRecord(c.input(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
 	}
-	return in
+	if c.Correlation != "" || c.Pseudonym != "" {
+		t.Fatal("a case with a note names no correlation and no pseudonym")
+	}
+	ev := c.Event.event(t)
+	now := time.UnixMilli(c.Lost.Since)
+	tr := &fakeTransport{err: connect.NewError(connect.CodeUnavailable, errors.New("down"))}
+	// The cases probe the layout of the note, not sluis's catalogue, so the table is the open one of the tests.
+	e, err := New(Config{Actor: c.Actor, Boundary: c.Boundary, Release: c.Release, Transport: tr, Table: openTable(t), Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lost := ev
+	lost.Facts = c.Lost.Total
+	if err := e.Emit(context.Background(), lost); err == nil {
+		t.Fatal("the emit that loses the facts did not fail")
+	}
+	tr.err, now = nil, time.UnixMilli(c.TimeMS)
+	if err := e.Emit(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	msg := tr.reqs[len(tr.reqs)-1].GetMessage()
+	rec := strings.Replace(string(msg.GetRecord()), `"uid":"`+msg.GetUid()+`"`, `"uid":"`+c.UID+`"`, 1)
+	rec = processRE.ReplaceAllString(rec, `"process":"`+c.Lost.Process+`"`)
+	return []byte(rec)
+}
+
+var processRE = regexp.MustCompile(`"process":"[0-9a-f]{16}"`)
+
+// check is what audit's emitter says of an event before it lays out a record: BuildRecord refuses the event first.
+func check(ev Event) error {
+	_, err := BuildRecord(RecordInput{Component: "key", Scope: "dev", Release: "0.0.0-test", UID: "01950000-0000-7000-8000-000000000001", Event: ev})
+	return err
 }
 
 type recordFile struct {
@@ -334,10 +310,7 @@ func TestRecordVectors(t *testing.T) {
 	}
 	for _, c := range f.Cases {
 		t.Run(c.Name, func(t *testing.T) {
-			got, err := buildRecord(c.input(t))
-			if err != nil {
-				t.Fatal(err)
-			}
+			got := c.build(t)
 			if string(got) != c.Expected {
 				t.Fatalf("got  %s\nwant %s", got, c.Expected)
 			}
@@ -357,10 +330,7 @@ func TestRecordHashVectors(t *testing.T) {
 	}
 	for _, c := range f.Cases {
 		t.Run(c.Name, func(t *testing.T) {
-			got, err := buildRecord(c.input(t))
-			if err != nil {
-				t.Fatal(err)
-			}
+			got := c.build(t)
 			sum := sha512.Sum384(got)
 			if hex.EncodeToString(sum[:]) != c.SHA384 {
 				t.Fatalf("SHA-384 of %s = %x, want %s", got, sum, c.SHA384)
@@ -422,10 +392,7 @@ func TestRecordVectorsAreLean(t *testing.T) {
 		t.Fatal("the vector file is empty")
 	}
 	for _, c := range f.Cases {
-		built, err := buildRecord(c.input(t))
-		if err != nil {
-			t.Fatal(err)
-		}
+		built := c.build(t)
 		var rec map[string]any
 		if err := json.Unmarshal(built, &rec); err != nil {
 			t.Fatal(err)
@@ -493,10 +460,7 @@ func TestRecordVectorsUseNoDelegationAndNoAIProfile(t *testing.T) {
 		t.Fatal("the vector file is empty")
 	}
 	for _, c := range f.Cases {
-		built, err := buildRecord(c.input(t))
-		if err != nil {
-			t.Fatal(err)
-		}
+		built := c.build(t)
 		var rec any
 		if err := json.Unmarshal(built, &rec); err != nil {
 			t.Fatal(err)
@@ -516,28 +480,6 @@ func TestRecordVectorsUseNoDelegationAndNoAIProfile(t *testing.T) {
 	}
 }
 
-// verifies: REQ-AUDIT-051
-func TestUUIDVectors(t *testing.T) {
-	var f recordFile
-	readVectors(t, "record-vectors.json", &f)
-	if len(f.UUIDs) == 0 {
-		t.Fatal("no uuid vectors")
-	}
-	for _, v := range f.UUIDs {
-		var rb [8]byte
-		if len(v.RandBHex) != 16 {
-			t.Fatal("bad vector")
-		}
-		for i := range rb {
-			n, _ := strconv.ParseUint(v.RandBHex[2*i:2*i+2], 16, 8)
-			rb[i] = byte(n)
-		}
-		if got := uuidV7(v.MS, v.Counter, rb); got != v.Expected {
-			t.Errorf("uuidV7(%d,%d,%s) = %s, want %s", v.MS, v.Counter, v.RandBHex, got, v.Expected)
-		}
-	}
-}
-
 // verifies: REQ-AUDIT-046, REQ-AUDIT-107
 func TestRefusalVectors(t *testing.T) {
 	var f recordFile
@@ -549,8 +491,8 @@ func TestRefusalVectors(t *testing.T) {
 	for _, r := range f.Refusals {
 		t.Run(r.Name, func(t *testing.T) {
 			ev := base
-			ev.Sluis = sluisFrom(t, r.Sluis)
-			err := validateEvent(ev)
+			ev.ProductObject = sluisFrom(t, r.Sluis)
+			err := check(ev)
 			if err == nil {
 				t.Fatal("accepted")
 			}
@@ -571,24 +513,9 @@ func TestRefusalVectors(t *testing.T) {
 	}
 	for _, a := range f.Accepted {
 		ev := base
-		ev.Sluis = sluisFrom(t, a.Sluis)
-		if err := validateEvent(ev); err != nil {
+		ev.ProductObject = sluisFrom(t, a.Sluis)
+		if err := check(ev); err != nil {
 			t.Errorf("%s: %v", a.Name, err)
-		}
-	}
-}
-
-func TestEmailShape(t *testing.T) {
-	var f recordFile
-	readVectors(t, "record-vectors.json", &f)
-	for _, s := range f.Email.Match {
-		if !emailShaped(s) {
-			t.Errorf("%q should match", s)
-		}
-	}
-	for _, s := range f.Email.NoMatch {
-		if emailShaped(s) {
-			t.Errorf("%q should not match", s)
 		}
 	}
 }
@@ -599,11 +526,8 @@ func TestRecordIsRefusedAboveItsBound(t *testing.T) {
 	for i := range 20 {
 		sluis["k"+strconv.Itoa(i)] = strings.Repeat("a", StringMax)
 	}
-	ev := Event{Action: Action{Name: "x", ClassUID: 6003, ActivityID: 99, ActivityName: "Sign"}, Status: StatusSuccess, Sluis: sluis, Caller: "signer", Operation: "Sign"}
-	if err := validateEvent(ev); err != nil {
-		t.Fatal(err)
-	}
-	_, err := buildRecord(recordInput{actor: "a", boundary: "dev", release: "r", uid: "u", ev: ev})
+	ev := Event{Action: Action{Name: "x", ClassUID: 6003, ActivityID: 99, ActivityName: "Sign"}, Status: StatusSuccess, ProductObject: sluis, Caller: "signer", Operation: "Sign"}
+	_, err := BuildRecord(RecordInput{Component: "a", Scope: "dev", Release: "r", UID: "u", Event: ev})
 	if reason, _ := refusal.Reason(err); reason != "bound" {
 		t.Fatalf("err = %v", err)
 	}
@@ -620,7 +544,7 @@ func TestEventRefusalVectors(t *testing.T) {
 	}
 	for _, r := range f.EventRefusals {
 		t.Run(r.Name, func(t *testing.T) {
-			err := validateEvent(r.Event.event(t))
+			err := check(r.Event.event(t))
 			if err == nil {
 				t.Fatal("accepted")
 			}
@@ -633,7 +557,7 @@ func TestEventRefusalVectors(t *testing.T) {
 		})
 	}
 	for _, a := range f.EventAccepted {
-		if err := validateEvent(a.Event.event(t)); err != nil {
+		if err := check(a.Event.event(t)); err != nil {
 			t.Errorf("%s: %v", a.Name, err)
 		}
 	}
@@ -642,7 +566,7 @@ func TestEventRefusalVectors(t *testing.T) {
 func TestPseudonymInputVectors(t *testing.T) {
 	var f recordFile
 	readVectors(t, "record-vectors.json", &f)
-	if len(f.MacInputs) == 0 || f.MacLabel != pseudonymLabel {
+	if len(f.MacInputs) == 0 || f.MacLabel != PseudonymLabel {
 		t.Fatalf("label %q, %d inputs", f.MacLabel, len(f.MacInputs))
 	}
 	seen := map[string]string{}

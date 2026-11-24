@@ -8,7 +8,7 @@ import "testing"
 func openTable(t testing.TB) *Table {
 	t.Helper()
 	tb, err := NewTable(
-		[]Row{{Name: "key.sign", Actor: "key", Class: 6003, Activities: []Activity{{ID: 99, Name: "Sign"}}, Outcomes: []Status{StatusSuccess, StatusFailure}}},
+		[]Row{{Name: "key.sign", Component: "key", Class: 6003, Activities: []Activity{{ID: 99, Name: "Sign"}}, Outcomes: []Status{StatusSuccess, StatusFailure}}},
 		map[string]string{DefsName: `{}`, "key.sign.schema.json": `{"type":"object"}`},
 	)
 	if err != nil {

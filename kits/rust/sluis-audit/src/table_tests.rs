@@ -6,9 +6,9 @@ use std::collections::HashSet;
 
 use serde_json::Value;
 
-use crate::table::Table;
 use crate::tests::{arr, built_record, parse, refusal_of, text};
 use crate::{Action, Event, Status};
+use crate::{SluisTable as _, Table};
 
 const ACTIONS: &str = include_str!("../../../conformance/audit/action-vectors.json");
 const SCHEMA: &str = include_str!("../../../conformance/audit/schema-vectors.json");
@@ -346,81 +346,6 @@ fn the_releases_of_the_shared_vectors() {
     for s in arr(&f, "reject") {
         assert!(!crate::valid_release(s.as_str().unwrap()), "{s} taken");
     }
-}
-
-/// verifies: REQ-AUDIT-149
-///
-/// The patterns the policy takes mean the same in both engines: each accepted pattern matches and refuses the strings of the
-/// corpus, here through the engine the Rust library uses (and the `regex` crate), in Go through RE2.
-#[test]
-fn accepted_patterns_match_as_the_corpus_says() {
-    let f = parse(POLICY);
-    assert!(
-        arr(&f, "matches").len() >= 8,
-        "the vector file lost its matches"
-    );
-    for m in arr(&f, "matches") {
-        let p = text(m, "pattern");
-        let docs = vec![
-            (
-                crate::DEFS_NAME.to_owned(),
-                r#"{"$schema":"https://json-schema.org/draft/2020-12/schema"}"#.to_owned(),
-            ),
-            (
-                "x.a.schema.json".to_owned(),
-                serde_json::json!({"$schema":"https://json-schema.org/draft/2020-12/schema","properties":{"a":{"type":"string","pattern":p}}}).to_string(),
-            ),
-        ];
-        crate::check_documents(&docs).unwrap_or_else(|e| panic!("{p}: refused by the policy: {e}"));
-        let v =
-            jsonschema::validator_for(&serde_json::json!({"type":"string","pattern":p})).unwrap();
-        let re = regex::Regex::new(p).unwrap();
-        for (key, want) in [("yes", true), ("no", false)] {
-            for s in arr(m, key) {
-                let s = s.as_str().unwrap();
-                assert_eq!(
-                    v.is_valid(&serde_json::json!(s)),
-                    want,
-                    "{p} on {s:?} (the library)"
-                );
-                assert_eq!(re.is_match(s), want, "{p} on {s:?} (the regex crate)");
-            }
-        }
-    }
-}
-
-fn corpus_docs(c: &Value) -> Vec<(String, String)> {
-    c["docs"]
-        .as_object()
-        .unwrap()
-        .iter()
-        .map(|(k, v)| (k.clone(), v.as_str().unwrap().to_owned()))
-        .collect()
-}
-
-/// verifies: REQ-AUDIT-149
-///
-/// The policy is linear: every case of the corpus is checked in well under a second, the pathological ones included (a check
-/// that walked every duplicate reference did not finish in a minute).
-#[test]
-fn the_policy_is_fast_on_every_case_of_the_corpus() {
-    let f = parse(POLICY);
-    let start = std::time::Instant::now();
-    for c in arr(&f, "cases") {
-        let t0 = std::time::Instant::now();
-        let _ = crate::check_policy(&corpus_docs(c));
-        assert!(
-            t0.elapsed() < std::time::Duration::from_millis(500),
-            "{}: {:?}",
-            text(c, "name"),
-            t0.elapsed()
-        );
-    }
-    assert!(
-        start.elapsed() < std::time::Duration::from_secs(3),
-        "{:?}",
-        start.elapsed()
-    );
 }
 
 /// verifies: REQ-AUDIT-149

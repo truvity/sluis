@@ -9,7 +9,6 @@ require (
 	filippo.io/torchwood v0.10.0
 	github.com/go-jose/go-jose/v4 v4.1.7
 	github.com/go-webauthn/webauthn v0.18.2
-	github.com/gowebpki/jcs v1.0.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/transparency-dev/formats v0.1.1
 	github.com/truvity/atoom/blob v0.4.0
@@ -24,6 +23,7 @@ require (
 	github.com/truvity/atoom/source v0.4.0
 	github.com/truvity/atoom/store v0.4.0
 	github.com/truvity/atoom/transport v0.4.0
+	github.com/truvity/audit/emitter v0.18.0
 	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/mod v0.42.0
 	google.golang.org/protobuf v1.36.12
@@ -38,6 +38,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/google/go-tpm v0.9.8 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/gowebpki/jcs v1.0.2 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/tinylib/msgp v1.6.4 // indirect
 	github.com/x448/float16 v0.8.4 // indirect

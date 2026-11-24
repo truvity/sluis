@@ -267,7 +267,7 @@ async fn up(dir: &Path) -> Up {
 fn open_table() -> Arc<Table> {
     static ROWS: &[Row] = &[Row {
         name: "key.sign",
-        actor: "key",
+        component: "key",
         class: 6003,
         activities: &[Activity {
             id: 99,
@@ -956,12 +956,13 @@ async fn a_record_too_large_for_the_note_is_sent_without_it_and_the_note_stays_o
     fail(&u, false);
     let mut big = sign_event();
     for i in 0..15 {
-        big.sluis
+        big.product_object
             .insert(format!("k{i:02}"), Value::from("a".repeat(1024)));
     }
     let (base, _) = e.record(big.clone()).await.unwrap();
     let pad = sluis_audit::RECORD_MAX - base.len() - 20 - r#","pad":"""#.len();
-    big.sluis.insert("pad".into(), Value::from("b".repeat(pad)));
+    big.product_object
+        .insert("pad".into(), Value::from("b".repeat(pad)));
     let (rec, _) = e.record(big.clone()).await.unwrap();
     assert!(rec.len() > sluis_audit::RECORD_MAX - 40, "setup");
     e.emit(big)
@@ -1006,7 +1007,7 @@ async fn the_note_sits_beside_the_callers_fields_and_a_caller_cannot_write_it() 
     e.emit(sign_event()).await.unwrap_err();
     fail(&u, false);
     let mut ev = sign_event();
-    ev.sluis
+    ev.product_object
         .insert("purpose".into(), Value::from("token-signing"));
     e.emit(ev).await.unwrap();
     {
@@ -1016,7 +1017,7 @@ async fn the_note_sits_beside_the_callers_fields_and_a_caller_cannot_write_it() 
         assert_eq!(rec["unmapped"]["sluis"]["lost"]["total"], 1);
     }
     let mut ev = sign_event();
-    ev.sluis
+    ev.product_object
         .insert("lost".into(), serde_json::json!({"total": 0}));
     let err = e.emit(ev).await.unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidArgument);
@@ -1161,7 +1162,7 @@ async fn the_emitter_refuses_an_unknown_action_and_a_record_that_does_not_valida
         ("a name with a space", spaced),
     ] {
         let mut ev = sign_event();
-        ev.sluis = sluis;
+        ev.product_object = sluis;
         let err = e.emit(ev).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::InvalidArgument, "{name}");
         assert_eq!(refusal_reason(&err).as_deref(), Some("schema"), "{name}");
@@ -1172,7 +1173,7 @@ async fn the_emitter_refuses_an_unknown_action_and_a_record_that_does_not_valida
     );
 
     let mut ev = sign_event();
-    ev.sluis = good;
+    ev.product_object = good;
     e.emit(ev).await.unwrap();
     assert_eq!(u.spool.reqs.lock().unwrap().len(), 1);
 }
@@ -1192,7 +1193,7 @@ async fn the_record_that_carries_the_note_of_lost_facts_validates() {
         ("key_id", "k1"),
         ("caller", "signer"),
     ] {
-        begin.sluis.insert(k.into(), Value::from(v));
+        begin.product_object.insert(k.into(), Value::from(v));
     }
     *u.spool.fail.lock().unwrap() = Some(ErrorCode::Unavailable);
     // The first fails at the spool (the record is valid), and is counted.

@@ -131,7 +131,7 @@ pub fn decide(o: &Outcome<'_>) -> Event {
             decision: o.decision,
             ..PolicyRef::default()
         }),
-        sluis,
+        product_object: sluis,
         correlation_id: None,
         entity: None,
         subject_best_effort: false,
@@ -143,7 +143,7 @@ pub fn decide(o: &Outcome<'_>) -> Event {
 pub fn start(digest: &str, policies: usize) -> Event {
     Event {
         action: action("policy.start", "Start"),
-        sluis: fields(digest, policies, &[]),
+        product_object: fields(digest, policies, &[]),
         ..Event::default()
     }
 }
@@ -153,7 +153,7 @@ pub fn start(digest: &str, policies: usize) -> Event {
 pub fn reloaded(digest: &str, policies: usize) -> Event {
     Event {
         action: action("policy.reload", "Reload"),
-        sluis: fields(digest, policies, &[]),
+        product_object: fields(digest, policies, &[]),
         ..Event::default()
     }
 }
@@ -166,7 +166,7 @@ pub fn reload_refused(in_force: &str, why: &LoadError) -> Event {
         action: action("policy.reload.refused", "Refuse"),
         status: Status::Failure,
         status_code: "invalid".into(),
-        sluis: {
+        product_object: {
             let mut m = fields(in_force, 0, &why.0);
             if let Some(d) = m.remove("digest") {
                 m.insert("in_force_digest".into(), d);

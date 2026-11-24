@@ -106,7 +106,7 @@ func (a *attempt) event(err error) audit.Event {
 		sluis["client"] = map[string]any{"id": a.client, "method": a.method, "authenticated": a.authenticated}
 	}
 	if len(sluis) > 0 {
-		ev.Sluis = sluis
+		ev.ProductObject = sluis
 	}
 	return ev
 }

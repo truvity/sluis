@@ -323,11 +323,6 @@ go-test: rust-toolchain
       | awk '!/^=== (RUN|PAUSE|CONT|NAME)/ && !/^[[:space:]]*--- PASS/ && !/^PASS$/'
     just check-packages
 
-# Run the Go fuzz target of the audit canonicaliser for a bounded time (default 30 s). `just go-test` already
-# runs its seeds, the vector files and the RFC 8785 corpus on every run; this explores beyond them.
-go-fuzz time="30s":
-    go test ./kits/go/audit -run '^$' -fuzz '^FuzzCanonical$' -fuzztime {{time}}
-
 # Run the Go fuzz targets of session's client parameters for a bounded time each (default 30 s): the authorization
 # request's strings (scope, state, nonce, challenge, redirect_uri) and the token request's (code, verifier). `just go-test`
 # already runs their seeds on every run.

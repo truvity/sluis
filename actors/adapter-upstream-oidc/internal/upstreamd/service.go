@@ -389,12 +389,12 @@ func (s *Service) audit(ctx context.Context, a audit.Action, who *audit.Subject,
 	}
 	for _, m := range sluis {
 		if len(m) > 0 {
-			ev.Sluis = m
+			ev.ProductObject = m
 		}
 	}
 	if callErr != nil {
 		ev.Status, ev.StatusCode = audit.StatusFailure, reasonOf(callErr)
-		ev.Subject, ev.Tenant, ev.Sluis = nil, "", nil
+		ev.Subject, ev.Tenant, ev.ProductObject = nil, "", nil
 	}
 	emit := s.opts.Audit.Emit
 	if callErr == nil {

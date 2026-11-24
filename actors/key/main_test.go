@@ -308,12 +308,12 @@ func TestTheActionTableCoversEveryActionOfKeyd(t *testing.T) {
 	consts := keydActions(t)
 	table := audit.Sluis()
 	for name, id := range consts {
-		if r, ok := table.Row(name); !ok || r.Actor != "key" {
+		if r, ok := table.Row(name); !ok || r.Component != "key" {
 			t.Errorf("keyd.%s (%q) is not a row of key@ in the action table", id, name)
 		}
 	}
 	for _, name := range table.Names() {
-		if r, _ := table.Row(name); r.Actor != "key" {
+		if r, _ := table.Row(name); r.Component != "key" {
 			continue
 		}
 		if _, ok := consts[name]; !ok {

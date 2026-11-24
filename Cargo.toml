@@ -35,6 +35,9 @@ atoom-index = { git = "https://github.com/truvity/atoom", tag = "v0.4.0" }
 atoom-index-sqlite = { git = "https://github.com/truvity/atoom", tag = "v0.4.0" }
 atoom-transport = { git = "https://github.com/truvity/atoom", tag = "v0.4.0" }
 atoom-transport-spool = { git = "https://github.com/truvity/atoom", tag = "v0.4.0" }
+# The audit emitter, pinned by release tag: kits/rust/sluis-audit is a thin wrapper over it (the table of sluis, the Mac of key@,
+# the names of sluis). It is on the same atoom tag, so the tree holds one atoom.
+audit-emitter = { git = "https://github.com/truvity/audit", tag = "v0.18.0" }
 
 [workspace.package]
 edition = "2024"

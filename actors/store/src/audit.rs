@@ -141,7 +141,7 @@ impl EmitterSink {
                 sluis_audit::Status::Success
             },
             status_code: e.reason,
-            sluis: {
+            product_object: {
                 let mut m: serde_json::Map<String, serde_json::Value> = e
                     .fields
                     .into_iter()

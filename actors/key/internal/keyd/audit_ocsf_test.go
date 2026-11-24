@@ -82,7 +82,7 @@ func TestEveryApiActivityRowOfKeyHasASourceAndAnOperation(t *testing.T) {
 	n := 0
 	for _, name := range audit.Sluis().Names() {
 		row, _ := audit.Sluis().Row(name)
-		if row.Actor != "key" || row.Class != classAPIActivity {
+		if row.Component != "key" || row.Class != classAPIActivity {
 			continue
 		}
 		n++
@@ -111,7 +111,7 @@ func TestTheFactOfARefusedPinRequestIsWrittenWhateverThePeerWroteInIt(t *testing
 			if err != nil {
 				t.Fatalf("%q: %v", name, err)
 			}
-			rec, err := audit.BuildRecord("key", "dev", "0.0.0", "01950000-0000-7000-8000-000000000001", 1793750400000, "", "", out)
+			rec, err := audit.BuildRecord(audit.RecordInput{Component: "key", Scope: "dev", Release: "0.0.0", UID: "01950000-0000-7000-8000-000000000001", TimeMS: 1793750400000, Event: out})
 			if err != nil {
 				t.Fatalf("the record of %d bytes of node does not build: %v", len(name), err)
 			}
