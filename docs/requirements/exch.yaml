@@ -453,3 +453,20 @@ requirements:
     issues: [961, 1843]
     verification:
       - {kind: integration-test, ref: "a rule on the customer of a trusted realm's token allows a token of that customer and refuses a token of another, and a request that names a customer or a product as a parameter changes nothing"}
+  - id: REQ-EXCH-032
+    area: EXCH
+    statement: "Once private_key_jwt client authentication and the marker against re-exchange exist, a confidential sign-in client that authenticates by private_key_jwt MAY present the access token of its live sign-in as a subject token for a resource client's audience, and exchange refuses an ID token or a token that exchange itself issued as a subject token."
+    rationale: "A browser-session proxy signs in as a confidential client and needs resource tokens for its sessions, so REQ-EXCH-020 is lifted for such a client only, after REQ-CLIENT-058 and the marker, and only for the targets that exchange serves (ADR 0022, ADR 0051)."
+    level: MAY
+    source: stakeholder-integrator
+    status: planned
+    milestone: customer-identity
+    runtimes: all
+    actors: [exchange]
+    standards:
+      - {id: ST-07, section: "2.1", depth: Partial}
+      - {id: ST-20, section: "7523 2.2", depth: Partial}
+    issues: [782, 961]
+    verification:
+      - {kind: integration-test, ref: "a confidential private_key_jwt client's live sign-in token, from that client, is exchanged for a resource client and refused for a sign-in client"}
+      - {kind: integration-test, ref: "its ID token, a token that exchange issued, an ended sign-in's token and a token presented by another client are refused with a closed reason"}
