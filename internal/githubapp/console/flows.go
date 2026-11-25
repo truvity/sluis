@@ -45,7 +45,7 @@ func (c *Service) beginCatalogueAppConnect(ctx context.Context, id string) (gith
 	if !declared {
 		return githubBegin{}, connect.Errorf(connect.CodeInvalidArgument, "the catalogue declares no App %q", id)
 	}
-	existing, _, created, err := store.Get(ctx, id)
+	existing, key, created, err := store.Get(ctx, id)
 	if err != nil {
 		return githubBegin{}, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
@@ -57,7 +57,7 @@ func (c *Service) beginCatalogueAppConnect(ctx context.Context, id string) (gith
 	state := consolewire.StatePlaceholder
 	out := githubBegin{state: state, bind: consolewire.BindCatalogue + id}
 	if created {
-		out.url = githubapp.InstallURL(existing.AppSlug, state)
+		out.url = githubapp.InstallURL(c.liveSlug(ctx, existing.AppID, key, existing.AppSlug, c.catalogueRename(id)), state)
 		return out, nil
 	}
 	root := c.githubRoot(ctx)
@@ -106,13 +106,14 @@ func (c *Service) disconnectCatalogueApp(ctx context.Context, id string) (github
 		return githubDisconnect{}, connect.Errorf(connect.CodeNotFound, "no App %s has been created", id)
 	}
 
+	slug := c.liveSlug(ctx, record.AppID, key, record.AppSlug, nil)
 	out := c.uninstall(ctx, record.AppID, record.InstallationID, key)
-	out.settingsURL = appSettingsURL(record.Org, record.AppSlug)
+	out.settingsURL = appSettingsURL(record.Org, slug)
 	if err = store.Delete(ctx, id); err != nil {
 		return githubDisconnect{}, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	c.record(ctx, audit.CatalogueAppDisconnected(actorOf(ctx), record.Org,
-		audit.App{Name: id, ID: record.AppID, Slug: record.AppSlug}, out.uninstalled, out.detail))
+		audit.App{Name: id, ID: record.AppID, Slug: slug}, out.uninstalled, out.detail))
 	return out, nil
 }
 
@@ -171,7 +172,11 @@ func (c *Service) beginRunnerAppConnect(ctx context.Context, org, tier string) (
 	state := consolewire.StatePlaceholder
 	out := githubBegin{state: state, bind: consolewire.BindRunner + tier + ":" + org}
 	if created {
-		out.url = githubapp.InstallURL(existing.AppSlug, state)
+		key, _, err := c.deps.RunnerApps.PrivateKey(ctx, tier, org)
+		if err != nil {
+			return githubBegin{}, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
+		}
+		out.url = githubapp.InstallURL(c.liveSlug(ctx, existing.AppID, key, existing.AppSlug, c.runnerRename(tier, org)), state)
 		return out, nil
 	}
 	root := c.githubRoot(ctx)
@@ -222,12 +227,13 @@ func (c *Service) disconnectRunnerApp(ctx context.Context, org, tier string) (gi
 		return githubDisconnect{}, connect.Errorf(connect.CodeNotFound, "%s has no %s runner App", org, tier)
 	}
 
+	slug := c.liveSlug(ctx, record.AppID, key, record.AppSlug, nil)
 	out := c.uninstall(ctx, record.AppID, record.InstallationID, key)
-	out.settingsURL = appSettingsURL(org, record.AppSlug)
+	out.settingsURL = appSettingsURL(org, slug)
 	if err = c.deps.RunnerApps.Delete(ctx, tier, org); err != nil {
 		return githubDisconnect{}, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	c.record(ctx, audit.RunnerAppDisconnected(actorOf(ctx), org,
-		audit.App{ID: record.AppID, Slug: record.AppSlug, Tier: tier}, out.uninstalled, out.detail))
+		audit.App{ID: record.AppID, Slug: slug, Tier: tier}, out.uninstalled, out.detail))
 	return out, nil
 }

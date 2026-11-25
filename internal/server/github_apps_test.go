@@ -1212,6 +1212,7 @@ func TestARunnerAppNeedsADeclaredTierABoundOrganisationAndAnOperator(t *testing.
 // Disconnect uninstalls on GitHub and forgets every key of that one App.
 func TestDisconnectingARunnerAppUninstallsThenForgetsItsKeys(t *testing.T) {
 	github := startFakeGitHub(t)
+	github.slug = "globex-runners-stable"
 	_, console, client := runnerServer(t, "preview", "stable")
 	store := console.deps.GitHubRunnerApps
 	at := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)

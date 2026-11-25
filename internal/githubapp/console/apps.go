@@ -94,6 +94,9 @@ type githubAppSpec struct {
 	// where this service keeps none, and keyless then says why.
 	key     func() string
 	keyless string
+	// rename writes the slug GitHub gives the App now into its record; nil
+	// where its store cannot, or the App is asked nothing (slug.go).
+	rename slugRename
 
 	// place is where the App's key is kept, for a deployment copying it.
 	place keyPlace
@@ -553,6 +556,7 @@ func (c *Service) controllerAppSpecs(ctx context.Context, bound map[string]*bind
 			spec.connectedAt, spec.connectedBy = record.ConnectedAt, record.ConnectedBy
 			spec.appRef = record.AppRef
 			spec.key = c.organisationKey(ctx, org)
+			spec.rename = c.controllerRename(record.AppRef)
 			if noter, ok := c.deps.Orgs.(declaredAppNoter); ok {
 				note, err := noter.DeclaredAppNote(ctx, org)
 				if err != nil {
@@ -639,6 +643,7 @@ func (c *Service) runnerAppSpecs(ctx context.Context, bound map[string]*binding,
 				}
 				return key
 			}
+			spec.rename = c.runnerRename(key.tier, key.org)
 		}
 		out = append(out, spec)
 	}
@@ -721,6 +726,7 @@ func (c *Service) catalogueAppSpec(
 		_, key, _, _ := store.Get(ctx, id)
 		return key
 	}
+	spec.rename = c.catalogueRename(id)
 	return spec
 }
 
@@ -801,6 +807,13 @@ func (c *Service) githubAppView(ctx context.Context, spec githubAppSpec, fresh b
 	if fresh || !cached {
 		seen = c.observe(ctx, spec.appID, spec.installationID, spec.installed, spec.entry.Webhook != nil, spec.key())
 		c.seen.put(spec.id, seen)
+		// Written back once per answer from GitHub, not once per page load.
+		c.keepSlug(ctx, spec.rename, spec.appID, spec.appSlug, seen.app)
+	}
+	// The App's name and every URL built from it follow the slug GitHub gives
+	// now: an owner may have renamed the App since it was created.
+	if slug := currentSlug(spec.appSlug, spec.appID, seen.app); slug != spec.appSlug {
+		out.Name, out.AppSlug, out.SettingsUrl = slug, slug, appSettingsURL(spec.org, slug)
 	}
 	out.CheckedAt, out.Reason = timestampOf(seen.at), seen.err
 	if out.Reason == "" {
