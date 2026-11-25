@@ -640,6 +640,31 @@
             "description": "A conformance or test harness signs in through it: the only kind of client the conformance account (`conformance.enabled`) may sign in to. Refused on an exchange client.",
             "type": "boolean"
           },
+          "jwks": {
+            "additionalProperties": false,
+            "description": "The public keys a `private_key_jwt` client's assertions are checked against (RFC 7517 5), inline: one to four, each with a `kid` and an `alg` of ES256, PS256 or RS256. Required with, and refused without, `token_endpoint_auth_method: private_key_jwt`.",
+            "properties": {
+              "keys": {
+                "description": "The public JSON Web Keys.",
+                "items": {
+                  "description": "A public JSON Web Key (RFC 7517 4).",
+                  "required": [
+                    "kty",
+                    "kid",
+                    "alg"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 4,
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "keys"
+            ],
+            "type": "object"
+          },
           "kind": {
             "description": "public, confidential or exchange.",
             "enum": [
@@ -718,6 +743,12 @@
             "description": "The algorithm its tokens are signed with, when it cannot verify the default: RS256, ES256 or ES384.",
             "minLength": 1,
             "type": "string"
+          },
+          "token_endpoint_auth_method": {
+            "description": "How a confidential client authenticates at the token and revocation endpoints (RFC 7591 2). Absent, with its `secret`; `private_key_jwt`, with an assertion signed by a key of its `jwks` (RFC 7523 2.2), and then it names no `secret`. Confidential only.",
+            "enum": [
+              "private_key_jwt"
+            ]
           },
           "ttl_cap": {
             "$ref": "#/$defs/duration",

@@ -190,14 +190,19 @@ func (e *exporter) add(ctx context.Context, s backup.Section, m port.Module, rec
 // An exchange of the SRP sign-in (kind `srp`) is two minutes of a server's private
 // value and is never carried, and neither is a device code (kinds `device` and
 // `device-user`, `device-poll`): twenty minutes at most, and once approved it holds a code and
-// its verifier, which a restore must not hand back to a device.
+// its verifier, which a restore must not hand back to a device. Nor is the marker of a
+// spent client assertion (kind `assertion`): ten minutes and a minute more, and a
+// restore that brought one back could only refuse an assertion nobody presents again.
 func owned(m port.Module, key string) bool {
 	a, err := port.Locate5(key)
 	return err == nil && a.Module == m && !neverCarried[a.Kind]
 }
 
 // neverCarried are the kinds a backup leaves out.
-var neverCarried = map[string]bool{"maintenance": true, "recovery": true, "srp": true, "device": true, "device-user": true, "device-poll": true}
+var neverCarried = map[string]bool{
+	"maintenance": true, "recovery": true, "srp": true, "device": true, "device-user": true, "device-poll": true,
+	"assertion": true,
+}
 
 func (e *exporter) state(ctx context.Context, u unit) (int, error) {
 	n := 0

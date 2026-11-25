@@ -245,6 +245,19 @@ const (
 	KindExchange = "exchange"
 )
 
+// AuthPrivateKeyJWT is the one value of `token_endpoint_auth_method`: the
+// client authenticates with a JWT it signs (RFC 7523 2.2).
+const AuthPrivateKeyJWT = "private_key_jwt"
+
+// PrivateKeyJWT reports that this client authenticates with a signed
+// assertion rather than a secret.
+func (c Client) PrivateKeyJWT() bool { return c.TokenEndpointAuthMethod == AuthPrivateKeyJWT }
+
+// HoldsSecret reports that this client has a secret for the installation to
+// deliver or the issuer to make: a confidential client that does not
+// authenticate with `private_key_jwt`.
+func (c Client) HoldsSecret() bool { return c.Kind == KindConfidential && !c.PrivateKeyJWT() }
+
 // The PKCE policies a client may declare (`pkce`).
 const (
 	// PKCERequired refuses an authorization request with no S256
@@ -691,6 +704,26 @@ type Client struct {
 	// that can reach a proxy, which is what actually holds the session
 	// for a console that runs no OpenID flow of its own.
 	BackChannelLogout string `yaml:"backchannel_logout_uri,omitempty"`
+	// TokenEndpointAuthMethod is how a confidential client proves itself at
+	// the token and revocation endpoints (RFC 7591 2). Absent, it presents
+	// the secret [Client.Secret] names, in HTTP Basic or in the body.
+	// [AuthPrivateKeyJWT] has it sign an assertion with a private key only
+	// it holds (RFC 7523 2.2, OpenID Connect Core 9), checked against
+	// [Client.JWKS]; such a client holds no secret, and declaring one beside
+	// it is refused. Only on a confidential client.
+	//
+	// It exists for a relying party that keeps its key where it cannot be
+	// read, an HSM or a cloud KMS: a key it never holds cannot leak with
+	// its disk or its configuration, which a shared secret can.
+	TokenEndpointAuthMethod string `yaml:"token_endpoint_auth_method,omitempty"`
+	// JWKS is the public key set a `private_key_jwt` client's assertions are
+	// checked against, inline (RFC 7591 2, `jwks`): one to [MaxClientKeys]
+	// public keys, each with a `kid` and an `alg` of
+	// [ClientAssertionAlgs]. Inline rather than fetched from a `jwks_uri`:
+	// nothing is fetched at sign-in, and a key changes with the policy, as
+	// a client's secret name does. Required with, and refused without,
+	// [AuthPrivateKeyJWT].
+	JWKS *ClientJWKS `yaml:"jwks,omitempty"`
 	// SigningAlg pins which algorithm a token FOR THIS CLIENT is signed
 	// with: an ID token always, an access token whenever this client is
 	// its own audience (no `resource` named). Empty uses the installation
@@ -1253,8 +1286,12 @@ func (c Client) validate(id string, p Policy) error {
 	default:
 		return fmt.Errorf("client %q: kind %q is not public, confidential or exchange", id, c.Kind)
 	}
-	if c.Kind == KindConfidential && c.Secret.IsZero() {
-		return fmt.Errorf("client %q is confidential and names no secret: name one, or write `secret: {generate: true}` to have the issuer make it", id)
+	if err := c.validateAuthMethod(id); err != nil {
+		return err
+	}
+	if c.HoldsSecret() && c.Secret.IsZero() {
+		return fmt.Errorf("client %q is confidential and names no secret: name one, write `secret: {generate: true}` to have the issuer make it, "+
+			"or declare `token_endpoint_auth_method: private_key_jwt` with its `jwks`", id)
 	}
 	if c.Kind != KindConfidential && c.Secret.Generate {
 		return fmt.Errorf("client %q is %s and holds no secret: only a confidential client may have the issuer generate one", id, c.Kind)

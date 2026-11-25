@@ -56,12 +56,19 @@ func (c *client) ApplicationType() op.ApplicationType {
 
 // AuthMethod says how the client proves itself at the token endpoint. A
 // public client proves nothing and relies on PKCE; a confidential one
-// presents the secret the deployment put in a Secret.
+// presents the secret the deployment put in a Secret, or, declaring
+// `token_endpoint_auth_method: private_key_jwt`, an assertion signed by a key
+// of its `jwks`. The library refuses the other way for each: a secret from a
+// `private_key_jwt` client, an assertion from any other.
 func (c *client) AuthMethod() oidc.AuthMethod {
-	if c.declared.Kind == policy.KindPublic {
+	switch {
+	case c.declared.Kind == policy.KindPublic:
 		return oidc.AuthMethodNone
+	case c.declared.PrivateKeyJWT():
+		return oidc.AuthMethodPrivateKeyJWT
+	default:
+		return oidc.AuthMethodBasic
 	}
-	return oidc.AuthMethodBasic
 }
 
 func (c *client) ResponseTypes() []oidc.ResponseType {

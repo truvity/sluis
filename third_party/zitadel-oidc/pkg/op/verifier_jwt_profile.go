@@ -95,6 +95,17 @@ func VerifyJWTAssertion(ctx context.Context, assertion string, v *JWTProfileVeri
 	if err = oidc.CheckSignature(ctx, assertion, payload, request, nil, keySet); err != nil {
 		return nil, err
 	}
+	// sluis: a key storage that remembers the assertions it has seen spends
+	// each once (RFC 7523 3, item 7), after it verified. Not upstream, and
+	// no exported name: a module that builds sluis without this copy builds
+	// against upstream, which must compile.
+	if once, ok := v.Storage.(interface {
+		ClaimJWTAssertion(ctx context.Context, request *oidc.JWTTokenRequest) error
+	}); ok {
+		if err = once.ClaimJWTAssertion(ctx, request); err != nil {
+			return nil, err
+		}
+	}
 	return request, nil
 }
 

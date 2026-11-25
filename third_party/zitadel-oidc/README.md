@@ -1,6 +1,6 @@
 # zitadel/oidc, patched
 
-A copy of [github.com/zitadel/oidc/v3](https://github.com/zitadel/oidc) at **v3.51.16**, with one line removed, the authorization endpoint's error logging changed, the ID token's audience narrowed to the client, and a public client's secret refused at the token endpoint.
+A copy of [github.com/zitadel/oidc/v3](https://github.com/zitadel/oidc) at **v3.51.16**, with one line removed, the authorization endpoint's error logging changed, the ID token's audience narrowed to the client, a public client's secret refused at the token endpoint, and a client assertion spent once.
 The root `go.mod` wires it in with `replace github.com/zitadel/oidc/v3 v3.51.16 => ./third_party/zitadel-oidc`.
 
 ## The change
@@ -26,6 +26,11 @@ Upstream passes the request's audience, which is the resource a request named (R
 Upstream ignores the secret for such a client.
 Not upstream; drop them with the directory, after checking that a release does the same.
 
+`pkg/op/verifier_jwt_profile.go`, `VerifyJWTAssertion`: after the signature is verified, a key storage with a method `ClaimJWTAssertion(ctx, *oidc.JWTTokenRequest) error` is asked to spend the assertion, so a `private_key_jwt` assertion presented twice is refused (RFC 7523 3, item 7).
+Upstream checks no `jti`.
+The method is matched by an unnamed interface, so the patch exports nothing: a module that builds sluis without this copy (the replace is the root module's only) still compiles, without the check.
+Not upstream; drop it with the directory, after checking that a release offers a replay hook.
+
 ## What is copied
 
 Only the packages sluis builds: `internal/otel`, `pkg/client`, `pkg/client/rp`, `pkg/crypto`, `pkg/http`, `pkg/oidc`, `pkg/oidc/grants/tokenexchange` and `pkg/op`, without their tests.
@@ -38,7 +43,7 @@ up="$(go env GOMODCACHE)/github.com/zitadel/oidc/v3@v3.51.16"
 cd third_party/zitadel-oidc && find . -type f ! -name README.md -exec cmp {} "$up/{}" \;
 ```
 
-It prints six differences: `pkg/oidc/token.go`, `pkg/op/error.go`, `pkg/op/auth_request.go`, `pkg/op/token.go`, `pkg/op/token_code.go` and `pkg/op/token_refresh.go`.
+It prints seven differences: `pkg/oidc/token.go`, `pkg/op/error.go`, `pkg/op/auth_request.go`, `pkg/op/token.go`, `pkg/op/token_code.go`, `pkg/op/token_refresh.go` and `pkg/op/verifier_jwt_profile.go`.
 
 ## When it goes
 

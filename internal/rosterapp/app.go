@@ -171,7 +171,7 @@ func Load(file string) (Config, error) {
 	var clients []string
 	if p != nil {
 		for id := range p.Policy.Clients {
-			if p.Policy.Clients[id].Kind == policy.KindConfidential {
+			if p.Policy.Clients[id].HoldsSecret() {
 				clients = append(clients, secrets.ClientSecret(id))
 			}
 		}

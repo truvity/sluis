@@ -127,9 +127,19 @@ func clientSchema() m {
 		"sign_in_exchange":       boolean("It may exchange a sign-in for a token of its own."),
 		"device_authorization":   boolean("It may sign a person in with the device authorization grant (RFC 8628): `/device_authorization`, approval at `/device`, then `/token`. Off by default; `public` only, with `redirects`, and refused with `session: agent`."),
 		"backchannel_logout_uri": str("Where a back-channel logout is posted."),
-		"signing_alg":            str("The algorithm its tokens are signed with, when it cannot verify the default: RS256, ES256 or ES384."),
-		"groups":                 groupsOverride(),
-		"groups_delimiter":       str("Rewrites `:` in its `groups` claim (docs/decisions/0015)."),
+		"token_endpoint_auth_method": m{
+			"enum":        []string{"private_key_jwt"},
+			"description": "How a confidential client authenticates at the token and revocation endpoints (RFC 7591 2). Absent, with its `secret`; `private_key_jwt`, with an assertion signed by a key of its `jwks` (RFC 7523 2.2), and then it names no `secret`. Confidential only.",
+		},
+		"jwks": obj("The public keys a `private_key_jwt` client's assertions are checked against (RFC 7517 5), inline: one to four, each with a `kid` and an `alg` of ES256, PS256 or RS256. Required with, and refused without, `token_endpoint_auth_method: private_key_jwt`.", m{
+			"keys": m{
+				"type": "array", "minItems": 1, "maxItems": 4, "description": "The public JSON Web Keys.",
+				"items": m{"type": "object", "required": []string{"kty", "kid", "alg"}, "description": "A public JSON Web Key (RFC 7517 4)."},
+			},
+		}, "keys"),
+		"signing_alg":      str("The algorithm its tokens are signed with, when it cannot verify the default: RS256, ES256 or ES384."),
+		"groups":           groupsOverride(),
+		"groups_delimiter": str("Rewrites `:` in its `groups` claim (docs/decisions/0015)."),
 		"pkce": m{
 			"enum":        []string{"required", "optional"},
 			"description": "Whether it must use PKCE (RFC 7636, RFC 9700 2.1.1): `required` refuses an authorization request with no S256 `code_challenge` and a code redeemed with no `code_verifier`. A public client is always `required` and refuses `optional`; absent is `optional` for a confidential client. Refused on an exchange client.",
