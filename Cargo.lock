@@ -162,7 +162,7 @@ source = "git+https://github.com/truvity/atoom?tag=v0.5.0#0c51522dc227caf947689a
 dependencies = [
  "anyhow",
  "atoom-blob-fsdir",
- "atoom-socket 0.5.0",
+ "atoom-socket",
  "clap",
  "connectrpc",
  "tempfile",
@@ -178,7 +178,7 @@ source = "git+https://github.com/truvity/atoom?tag=v0.5.0#0c51522dc227caf947689a
 dependencies = [
  "anyhow",
  "atoom-blob",
- "atoom-common 0.5.0",
+ "atoom-common",
  "aws-lc-rs",
  "connectrpc",
  "rustix",
@@ -194,8 +194,8 @@ dependencies = [
  "anyhow",
  "atoom-blob",
  "atoom-blob-fsdir",
- "atoom-common 0.5.0",
- "atoom-socket 0.5.0",
+ "atoom-common",
+ "atoom-socket",
  "clap",
  "connectrpc",
  "rustix",
@@ -203,18 +203,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "atoom-common"
-version = "0.4.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.4.0#0059db4895b20c1e93674ab07833d9ba798194f4"
-dependencies = [
- "base64 0.22.1",
- "buffa",
- "connectrpc",
- "connectrpc-build",
- "serde",
 ]
 
 [[package]]
@@ -234,7 +222,7 @@ name = "atoom-destination"
 version = "0.5.0"
 source = "git+https://github.com/truvity/atoom?tag=v0.5.0#0c51522dc227caf947689a23ed5c72d1368bae93"
 dependencies = [
- "atoom-common 0.5.0",
+ "atoom-common",
  "buffa",
  "buffa-types",
  "connectrpc",
@@ -248,9 +236,9 @@ version = "0.5.0"
 source = "git+https://github.com/truvity/atoom?tag=v0.5.0#0c51522dc227caf947689a23ed5c72d1368bae93"
 dependencies = [
  "anyhow",
- "atoom-common 0.5.0",
+ "atoom-common",
  "atoom-destination",
- "atoom-socket 0.5.0",
+ "atoom-socket",
  "aws-lc-rs",
  "clap",
  "connectrpc",
@@ -265,7 +253,7 @@ source = "git+https://github.com/truvity/atoom?tag=v0.5.0#0c51522dc227caf947689a
 dependencies = [
  "anyhow",
  "atoom-destination-conformance",
- "atoom-socket 0.5.0",
+ "atoom-socket",
  "clap",
  "rustix",
  "serde_json",
@@ -293,9 +281,9 @@ version = "0.5.0"
 source = "git+https://github.com/truvity/atoom?tag=v0.5.0#0c51522dc227caf947689a23ed5c72d1368bae93"
 dependencies = [
  "anyhow",
- "atoom-common 0.5.0",
+ "atoom-common",
  "atoom-index",
- "atoom-socket 0.5.0",
+ "atoom-socket",
  "buffa",
  "clap",
  "connectrpc",
@@ -309,30 +297,11 @@ dependencies = [
 
 [[package]]
 name = "atoom-socket"
-version = "0.4.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.4.0#0059db4895b20c1e93674ab07833d9ba798194f4"
-dependencies = [
- "anyhow",
- "atoom-common 0.4.0",
- "bytes",
- "connectrpc",
- "futures",
- "http",
- "hyper",
- "hyper-util",
- "rustix",
- "tokio",
- "tower",
- "tracing",
-]
-
-[[package]]
-name = "atoom-socket"
 version = "0.5.0"
 source = "git+https://github.com/truvity/atoom?tag=v0.5.0#0c51522dc227caf947689a23ed5c72d1368bae93"
 dependencies = [
  "anyhow",
- "atoom-common 0.5.0",
+ "atoom-common",
  "bytes",
  "clap",
  "connectrpc",
@@ -365,8 +334,8 @@ version = "0.5.0"
 source = "git+https://github.com/truvity/atoom?tag=v0.5.0#0c51522dc227caf947689a23ed5c72d1368bae93"
 dependencies = [
  "anyhow",
- "atoom-common 0.5.0",
- "atoom-socket 0.5.0",
+ "atoom-common",
+ "atoom-socket",
  "atoom-source",
  "clap",
  "connectrpc",
@@ -383,8 +352,8 @@ version = "0.5.0"
 source = "git+https://github.com/truvity/atoom?tag=v0.5.0#0c51522dc227caf947689a23ed5c72d1368bae93"
 dependencies = [
  "anyhow",
- "atoom-common 0.5.0",
- "atoom-socket 0.5.0",
+ "atoom-common",
+ "atoom-socket",
  "atoom-source",
  "aws-lc-rs",
  "clap",
@@ -415,8 +384,8 @@ version = "0.5.0"
 source = "git+https://github.com/truvity/atoom?tag=v0.5.0#0c51522dc227caf947689a23ed5c72d1368bae93"
 dependencies = [
  "anyhow",
- "atoom-common 0.5.0",
- "atoom-socket 0.5.0",
+ "atoom-common",
+ "atoom-socket",
  "atoom-store",
  "buffa-types",
  "clap",
@@ -431,8 +400,8 @@ version = "0.5.0"
 source = "git+https://github.com/truvity/atoom?tag=v0.5.0#0c51522dc227caf947689a23ed5c72d1368bae93"
 dependencies = [
  "anyhow",
- "atoom-common 0.5.0",
- "atoom-socket 0.5.0",
+ "atoom-common",
+ "atoom-socket",
  "atoom-store",
  "atoom-store-conformance",
  "clap",
@@ -448,8 +417,8 @@ version = "0.5.0"
 source = "git+https://github.com/truvity/atoom?tag=v0.5.0#0c51522dc227caf947689a23ed5c72d1368bae93"
 dependencies = [
  "anyhow",
- "atoom-common 0.5.0",
- "atoom-socket 0.5.0",
+ "atoom-common",
+ "atoom-socket",
  "atoom-store",
  "atoom-store-conformance",
  "base64 0.22.1",
@@ -464,18 +433,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "atoom-transport"
-version = "0.4.0"
-source = "git+https://github.com/truvity/atoom?tag=v0.4.0#0059db4895b20c1e93674ab07833d9ba798194f4"
-dependencies = [
- "buffa",
- "buffa-types",
- "connectrpc",
- "connectrpc-build",
- "serde",
 ]
 
 [[package]]
@@ -496,9 +453,9 @@ version = "0.5.0"
 source = "git+https://github.com/truvity/atoom?tag=v0.5.0#0c51522dc227caf947689a23ed5c72d1368bae93"
 dependencies = [
  "anyhow",
- "atoom-common 0.5.0",
- "atoom-socket 0.5.0",
- "atoom-transport 0.5.0",
+ "atoom-common",
+ "atoom-socket",
+ "atoom-transport",
  "aws-lc-rs",
  "buffa",
  "clap",
@@ -513,12 +470,12 @@ dependencies = [
 
 [[package]]
 name = "audit-emitter"
-version = "0.18.0"
-source = "git+https://github.com/truvity/audit?tag=v0.18.0#2821133d32ce0c6a10d20d717657947950d9ed96"
+version = "0.19.0"
+source = "git+https://github.com/truvity/audit?tag=v0.19.0#f0322c566532f1614e625d09599873ec71813d6c"
 dependencies = [
- "atoom-common 0.4.0",
- "atoom-socket 0.4.0",
- "atoom-transport 0.4.0",
+ "atoom-common",
+ "atoom-socket",
+ "atoom-transport",
  "base64 0.23.1",
  "connectrpc",
  "jsonschema",
@@ -1305,11 +1262,11 @@ name = "exporter"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "atoom-common 0.5.0",
+ "atoom-common",
  "atoom-destination",
  "atoom-destination-conformance",
  "atoom-destination-dir",
- "atoom-socket 0.5.0",
+ "atoom-socket",
  "aws-lc-rs",
  "base64 0.22.1",
  "buffa",
@@ -2632,7 +2589,7 @@ name = "rqlite"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "atoom-common 0.5.0",
+ "atoom-common",
  "atoom-store",
  "atoom-store-conformance",
  "atoom-store-memory",
@@ -2961,7 +2918,7 @@ name = "sluis-audit"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "atoom-common 0.5.0",
+ "atoom-common",
  "audit-emitter",
  "base64 0.23.1",
  "buffa",
@@ -2982,7 +2939,7 @@ dependencies = [
  "atoom-destination",
  "atoom-destination-conformance",
  "atoom-destination-dir",
- "atoom-socket 0.5.0",
+ "atoom-socket",
  "clap",
  "connectrpc",
  "rustix",
@@ -3046,7 +3003,7 @@ name = "sluis-driver-writer-spool"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "atoom-transport 0.5.0",
+ "atoom-transport",
  "atoom-transport-spool",
  "clap",
  "connectrpc",
@@ -3065,8 +3022,8 @@ name = "sluis-kit"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "atoom-common 0.5.0",
- "atoom-socket 0.5.0",
+ "atoom-common",
+ "atoom-socket",
  "buffa",
  "clap",
  "connectrpc",
@@ -3215,7 +3172,7 @@ name = "store"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "atoom-common 0.5.0",
+ "atoom-common",
  "atoom-source-credential",
  "atoom-source-file",
  "atoom-store",
