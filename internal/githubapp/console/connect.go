@@ -124,8 +124,14 @@ func (c *Service) beginOrganisationConnect(
 	out := githubBegin{state: state, bind: githubBind + org, owner: owner}
 	if connected {
 		// Created and never installed: pick up where the owner left off
-		// rather than creating a second App.
-		out.url = githubapp.InstallURL(existing.AppSlug, state)
+		// rather than creating a second App, under the slug GitHub gives it
+		// now (an owner may have renamed it).
+		credential, _, err := c.deps.Orgs.Credential(ctx, org)
+		if err != nil {
+			return githubBegin{}, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
+		}
+		slug := c.liveSlug(ctx, credential.AppID, credential.PrivateKey, existing.AppSlug, c.controllerRename(existing.AppRef))
+		out.url = githubapp.InstallURL(slug, state)
 		return out, nil
 	}
 	root := c.githubRoot(ctx)
@@ -183,8 +189,12 @@ func (c *Service) disconnectOrganisation(ctx context.Context, org string) (githu
 		return githubDisconnect{}, connect.Errorf(connect.CodeNotFound, "%s is not connected", org)
 	}
 
+	// The settings page is where the owner deletes the App, so it is the one
+	// under the slug GitHub gives now. Asked before uninstalling, and nothing
+	// is written back: the record is about to go.
+	slug := c.liveSlug(ctx, credential.AppID, credential.PrivateKey, record.AppSlug, nil)
 	out := c.uninstall(ctx, credential.AppID, credential.InstallationID, credential.PrivateKey)
-	out.settingsURL = appSettingsURL(org, record.AppSlug)
+	out.settingsURL = appSettingsURL(org, slug)
 	if err = c.deps.Orgs.Delete(ctx, org); err != nil {
 		return githubDisconnect{}, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}

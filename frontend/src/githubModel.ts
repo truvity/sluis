@@ -223,6 +223,9 @@ export type GitHubAppView = {
   description: string;
   /** Why GitHub could not be asked, when it could not. */
   reason: string;
+  /** The App's page and its settings page, as the server serves them: built
+   *  from the slug GitHub gives now, which moves when an owner renames the App,
+   *  so never rebuilt here from a slug. */
   htmlUrl: string;
   settingsUrl: string;
   appId: bigint;
@@ -246,12 +249,6 @@ export type GitHubAppView = {
 };
 
 const purposeOrder: Record<AppPurpose, number> = { link: 0, controller: 1, runners: 2, tokens: 3 };
-
-/** Where an owner edits an App, and deletes it. Only for a name the
- *  server did not give us one for. */
-export function appSettingsURL(org: string, slug: string): string {
-  return org && slug ? `https://github.com/organizations/${encodeURIComponent(org)}/settings/apps/${encodeURIComponent(slug)}` : "";
-}
 
 function scopeWords(scope: string): string {
   return ({ all: "every repository", selected: "selected repositories" } as Record<string, string>)[scope] ?? scope;

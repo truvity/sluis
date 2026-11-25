@@ -122,6 +122,10 @@ type fakeGitHub struct {
 	app, installed map[string]string
 	// events are the webhook events GET /app answers with.
 	events []string
+	// slug is the App's slug GET /app answers with; empty is the one the
+	// conversion gave, globex-access-roster. An App renamed on GitHub has
+	// another.
+	slug string
 	// reads counts those two calls.
 	reads int
 	// hook is the App's webhook as GitHub holds it, set through
@@ -212,8 +216,12 @@ func startFakeGitHub(t *testing.T) *fakeGitHub {
 		fake.mu.Lock()
 		defer fake.mu.Unlock()
 		fake.reads++
+		slug := fake.slug
+		if slug == "" {
+			slug = "globex-access-roster"
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id": 42, "slug": "globex-access-roster", "html_url": "https://github.com/apps/globex-access-roster",
+			"id": 42, "slug": slug, "html_url": "https://github.com/apps/" + slug,
 			"owner": map[string]any{"login": fake.owner}, "permissions": fake.app, "events": fake.events,
 		})
 	})

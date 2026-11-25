@@ -92,6 +92,9 @@ func TestAnOrganisationRowShowsTheRecordedSlugOnceThereIsOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	rig.github.mu.Lock()
+	rig.github.slug = "people-of-globex"
+	rig.github.mu.Unlock()
 	apps, _ := rig.list(t)
 	if got := apps["globex-controller"].GetName(); got != "people-of-globex" {
 		t.Errorf("a created App's row is %q, want its recorded slug", got)
