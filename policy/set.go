@@ -190,6 +190,22 @@ func (s *Set) DeviceClients() []string {
 	return out
 }
 
+// PrivateKeyJWTClients lists, sorted, the clients that authenticate with
+// `token_endpoint_auth_method: private_key_jwt`: while there is one, the
+// token and revocation endpoints accept a client assertion and discovery
+// says so.
+func (s *Set) PrivateKeyJWTClients() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []string
+	for _, id := range slices.Sorted(maps.Keys(s.declared.Clients)) {
+		if s.declared.Clients[id].PrivateKeyJWT() {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 // ClientDocuments returns the document-client policy in force.
 func (s *Set) ClientDocuments() ClientDocuments {
 	s.mu.RLock()

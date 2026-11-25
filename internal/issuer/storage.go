@@ -778,6 +778,14 @@ func (s *Storage) AuthorizeClientIDSecret(ctx context.Context, clientID, secret 
 
 		return nil
 	}
+	// A client that authenticates with a key holds no secret, and the
+	// library asks here when it presents none (a token exchange takes no
+	// assertion). Refused by name, rather than as a secret that does not
+	// match one it was never given.
+	if declared.PrivateKeyJWT() {
+		return deny(ctx, oidc.ErrInvalidClient, errors.New("the client authenticates with private_key_jwt, not a secret"),
+			logattr.SafeString("client", clientID))
+	}
 	want, ok := s.secrets.Resolve(ctx, clientID)
 	if slot := s.matchSecret(want, ok, secret); slot != clientcreds.SlotNone {
 		clientcreds.CountAuth(ctx, slot)
@@ -2919,9 +2927,37 @@ func (s *Storage) namesOf(ctx context.Context, subject string) (given, family st
 	return resolved.GivenName, resolved.FamilyName
 }
 
-// GetKeyByIDAndClientID implements [op.OPStorage].
-func (s *Storage) GetKeyByIDAndClientID(context.Context, string, string) (*jose.JSONWebKey, error) {
-	return nil, errors.New("the JWT profile for client authentication is not wired in the spike")
+// GetKeyByIDAndClientID implements [op.OPStorage]: the public key a client's
+// assertion names by its `kid`, from the client's `jwks` in the policy. Only
+// for a client that declares `token_endpoint_auth_method: private_key_jwt`;
+// any other has no key to authenticate with, whatever it signed. An
+// assertion with no `kid` is checked against a client's only key, and is
+// refused when the client has several: the issuer never tries keys in turn.
+//
+// The library calls it for a client assertion and for the JWT bearer grant,
+// which is not served ([client.GrantTypes]).
+func (s *Storage) GetKeyByIDAndClientID(_ context.Context, keyID, clientID string) (*jose.JSONWebKey, error) {
+	declared, ok := s.iss.Policy().Client(clientID)
+	if !ok || !declared.PrivateKeyJWT() {
+		return nil, errors.New("the client authenticates with no key")
+	}
+
+	keys, err := declared.JWKS.KeySet()
+	if err != nil {
+		return nil, fmt.Errorf("the client's jwks: %w", err)
+	}
+
+	if keyID == "" && len(keys) == 1 {
+		return &keys[0], nil
+	}
+
+	for i := range keys {
+		if keyID != "" && keys[i].KeyID == keyID {
+			return &keys[i], nil
+		}
+	}
+
+	return nil, errors.New("the assertion names no key of the client's jwks")
 }
 
 // ValidateJWTProfileScopes implements [op.OPStorage].

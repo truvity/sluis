@@ -21,7 +21,8 @@ A client's id is the `aud`, unless the request named a [resource](#resources).
 | Key | Meaning |
 |---|---|
 | `kind` | `public`, `confidential` or `exchange` |
-| `secret` | required for `confidential`: a name, or [`{generate: true}`](#a-generated-secret) |
+| `secret` | required for `confidential`, unless it authenticates with a key: a name, or [`{generate: true}`](#a-generated-secret) |
+| `token_endpoint_auth_method`, `jwks` | `private_key_jwt` and its public keys: the client signs an assertion instead of presenting a secret; `confidential` only; see [private_key_jwt](#private_key_jwt) |
 | `redirects` | paths that start a sign-in |
 | `signed_out` | pages allowed after RP-initiated logout; an address in both lists fails the load; an `exchange` client may declare none |
 | `requires` | internal groups, any one admits |
@@ -36,6 +37,30 @@ A client's id is the `aud`, unless the request named a [resource](#resources).
 | `groups` | [groups override](#groups-override) |
 | `groups_delimiter` | [rewrites `:`](#groups_delimiter) |
 | `signing_alg` | [pins the algorithm](#signing_alg) |
+
+### private_key_jwt
+
+```yaml
+clients:
+  portal:
+    kind: confidential
+    token_endpoint_auth_method: private_key_jwt
+    jwks:
+      keys:
+        - { kty: EC, crv: P-256, x: "...", y: "...", kid: portal-1, alg: ES256, use: sig }
+    pkce: required
+    redirects: [https://portal.example.com/callback]
+    requires: [devel:portal:user]
+```
+
+| Rule | |
+|---|---|
+| `jwks` | inline, one to four public keys, each with a distinct `kid` and an `alg` of `ES256` (P-256), `PS256` or `RS256` (RSA, 2048 bits or more); no private material; `use`, when present, `sig`. Nothing is fetched |
+| Key change | declare the new key beside the old, move the client to it, remove the old |
+| The assertion | `client_assertion_type` `urn:ietf:params:oauth:client-assertion-type:jwt-bearer`; `iss` and `sub` the client; `aud` the issuer URL; `jti`; `iat` within the hour; `exp` at most ten minutes ahead; signed by the key its `kid` names (no `kid`: the client's only key) |
+| Once | each assertion is accepted once, at `/token` or `/revoke`; a second presentation is `invalid_client` |
+| Refused | a `secret` beside it; on a `public` or `exchange` client; `jwks` without it. The client presents no secret, and a token exchange, which takes none, is `invalid_client` for it |
+| Discovery | while a client declares it, `token_endpoint_auth_methods_supported` and `revocation_endpoint_auth_methods_supported` name `private_key_jwt`, and `token_endpoint_auth_signing_alg_values_supported` and `revocation_endpoint_auth_signing_alg_values_supported` the three algorithms; otherwise neither |
 
 ### PKCE
 

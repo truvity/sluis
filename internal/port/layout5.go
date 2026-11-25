@@ -199,6 +199,9 @@ var rules5 = []rule5{
 	r5(ModuleOIDC, "device", "issuer:device:", convID),
 	r5(ModuleOIDC, "device-user", "issuer:device-user:", convID),
 	r5(ModuleOIDC, "device-poll", "issuer:device-poll:", convID),
+	// The marker of a spent client assertion (`private_key_jwt`), keyed by
+	// the SHA-256 of the client and the assertion's jti.
+	r5(ModuleOIDC, "assertion", "issuer:assertion:", convID),
 	r5(ModuleOIDC, "token", "issuer:token:", convID),
 	r5(ModuleOIDC, "sso", "issuer:sso:", convID),
 	r5(ModuleOIDC, "sso-of", "issuer:sso-of:", convID),

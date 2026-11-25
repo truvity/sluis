@@ -31,6 +31,7 @@ import (
 	"github.com/truvity/sluis/internal/rpcmount"
 	"github.com/truvity/sluis/internal/signer"
 	"github.com/truvity/sluis/internal/telemetry"
+	"github.com/truvity/sluis/policy"
 )
 
 // Provider assembles the OpenID surface over the storage: discovery, the
@@ -53,10 +54,15 @@ func Provider(iss *Issuer, storage op.Storage) (*op.Provider, error) {
 		// not a challenge, and every client we issue to can do S256.
 		CodeMethodS256: true,
 		// A public client authenticates at the token endpoint by posting
-		// its id; a confidential one uses Basic. Private-key JWT stays
-		// off until a client needs it.
+		// its id; a confidential one uses Basic, or the body. Private-key
+		// JWT (RFC 7523 2.2) is on while a client declares
+		// `token_endpoint_auth_method: private_key_jwt`, and off otherwise,
+		// so discovery advertises it only where somebody can use it: the
+		// policy is immutable for an instance. Its assertion is checked by
+		// [Storage.GetKeyByIDAndClientID] and spent once by
+		// [Storage.ClaimJWTAssertion].
 		AuthMethodPost:          true,
-		AuthMethodPrivateKeyJWT: false,
+		AuthMethodPrivateKeyJWT: len(iss.Policy().PrivateKeyJWTClients()) > 0,
 		GrantTypeRefreshToken:   true,
 		SupportedScopes: []string{
 			"openid", "profile", "email", "offline_access",
@@ -305,7 +311,8 @@ func HandlerWithSignIn(iss *Issuer, storage op.Storage, signIn SignInDeps) (http
 				endSession(signIn, storage.GetClientByClientID, endSessionHints(
 					iss.Config().URL, provider.IDTokenHintVerifier, knownClient(iss, storage)), truthfulDiscovery(
 					iss.Config().URL, func() bool { return iss.Policy().ClientDocuments().Enabled() }, iss.ConformanceOn,
-					device.served, refusalFilter(provider)))))))))))))))
+					device.served, func() bool { return len(iss.Policy().PrivateKeyJWTClients()) > 0 },
+					refusalFilter(provider)))))))))))))))
 	// An installation token for a catalogue App is claimed in front of the
 	// library, which can only mint tokens this issuer signs. The storage
 	// is the concrete one wherever a deployment runs; a test's stand-in
@@ -771,12 +778,14 @@ var authorizationServerFields = []string{
 	"response_modes_supported",
 	"grant_types_supported",
 	"token_endpoint_auth_methods_supported",
+	"token_endpoint_auth_signing_alg_values_supported",
 	"service_documentation",
 	"ui_locales_supported",
 	"op_policy_uri",
 	"op_tos_uri",
 	"revocation_endpoint",
 	"revocation_endpoint_auth_methods_supported",
+	"revocation_endpoint_auth_signing_alg_values_supported",
 	// RFC 8628 4: the device authorization grant's endpoint, an RFC 8414
 	// member, present only while a client declares the grant.
 	"device_authorization_endpoint",
@@ -860,7 +869,7 @@ var unservedDiscoveryFields = []string{
 // served as discovery and the corrected document is then narrowed to the
 // members RFC 8414 defines, so headers, status and content come from one
 // place.
-func truthfulDiscovery(issuerURL string, documentClientsEnabled, conformanceOn, deviceServed func() bool, next http.Handler) http.Handler {
+func truthfulDiscovery(issuerURL string, documentClientsEnabled, conformanceOn, deviceServed, privateKeyJWT func() bool, next http.Handler) http.Handler {
 	asPath := authorizationServerURI(issuerURL)
 	device := deviceDiscovery(issuerURL, deviceServed)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -922,6 +931,15 @@ func truthfulDiscovery(issuerURL string, documentClientsEnabled, conformanceOn, 
 		// to nobody, so each is withdrawn.
 		for _, name := range unservedDiscoveryFields {
 			delete(doc, name)
+		}
+		// Except while a client authenticates with `private_key_jwt`: then
+		// the token and revocation endpoints take a signed assertion, and
+		// the algorithms it may be signed with are the ones a key of a
+		// client's `jwks` may name (OpenID Connect Discovery 3, RFC 8414 2).
+		// The library's own list is its RS256 default, which is not that.
+		if privateKeyJWT != nil && privateKeyJWT() {
+			doc["token_endpoint_auth_signing_alg_values_supported"] = policy.ClientAssertionAlgs
+			doc["revocation_endpoint_auth_signing_alg_values_supported"] = policy.ClientAssertionAlgs
 		}
 		// Client ID Metadata Documents, and only when an origin has been
 		// named. A client reads this field to decide whether to present a
