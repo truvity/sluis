@@ -1,5 +1,9 @@
 ## Unreleased
 
+## v1.87.1
+
+A patch release: the console's settings, install and disconnect links follow a GitHub App's current slug after the App is renamed on GitHub, and the catalogue and runner App records are written back with it (#1969); non-major dependency updates. Upgrade notes: none. Rolling back is safe: an older binary reads the refreshed slug as it reads any slug.
+
 ### Fixed
 
 - **A GitHub App renamed on GitHub keeps working links in the console.** Renaming an App on GitHub changes its slug, and the console built the App's settings link (`https://github.com/organizations/<org>/settings/apps/<slug>`) and its install link (`https://github.com/apps/<slug>/installations/new`) from the slug its record was created with, so both answered `404` after a rename. The console now takes the slug from GitHub's answer to `GET /app`, asked as the App with its own key: the App's name, page, settings link and install link, and the settings link a Disconnect returns, are the current slug's. The Apps list costs no extra call, because the slug comes with the answer the page already asks for and is kept for the same minute. Starting an install and disconnecting ask once, for that one App. The slug that moved is written back into the record of a catalogue or runner App, and of the catalogue App an organisation's record names (`app_ref`). The write changes only `app_slug` and `html_url`, under the record's revision, and leaves a record that names another GitHub App by then. It is logged, not audited. The organisation's own record keeps its slug, since the id its App is kept under on layout v5 comes from that slug. When GitHub cannot be asked the stored slug is used and the page does not fail. The link App is never asked as the App, so it keeps the slug it was created with. The console no longer has its own copy of the settings URL builder and uses the URL the server sends. Upgrade notes: none.
