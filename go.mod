@@ -23,7 +23,7 @@ require (
 	github.com/truvity/atoom/source v0.5.0
 	github.com/truvity/atoom/store v0.5.0
 	github.com/truvity/atoom/transport v0.5.0
-	github.com/truvity/audit/emitter v0.18.0
+	github.com/truvity/audit/emitter v0.19.0
 	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/mod v0.42.0
 	google.golang.org/protobuf v1.36.12

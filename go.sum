@@ -66,8 +66,8 @@ github.com/truvity/atoom/store v0.5.0 h1:TcrNGKlCcLHcK+RiROfbho7HLKEfTmT2U/dvFK/
 github.com/truvity/atoom/store v0.5.0/go.mod h1:/sOkoS10Gscz+5z630IirM3PvhjJvoV3OXrj1c/GucE=
 github.com/truvity/atoom/transport v0.5.0 h1:amYSrKEz/5nCXg7mrMHGpyPSTkLh1VoV4hvUTjV4eg8=
 github.com/truvity/atoom/transport v0.5.0/go.mod h1:mwKi5xMBxm+su4komULsHv4hZXnGIgYvnAS35weBz9c=
-github.com/truvity/audit/emitter v0.18.0 h1:+IpasZ4MvWFBrRNbmFfmLspLySVXdp3u1zZGSLkO89E=
-github.com/truvity/audit/emitter v0.18.0/go.mod h1:HJQuo7+RnszDhVDr+jb9dO62ZMIC/vd7HBQa48QFDWk=
+github.com/truvity/audit/emitter v0.19.0 h1:z72nx+ifnmIdS9FtT++6u5xAFd2SUaItmSMquPIUnE8=
+github.com/truvity/audit/emitter v0.19.0/go.mod h1:o3yUsvf2sYSJS0BfCywmj2StKvtH5KkZEqUmUSJgNzg=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
 github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=
 go.uber.org/mock v0.6.0 h1:hyF9dfmbgIX5EfOdasqLsWD6xqpNZlXblLB/Dbnwv3Y=
