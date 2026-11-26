@@ -115,7 +115,7 @@ func parse(args []string, getenv func(string) string) (resourceproxy.Config, err
 	str(&cfg.DelegationHeader, "outbound-delegation-header", resourceproxy.DefaultDelegationHeader,
 		"in delegate mode, the header the stock server passes through from its request to its backend call")
 	fs.IntVar(&cfg.DelegationCacheSize, "outbound-delegation-cache-size",
-		int(envInt(getenv, "OUTBOUND_DELEGATION_CACHE_SIZE", resourceproxy.DefaultDelegationCacheSize, &badEnv)),
+		envCount(getenv, "OUTBOUND_DELEGATION_CACHE_SIZE", resourceproxy.DefaultDelegationCacheSize, &badEnv),
 		"in delegate mode, how many callers' backend tokens are kept ($OUTBOUND_DELEGATION_CACHE_SIZE)")
 
 	if err := fs.Parse(args); err != nil {
@@ -133,6 +133,21 @@ func envInt(getenv func(string) string, key string, def int64, bad *[]string) in
 		return def
 	}
 	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		*bad = append(*bad, key)
+		return def
+	}
+	return n
+}
+
+// envCount is envInt for an int: parsed at the platform's own size, so a value
+// too large for it is refused rather than truncated.
+func envCount(getenv func(string) string, key string, def int, bad *[]string) int {
+	v := getenv(key)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
 	if err != nil {
 		*bad = append(*bad, key)
 		return def
