@@ -71,6 +71,35 @@ func (b *Backend) WithAccount(email, given, family string) *Backend {
 	return b
 }
 
+// WithAlias gives an account another address, the way a Workspace alias
+// does: listed on the account, and answered by Account and GroupsOf as the
+// account it belongs to.
+func (b *Backend) WithAlias(primary, alias string) *Backend {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	p, a := strings.ToLower(primary), strings.ToLower(alias)
+	if account, ok := b.accounts[p]; ok {
+		account.Aliases = append(slices.Clone(account.Aliases), a)
+		slices.Sort(account.Aliases)
+		b.accounts[p] = account
+	}
+	return b
+}
+
+// primaryOf is the primary address an address belongs to: itself, or the
+// account it is an alias of. The caller holds mu.
+func (b *Backend) primaryOf(email string) string {
+	if _, ok := b.accounts[email]; ok {
+		return email
+	}
+	for _, key := range slices.Sorted(maps.Keys(b.accounts)) {
+		if slices.Contains(b.accounts[key].Aliases, email) {
+			return key
+		}
+	}
+	return email
+}
+
 // WithGroup adds a group with the given members.
 func (b *Backend) WithGroup(email string, members ...string) *Backend {
 	b.mu.Lock()
@@ -225,6 +254,9 @@ func (b *Backend) Accounts(_ context.Context) ([]backend.Account, error) {
 		return nil, err
 	}
 	out := slices.Collect(maps.Values(b.accounts))
+	for i := range out {
+		out[i].Aliases = slices.Clone(out[i].Aliases)
+	}
 	slices.SortFunc(out, func(x, y backend.Account) int { return strings.Compare(x.Email, y.Email) })
 	return out, nil
 }
@@ -251,7 +283,10 @@ func (b *Backend) Account(_ context.Context, email string) (backend.Account, boo
 	if err := b.enter(OpAccount); err != nil {
 		return backend.Account{}, false, err
 	}
-	a, ok := b.accounts[strings.ToLower(email)]
+	a, ok := b.accounts[b.primaryOf(strings.ToLower(email))]
+	if ok {
+		a.Aliases = slices.Clone(a.Aliases)
+	}
 	return a, ok, nil
 }
 
@@ -262,7 +297,7 @@ func (b *Backend) GroupsOf(_ context.Context, email string) ([]string, error) {
 	if err := b.enter(OpGroupsOf); err != nil {
 		return nil, err
 	}
-	e := strings.ToLower(email)
+	e := b.primaryOf(strings.ToLower(email))
 	var out []string
 	for _, key := range slices.Sorted(maps.Keys(b.groups)) {
 		if slices.Contains(b.groups[key].Members, e) {

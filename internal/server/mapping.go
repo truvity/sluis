@@ -159,6 +159,7 @@ func holderProto(h *access.Holder) *directoryrosterv1.Holder {
 		Live:          h.Live,
 		Authoritative: h.Authoritative,
 		Via:           h.Via,
+		Aliases:       h.Aliases,
 	}
 	if h.Lifetime > 0 {
 		out.Lifetime = durationpb.New(h.Lifetime)

@@ -1968,7 +1968,10 @@ type Holder struct {
 	// the internal groups that admit them.
 	Via []string `protobuf:"bytes,6,rep,name=via,proto3" json:"via,omitempty"`
 	// for a client: how long their token would live.
-	Lifetime      *durationpb.Duration `protobuf:"bytes,7,opt,name=lifetime,proto3" json:"lifetime,omitempty"`
+	Lifetime *durationpb.Duration `protobuf:"bytes,7,opt,name=lifetime,proto3" json:"lifetime,omitempty"`
+	// aliases are the holder's other addresses, lower-cased: the same
+	// person, so that a consumer holding an alias knows whom it means.
+	Aliases       []string `protobuf:"bytes,8,rep,name=aliases,proto3" json:"aliases,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2048,6 +2051,13 @@ func (x *Holder) GetVia() []string {
 func (x *Holder) GetLifetime() *durationpb.Duration {
 	if x != nil {
 		return x.Lifetime
+	}
+	return nil
+}
+
+func (x *Holder) GetAliases() []string {
+	if x != nil {
+		return x.Aliases
 	}
 	return nil
 }
@@ -3415,7 +3425,7 @@ const file_sluis_v1_access_proto_rawDesc = "" +
 	"\x12ListHoldersRequest\x12\x14\n" +
 	"\x05group\x18\x01 \x01(\tR\x05group\x12\x16\n" +
 	"\x06client\x18\x02 \x01(\tR\x06client\x12\x14\n" +
-	"\x05limit\x18\x03 \x01(\x05R\x05limit\"\xe1\x01\n" +
+	"\x05limit\x18\x03 \x01(\x05R\x05limit\"\xfb\x01\n" +
 	"\x06Holder\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1d\n" +
 	"\n" +
@@ -3425,7 +3435,8 @@ const file_sluis_v1_access_proto_rawDesc = "" +
 	"\x04live\x18\x04 \x01(\bR\x04live\x12$\n" +
 	"\rauthoritative\x18\x05 \x01(\bR\rauthoritative\x12\x10\n" +
 	"\x03via\x18\x06 \x03(\tR\x03via\x125\n" +
-	"\blifetime\x18\a \x01(\v2\x19.google.protobuf.DurationR\blifetime\"\xa0\x01\n" +
+	"\blifetime\x18\a \x01(\v2\x19.google.protobuf.DurationR\blifetime\x12\x18\n" +
+	"\aaliases\x18\b \x03(\tR\aaliases\"\xa0\x01\n" +
 	"\x13ListHoldersResponse\x12*\n" +
 	"\aholders\x18\x01 \x03(\v2\x10.sluis.v1.HolderR\aholders\x12\x1a\n" +
 	"\bexamined\x18\x02 \x01(\x05R\bexamined\x12\x1c\n" +

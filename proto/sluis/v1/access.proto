@@ -433,6 +433,9 @@ message Holder {
   repeated string via = 6;
   // for a client: how long their token would live.
   google.protobuf.Duration lifetime = 7;
+  // aliases are the holder's other addresses, lower-cased: the same
+  // person, so that a consumer holding an alias knows whom it means.
+  repeated string aliases = 8;
 }
 
 message ListHoldersResponse {

@@ -554,7 +554,7 @@ func (c *Controller) directory() rails.Directory {
 			}
 			var holders []rails.Holder
 			for _, holder := range response.GetHolders() {
-				holders = append(holders, rails.Holder{Email: holder.GetEmail(), Live: holder.GetLive()})
+				holders = append(holders, rails.Holder{Email: holder.GetEmail(), Live: holder.GetLive(), Aliases: holder.GetAliases()})
 			}
 			return holders, response.GetPolicyDigest(), response.GetTruncated(), nil
 		},

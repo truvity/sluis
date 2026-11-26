@@ -34,6 +34,12 @@ type Snapshot struct {
 	// needs and nothing more, so keeping it costs a line per group rather
 	// than a membership.
 	Discovered []string
+
+	// aliases maps each account's other addresses to its primary one. It
+	// is derived from Accounts, like MemberOf from Groups, and never
+	// stored: an alias is the same person as its primary, and answering
+	// it as an absence would read as a removal.
+	aliases map[string]string
 }
 
 // NewSnapshot indexes a full read into a snapshot. Discovered is every
@@ -50,6 +56,7 @@ func NewSnapshot(
 		Groups:     make(map[string]backend.Group, len(groups)),
 		MemberOf:   map[string][]string{},
 		Discovered: normaliseGroups(discovered),
+		aliases:    map[string]string{},
 	}
 	if len(s.Discovered) == 0 {
 		names := make([]string, 0, len(groups))
@@ -61,6 +68,9 @@ func NewSnapshot(
 	for _, a := range accounts {
 		a.Email = strings.ToLower(a.Email)
 		s.Accounts[a.Email] = a
+	}
+	for _, key := range slices.Sorted(maps.Keys(s.Accounts)) {
+		s.indexAliases(s.Accounts[key])
 	}
 	for _, g := range groups {
 		g.Email = strings.ToLower(g.Email)
@@ -211,6 +221,35 @@ func (s *Snapshot) narrowGroups(sync []string) *Snapshot {
 	return NewSnapshot(s.Workspace, s.TakenAt, accounts, groups, s.Discovered)
 }
 
+// indexAliases files an account's aliases under its primary address. An
+// alias that is some account's primary address is never re-filed: the
+// directory cannot hand one address to two people, and where a stale
+// snapshot seems to, the primary is the safer reading.
+func (s *Snapshot) indexAliases(a backend.Account) {
+	if s.aliases == nil {
+		s.aliases = map[string]string{}
+	}
+	for _, alias := range a.Aliases {
+		alias = strings.ToLower(strings.TrimSpace(alias))
+		if _, primary := s.Accounts[alias]; alias == "" || primary {
+			continue
+		}
+		s.aliases[alias] = a.Email
+	}
+}
+
+// PrimaryOf returns the primary address of the account an address
+// belongs to: the address itself for a primary one, the account's primary
+// for an alias, and false for an address the snapshot does not hold.
+func (s *Snapshot) PrimaryOf(email string) (string, bool) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if _, ok := s.Accounts[email]; ok {
+		return email, true
+	}
+	primary, ok := s.aliases[email]
+	return primary, ok
+}
+
 // Age reports how old the snapshot is at now.
 func (s *Snapshot) Age(now time.Time) time.Duration { return now.Sub(s.TakenAt) }
 
@@ -229,6 +268,7 @@ func (s *Snapshot) clone() *Snapshot {
 		Groups:     make(map[string]backend.Group, len(s.Groups)),
 		MemberOf:   make(map[string][]string, len(s.MemberOf)),
 		Discovered: slices.Clone(s.Discovered),
+		aliases:    maps.Clone(s.aliases),
 	}
 	for k, g := range s.Groups {
 		g.Members = slices.Clone(g.Members)
@@ -246,9 +286,20 @@ func (s *Snapshot) clone() *Snapshot {
 // whole is no younger than it was.
 func (s *Snapshot) patchAccount(email string, account backend.Account, found bool, groups []string) {
 	email = strings.ToLower(email)
+	if s.aliases == nil {
+		s.aliases = map[string]string{}
+	}
+	// The account's old aliases go with it, and come back from the read.
+	for alias, primary := range s.aliases {
+		if primary == email {
+			delete(s.aliases, alias)
+		}
+	}
 	if found {
 		account.Email = email
 		s.Accounts[email] = account
+		delete(s.aliases, email)
+		s.indexAliases(account)
 	} else {
 		delete(s.Accounts, email)
 	}

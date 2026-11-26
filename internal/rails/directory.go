@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 )
 
 // Holder is one account holding a group, as the directory reports it.
@@ -13,10 +14,38 @@ type Holder struct {
 	// Live is false for a suspended account, which is not somebody a
 	// target should contain.
 	Live bool
+	// Aliases are the account's other addresses: the same person, under
+	// another name.
+	Aliases []string
 }
 
 // Holders are each asked group's holders. A group nobody holds is absent.
 type Holders map[string][]Holder
+
+// PrimaryOf returns a func that names the person behind an address: the
+// primary address of the holder the address is an alias of, or the address
+// itself, lower-cased. A target that knows a person by an alias (a GitHub
+// link, an invitation) and a holders list that knows them by their primary
+// address then speak of one person, not of a member nothing wants and a
+// holder nobody linked.
+func PrimaryOf(holders Holders) func(string) string {
+	primaries := map[string]string{}
+	for _, list := range holders {
+		for _, h := range list {
+			email := strings.ToLower(strings.TrimSpace(h.Email))
+			for _, alias := range h.Aliases {
+				primaries[strings.ToLower(strings.TrimSpace(alias))] = email
+			}
+		}
+	}
+	return func(email string) string {
+		email = strings.ToLower(strings.TrimSpace(email))
+		if p, ok := primaries[email]; ok {
+			return p
+		}
+		return email
+	}
+}
 
 // Vouch is the directory's answer about one address, asked before anybody
 // is removed on its account.

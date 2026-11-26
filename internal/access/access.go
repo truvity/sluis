@@ -392,6 +392,12 @@ func (a *Authorizer) explain(ctx context.Context, proof Proof, refuseSuspended b
 		out.Authoritative, out.DirectoryGroups = resolved.Authoritative, resolved.Groups
 		out.GivenName, out.FamilyName = resolved.GivenName, resolved.FamilyName
 		in.DirectoryGroups, in.Authoritative = resolved.Groups, resolved.Authoritative
+		// An alias is evaluated as the account it belongs to, so that a
+		// group naming the person by their primary address holds them by
+		// either.
+		if resolved.Primary != "" {
+			in.Email = resolved.Primary
+		}
 	}
 
 	out.Result = a.evaluate(in)
@@ -508,6 +514,8 @@ type Holder struct {
 	Authoritative bool
 	Via           []string
 	Lifetime      time.Duration
+	// Aliases are the holder's other addresses: the same person.
+	Aliases []string
 }
 
 // HoldersOf resolves an internal group, or a client, to the people who
@@ -544,6 +552,7 @@ func (a *Authorizer) HoldersOf(people []hub.Person, group, client string) []Hold
 			FamilyName:    person.FamilyName,
 			Live:          person.Live,
 			Authoritative: person.Authoritative,
+			Aliases:       person.Aliases,
 		}
 		switch {
 		case group != "":

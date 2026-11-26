@@ -253,3 +253,39 @@ func TestExplainTheBreakGlassAdmin(t *testing.T) {
 		t.Errorf("explanation = %+v, want no directory opinion and no groups", got)
 	}
 }
+
+// An alias is evaluated as the account it belongs to, so that a group
+// naming the person by their primary address holds them by either.
+func TestAnAliasIsEvaluatedAsItsAccount(t *testing.T) {
+	t.Parallel()
+	p, err := policy.Parse([]byte(`
+version: 1
+groups:
+  all:sluis:operator: { matchers: [{ email: ada@example.com }] }
+claims:
+  all:sluis:operator: { groups: [hub:operator] }
+lifetimes:
+  default: 12h
+`))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	set, err := policy.NewSet(p)
+	if err != nil {
+		t.Fatalf("NewSet: %v", err)
+	}
+	a := access.NewAuthorizer(set, &directory{result: hub.UserResult{
+		Primary: "ada@example.com", InDomain: true, Found: true, Authoritative: true,
+	}}, time.Hour)
+
+	got, err := a.Explain(context.Background(), access.Proof{Email: "ada.lovelace@example.com"})
+	if err != nil {
+		t.Fatalf("Explain: %v", err)
+	}
+	if got.Role != access.RoleOperator || !got.Result.Has("all:sluis:operator") {
+		t.Errorf("explanation = %+v, want the operator group the primary address holds", got)
+	}
+	if got.Email != "ada.lovelace@example.com" {
+		t.Errorf("email = %q, want the address asked about", got.Email)
+	}
+}
