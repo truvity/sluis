@@ -34,6 +34,17 @@ type Snapshot struct {
 	// needs and nothing more, so keeping it costs a line per group rather
 	// than a membership.
 	Discovered []string
+	// Passes counts, per domain the reads covered, the complete reads in a
+	// row that covered it, up to [GoneAfterPasses]; Absent counts, per
+	// address an earlier read had, the complete reads in a row it has been
+	// missing from since, below [GoneAfterPasses]. Together they are
+	// [Snapshot.AbsentPasses], which is how a hub that only reads snapshots
+	// tells an account deleted a while ago from one created since the read.
+	// Both are written by a complete read ([Snapshot.carryAbsences]) and
+	// carried by a patch and a narrowing; a snapshot without them counts
+	// nobody as gone.
+	Passes map[string]int
+	Absent map[string]int
 
 	// aliases maps each account's other addresses to its primary one. It
 	// is derived from Accounts, like MemberOf from Groups, and never
@@ -200,7 +211,9 @@ func (s *Snapshot) narrow(serve []string) *Snapshot {
 		groups = append(groups, s.Groups[key])
 	}
 	accounts, groups = restrict(accounts, groups, serve, nil)
-	return NewSnapshot(s.Workspace, s.TakenAt, accounts, groups, s.Discovered)
+	out := NewSnapshot(s.Workspace, s.TakenAt, accounts, groups, s.Discovered)
+	out.keepAbsences(s, serve)
+	return out
 }
 
 // narrowGroups drops the groups a newly narrowed sync list no longer
@@ -218,7 +231,9 @@ func (s *Snapshot) narrowGroups(sync []string) *Snapshot {
 		groups = append(groups, s.Groups[key])
 	}
 	_, groups = restrict(accounts, groups, nil, sync)
-	return NewSnapshot(s.Workspace, s.TakenAt, accounts, groups, s.Discovered)
+	out := NewSnapshot(s.Workspace, s.TakenAt, accounts, groups, s.Discovered)
+	s.cloneAbsences(out)
+	return out
 }
 
 // indexAliases files an account's aliases under its primary address. An
@@ -270,6 +285,7 @@ func (s *Snapshot) clone() *Snapshot {
 		Discovered: slices.Clone(s.Discovered),
 		aliases:    maps.Clone(s.aliases),
 	}
+	s.cloneAbsences(out)
 	for k, g := range s.Groups {
 		g.Members = slices.Clone(g.Members)
 		out.Groups[k] = g
@@ -290,9 +306,14 @@ func (s *Snapshot) patchAccount(email string, account backend.Account, found boo
 		s.aliases = map[string]string{}
 	}
 	// The account's old aliases go with it, and come back from the read.
+	// Not found, they are missing from now on, like the account: counted
+	// from the next complete read, not as old as their domain.
 	for alias, primary := range s.aliases {
 		if primary == email {
 			delete(s.aliases, alias)
+			if !found {
+				s.startAbsence(alias)
+			}
 		}
 	}
 	if found {
@@ -300,7 +321,15 @@ func (s *Snapshot) patchAccount(email string, account backend.Account, found boo
 		s.Accounts[email] = account
 		delete(s.aliases, email)
 		s.indexAliases(account)
+		// Back: whatever was counted against it, or its aliases, is over.
+		delete(s.Absent, email)
+		for _, alias := range account.Aliases {
+			delete(s.Absent, strings.ToLower(strings.TrimSpace(alias)))
+		}
 	} else {
+		if _, held := s.Accounts[email]; held {
+			s.startAbsence(email)
+		}
 		delete(s.Accounts, email)
 	}
 	for _, g := range s.MemberOf[email] {

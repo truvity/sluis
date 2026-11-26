@@ -10,6 +10,7 @@ Each row names a failure and what consumers and operators see.
 | Domain claimed by two workspaces | `authoritative=false` for that domain on both |
 | Address in no served domain | `in_domain=false`: no opinion |
 | Account missing from the snapshot | one live read first; `found=false` only after the backend said so |
+| Account missing from the snapshot, in a hub that only reads snapshots (`google.remote`) | no live read is possible: `authoritative=false` until the address has been missing from 3 complete reads in a row, then `found=false` with the snapshot's authority; a failed or partial read is no pass and resets nothing |
 | The state store is unreachable | the replica leaves readiness and says which dependency; sessions and snapshots are unavailable until it returns; liveness is unaffected, so nothing restarts |
 | Credential revoked or admin suspended | probe fails, domain is provisional; reconnect is the recovery |
 | A request would wait on the directory | it does not: the work runs detached and the answer is *first snapshot pending* |

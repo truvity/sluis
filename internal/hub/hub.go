@@ -618,12 +618,14 @@ func (h *Hub) point(ctx context.Context, v view, email string, maxAge *time.Dura
 	if !goLive && maxAge != nil && snap.Age(h.now()) > *maxAge {
 		goLive = true
 	}
+	missing := false
 	if !goLive {
 		if _, present := snap.Accounts[lower]; !present {
 			// A group address is not an account and the directory
 			// refuses to read one as a user, so a miss on a known group
 			// is already the answer: not an account.
 			goLive = !snap.isGroup(lower)
+			missing = goLive
 		}
 	}
 
@@ -636,7 +638,16 @@ func (h *Hub) point(ctx context.Context, v view, email string, maxAge *time.Dura
 		// snapshot says is now an opinion rather than a fact: in
 		// particular an absence, which a caller would otherwise act on as
 		// a removal, may simply be an account created since the last pass.
-		authoritative = false
+		//
+		// Except, in a hub that only reads snapshots, for an address the
+		// complete reads have been missing for GoneAfterPasses passes in a
+		// row: that is an account the directory has not had for that long,
+		// and the absence is answered with the snapshot's own authority. No
+		// live read will ever come here, so without it a deleted account
+		// would hold its removals for good.
+		if !h.readOnly || !missing || !snap.gone(lower) {
+			authoritative = false
+		}
 	}
 
 	out := pointResult{
@@ -1015,6 +1026,17 @@ func (h *Hub) Refresh(ctx context.Context, workspaceID string) (time.Time, error
 		// uses the intersection, so nothing unowned is answered either way.
 		accounts, groups = restrict(accounts, groups, ws.Serve, ws.SyncGroups)
 		snap := NewSnapshot(workspaceID, h.now(), accounts, groups, discovered)
+		// A complete read is a pass: it counts, for a hub that only reads
+		// snapshots, how long each address has been missing. Served, not
+		// Serve as written: a domain the tenant does not own is answered
+		// for by nobody, so its absences count for nothing.
+		prev, prevErr := h.snapshots.Get(ctx, workspaceID)
+		if prevErr != nil {
+			h.log.WarnContext(ctx, "the previous snapshot is unreadable; absences are counted again from this read",
+				logattr.SafeString("workspace", workspaceID), logattr.SafeError("error", prevErr))
+			prev = nil
+		}
+		snap.carryAbsences(prev, ws.Served())
 		if err = h.snapshots.Put(ctx, snap); err != nil {
 			return time.Time{}, fmt.Errorf("store snapshot: %w", err)
 		}

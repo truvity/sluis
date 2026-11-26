@@ -170,6 +170,11 @@ type wire struct {
 	// rollout decodes into "the kept groups are all there were", which is
 	// what it meant.
 	Discovered []string `json:"discovered,omitempty"`
+	// Passes and Absent are the counts behind [Snapshot.AbsentPasses]. A
+	// snapshot written by an older replica has neither and decodes as one
+	// that counts nobody gone, which is what an older replica meant.
+	Passes map[string]int `json:"passes,omitempty"`
+	Absent map[string]int `json:"absent,omitempty"`
 }
 
 // EncodeSnapshot writes a snapshot compressed. A directory of any size is
@@ -181,7 +186,10 @@ func EncodeSnapshot(snap *Snapshot) ([]byte, error) {
 	if snap == nil {
 		return nil, errors.New("nothing to store")
 	}
-	out := wire{Workspace: snap.Workspace, TakenAt: snap.TakenAt, Discovered: snap.Discovered}
+	out := wire{
+		Workspace: snap.Workspace, TakenAt: snap.TakenAt, Discovered: snap.Discovered,
+		Passes: snap.Passes, Absent: snap.Absent,
+	}
 	for _, email := range sortedKeys(snap.Accounts) {
 		out.Accounts = append(out.Accounts, snap.Accounts[email])
 	}
@@ -214,7 +222,9 @@ func DecodeSnapshot(blob []byte) (*Snapshot, error) {
 	}
 	// Rebuilt through the ordinary constructor, so a snapshot read back
 	// is indexed exactly like one just taken.
-	return NewSnapshot(in.Workspace, in.TakenAt, in.Accounts, in.Groups, in.Discovered), nil
+	snap := NewSnapshot(in.Workspace, in.TakenAt, in.Accounts, in.Groups, in.Discovered)
+	snap.Passes, snap.Absent = in.Passes, in.Absent
+	return snap, nil
 }
 
 // maxSnapshotBytes bounds what one decompression may produce. The value
