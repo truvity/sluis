@@ -35,6 +35,12 @@ type Delegation struct {
 	// Subjects are the kinds of subject such an actor may act for. Absent
 	// is [DelegatedPerson], the only kind there is.
 	Subjects []string `yaml:"subjects,omitempty"`
+	// SubjectAudiences narrows which of a subject's tokens an actor may
+	// present: the subject token must have been issued for one of these
+	// audiences, a [Resource] or a [Client] of this policy, such as the MCP
+	// server the actor fronts. Absent, any live token of an allowed subject
+	// kind may be presented, whatever it was issued for.
+	SubjectAudiences []string `yaml:"subject_audiences,omitempty"`
 }
 
 // AdmitsActor reports whether in, an actor's proof, is one of the actors.
@@ -57,6 +63,19 @@ func (d *Delegation) AllowsSubject(kind string) bool {
 	return slices.Contains(d.Subjects, kind)
 }
 
+// AllowsSubjectAudience reports whether a subject token issued for audience
+// may be acted for: one of its audiences is among [Delegation.SubjectAudiences],
+// or none are listed.
+func (d *Delegation) AllowsSubjectAudience(audience []string) bool {
+	if d == nil {
+		return false
+	}
+	if len(d.SubjectAudiences) == 0 {
+		return true
+	}
+	return slices.ContainsFunc(audience, func(a string) bool { return slices.Contains(d.SubjectAudiences, a) })
+}
+
 // AllowedSubjects is [Delegation.Subjects] with its default filled in.
 func (d *Delegation) AllowedSubjects() []string {
 	if d == nil {
@@ -71,8 +90,9 @@ func (d *Delegation) AllowedSubjects() []string {
 // validate checks the rule at load. An empty actor list would read as a
 // delegation nobody can use, and an address as an actor could never match,
 // because a person is never an actor: both are typos found only when a
-// workload's calls start failing, so both are refused here.
-func (d *Delegation) validate(id string) error {
+// workload's calls start failing, so both are refused here. A subject
+// audience that names no resource or client of p is the same kind of typo.
+func (d *Delegation) validate(id string, p Policy) error {
 	if d == nil {
 		return nil
 	}
@@ -104,6 +124,23 @@ func (d *Delegation) validate(id string) error {
 			return fmt.Errorf("%s: subjects: %q is listed twice", where, kind)
 		}
 		seen[kind] = true
+	}
+	if d.SubjectAudiences != nil && len(d.SubjectAudiences) == 0 {
+		return fmt.Errorf("%s: subject_audiences is empty: list the audiences a subject token may be issued for, or leave the key out to accept any", where)
+	}
+	audiences := map[string]bool{}
+	for _, audience := range d.SubjectAudiences {
+		_, resource := p.Resources[audience]
+		_, client := p.Clients[audience]
+		switch {
+		case audience == "":
+			return fmt.Errorf("%s: subject_audiences: an empty audience", where)
+		case !resource && !client:
+			return fmt.Errorf("%s: subject_audiences: %q is neither a resource nor a client of this policy, so no subject token is issued for it", where, audience)
+		case audiences[audience]:
+			return fmt.Errorf("%s: subject_audiences: %q is listed twice", where, audience)
+		}
+		audiences[audience] = true
 	}
 	return nil
 }

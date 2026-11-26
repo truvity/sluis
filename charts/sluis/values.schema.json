@@ -2424,6 +2424,16 @@
                     "minItems": 1,
                     "type": "array"
                   },
+                  "subject_audiences": {
+                    "description": "The audiences a subject token must have been issued for, each a `resources` row or a client of this policy, such as the MCP server the actor fronts. Absent, any live token of an allowed subject kind may be presented.",
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
                   "subjects": {
                     "description": "The subject kinds an actor may act for. Absent is `person`: the access token of a person's sign-in that still stands.",
                     "items": {

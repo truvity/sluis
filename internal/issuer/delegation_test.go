@@ -19,6 +19,8 @@ import (
 // delegationPolicy is the demonstration policy with two backends a sidecar
 // calls as the caller: `store`, which ada is admitted to, and `store-deploy`,
 // which she is not. Both name the same actors; `aws:1111:power` names none.
+// `store-own` acts only for tokens issued for `local-dev`, and `store-mcp`
+// only for tokens issued for the MCP resource.
 // One actor is limited to another client by its own exchange limit.
 var delegationPolicy = strings.Replace(demo.Policy, "clients:\n",
 	"clients:\n"+
@@ -34,10 +36,28 @@ var delegationPolicy = strings.Replace(demo.Policy, "clients:\n",
 		"    kind: exchange\n"+
 		"    requires: [all:gitops:deployer]\n"+
 		"    delegation:\n"+
-		"      actors: [{service_account: {namespace: mcp, name: observability}}]\n", 1) +
+		"      actors: [{service_account: {namespace: mcp, name: observability}}]\n"+
+		"  store-own:\n"+
+		"    kind: exchange\n"+
+		"    requires: [devel:k8s:viewer, mgmt:k8s:admin]\n"+
+		"    delegation:\n"+
+		"      actors: [{service_account: {namespace: mcp, name: observability}}]\n"+
+		"      subject_audiences: [local-dev]\n"+
+		"  store-mcp:\n"+
+		"    kind: exchange\n"+
+		"    requires: [devel:k8s:viewer, mgmt:k8s:admin]\n"+
+		"    delegation:\n"+
+		"      actors: [{service_account: {namespace: mcp, name: observability}}]\n"+
+		"      subject_audiences: ["+mcpResource+"]\n", 1) +
 	"exchange_limits:\n" +
 	"  - match: {service_account: {namespace: mcp, name: limited}}\n" +
-	"    clients: [aws:1111:power]\n"
+	"    clients: [aws:1111:power]\n" +
+	"resources:\n" +
+	"  " + mcpResource + ": {requires: [devel:k8s:viewer]}\n"
+
+// mcpResource is the MCP server a sidecar fronts: what a delegation's
+// subject_audiences names so that only tokens issued for it are acted for.
+const mcpResource = "https://mcp.example/store"
 
 const (
 	actorToken  = "k8s:mcp/observability"
@@ -180,7 +200,10 @@ func TestADelegationTheTargetDoesNotAllowIsRefused(t *testing.T) {
 			"invalid_target", "subject_kind_not_allowed",
 		},
 		"an actor limited to another client": {access, person, "k8s:mcp/limited", "store", "invalid_target", "actor_exchange_limited"},
-		"a person's own token as the actor":  {access, person, access, "store", "invalid_grant", "actor_token_refused"},
+		"a subject token issued for another audience": {
+			access, person, actorToken, "store-mcp", "invalid_target", "subject_audience_not_allowed",
+		},
+		"a person's own token as the actor": {access, person, access, "store", "invalid_grant", "actor_token_refused"},
 	} {
 		form := url.Values{
 			"grant_type": {string(oidc.GrantTypeTokenExchange)}, "subject_token": {tc.subject},
@@ -198,6 +221,46 @@ func TestADelegationTheTargetDoesNotAllowIsRefused(t *testing.T) {
 		if got := lastExchange(t, trail)["reason_code"]; got != tc.reason {
 			t.Errorf("%s: reason_code = %v, want %s", name, got, tc.reason)
 		}
+	}
+}
+
+// subject_audiences narrows which of a person's tokens an actor may present:
+// one issued for a listed audience is acted for, one issued for anything else
+// is refused as the target's rule, recorded with the actor beside the person.
+func TestADelegationActsOnlyForTokensIssuedForItsSubjectAudiences(t *testing.T) {
+	t.Parallel()
+	server, iss, trail := serveDelegation(t, adaDirectory())
+	access, _ := signedInTokens(t, server, iss, "local-dev")["access_token"].(string)
+	if aud, _ := claimsOf(t, server, access)["aud"].([]any); !slices.Contains(aud, any("local-dev")) {
+		t.Fatalf("the subject token's aud = %v, want local-dev", aud)
+	}
+
+	status, body := delegate(t, server, access, string(oidc.AccessTokenType), actorToken, "store-own")
+	if status != http.StatusOK {
+		t.Fatalf("delegate a token issued for a listed audience: %d %v", status, body)
+	}
+	raw, _ := body["access_token"].(string)
+	if act, _ := claimsOf(t, server, raw)["act"].(map[string]any); act["sub"] != actorSubject {
+		t.Errorf("act = %v, want {sub: %s}", act, actorSubject)
+	}
+
+	status, body = delegate(t, server, access, string(oidc.AccessTokenType), actorToken, "store-mcp")
+	if status != http.StatusBadRequest || body["error"] != "invalid_target" {
+		t.Fatalf("delegate a token issued for another audience = %d %v, want 400 invalid_target", status, body)
+	}
+	data := lastExchange(t, trail)
+	if data["reason_code"] != "subject_audience_not_allowed" || data["acted_by"] != actorSubject || data["proof"] != "person" {
+		t.Errorf("recorded %v, want subject_audience_not_allowed for the person, acted for by the workload", data)
+	}
+	if got := trail.Find("roster.token.exchanged"); got[len(got)-1].GetActor().GetId() != "ada@north.example" {
+		t.Errorf("actor = %v, want the person", got[len(got)-1].GetActor())
+	}
+
+	// A delegated token is itself a subject token, issued for its own target:
+	// presented again, it is read against that audience, not the first one's.
+	status, body = delegate(t, server, raw, string(oidc.AccessTokenType), actorToken, "store-own")
+	if status != http.StatusBadRequest || body["error"] != "invalid_target" {
+		t.Errorf("delegate a token issued for store-own at store-own = %d %v, want 400 invalid_target", status, body)
 	}
 }
 
@@ -244,14 +307,18 @@ func TestAnActorHalfNamedIsMalformed(t *testing.T) {
 }
 
 // A delegation is refused at load when it names no actor, names a person as
-// one, or names a subject kind there is not.
+// one, names a subject kind there is not, or lists subject audiences that
+// are empty, repeated, or neither a resource nor a client.
 func TestADelegationIsCheckedAtLoad(t *testing.T) {
 	t.Parallel()
 	for name, rule := range map[string]string{
-		"no actors":        "{actors: []}",
-		"a person":         "{actors: [{email: ada@north.example}]}",
-		"an unknown kind":  "{actors: [{service_account: {namespace: mcp, name: a}}], subjects: [robot]}",
-		"a repeated actor": "{actors: [{service_account: {namespace: mcp, name: a}}, {service_account: {namespace: mcp, name: a}}]}",
+		"no actors":                      "{actors: []}",
+		"a person":                       "{actors: [{email: ada@north.example}]}",
+		"an unknown kind":                "{actors: [{service_account: {namespace: mcp, name: a}}], subjects: [robot]}",
+		"a repeated actor":               "{actors: [{service_account: {namespace: mcp, name: a}}, {service_account: {namespace: mcp, name: a}}]}",
+		"an empty subject audience list": "{actors: [{service_account: {namespace: mcp, name: a}}], subject_audiences: []}",
+		"an unknown subject audience":    "{actors: [{service_account: {namespace: mcp, name: a}}], subject_audiences: [nowhere]}",
+		"a repeated subject audience":    "{actors: [{service_account: {namespace: mcp, name: a}}], subject_audiences: [local-dev, local-dev]}",
 	} {
 		doc := strings.Replace(demo.Policy, "clients:\n",
 			"clients:\n  store: {kind: exchange, requires: [devel:k8s:viewer], delegation: "+rule+"}\n", 1)
@@ -262,5 +329,20 @@ func TestADelegationIsCheckedAtLoad(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "delegation") {
 			t.Errorf("%s: err = %v, want a delegation refusal", name, err)
 		}
+		if strings.Contains(rule, "subject_audiences") && (err == nil || !strings.Contains(err.Error(), "subject_audiences")) {
+			t.Errorf("%s: err = %v, want a subject_audiences refusal", name, err)
+		}
+	}
+
+	// A list naming a resource and a client of the policy loads.
+	doc := strings.Replace(demo.Policy, "clients:\n", "clients:\n  store: {kind: exchange, requires: [devel:k8s:viewer], delegation: "+
+		"{actors: [{service_account: {namespace: mcp, name: a}}], subject_audiences: [local-dev, "+mcpResource+"]}}\n", 1) +
+		"resources:\n  " + mcpResource + ": {requires: [devel:k8s:viewer]}\n"
+	declared, err := policy.Parse([]byte(doc))
+	if err == nil {
+		_, err = policy.NewSet(declared)
+	}
+	if err != nil {
+		t.Errorf("subject_audiences naming a resource and a client: %v, want it to load", err)
 	}
 }

@@ -1294,7 +1294,7 @@ func (c Client) validate(id string, p Policy) error {
 	if err := c.validateAuthMethod(id); err != nil {
 		return err
 	}
-	if err := c.Delegation.validate(id); err != nil {
+	if err := c.Delegation.validate(id, p); err != nil {
 		return err
 	}
 	if c.HoldsSecret() && c.Secret.IsZero() {
