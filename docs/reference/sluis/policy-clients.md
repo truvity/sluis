@@ -146,6 +146,33 @@ exchange_limits:
 | Across files | limits add up; an identical limit is kept once |
 | Rationale | [why an identity can be limited](../../concepts/sluis/verify-and-issue.md#why-an-identity-can-be-limited-to-some-audiences) |
 
+## Delegation
+
+```yaml
+clients:
+  store:
+    kind: exchange
+    requires: [all:store:viewer]
+    delegation:
+      actors:
+        - service_account: { cluster: east, namespace: mcp, name: observability-mcp }
+      subjects: [person]
+```
+
+| Rule | Value |
+|---|---|
+| Effect | an exchange with an `actor_token` (RFC 8693 delegation) mints the subject's token for this client, naming the actor in `act` |
+| Request | `subject_token`: the person's access token this issuer signed, `subject_token_type` `access_token`; `actor_token`: the actor's own token (a ServiceAccount, a GitHub job, an AWS role), its `actor_token_type` the one it would exchange itself with |
+| `actors` | at least one [matcher](policy-groups.md), `service_account`, `github` or `aws`, each once; read against the actor's proof alone |
+| `subjects` | `person`, the default and the only kind |
+| Token | `sub` and the claims of the person, with groups from the directory's answer now, never copied from the subject token; `act: {sub: <actor>}`, with the subject token's own `act` nested under it; expires no later than the subject token; its record ends with the subject token's sign-in |
+| Still applies | the client's `requires` to the person; the exchange limits of the person and of the actor |
+| Refused, `invalid_target` | no `delegation` (`reason_code` `delegation_not_declared`), an actor not named (`actor_not_admitted`), a subject kind not named, such as a CI job's token (`subject_kind_not_allowed`), the actor's exchange limit (`actor_exchange_limited`), the person not admitted (`not_admitted`) |
+| Refused, `invalid_grant` | an actor token this issuer signed or no verifier accepts (`actor_token_refused`), a subject token of another type (`wrong_token_type`), unknown (`no_record_of_token`), not a person's (`not_a_person`), whose sign-in ended (`session_ended`), or a recovery or conformance sign-in |
+| Audit | `roster.token.exchanged` with the person as actor, `acted_by` the actor's identity and `acted_by_proof` its kind |
+| Refused at load | no `actors`; an `email` or `email_domain` actor; an actor twice; an unknown subject kind |
+| Not served | the GitHub installation token and Cloudflare exchanges, which refuse any actor |
+
 ## Resources
 
 ```yaml

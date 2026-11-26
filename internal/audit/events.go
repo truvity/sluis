@@ -133,9 +133,30 @@ func RecoveryDisabled(actor Actor, installation, generation string, signIns, ses
 
 // TokenExchanged is a token exchange for one client, by the kind of proof
 // presented.
-func TokenExchanged(actor Actor, audience, proof string, o Outcome) *record.Record {
+//
+// by names who acted for the actor, for a delegated exchange (RFC 8693
+// `actor_token`): the actor is the person whose token was minted, and by is the
+// workload that presented it. At most one; none for an exchange of one's own
+// proof.
+func TokenExchanged(actor Actor, audience, proof string, o Outcome, by ...ActedBy) *record.Record {
 	return build("roster.token.exchanged", actor, o,
-		subjectOf(actor), []*record.Target{targetClient(audience)}, data{"proof": proof})
+		subjectOf(actor), []*record.Target{targetClient(audience)}, actedBy(data{"proof": proof}, by))
+}
+
+// ActedBy is the party that acted for a token exchange's subject: the
+// actor_token's identity, and the kind of proof it was (ci or workload).
+type ActedBy struct {
+	ID    string
+	Proof string
+}
+
+// actedBy adds the first of by to d.
+func actedBy(d data, by []ActedBy) data {
+	if len(by) > 0 {
+		d["acted_by"] = by[0].ID
+		d["acted_by_proof"] = by[0].Proof
+	}
+	return d
 }
 
 // Device is what the device authorization grant (RFC 8628) records about one
@@ -226,9 +247,10 @@ func (f Refusal) data(d data) data {
 
 // TokenExchangeRefused is a refused token exchange with the evaluation behind
 // the refusal.
-func TokenExchangeRefused(actor Actor, audience, proof string, o Outcome, why Refusal) *record.Record {
+// by is [TokenExchanged]'s.
+func TokenExchangeRefused(actor Actor, audience, proof string, o Outcome, why Refusal, by ...ActedBy) *record.Record {
 	return build("roster.token.exchanged", actor, o,
-		subjectOf(actor), []*record.Target{targetClient(audience)}, why.data(data{"proof": proof}))
+		subjectOf(actor), []*record.Target{targetClient(audience)}, why.data(actedBy(data{"proof": proof}, by)))
 }
 
 // SignInRefused is a refused sign-in with the evaluation behind the refusal.

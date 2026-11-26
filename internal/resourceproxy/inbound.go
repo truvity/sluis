@@ -33,7 +33,14 @@ type Inbound struct {
 	// extraReady is asked by /readyz as well: the outbound side, when it
 	// is on.
 	extraReady func() error
+	// handles is set in [ModeDelegate]: each request is registered under a
+	// handle the stock server carries to the outbound side.
+	handles *Handles
 }
+
+// Delegate has every proxied request carry a handle to its caller on
+// [Config.DelegationHeader], for the outbound side to act for them.
+func (in *Inbound) Delegate(handles *Handles) { in.handles = handles }
 
 // NewInbound builds the inbound side from a validated Config.
 func NewInbound(cfg Config, log *slog.Logger, extraReady func() error) (*Inbound, error) {
@@ -147,6 +154,18 @@ func (in *Inbound) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
 		r.ContentLength = int64(len(body))
+	}
+
+	if in.handles != nil {
+		// Set, never added to: a handle the caller sent is not theirs to
+		// name.
+		var subject string
+		if rec != nil {
+			subject = rec.who.Subject
+		}
+		handle, done := in.handles.Open(resource.BearerToken(r), subject)
+		defer done()
+		r.Header.Set(in.cfg.DelegationHeader, handle)
 	}
 
 	in.proxy.ServeHTTP(w, r)

@@ -22,7 +22,20 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger) error {
 		source     *TokenSource
 		extraReady func() error
 	)
-	if cfg.OutboundEnabled() {
+	var handles *Handles
+	switch {
+	case cfg.Delegating():
+		delegator, err := NewDelegator(cfg, nil)
+		if err != nil {
+			return err
+		}
+		if outbound, err = NewOutbound(cfg, log, nil); err != nil {
+			return err
+		}
+		handles = NewHandles()
+		outbound.ActFor(handles, cfg.DelegationHeader, delegator)
+		extraReady = delegator.Ready
+	case cfg.OutboundEnabled():
 		var err error
 		if source, err = NewTokenSource(cfg, log, nil); err != nil {
 			return err
@@ -41,11 +54,16 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	if handles != nil {
+		inbound.Delegate(handles)
+	}
 
 	servers := []*http.Server{newServer(cfg.Listen, inbound.Handler())}
 	if outbound != nil {
 		servers = append(servers, newServer(cfg.OutboundListen, outbound.Handler()))
-		go source.Warm(ctx)
+		if source != nil {
+			go source.Warm(ctx)
+		}
 	}
 
 	failed := make(chan error, len(servers))

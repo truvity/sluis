@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
+	"time"
 
 	"github.com/truvity/sluis/audit/sdk/record"
 
@@ -25,6 +27,42 @@ type Proof struct {
 	ServiceAccount *policy.ServiceAccountRef
 	// AWS is set for an AWS IAM role's outbound identity federation token.
 	AWS *policy.AWSRole
+	// Acting is set when another party presents this proof on its holder's
+	// behalf: an RFC 8693 exchange with an `actor_token`. See [Acting].
+	Acting *Acting
+}
+
+// Acting is the second party of a delegated exchange: who is acting for the
+// proof's subject, and what the subject token was issued under.
+//
+// The actor is a machine proof a verifier made from the `actor_token`, never
+// a sign-in, and the subject is a person's access token this issuer signed.
+// The token minted is the subject's, with the subject's groups as the
+// directory answers them now, and names the actor in `act` (RFC 8693 4.1).
+type Acting struct {
+	// Actor is the verified actor_token.
+	Actor Proof
+	// Prior is the subject token's own `act`, when it was itself minted by a
+	// delegation: kept, nested under the new actor, so the chain reads
+	// newest first.
+	Prior map[string]any
+	// Session and SignIn are what the subject token was issued under, so the
+	// delegated token's record ends when they do ([Storage.recordLive]).
+	Session string
+	SignIn  string
+	// Expires is the subject token's own expiry: a delegated token never
+	// outlives the token it was made from.
+	Expires time.Time
+}
+
+// actClaim is the `act` claim for a delegated token: the actor, and the
+// subject token's own chain beneath it.
+func (a *Acting) actClaim() map[string]any {
+	act := map[string]any{"sub": a.Actor.Subject()}
+	if len(a.Prior) > 0 {
+		act["act"] = a.Prior
+	}
+	return act
 }
 
 // Subject is the token's `sub`: stable, and never a person. A CI job that
@@ -52,6 +90,8 @@ type Grant struct {
 	Result   policy.Result
 	Claims   map[string]any
 	Held     bool
+	// Acting is the proof's [Acting] for a delegated exchange, nil otherwise.
+	Acting *Acting
 }
 
 // ErrNoTarget is returned when the request names no audience. The
@@ -95,6 +135,16 @@ func (i *Issuer) Exchange(ctx context.Context, proof Proof, audience string) (Gr
 		i.record(ctx, exchangeRefused(proof, audience, audit.Denied("the requested audience is not a declared client"),
 			i.exchangeRefusal(ctx, proof, audience, "unknown_audience")))
 		return Grant{}, fmt.Errorf("%w: %q", ErrUnknownTarget, audience)
+	}
+
+	// A delegated exchange is the target's to allow, before anything about
+	// the subject is resolved: the client names its actors and the subject
+	// kinds they may act for, and the actor's own exchange limit applies as
+	// it would to the actor's own exchange.
+	if proof.Acting != nil {
+		if err := i.delegationAllowed(ctx, proof, client, audience); err != nil {
+			return Grant{}, err
+		}
 	}
 
 	// The identity's own limit, before anything else is resolved: it reads
@@ -141,6 +191,13 @@ func (i *Issuer) Exchange(ctx context.Context, proof Proof, audience string) (Gr
 	// evaluated set, exactly as [policy.Policy.ScopeGroups] requires.
 	claims := scopeClaims(i.cfg.GroupsScoping, i.set, Claims(result), audience, result.Groups)
 	claims = applyGroupsDelimiter(i.set, claims, audience)
+	if proof.Acting != nil {
+		claims = maps.Clone(claims)
+		if claims == nil {
+			claims = map[string]any{}
+		}
+		claims["act"] = proof.Acting.actClaim()
+	}
 
 	return Grant{
 		Subject:  proof.Subject(),
@@ -148,7 +205,37 @@ func (i *Issuer) Exchange(ctx context.Context, proof Proof, audience string) (Gr
 		Result:   result,
 		Claims:   claims,
 		Held:     held,
+		Acting:   proof.Acting,
 	}, nil
+}
+
+// delegationAllowed is the target client's rule for a delegated exchange
+// ([policy.Delegation]): it declares one, it names this actor, it allows this
+// kind of subject, and the actor's own exchange limit names the audience.
+// Each refusal is [ErrRefused], one answer to the caller, with its own code
+// in the audit record.
+func (i *Issuer) delegationAllowed(ctx context.Context, proof Proof, client policy.Client, audience string) error {
+	actor := proof.Acting.Actor
+	refuse := func(code, reason string, err error) error {
+		i.record(ctx, exchangeRefused(proof, audience, audit.Denied(reason), i.exchangeRefusal(ctx, proof, audience, code)))
+		return fmt.Errorf("%w: %w", ErrRefused, err)
+	}
+	switch {
+	case client.Delegation == nil:
+		return refuse("delegation_not_declared", "the requested audience accepts no delegated exchange",
+			fmt.Errorf("%q declares no delegation, so nobody may act for another party there", audience))
+	case !client.Delegation.AdmitsActor(actor.identity()):
+		return refuse("actor_not_admitted", "the requested audience's delegation does not name this actor",
+			fmt.Errorf("%q does not name %q among the actors that may act for a subject", audience, actor.Subject()))
+	case !client.Delegation.AllowsSubject(proof.kind()):
+		return refuse("subject_kind_not_allowed", "the requested audience's delegation does not allow this kind of subject",
+			fmt.Errorf("%q allows acting for %v, and this subject is %s", audience, client.Delegation.AllowedSubjects(), proof.kind()))
+	case !i.set.ExchangeAllowed(actor.identity(), audience):
+		allowed, _ := i.set.ExchangeClients(actor.identity())
+		return refuse("actor_exchange_limited", "the actor's exchange limit does not name the requested audience",
+			fmt.Errorf("the actor is limited to %v, which does not include %q", allowed, audience))
+	}
+	return nil
 }
 
 // identity is the proof as a matcher reads it, and nothing the directory
@@ -189,13 +276,22 @@ func (i *Issuer) Lifetime(grant Grant) (out policy.Duration) {
 
 // exchangeRefused is a refused exchange with the evaluation behind it.
 func exchangeRefused(proof Proof, audience string, o audit.Outcome, why audit.Refusal) *record.Record {
-	return audit.TokenExchangeRefused(proof.actor(), audience, proof.kind(), o, why)
+	return audit.TokenExchangeRefused(proof.actor(), audience, proof.kind(), o, why, proof.actedBy()...)
 }
 
 // exchangeEvent is one token exchange, by the kind of proof it was: the
 // question an operator asks of it is usually "which job, for what".
 func exchangeEvent(proof Proof, audience string, o audit.Outcome) *record.Record {
-	return audit.TokenExchanged(proof.actor(), audience, proof.kind(), o)
+	return audit.TokenExchanged(proof.actor(), audience, proof.kind(), o, proof.actedBy()...)
+}
+
+// actedBy is who acted for the proof's subject, as the trail names them: none
+// for an exchange of one's own proof.
+func (p Proof) actedBy() []audit.ActedBy {
+	if p.Acting == nil {
+		return nil
+	}
+	return []audit.ActedBy{{ID: p.Acting.Actor.Subject(), Proof: p.Acting.Actor.kind()}}
 }
 
 // actor is who presented the proof, as the trail names them. A request

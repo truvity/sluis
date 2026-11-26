@@ -1868,6 +1868,14 @@ func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, e
 		signingAudienceFrom(ctx).markAgentUntil(expires)
 	}
 
+	// A delegated token never outlives the subject token it was made from,
+	// and its record stands only while the sign-in behind that token does:
+	// ending the sign-in ends what was acted for under it.
+	acting := actingOf(s, request)
+	if acting != nil && !acting.Expires.IsZero() && acting.Expires.Before(expires) {
+		expires = acting.Expires
+	}
+
 	issued := &token{
 		ID:       uuid.NewString(),
 		Subject:  request.GetSubject(),
@@ -1881,6 +1889,9 @@ func (s *Storage) issue(ctx context.Context, request op.TokenRequest) (*token, e
 	issued.GivenName, issued.FamilyName = given, family
 	if opened, ok := request.(*authRequest); ok {
 		issued.SignIn = opened.SSO
+	}
+	if acting != nil {
+		issued.Session, issued.SignIn = acting.Session, acting.SignIn
 	}
 	return issued, nil
 }
@@ -2989,13 +3000,27 @@ func (s *Storage) VerifyExchangeSubjectToken(
 	return tok, subject, map[string]any{verifiedKey: verified{proof}}, nil
 }
 
-// VerifyExchangeActorToken is not served: delegation, where one party
-// acts for another, is a second principal in a token and this design has
-// exactly one.
+// VerifyExchangeActorToken is the actor of a delegated exchange: a machine
+// proof, checked by the same verifiers as a subject token -- a cluster's
+// ServiceAccount, a GitHub job, an AWS role -- and carried under a key of its
+// own, so that an actor's proof is never read as a subject's or the other way
+// round. A person is never an actor: one of this issuer's own access tokens is
+// read by the library before this is asked, and carries no proof here.
 func (s *Storage) VerifyExchangeActorToken(
-	context.Context, string, oidc.TokenType,
+	ctx context.Context, tok string, tokenType oidc.TokenType,
 ) (string, string, map[string]any, error) {
-	return "", "", nil, errors.New("acting for another party is not served by this issuer")
+	if s.verify == nil {
+		return "", "", nil, ErrUnverified
+	}
+	proof, err := s.verify.Verify(ctx, tok, string(tokenType))
+	if err != nil {
+		return "", "", nil, err
+	}
+	subject := proof.Subject()
+	if subject == "" || proof.Email != "" {
+		return "", "", nil, ErrUnverified
+	}
+	return tok, subject, map[string]any{verifiedActorKey: verified{proof}}, nil
 }
 
 // verified carries a proof from [Storage.VerifyExchangeSubjectToken] to
@@ -3010,6 +3035,10 @@ type verified struct{ proof Proof }
 
 // verifiedKey is where that value sits in the claims map.
 const verifiedKey = "access-roster:verified-proof"
+
+// verifiedActorKey is where an actor_token's proof sits in the actor's claims
+// map ([Storage.VerifyExchangeActorToken]).
+const verifiedActorKey = "access-roster:verified-actor"
 
 // ValidateTokenExchangeRequest is the gate. The requested audience is a
 // client; the proof resolves to internal groups; the client's `requires`
@@ -3034,12 +3063,22 @@ func (s *Storage) ValidateTokenExchangeRequest(ctx context.Context, request op.T
 		return deny(ctx, oidc.ErrInvalidTarget, reason, slog.Int("audiences", len(audiences)))
 	}
 
-	proof, err := s.proofOf(ctx, request)
+	var (
+		proof Proof
+		err   error
+	)
+	if delegated(request) {
+		proof, err = s.delegatedProof(ctx, request, audiences[0])
+	} else {
+		proof, err = s.proofOf(ctx, request)
+	}
 	if err != nil {
-		s.iss.record(ctx, audit.TokenExchangeRefused(audit.Anonymous(), audiences[0], "",
-			audit.Denied(reasonOfOIDC(err)), audit.Refusal{
-				Code: reasonCodeOf(err, "subject_token_refused"), Audience: audiences[0], Directory: "not_applicable",
-			}))
+		if !delegated(request) {
+			s.iss.record(ctx, audit.TokenExchangeRefused(audit.Anonymous(), audiences[0], "",
+				audit.Denied(reasonOfOIDC(err)), audit.Refusal{
+					Code: reasonCodeOf(err, "subject_token_refused"), Audience: audiences[0], Directory: "not_applicable",
+				}))
+		}
 		return err
 	}
 
@@ -3075,20 +3114,18 @@ func (s *Storage) ValidateTokenExchangeRequest(ctx context.Context, request op.T
 // exchangeParameters refuses what an exchange may ask for and this issuer
 // does not serve, rather than answering a request other than the one made.
 //
-// An actor: delegation is a second principal in a token, and this design has
-// exactly one, the subject. An actor the library accepted used to be carried
-// no further, so a caller asking to act for somebody got a token with no `act`
-// and no word that its actor was ignored. The GitHub and Cloudflare exchanges
-// refuse it the same way.
+// An actor half-named: an `actor_token` without its `actor_token_type`, or the
+// type alone (RFC 8693 2.1 requires both or neither). A delegated exchange is
+// [Storage.delegatedProof]'s; the GitHub and Cloudflare exchanges serve none
+// and refuse any actor.
 //
 // A token type other than an access token: an exchange issues an access token
 // and nothing else (no refresh token, no ID token), so asking for another kind
 // is answered with a refusal, not with an access token in its place. Naming
 // none, or an access token, is the request this issuer serves.
 func exchangeParameters(ctx context.Context, request op.TokenExchangeRequest) error {
-	if request.GetExchangeActorTokenIDOrToken() != "" || request.GetExchangeActor() != "" ||
-		request.GetExchangeActorTokenType() != "" {
-		return malformed(ctx, errors.New("actor_token: acting for another party is not served by this issuer"))
+	if (request.GetExchangeActorTokenIDOrToken() != "") != (request.GetExchangeActorTokenType() != "") {
+		return malformed(ctx, errors.New("actor_token: an actor_token and its actor_token_type are named together or not at all"))
 	}
 	if wanted := request.GetRequestedTokenType(); wanted != "" && wanted != oidc.AccessTokenType {
 		return malformed(ctx, fmt.Errorf("requested_token_type: an exchange issues an access token, not %s", wanted))

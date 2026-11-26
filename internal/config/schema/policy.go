@@ -69,6 +69,20 @@ func exchangeLimitsSchema() m {
 		}, "match", "clients"))
 }
 
+// delegationSchema is a client's `delegation`: the workloads that may act for
+// a person at it (RFC 8693 `actor_token`).
+func delegationSchema() m {
+	actor := matcherSchema()
+	actor["description"] = "One actor: a matcher, as a group's, matched against the actor_token's proof alone. A `service_account`, `github` or `aws` matcher; an address is refused."
+	return obj("Who may act for a subject at this client (docs/reference/sluis/policy-clients.md#delegation): an exchange with an `actor_token` mints the subject's token, with their current groups, and names the actor in `act`. Absent, a delegated exchange for it is refused. The subject must still meet `requires`.", m{
+		"actors": m{"type": "array", "minItems": 1, "items": actor, "description": "The actors, any of which may act for a subject."},
+		"subjects": m{
+			"type": "array", "uniqueItems": true, "items": m{"enum": []string{"person"}},
+			"description": "The subject kinds an actor may act for. Absent is `person`: the access token of a person's sign-in that still stands.",
+		},
+	}, "actors")
+}
+
 func vocabularySchema() m {
 	role := m{
 		"description": "A role: the roles it implies, or `{implies, scopes}` to restrict it to some of its thing's scopes.",
@@ -144,8 +158,9 @@ func clientSchema() m {
 			"enum":        []string{"required", "optional"},
 			"description": "Whether it must use PKCE (RFC 7636, RFC 9700 2.1.1): `required` refuses an authorization request with no S256 `code_challenge` and a code redeemed with no `code_verifier`. A public client is always `required` and refuses `optional`; absent is `optional` for a confidential client. Refused on an exchange client.",
 		},
-		"harness": boolean("A conformance or test harness signs in through it: the only kind of client the conformance account (`conformance.enabled`) may sign in to. Refused on an exchange client."),
-		"session": sessionClass("Its refresh chains", "Refused on an exchange client and, as `agent`, with `sign_in_exchange` or `device_authorization`."),
+		"harness":    boolean("A conformance or test harness signs in through it: the only kind of client the conformance account (`conformance.enabled`) may sign in to. Refused on an exchange client."),
+		"session":    sessionClass("Its refresh chains", "Refused on an exchange client and, as `agent`, with `sign_in_exchange` or `device_authorization`."),
+		"delegation": delegationSchema(),
 	}, "kind")
 }
 

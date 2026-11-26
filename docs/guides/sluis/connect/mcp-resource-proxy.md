@@ -35,6 +35,9 @@ Each flag has an upper-case environment variable of the same name.
 | `--outbound-ca-file` | system roots | PEM CAs trusted only for `OUTBOUND_TARGET`; read once at start |
 | `--outbound-allow-non-loopback` | `false` | allow a non-loopback `--outbound-listen` |
 | `--refresh-before` | `1m` | exchange again this long before expiry, at most half a token's life |
+| `--outbound-mode` | `workload` | `workload` calls the backend as this workload; `delegate` as the caller |
+| `--outbound-delegation-header` | `X-Sluis-Delegation` | `delegate`: the header the stock server passes from its request to its backend call |
+| `--outbound-delegation-cache-size` | `1024` | `delegate`: callers whose backend token is kept |
 
 Any `OUTBOUND_*` value without `OUTBOUND_LISTEN`, or `OUTBOUND_LISTEN` without the five it needs, is refused at start.
 
@@ -53,11 +56,28 @@ A host with several resources needs one well-known route per resource.
 
 ## Call a backend as the server
 
-Point the stock server's backend URL at `OUTBOUND_LISTEN`. The proxy adds this workload's own bearer and forwards to `OUTBOUND_TARGET`. It never forwards the caller's token, and acting as the user is not provided.
+Point the stock server's backend URL at `OUTBOUND_LISTEN`. The proxy adds this workload's own bearer and forwards to `OUTBOUND_TARGET`. It never forwards the caller's token.
 
 The proxy exchanges the ServiceAccount token at `OUTBOUND_TOKEN_ENDPOINT` ([service to service](service-to-service.md)). If a refresh fails and no valid token remains, the call is `502`. `/readyz` waits for the first token.
 
 A non-loopback listener is refused at start unless `OUTBOUND_ALLOW_NON_LOOPBACK=true`.
+
+## Call a backend as the caller
+
+Set `OUTBOUND_MODE=delegate`, pass `X-Sluis-Delegation` through the stock server, and declare a [`delegation`](../../../reference/sluis/policy-clients.md#delegation) naming this ServiceAccount on `OUTBOUND_AUDIENCE`.
+
+| Step | What happens |
+|---|---|
+| Inbound | the request reaches the stock server with no credential and a random handle in the header, valid until the request ends |
+| Outbound | the handle names the caller; the proxy exchanges the caller's token as `subject_token`, with the ServiceAccount token as `actor_token`, for `OUTBOUND_AUDIENCE` |
+| Backend | gets the delegated token: the caller's `sub` and current groups, and `act` naming this workload. The handle is removed |
+| Cache | per SHA-256 of the caller's token until `--refresh-before`, at most the cache size; the soonest to expire goes first |
+| No or unknown handle | `403`, the backend is not called |
+| Issuer refuses (4xx) | `403` |
+| Issuer fails | `502` |
+| Pass-through | `MCP_PASSTHROUGH_HEADERS` on the VictoriaMetrics servers |
+| `/readyz` | waits until the ServiceAccount token can be read |
+| Audit | an `mcp_delegation` line per backend call: `sub`, `outcome` (`acted`, `refused`), `cached`, `reason` (`no_caller`, the issuer's error code, `exchange_failed`) |
 
 ## Read the audit line
 

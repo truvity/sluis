@@ -14,6 +14,15 @@
 //     The caller's token is never forwarded anywhere (the MCP spec
 //     forbids passing it through), so the stock server holds no
 //     credential at all.
+//
+// The outbound side has two modes. `workload`, the default, calls the backend
+// as this workload. `delegate` calls it as the caller: the inbound side puts an
+// opaque handle for the request on the header DelegationHeader, the stock
+// server passes that header through to the outbound side, and the outbound
+// side exchanges the caller's token, with this workload's own token as the
+// actor (RFC 8693 delegation), for a token the backend accepts. The handle is
+// good only while the inbound request is in flight, and only in this process;
+// the caller's token itself never leaves the proxy.
 package resourceproxy
 
 import (
@@ -65,7 +74,25 @@ type Config struct {
 	OutboundAllowNonLoopback bool
 	// RefreshBefore is how long before expiry a token is exchanged again.
 	RefreshBefore time.Duration
+
+	// OutboundMode is [ModeWorkload] (empty) or [ModeDelegate].
+	OutboundMode string
+	// DelegationHeader carries a request's handle from the inbound side,
+	// through the stock server, to the outbound side in [ModeDelegate].
+	DelegationHeader string
+	// DelegationCacheSize bounds how many callers' delegated tokens are
+	// kept at once in [ModeDelegate].
+	DelegationCacheSize int
 }
+
+// The outbound modes.
+const (
+	// ModeWorkload calls the backend as this workload.
+	ModeWorkload = "workload"
+	// ModeDelegate calls the backend as the caller of the request the stock
+	// server is serving, with this workload named as the actor.
+	ModeDelegate = "delegate"
+)
 
 // Default limits.
 const (
@@ -73,7 +100,14 @@ const (
 	DefaultBodyTimeout     = 30 * time.Second
 	DefaultUpstreamTimeout = 2 * time.Minute
 	DefaultRefreshBefore   = time.Minute
+	// DefaultDelegationHeader is what the stock server must pass through
+	// (for the VictoriaMetrics MCP servers, MCP_PASSTHROUGH_HEADERS).
+	DefaultDelegationHeader    = "X-Sluis-Delegation"
+	DefaultDelegationCacheSize = 1024
 )
+
+// Delegating reports whether the outbound side acts for the caller.
+func (c Config) Delegating() bool { return c.OutboundEnabled() && c.OutboundMode == ModeDelegate }
 
 // OutboundEnabled reports whether the outbound side runs.
 func (c Config) OutboundEnabled() bool { return c.OutboundListen != "" }
@@ -93,6 +127,15 @@ func (c *Config) Validate() error {
 	if c.RefreshBefore <= 0 {
 		c.RefreshBefore = DefaultRefreshBefore
 	}
+	if c.OutboundMode == "" {
+		c.OutboundMode = ModeWorkload
+	}
+	if c.DelegationHeader == "" {
+		c.DelegationHeader = DefaultDelegationHeader
+	}
+	if c.DelegationCacheSize <= 0 {
+		c.DelegationCacheSize = DefaultDelegationCacheSize
+	}
 
 	var missing []string
 	for name, value := range map[string]string{
@@ -110,7 +153,20 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("resource-proxy: UPSTREAM: %w", err)
 	}
 
+	switch c.OutboundMode {
+	case ModeWorkload, ModeDelegate:
+	default:
+		return fmt.Errorf("resource-proxy: OUTBOUND_MODE %q is not %q or %q", c.OutboundMode, ModeWorkload, ModeDelegate)
+	}
+	if err := delegationHeaderValid(c.DelegationHeader); err != nil {
+		return err
+	}
+
 	if !c.OutboundEnabled() {
+		if c.OutboundMode == ModeDelegate {
+			return errors.New("resource-proxy: OUTBOUND_MODE is delegate but OUTBOUND_LISTEN is not set: " +
+				"acting for the caller is the outbound side's")
+		}
 		if c.OutboundTarget != "" || c.OutboundTokenEndpoint != "" || c.OutboundClientID != "" ||
 			c.OutboundAudience != "" || c.OutboundSATokenFile != "" || c.OutboundCAFile != "" {
 			return errors.New("resource-proxy: an OUTBOUND_* value is set but OUTBOUND_LISTEN is not; " +
@@ -144,6 +200,25 @@ func (c *Config) Validate() error {
 			c.OutboundListen)
 	}
 	return nil
+}
+
+// delegationHeaderValid refuses a handle header that is not a header name, or
+// that is one of the headers a credential travels in: the handle replaces the
+// caller's credential, and must never be mistaken for one.
+func delegationHeaderValid(name string) error {
+	if strings.TrimFunc(name, isHeaderNameRune) != "" {
+		return fmt.Errorf("resource-proxy: OUTBOUND_DELEGATION_HEADER %q is not a header name", name)
+	}
+	for _, h := range append([]string{"Cookie", "Proxy-Authorization", "Host"}, credentialHeaders...) {
+		if strings.EqualFold(name, h) {
+			return fmt.Errorf("resource-proxy: OUTBOUND_DELEGATION_HEADER %q is a header this proxy reserves", name)
+		}
+	}
+	return nil
+}
+
+func isHeaderNameRune(r rune) bool {
+	return r == '-' || (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
 }
 
 // IsLoopbackListen reports whether a listen address binds loopback only.
