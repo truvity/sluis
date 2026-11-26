@@ -2,11 +2,13 @@ package google
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -389,5 +391,71 @@ func TestAGroupKeyIsNotAnAccountButRealFailuresStayErrors(t *testing.T) {
 				t.Errorf("Account = %+v, %v, %v; want an absence without an error", account, found, err)
 			}
 		})
+	}
+}
+
+// An account carries every other address the directory lists for it —
+// aliases, non-editable aliases and the emails block — lower-cased, once
+// each, and never its primary: an alias is the same person, and the hub
+// can only say so if the listing it already reads tells it.
+func TestAnAccountCarriesItsAliases(t *testing.T) {
+	t.Parallel()
+
+	var user directory.User
+	err := json.Unmarshal([]byte(`{
+		"primaryEmail": "Ada@North.Example",
+		"aliases": ["Ada.Lovelace@North.Example", "a@north.example"],
+		"nonEditableAliases": ["ada@north.example.test-google-a.com"],
+		"emails": [
+			{"address": "ada@north.example", "primary": true},
+			{"address": "ADA.LOVELACE@north.example"},
+			{"address": "countess@north.example", "type": "work"},
+			{"type": "home"}
+		]
+	}`), &user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := account(&user)
+	want := []string{
+		"a@north.example", "ada.lovelace@north.example",
+		"ada@north.example.test-google-a.com", "countess@north.example",
+	}
+	if got.Email != "ada@north.example" || !slices.Equal(got.Aliases, want) {
+		t.Errorf("account = %q %v, want %q %v", got.Email, got.Aliases, "ada@north.example", want)
+	}
+	if bare := account(&directory.User{PrimaryEmail: "b@north.example"}); bare.Aliases != nil {
+		t.Errorf("aliases = %v, want none", bare.Aliases)
+	}
+}
+
+// users.get answers an alias with the user it belongs to. Account reports
+// that user under its primary address, aliases and all, so the hub can
+// file the answer under the one person rather than a second one.
+func TestAccountReadByAnAliasIsTheUserItBelongsTo(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/users/ada.lovelace@north.example") {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"primaryEmail":"ada@north.example","aliases":["ada.lovelace@north.example"]}`)
+	}))
+	defer server.Close()
+	svc, err := directory.NewService(ctx, option.WithEndpoint(server.URL), option.WithoutAuthentication())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := &Backend{svc: svc}
+
+	got, found, err := b.Account(ctx, "Ada.Lovelace@North.Example")
+	if err != nil || !found {
+		t.Fatalf("Account = %+v, %v, %v", got, found, err)
+	}
+	if got.Email != "ada@north.example" || !slices.Equal(got.Aliases, []string{"ada.lovelace@north.example"}) {
+		t.Errorf("Account = %+v, want the primary with its alias", got)
 	}
 }

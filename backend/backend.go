@@ -49,6 +49,11 @@ type Account struct {
 	// them; callers must tolerate that.
 	GivenName  string
 	FamilyName string
+	// Aliases are the account's other addresses, lower-cased: every
+	// address mail to which reaches the same person, so that an alias is
+	// that person and never somebody else, or nobody. Empty when the
+	// backend has none or cannot say.
+	Aliases []string `json:",omitempty"`
 }
 
 // Group is one group and its flat membership. Nested groups are NOT

@@ -163,6 +163,7 @@ func Derive(org string, binding policy.GitHubOrg, holders Holders, state State) 
 		return out, len(emails) > 0 && len(out) == 0
 	}
 	skipped := map[string]bool{}
+	primary := rails.PrimaryOf(holders)
 
 	want := func(scope, email string, role status.Role) {
 		if d.desired[scope] == nil {
@@ -228,7 +229,7 @@ func Derive(org string, binding policy.GitHubOrg, holders Holders, state State) 
 			continue
 		}
 		for _, email := range emails {
-			email = strings.ToLower(email)
+			email = primary(email)
 			if slices.Contains(d.emailsOf[member.Login], email) {
 				continue
 			}
@@ -255,7 +256,7 @@ func Derive(org string, binding policy.GitHubOrg, holders Holders, state State) 
 			continue
 		}
 		for _, email := range emails {
-			email = strings.ToLower(email)
+			email = primary(email)
 			if other, taken := d.outside[email]; taken && other.ID != l.ID {
 				d.ambiguous[email] = appendUnique(appendUnique(d.ambiguous[email], other.Login), l.Login)
 				continue
@@ -265,7 +266,7 @@ func Derive(org string, binding policy.GitHubOrg, holders Holders, state State) 
 	}
 	for _, invitation := range state.Invitations {
 		if invitation.Email != "" {
-			d.invited[strings.ToLower(invitation.Email)] = true
+			d.invited[primary(invitation.Email)] = true
 		}
 		if invitation.Login != "" {
 			d.invited["@"+strings.ToLower(invitation.Login)] = true

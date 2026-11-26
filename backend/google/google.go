@@ -412,6 +412,45 @@ func account(user *directory.User) backend.Account {
 	if user.Name != nil {
 		out.GivenName, out.FamilyName = user.Name.GivenName, user.Name.FamilyName
 	}
+	out.Aliases = aliasesOf(user, out.Email)
+	return out
+}
+
+// aliasesOf is every other address the directory lists for one user: its
+// aliases, the aliases it cannot edit (those a secondary domain gives it),
+// and the addresses of its emails block. users.get answers an alias with
+// the user it belongs to, so a hub that knew only primary addresses would
+// read an alias as somebody it has never heard of, or as a second person.
+// The basic projection carries all three, so knowing them costs no call.
+func aliasesOf(user *directory.User, primary string) []string {
+	seen := map[string]bool{primary: true}
+	var out []string
+	add := func(address string) {
+		address = strings.ToLower(strings.TrimSpace(address))
+		if address == "" || !strings.Contains(address, "@") || seen[address] {
+			return
+		}
+		seen[address] = true
+		out = append(out, address)
+	}
+	for _, a := range user.Aliases {
+		add(a)
+	}
+	for _, a := range user.NonEditableAliases {
+		add(a)
+	}
+	// emails is untyped in the generated client: a list of objects as the
+	// JSON decoder left them.
+	if list, ok := user.Emails.([]any); ok {
+		for _, item := range list {
+			if entry, ok := item.(map[string]any); ok {
+				if address, ok := entry["address"].(string); ok {
+					add(address)
+				}
+			}
+		}
+	}
+	slices.Sort(out)
 	return out
 }
 

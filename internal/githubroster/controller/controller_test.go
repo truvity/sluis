@@ -37,6 +37,8 @@ type console struct {
 	mu sync.Mutex
 	// holders: group -> address -> live
 	holders map[string]map[string]bool
+	// aliases: a holder's address -> its other addresses
+	aliases map[string][]string
 	// people: address -> the directory's answer
 	people map[string]*directoryrosterv1.ExplainResponse
 	// policy is the digest the console answers under; explainPolicy, when
@@ -57,7 +59,7 @@ func (c *console) ListHolders(
 	c.asked++
 	out := &directoryrosterv1.ListHoldersResponse{PolicyDigest: c.policy}
 	for email, live := range c.holders[req.GetGroup()] {
-		out.Holders = append(out.Holders, &directoryrosterv1.Holder{Email: email, Live: live, Authoritative: true})
+		out.Holders = append(out.Holders, &directoryrosterv1.Holder{Email: email, Live: live, Authoritative: true, Aliases: c.aliases[email]})
 	}
 	return out, nil
 }
@@ -546,6 +548,40 @@ func TestAnUnvouchedLeaverIsRetried(t *testing.T) {
 		for _, m := range team.Members {
 			if m.Login == "leaver" && (m.State != status.StateRetrying || !strings.Contains(m.Reason, "cannot vouch")) {
 				t.Errorf("leaver's row = %+v, want retrying on the directory", m)
+			}
+		}
+	}
+}
+
+// A member GitHub knows by an alias is the holder the alias belongs to: the
+// directory lists it with the holder, so the member is where they belong —
+// not a member nothing wants, held because the directory "cannot vouch" for
+// the alias, beside a holder who "has not linked" an account.
+func TestAMemberKnownByAnAliasIsTheHolder(t *testing.T) {
+	r := newRig(t)
+	r.github.AddMember("grace", false, "G.Hopper@globex.example")
+	r.github.AddTeam("team-platform", "leaver", "bot", "grace")
+	r.console.mu.Lock()
+	r.console.holders["all:globex:employee"]["grace@globex.example"] = true
+	r.console.holders["all:platform:engineer"]["grace@globex.example"] = true
+	r.console.aliases = map[string][]string{"grace@globex.example": {"g.hopper@globex.example"}}
+	r.console.mu.Unlock()
+
+	r.run(true)
+
+	for _, change := range r.github.Did() {
+		if strings.Contains(change, "grace") || strings.Contains(change, "hopper") {
+			t.Errorf("%q acted on somebody who is where they belong", change)
+		}
+	}
+	got := r.report.org(t, "globex")
+	for _, team := range got.Teams {
+		for _, m := range team.Members {
+			if m.Login == "grace" && (m.Email != "grace@globex.example" || m.State != status.StateSynced) {
+				t.Errorf("grace's row in %s = %+v, want synced under her primary address", team.Team, m)
+			}
+			if strings.Contains(m.Email, "hopper") {
+				t.Errorf("a row under the alias: %+v", m)
 			}
 		}
 	}

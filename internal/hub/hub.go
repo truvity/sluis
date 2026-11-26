@@ -323,6 +323,10 @@ type AccountResult struct {
 // a second round trip for it would be a second chance to disagree.
 type UserResult struct {
 	Email string
+	// Primary is the account's primary address when the directory has the
+	// account: Email itself, or the primary of the account Email is an
+	// alias of. Empty when nothing was found.
+	Primary string
 	// Workspace is the tenant that serves the address's domain, when one
 	// does.
 	Workspace     string
@@ -601,6 +605,14 @@ func (h *Hub) point(ctx context.Context, v view, email string, maxAge *time.Dura
 	if maxAge == nil {
 		snap = h.keepFresh(ctx, ws.ID, snap)
 	}
+	// An alias is its account: answered as the primary address, from the
+	// same row, so that one person is never two and an alias is never read
+	// as somebody the directory does not have.
+	if snap != nil {
+		if primary, ok := snap.PrimaryOf(lower); ok {
+			lower = primary
+		}
+	}
 
 	goLive := snap == nil
 	if !goLive && maxAge != nil && snap.Age(h.now()) > *maxAge {
@@ -667,6 +679,17 @@ func (h *Hub) pointLive(
 		return pointResult{}, false
 	}
 
+	// Asked by an alias, the directory answers with the user it belongs
+	// to. The answer is filed under that user's primary address, the alias
+	// among its aliases: filed under the alias it would be a second account
+	// for the same person.
+	if found && account.Email != "" && account.Email != email {
+		if !slices.Contains(account.Aliases, email) {
+			account.Aliases = append(slices.Clone(account.Aliases), email)
+			slices.Sort(account.Aliases)
+		}
+		email = account.Email
+	}
 	if snap != nil {
 		patched := snap.clone()
 		patched.patchAccount(email, account, found, groups)
@@ -704,8 +727,13 @@ func (h *Hub) ResolveUser(ctx context.Context, email string, maxAge *time.Durati
 	if res, routed := v.routing[domain]; routed {
 		workspace = res.workspace
 	}
+	var primary string
+	if p.found {
+		primary = p.account.Email
+	}
 	return UserResult{
 		Email:         email,
+		Primary:       primary,
 		Workspace:     workspace,
 		InDomain:      p.inDomain,
 		Found:         p.found,
@@ -1489,6 +1517,8 @@ type Person struct {
 	Live            bool
 	Authoritative   bool
 	DirectoryGroups []string
+	// Aliases are the account's other addresses: the same person.
+	Aliases []string
 	// GitHubLogin is the GitHub account linked to the address, empty
 	// where none is or where the caller passed no links to match against.
 	GitHubLogin string
@@ -1580,6 +1610,11 @@ func (h *Hub) People(ctx context.Context, query PeopleQuery, limit int) ([]Perso
 				continue
 			}
 			login := query.GitHubLogins[strings.ToLower(account.Email)]
+			for _, alias := range account.Aliases {
+				if login == "" {
+					login = query.GitHubLogins[alias]
+				}
+			}
 			if query.GitHubLinked != nil && (login != "") != *query.GitHubLinked {
 				continue
 			}
@@ -1591,6 +1626,7 @@ func (h *Hub) People(ctx context.Context, query PeopleQuery, limit int) ([]Perso
 				Live:            account.Live,
 				Authoritative:   authoritative,
 				DirectoryGroups: snap.GroupsOf(email),
+				Aliases:         slices.Clone(account.Aliases),
 				GitHubLogin:     login,
 			})
 		}

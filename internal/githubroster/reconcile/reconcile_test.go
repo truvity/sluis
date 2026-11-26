@@ -608,3 +608,103 @@ func TestIgnoredAddressesAndLoginsAreLeftAlone(t *testing.T) {
 		}
 	}
 }
+
+// withAlias is one live holder known by its primary address and an alias.
+func withAlias(primary string, aliases ...string) reconcile.Holder {
+	return reconcile.Holder{Email: primary, Live: true, Aliases: aliases}
+}
+
+// A member linked by an alias is the holder the alias belongs to: one
+// person, in the teams their primary address is wanted in, with nothing to
+// confirm and nobody to invite. Linked by both addresses, still one row.
+func TestAnAliasIsThePersonItBelongsTo(t *testing.T) {
+	t.Parallel()
+	ada := withAlias("ada@globex.example", "ada.lovelace@globex.example", "countess@globex.example")
+	holders := reconcile.Holders{
+		"all:globex:employee":   {ada, withAlias("bob@globex.example", "robert@globex.example")},
+		"all:platform:engineer": {ada},
+	}
+	for name, emails := range map[string][]string{
+		"by an alias":          {"Ada.Lovelace@Globex.Example"},
+		"by alias and primary": {"countess@globex.example", "ada@globex.example"},
+	} {
+		state := reconcile.State{
+			Members:     []githubapp.Member{{ID: 1, Login: "ada", Emails: emails}},
+			Teams:       []githubapp.Team{{ID: 7, Slug: "team-platform"}},
+			TeamMembers: map[string][]githubapp.TeamMember{"team-platform": {{Login: "ada"}}},
+			// bob linked an account by an alias and was invited by it.
+			Links:       []reconcile.Link{{ID: 2, Login: "bob", Emails: []string{"robert@globex.example"}}},
+			Invitations: []githubapp.Invitation{{Email: "robert@globex.example"}},
+		}
+		draft := reconcile.Derive("globex", binding, holders, state)
+		if len(draft.Confirm()) != 0 {
+			t.Errorf("%s: confirm = %v, want nothing: nobody is a removal candidate", name, draft.Confirm())
+		}
+		report, did := draft.Decide(nil)
+		if len(did) != 0 {
+			t.Errorf("%s: actions = %v, want none: ada is where she belongs and bob is invited", name, actions(did))
+		}
+		for _, team := range []string{"", "team-platform"} {
+			if m := findMember(t, report, team, "ada@globex.example"); m.State != status.StateSynced || m.Login != "ada" {
+				t.Errorf("%s: ada in %q = %+v, want synced as @ada", name, team, m)
+			}
+		}
+		if m := findMember(t, report, "", "bob@globex.example"); m.State != status.StateInvited {
+			t.Errorf("%s: bob = %+v, want invited by his alias", name, m)
+		}
+		rows := 0
+		for _, m := range report.Members {
+			if m.Login == "ada" || strings.HasPrefix(m.Email, "ada") || strings.HasPrefix(m.Email, "countess") {
+				rows++
+			}
+		}
+		if rows != 1 {
+			t.Errorf("%s: ada has %d organisation rows, want one: %+v", name, rows, report.Members)
+		}
+	}
+}
+
+// A member linked by an alias whose person the roster no longer names is a
+// removal candidate under the alias, and the directory decides: an error or
+// an answer it cannot vouch for removes nobody, and only a person it
+// positively says is gone, or holds no wanted group, is removed.
+func TestAnAliasRemovalWaitsForTheDirectory(t *testing.T) {
+	t.Parallel()
+	holders := reconcile.Holders{"all:globex:employee": live("bob@globex.example")}
+	state := reconcile.State{
+		Members:     []githubapp.Member{{ID: 1, Login: "ada", Emails: []string{"ada.lovelace@globex.example"}}},
+		Teams:       []githubapp.Team{{ID: 7, Slug: "team-platform"}},
+		TeamMembers: map[string][]githubapp.TeamMember{"team-platform": {{Login: "ada"}}},
+	}
+	draft := reconcile.Derive("globex", binding, holders, state)
+	if !slices.Equal(draft.Confirm(), []string{"ada.lovelace@globex.example"}) {
+		t.Fatalf("confirm = %v, want the alias", draft.Confirm())
+	}
+
+	for name, confirmations := range map[string]map[string]reconcile.Confirmation{
+		"the directory erred":   nil,
+		"it cannot vouch":       {"ada.lovelace@globex.example": {Authoritative: false}},
+		"it cannot vouch, gone": {"ada.lovelace@globex.example": {Authoritative: false, Found: false}},
+	} {
+		report, did := draft.Decide(confirmations)
+		if len(did) != 0 {
+			t.Errorf("%s: actions = %v, want none", name, actions(did))
+		}
+		if m := findMember(t, report, "team-platform", "ada.lovelace@globex.example"); m.State != status.StateRetrying {
+			t.Errorf("%s: ada = %+v, want retrying, nothing done", name, m)
+		}
+	}
+
+	_, did := draft.Decide(map[string]reconcile.Confirmation{
+		"ada.lovelace@globex.example": {Authoritative: true, Found: true, Suspended: true},
+	})
+	if want := []string{"remove ada in the organisation"}; !slices.Equal(actions(did), want) {
+		t.Errorf("suspended: actions = %v, want %v", actions(did), want)
+	}
+	_, did = draft.Decide(map[string]reconcile.Confirmation{
+		"ada.lovelace@globex.example": {Authoritative: true, Found: true, Groups: []string{"all:globex:employee"}},
+	})
+	if want := []string{"remove ada in team-platform"}; !slices.Equal(actions(did), want) {
+		t.Errorf("dropped from the team's groups: actions = %v, want %v", actions(did), want)
+	}
+}
