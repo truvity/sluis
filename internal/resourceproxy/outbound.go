@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -99,23 +98,17 @@ func (s *TokenSource) Token(ctx context.Context) (string, error) {
 // effectiveMargin never asks for a refresh earlier than half the token's
 // own life, or a short-lived token would be exchanged on every call.
 func (s *TokenSource) effectiveMargin() time.Duration {
-	life := s.expires.Sub(s.issued)
-	if life > 0 && s.margin > life/2 {
-		return life / 2
-	}
-	return s.margin
+	return effectiveMargin(s.margin, s.issued, s.expires)
 }
 
-func (s *TokenSource) readSubject() (string, error) {
-	raw, err := os.ReadFile(s.file)
+func (s *TokenSource) readSubject() (string, error) { return readToken(s.file) }
+
+func readFile(file string) (string, error) {
+	raw, err := os.ReadFile(file)
 	if err != nil {
-		return "", fmt.Errorf("read the ServiceAccount token: %w", err)
+		return "", err
 	}
-	subject := strings.TrimSpace(string(raw))
-	if subject == "" {
-		return "", errors.New("the ServiceAccount token file is empty")
-	}
-	return subject, nil
+	return strings.TrimSpace(string(raw)), nil
 }
 
 // Obtained reports whether a token has ever been obtained: what
@@ -147,6 +140,19 @@ type Outbound struct {
 	source *TokenSource
 	proxy  *httputil.ReverseProxy
 	log    *slog.Logger
+
+	// In [ModeDelegate]: the inbound requests in flight, the header their
+	// handle arrives on, and what trades a caller's token for the backend's.
+	handles   *Handles
+	header    string
+	delegator *Delegator
+}
+
+// ActFor turns the forwarder to [ModeDelegate]: each request is sent as the
+// caller of the inbound request its handle names, and a request naming none
+// is refused.
+func (o *Outbound) ActFor(handles *Handles, header string, delegator *Delegator) {
+	o.handles, o.header, o.delegator = handles, header, delegator
 }
 
 // NewOutbound builds the forwarder from a validated Config.
@@ -186,6 +192,10 @@ func NewOutbound(cfg Config, log *slog.Logger, source *TokenSource) (*Outbound, 
 // Handler is the loopback listener.
 func (o *Outbound) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if o.delegator != nil {
+			o.delegate(w, r)
+			return
+		}
 		token, err := o.source.Token(r.Context())
 		if err != nil {
 			o.log.WarnContext(r.Context(), "no outbound identity", slog.String("error", err.Error()))

@@ -188,6 +188,52 @@ func (e *Exchanger) Exchange(ctx context.Context, subject, subjectType, audience
 	return Token{AccessToken: granted.AccessToken, Expires: expiresIn(granted.ExpiresIn)}, nil
 }
 
+// Delegate trades subject for a token audienced at audience that acts for
+// subject's holder, presented by actor (RFC 8693 delegation): the token is the
+// subject's, and its `act` claim names the actor.
+//
+// subject is the caller's access token this issuer signed, sent as
+// [TypeAccessToken]; actor is the presenting workload's own proof, of
+// actorType ([TypeJWT] when empty), the kind it would exchange for itself. The
+// audience must declare a `delegation` naming that actor. A refusal is a
+// [*RefusalError].
+func (e *Exchanger) Delegate(ctx context.Context, subject, actor, actorType, audience string) (Token, error) {
+	switch {
+	case e == nil || strings.TrimSpace(e.Issuer) == "":
+		return Token{}, errors.New("tokens: no issuer is configured")
+	case strings.TrimSpace(subject) == "":
+		return Token{}, errors.New("tokens: no subject token to act for")
+	case strings.TrimSpace(actor) == "":
+		return Token{}, errors.New("tokens: no actor token to act with")
+	case strings.TrimSpace(audience) == "":
+		return Token{}, errors.New("tokens: no audience was asked for")
+	}
+	if actorType == "" {
+		actorType = TypeJWT
+	}
+
+	form := url.Values{
+		"grant_type":         {GrantTypeExchange},
+		"subject_token":      {subject},
+		"subject_token_type": {TypeAccessToken},
+		"actor_token":        {actor},
+		"actor_token_type":   {actorType},
+		"audience":           {audience},
+		"scope":              {"openid"},
+	}
+	var granted struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int64  `json:"expires_in"`
+	}
+	if err := e.post(ctx, form, &granted); err != nil {
+		return Token{}, err
+	}
+	if granted.AccessToken == "" {
+		return Token{}, errors.New("tokens: the exchange returned no token")
+	}
+	return Token{AccessToken: granted.AccessToken, Expires: expiresIn(granted.ExpiresIn)}, nil
+}
+
 // InstallationToken is a GitHub App installation token and what GitHub
 // says it carries: that, and not what was asked for, is what was granted.
 type InstallationToken struct {

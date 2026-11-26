@@ -19,7 +19,7 @@
 # A change to what an action carries is a new version. The installation keeps
 # every version it was sent, so records already written keep their meaning.
 source: roster
-version: "1.26.0"
+version: "1.27.0"
 locales: [en]
 
 actor_kinds:
@@ -140,7 +140,7 @@ actions:
       en: "{outcome, select, success {{actor} looked up the access of {subject}} other {{actor} was refused a look-up of the access of {subject}}}"
 
   roster.token.exchanged:
-    summary: A token was exchanged for one another client accepts, or the exchange was refused.
+    summary: A token was exchanged for one another client accepts, or the exchange was refused. A delegated exchange (RFC 8693 actor_token) is the subject's, and names in acted_by the workload that acted for them.
     operation: authentication
     categories: [authentication, authorization_decision]
     category: security

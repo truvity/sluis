@@ -801,6 +801,11 @@ type Client struct {
 	// person or the recovery account signs in to it as to any other. Refused
 	// on an exchange client, which nobody signs in to.
 	Harness bool `yaml:"harness,omitempty"`
+	// Delegation names the workloads that may act for a person at this
+	// client: an RFC 8693 exchange with an `actor_token`, whose token is the
+	// person's, with their current groups, and names the workload in `act`.
+	// Absent, this client accepts no delegated exchange. See [Delegation].
+	Delegation *Delegation `yaml:"delegation,omitempty"`
 }
 
 // PKCERequired reports whether an authorization request for this client
@@ -1287,6 +1292,9 @@ func (c Client) validate(id string, p Policy) error {
 		return fmt.Errorf("client %q: kind %q is not public, confidential or exchange", id, c.Kind)
 	}
 	if err := c.validateAuthMethod(id); err != nil {
+		return err
+	}
+	if err := c.Delegation.validate(id); err != nil {
 		return err
 	}
 	if c.HoldsSecret() && c.Secret.IsZero() {

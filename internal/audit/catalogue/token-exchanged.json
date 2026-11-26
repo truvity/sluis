@@ -15,6 +15,24 @@
         "workload"
       ]
     },
+    "acted_by": {
+      "type": "string",
+      "description": "Who acted for the subject in a delegated exchange (RFC 8693 actor_token): the workload, CI job or AWS role that presented the subject's token, by its identity. The actor of the record is the subject. Only on a delegated exchange.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true
+    },
+    "acted_by_proof": {
+      "type": "string",
+      "description": "The kind of proof the actor_token was. Only on a delegated exchange.",
+      "x-audit-class": "shared",
+      "x-audit-pii": "none",
+      "x-audit-facet": true,
+      "enum": [
+        "ci",
+        "workload"
+      ]
+    },
     "reason_code": {
       "type": "string",
       "description": "Why a refusal was given, as a code: unknown_audience, not_admitted, subject_token_refused, directory_unavailable and the like. Only on a refusal.",

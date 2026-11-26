@@ -110,6 +110,13 @@ func parse(args []string, getenv func(string) string) (resourceproxy.Config, err
 	str(&cfg.OutboundCAFile, "outbound-ca-file", "", "PEM bundle added to the system roots for the outbound target only (a private CA); read at start")
 	boolean(&cfg.OutboundAllowNonLoopback, "outbound-allow-non-loopback", "let the outbound listener bind a non-loopback address")
 	dur(&cfg.RefreshBefore, "refresh-before", resourceproxy.DefaultRefreshBefore, "exchange again this long before a token expires")
+	str(&cfg.OutboundMode, "outbound-mode", resourceproxy.ModeWorkload,
+		"workload: call the backend as this workload; delegate: as the caller, with this workload as the actor")
+	str(&cfg.DelegationHeader, "outbound-delegation-header", resourceproxy.DefaultDelegationHeader,
+		"in delegate mode, the header the stock server passes through from its request to its backend call")
+	fs.IntVar(&cfg.DelegationCacheSize, "outbound-delegation-cache-size",
+		int(envInt(getenv, "OUTBOUND_DELEGATION_CACHE_SIZE", resourceproxy.DefaultDelegationCacheSize, &badEnv)),
+		"in delegate mode, how many callers' backend tokens are kept ($OUTBOUND_DELEGATION_CACHE_SIZE)")
 
 	if err := fs.Parse(args); err != nil {
 		return cfg, err

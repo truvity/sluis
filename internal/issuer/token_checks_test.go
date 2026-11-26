@@ -377,8 +377,8 @@ func TestAPublicClientPresentingASecretIsRefused(t *testing.T) {
 	}
 }
 
-// An exchange has one principal, its subject. A request that names an actor is
-// refused, whether or not the actor token is one this issuer would accept.
+// An actor proves itself with its own platform's token, never with one this
+// issuer signed, and an actor_token_type alone is malformed.
 func TestAnExchangeNamingAnActorIsRefused(t *testing.T) {
 	t.Parallel()
 	s := checksServer(t, "")
@@ -406,10 +406,13 @@ func TestAnExchangeNamingAnActorIsRefused(t *testing.T) {
 	both.Set("actor_token_type", "urn:ietf:params:oauth:token-type:access_token")
 	typeOnly := base()
 	typeOnly.Set("actor_token_type", "urn:ietf:params:oauth:token-type:access_token")
-	for name, form := range map[string]url.Values{"an accepted actor token": both, "an actor token type alone": typeOnly} {
-		status, body := checksPost(t, s, form, "local-dev", "")
-		if status != http.StatusBadRequest || body["error"] != "invalid_request" {
-			t.Errorf("%s = %d %v, want 400 invalid_request", name, status, body)
+	for name, tc := range map[string]struct {
+		form url.Values
+		code string
+	}{"one of this issuer's tokens as the actor": {both, "invalid_grant"}, "an actor token type alone": {typeOnly, "invalid_request"}} {
+		status, body := checksPost(t, s, tc.form, "local-dev", "")
+		if status != http.StatusBadRequest || body["error"] != tc.code {
+			t.Errorf("%s = %d %v, want 400 %s", name, status, body, tc.code)
 		}
 	}
 }

@@ -12,7 +12,7 @@ The actions sluis records, from the catalogue [`internal/audit/catalogue/roster.
 
 <!-- generated: audit-actions -->
 
-Catalogue version 1.26.0, 109 actions.
+Catalogue version 1.27.0, 109 actions.
 
 | Action | Operation | Targets | Delivery | Summary |
 |---|---|---|---|---|
@@ -20,7 +20,7 @@ Catalogue version 1.26.0, 109 actions.
 | `roster.recovery.signed_in` | authentication | client | block | Somebody signed in with the recovery identity, which bypasses the directory. |
 | `roster.recovery.disabled` | modify | installation | block | An operator who signed in through the identity provider turned the recovery sign-in off for the whole installation, from the console. Recovery sessions end with it. There is no matching action to turn it on; that is a change of the configuration's `recovery.generation`. |
 | `roster.access.explained` | access | client | async | An operator looked up what a person, CI job or workload would effectively be granted, or a caller who may not was refused. The record carries counts only. |
-| `roster.token.exchanged` | authentication | client | async | A token was exchanged for one another client accepts, or the exchange was refused. |
+| `roster.token.exchanged` | authentication | client | async | A token was exchanged for one another client accepts, or the exchange was refused. A delegated exchange (RFC 8693 actor_token) is the subject's, and names in acted_by the workload that acted for them. |
 | `roster.device.issued` | create | client | async | A device asked for a device code to sign a person in to a client (RFC 8628), or was refused one. Never the code; the request's address is in the record's context. |
 | `roster.device.approved` | authentication | client | async | A signed-in person approved a device code, so the device that asked for it is signed in to the client as them, or the approval was refused. |
 | `roster.device.denied` | authentication | client | async | A signed-in person denied a device code, so the device that asked for it is told access_denied and signs nobody in. |

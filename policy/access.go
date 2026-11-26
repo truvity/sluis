@@ -213,6 +213,8 @@ type AccessClient struct {
 	Session                 string         `yaml:"session,omitempty"`
 	PKCE                    string         `yaml:"pkce,omitempty"`
 	Harness                 bool           `yaml:"harness,omitempty"`
+	// Delegation is [Client.Delegation], its matchers spelled as a group's.
+	Delegation *Delegation `yaml:"delegation,omitempty"`
 
 	Hostname string `yaml:"hostname,omitempty"`
 	Prefix   string `yaml:"prefix,omitempty"`
@@ -525,7 +527,7 @@ func (a Access) clients() (map[string]Client, error) {
 			SignInExchange: c.SignInExchange, BackChannelLogout: c.BackchannelLogout, SigningAlg: c.SigningAlg,
 			Groups: c.Groups, GroupsDelimiter: c.GroupsDelimiter, Session: c.Session, PKCE: c.PKCE,
 			Harness: c.Harness, DeviceAuthorization: c.DeviceAuthorization,
-			TokenEndpointAuthMethod: c.TokenEndpointAuthMethod, JWKS: c.JWKS,
+			TokenEndpointAuthMethod: c.TokenEndpointAuthMethod, JWKS: c.JWKS, Delegation: c.Delegation,
 		}
 	}
 	return out, nil

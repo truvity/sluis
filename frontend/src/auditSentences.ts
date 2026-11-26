@@ -3,7 +3,7 @@ import type { Sentences } from "@truvity/audit";
 
 export const roster: Sentences = {
   "source": "roster",
-  "version": "1.26.0",
+  "version": "1.27.0",
   "locales": [
     "en"
   ],
@@ -627,7 +627,7 @@ export const roster: Sentences = {
       }
     },
     "roster.token.exchanged": {
-      "summary": "A token was exchanged for one another client accepts, or the exchange was refused.",
+      "summary": "A token was exchanged for one another client accepts, or the exchange was refused. A delegated exchange (RFC 8693 actor_token) is the subject's, and names in acted_by the workload that acted for them.",
       "message": {
         "en": "{outcome, select, success {{actor} exchanged a token for {targets_0_id}} denied {{actor} was refused a token for {targets_0_id}} other {{actor} could not exchange a token for {targets_0_id}}}"
       }

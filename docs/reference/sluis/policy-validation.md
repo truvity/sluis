@@ -13,7 +13,7 @@ Conflicts across files are refused when the layers merge. The merged policy is v
 | Members | an address without a domain |
 | Claims | a scalar conflict across two `claims` fragments |
 | Matchers | no field; `service_account` without `namespace` and `name`; `aws` without a twelve-digit `account` or with a pattern that does not compile; `github` `visibility` other than `public`, `private`, `internal` |
-| Clients | `display_name` or `description` that is not one bounded line; `sign_in_exchange` or `device_authorization` on a non-`public` client; `device_authorization` without `redirects`; a confidential client without `secret` or `token_endpoint_auth_method: private_key_jwt`; `private_key_jwt` beside a `secret`, on a non-`confidential` client or without a valid `jwks`; `jwks` without `private_key_jwt`; an empty `requires` |
+| Clients | `display_name` or `description` that is not one bounded line; `sign_in_exchange` or `device_authorization` on a non-`public` client; `device_authorization` without `redirects`; a confidential client without `secret` or `token_endpoint_auth_method: private_key_jwt`; `private_key_jwt` beside a `secret`, on a non-`confidential` client or without a valid `jwks`; `jwks` without `private_key_jwt`; a `delegation` without `actors`, with an `email` or `email_domain` actor, an actor twice or a subject kind other than `person`; an empty `requires` |
 | PKCE | `pkce` other than `required` or `optional`; `pkce: optional` on a `public` client; `pkce` on an `exchange` client |
 | Harness | `harness` on an `exchange` client |
 | Session | `session` on an `exchange` client; `session: agent` with `sign_in_exchange: true` or `device_authorization: true` |
