@@ -297,10 +297,12 @@ func (b *Backend) GroupsOf(_ context.Context, email string) ([]string, error) {
 	if err := b.enter(OpGroupsOf); err != nil {
 		return nil, err
 	}
+	// Asked by any of a person's addresses, the directory answers the
+	// groups the person is in, whichever address each lists them by.
 	e := b.primaryOf(strings.ToLower(email))
 	var out []string
 	for _, key := range slices.Sorted(maps.Keys(b.groups)) {
-		if slices.Contains(b.groups[key].Members, e) {
+		if slices.ContainsFunc(b.groups[key].Members, func(m string) bool { return b.primaryOf(m) == e }) {
 			out = append(out, key)
 		}
 	}
