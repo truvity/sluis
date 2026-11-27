@@ -85,10 +85,9 @@ func NewSnapshot(
 	}
 	for _, g := range groups {
 		g.Email = strings.ToLower(g.Email)
-		g.Members = slices.Clone(g.Members)
+		g.Members = s.membersByPrimary(g.Members)
 		s.Groups[g.Email] = g
 		for _, m := range g.Members {
-			m = strings.ToLower(m)
 			s.MemberOf[m] = append(s.MemberOf[m], g.Email)
 		}
 	}
@@ -161,11 +160,29 @@ func restrict(
 				keptAccounts = append(keptAccounts, a)
 			}
 		}
+		// A member listed by an alias is served when its account is: the
+		// alias may be at a domain this workspace does not serve. An alias
+		// that is some account's primary address is that account's, as in
+		// [Snapshot.indexAliases].
+		primaries := make(map[string]struct{}, len(accounts))
+		for _, a := range accounts {
+			primaries[strings.ToLower(a.Email)] = struct{}{}
+		}
+		servedAlias := map[string]struct{}{}
+		for _, a := range keptAccounts {
+			for _, alias := range a.Aliases {
+				alias = strings.ToLower(strings.TrimSpace(alias))
+				if _, primary := primaries[alias]; !primary {
+					servedAlias[alias] = struct{}{}
+				}
+			}
+		}
 		keptGroups := make([]backend.Group, 0, len(groups))
 		for _, g := range groups {
 			keep := inServed(g.Email)
 			for i := 0; !keep && i < len(g.Members); i++ {
-				keep = inServed(g.Members[i])
+				_, alias := servedAlias[strings.ToLower(strings.TrimSpace(g.Members[i]))]
+				keep = alias || inServed(g.Members[i])
 			}
 			if keep {
 				keptGroups = append(keptGroups, g)
@@ -253,6 +270,33 @@ func (s *Snapshot) indexAliases(a backend.Account) {
 	}
 }
 
+// membersByPrimary lower-cases a group's members and files each one the
+// snapshot knows as an alias under its account's primary address, once.
+// A directory lists a member by the address it was added by, which can be
+// an alias, or a primary since renamed; read as it is listed, the person
+// would be in no group under the address everything else knows them by.
+// An address that is nobody's alias, such as an external member, is kept
+// as it is.
+func (s *Snapshot) membersByPrimary(members []string) []string {
+	if members == nil {
+		return nil
+	}
+	out := make([]string, 0, len(members))
+	seen := make(map[string]struct{}, len(members))
+	for _, m := range members {
+		m = strings.ToLower(strings.TrimSpace(m))
+		if primary, ok := s.aliases[m]; ok {
+			m = primary
+		}
+		if _, dup := seen[m]; dup {
+			continue
+		}
+		seen[m] = struct{}{}
+		out = append(out, m)
+	}
+	return out
+}
+
 // PrimaryOf returns the primary address of the account an address
 // belongs to: the address itself for a primary one, the account's primary
 // for an alias, and false for an address the snapshot does not hold.
@@ -308,8 +352,15 @@ func (s *Snapshot) patchAccount(email string, account backend.Account, found boo
 	// The account's old aliases go with it, and come back from the read.
 	// Not found, they are missing from now on, like the account: counted
 	// from the next complete read, not as old as their domain.
+	//
+	// Every address the person went by, or goes by after the read, leaves
+	// the groups: a membership listed under an alias the snapshot did not
+	// know as one is the same person's, and the read puts it back under
+	// the primary address.
+	addresses := []string{email}
 	for alias, primary := range s.aliases {
 		if primary == email {
+			addresses = append(addresses, alias)
 			delete(s.aliases, alias)
 			if !found {
 				s.startAbsence(alias)
@@ -321,6 +372,11 @@ func (s *Snapshot) patchAccount(email string, account backend.Account, found boo
 		s.Accounts[email] = account
 		delete(s.aliases, email)
 		s.indexAliases(account)
+		for alias, primary := range s.aliases {
+			if primary == email && !slices.Contains(addresses, alias) {
+				addresses = append(addresses, alias)
+			}
+		}
 		// Back: whatever was counted against it, or its aliases, is over.
 		delete(s.Absent, email)
 		for _, alias := range account.Aliases {
@@ -332,13 +388,15 @@ func (s *Snapshot) patchAccount(email string, account backend.Account, found boo
 		}
 		delete(s.Accounts, email)
 	}
-	for _, g := range s.MemberOf[email] {
-		if grp, ok := s.Groups[g]; ok {
-			grp.Members = slices.DeleteFunc(slices.Clone(grp.Members), func(m string) bool { return m == email })
-			s.Groups[g] = grp
+	for _, address := range addresses {
+		for _, g := range s.MemberOf[address] {
+			if grp, ok := s.Groups[g]; ok {
+				grp.Members = slices.DeleteFunc(slices.Clone(grp.Members), func(m string) bool { return m == address })
+				s.Groups[g] = grp
+			}
 		}
+		delete(s.MemberOf, address)
 	}
-	delete(s.MemberOf, email)
 	if !found {
 		return
 	}

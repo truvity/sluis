@@ -56,3 +56,24 @@ func TestRestrictKeepsOnlyWhatAServedAnswerNeeds(t *testing.T) {
 		t.Errorf("an unnarrowed workspace lost data: %d accounts, %d groups", len(sameA), len(sameG))
 	}
 }
+
+// A served person listed in another domain's group by an alias at an
+// unserved domain still keeps that group: it is part of their answer. An
+// alias that is an unserved account's primary address is that account's,
+// and keeps nothing.
+func TestRestrictKeepsAGroupListingAServedAlias(t *testing.T) {
+	t.Parallel()
+
+	accounts := []backend.Account{
+		{Email: "ada@kept.example", Live: true, Aliases: []string{"ada@alias.example", "otto@other.example"}},
+		{Email: "otto@other.example", Live: true},
+	}
+	groups := []backend.Group{
+		{Email: "byalias@other.example", Members: []string{"Ada@Alias.Example"}},
+		{Email: "theirs@other.example", Members: []string{"otto@other.example"}},
+	}
+	_, keptGroups := restrict(accounts, groups, []string{"kept.example"}, nil)
+	if len(keptGroups) != 1 || keptGroups[0].Email != "byalias@other.example" {
+		t.Errorf("groups = %+v, want only the one listing ada's alias", keptGroups)
+	}
+}

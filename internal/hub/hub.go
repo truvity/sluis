@@ -1716,23 +1716,26 @@ func (h *Hub) DirectoryGroup(ctx context.Context, groupEmail string) (DirectoryG
 	}
 
 	// A member may belong to any tenant the hub reads, or to none; look
-	// across every snapshot once rather than per member.
-	accounts := map[string]backend.Account{}
+	// across every snapshot once rather than per member. A member listed
+	// by an alias of an account in another tenant is shown as that
+	// account, once.
+	snaps := make([]*Snapshot, 0, len(v.workspaces))
 	for _, id := range slices.Sorted(maps.Keys(v.workspaces)) {
 		snap, snapErr := h.snapshots.Get(ctx, id)
-		if snapErr != nil || snap == nil {
+		if snapErr != nil {
 			continue
 		}
-		maps.Copy(accounts, snap.Accounts)
+		snaps = append(snaps, snap)
 	}
+	known := peopleOf(snaps)
 	out.Members = make([]GroupMember, 0, len(result.Members))
+	seen := make(map[string]bool, len(result.Members))
 	for _, email := range result.Members {
-		email = strings.ToLower(email)
-		member := GroupMember{Email: email}
-		if account, known := accounts[email]; known {
-			member.Known, member.Live = true, account.Live
-			member.GivenName, member.FamilyName = account.GivenName, account.FamilyName
+		member := known.member(strings.ToLower(email))
+		if seen[member.Email] {
+			continue
 		}
+		seen[member.Email] = true
 		out.Members = append(out.Members, member)
 	}
 	return out, nil
