@@ -73,18 +73,16 @@ func (h *Hub) ResolveGroups(ctx context.Context, emails []string, maxDepth, maxN
 	}
 	// Who an address is, across every snapshot, read once and only if some
 	// group is found.
-	var accounts map[string]backend.Account
-	accountOf := func(email string) (backend.Account, bool) {
-		if accounts == nil {
-			accounts = map[string]backend.Account{}
+	var known *people
+	load := func() *people {
+		if known == nil {
+			snaps := make([]*Snapshot, 0, len(v.workspaces))
 			for _, id := range slices.Sorted(maps.Keys(v.workspaces)) {
-				if snap := snapOf(id); snap != nil {
-					maps.Copy(accounts, snap.Accounts)
-				}
+				snaps = append(snaps, snapOf(id))
 			}
+			known = peopleOf(snaps)
 		}
-		a, ok := accounts[email]
-		return a, ok
+		return known
 	}
 
 	out := make([]ResolvedGroup, 0, len(emails))
@@ -100,7 +98,7 @@ func (h *Hub) ResolveGroups(ctx context.Context, emails []string, maxDepth, maxN
 		resolved.Found, resolved.Authoritative, resolved.Workspace = true, root.authoritative, root.workspace
 		resolved.SnapshotAt = snapshotAt(snapOf(root.workspace))
 
-		people := map[string]bool{}
+		persons := map[string]bool{}
 		visited := map[string]bool{email: true}
 		type step struct {
 			group backend.Group
@@ -124,19 +122,62 @@ func (h *Hub) ResolveGroups(ctx context.Context, emails []string, maxDepth, maxN
 					}
 					continue
 				}
-				people[m] = true
+				persons[load().primaryOf(m)] = true
 			}
 		}
 		slices.Sort(resolved.Nested)
-		for _, m := range slices.Sorted(maps.Keys(people)) {
-			member := GroupMember{Email: m}
-			if account, known := accountOf(m); known {
-				member.Known, member.Live = true, account.Live
-				member.GivenName, member.FamilyName = account.GivenName, account.FamilyName
-			}
-			resolved.Members = append(resolved.Members, member)
+		for _, m := range slices.Sorted(maps.Keys(persons)) {
+			resolved.Members = append(resolved.Members, load().member(m))
 		}
 		out = append(out, resolved)
 	}
 	return out, nil
+}
+
+// people is every account a set of snapshots holds, by primary address,
+// and the primary address of every alias they know: who a group member
+// is, whichever tenant the hub reads them from.
+type people struct {
+	accounts map[string]backend.Account
+	aliases  map[string]string
+}
+
+// peopleOf indexes the snapshots, in order; a nil one holds nobody.
+func peopleOf(snaps []*Snapshot) *people {
+	out := &people{accounts: map[string]backend.Account{}, aliases: map[string]string{}}
+	for _, snap := range snaps {
+		if snap != nil {
+			maps.Copy(out.accounts, snap.Accounts)
+			maps.Copy(out.aliases, snap.aliases)
+		}
+	}
+	// An alias that is some account's primary address is that account's.
+	for alias := range out.aliases {
+		if _, primary := out.accounts[alias]; primary {
+			delete(out.aliases, alias)
+		}
+	}
+	return out
+}
+
+// primaryOf is the primary address of the account an address belongs to,
+// or the address itself for one nobody has as an alias, such as a member
+// from a tenant the hub does not read.
+func (p *people) primaryOf(email string) string {
+	if primary, ok := p.aliases[email]; ok {
+		return primary
+	}
+	return email
+}
+
+// member is one group member as the console shows it, under its primary
+// address, with what the snapshots know of it.
+func (p *people) member(email string) GroupMember {
+	email = p.primaryOf(email)
+	member := GroupMember{Email: email}
+	if account, known := p.accounts[email]; known {
+		member.Known, member.Live = true, account.Live
+		member.GivenName, member.FamilyName = account.GivenName, account.FamilyName
+	}
+	return member
 }
