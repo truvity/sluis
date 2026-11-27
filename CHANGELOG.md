@@ -1,4 +1,6 @@
-## Unreleased
+## v1.88.1
+
+A patch release: a person a directory group lists by an alias is in that group under their primary address (#1983, fixes #1980), and the go.mod files tidied after the non-major dependency updates (#1982).
 
 ### Fixed
 
