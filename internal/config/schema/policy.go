@@ -80,6 +80,10 @@ func delegationSchema() m {
 			"type": "array", "uniqueItems": true, "items": m{"enum": []string{"person"}},
 			"description": "The subject kinds an actor may act for. Absent is `person`: the access token of a person's sign-in that still stands.",
 		},
+		"subject_audiences": m{
+			"type": "array", "minItems": 1, "uniqueItems": true, "items": m{"type": "string", "minLength": 1},
+			"description": "The audiences a subject token must have been issued for, each a `resources` row or a client of this policy, such as the MCP server the actor fronts. Absent, any live token of an allowed subject kind may be presented.",
+		},
 	}, "actors")
 }
 

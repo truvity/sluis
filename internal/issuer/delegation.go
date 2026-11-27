@@ -106,11 +106,12 @@ func (s *Storage) delegatedProof(ctx context.Context, request op.TokenExchangeRe
 	prior, _ := issued.Claims["act"].(map[string]any)
 
 	return Proof{Email: issued.Subject, Acting: &Acting{
-		Actor:   actor,
-		Prior:   prior,
-		Session: issued.Session,
-		SignIn:  issued.SignIn,
-		Expires: issued.Expires,
+		Actor:    actor,
+		Prior:    prior,
+		Session:  issued.Session,
+		SignIn:   issued.SignIn,
+		Expires:  issued.Expires,
+		Audience: issued.Audience,
 	}}, nil
 }
 

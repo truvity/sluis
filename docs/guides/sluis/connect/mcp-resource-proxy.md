@@ -64,7 +64,7 @@ A non-loopback listener is refused at start unless `OUTBOUND_ALLOW_NON_LOOPBACK=
 
 ## Call a backend as the caller
 
-Set `OUTBOUND_MODE=delegate`, pass `X-Sluis-Delegation` through the stock server, and declare a [`delegation`](../../../reference/sluis/policy-clients.md#delegation) naming this ServiceAccount on `OUTBOUND_AUDIENCE`.
+Set `OUTBOUND_MODE=delegate`, pass `X-Sluis-Delegation` through the stock server, and declare a [`delegation`](../../../reference/sluis/policy-clients.md#delegation) naming this ServiceAccount on `OUTBOUND_AUDIENCE`. Its `subject_audiences` names this server's resource.
 
 | Step | What happens |
 |---|---|

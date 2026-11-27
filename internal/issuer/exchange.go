@@ -53,6 +53,9 @@ type Acting struct {
 	// Expires is the subject token's own expiry: a delegated token never
 	// outlives the token it was made from.
 	Expires time.Time
+	// Audience is what the subject token was issued for: the resource or
+	// client a delegation's `subject_audiences` is read against.
+	Audience []string
 }
 
 // actClaim is the `act` claim for a delegated token: the actor, and the
@@ -211,7 +214,8 @@ func (i *Issuer) Exchange(ctx context.Context, proof Proof, audience string) (Gr
 
 // delegationAllowed is the target client's rule for a delegated exchange
 // ([policy.Delegation]): it declares one, it names this actor, it allows this
-// kind of subject, and the actor's own exchange limit names the audience.
+// kind of subject and, when it lists `subject_audiences`, what the subject
+// token was issued for, and the actor's own exchange limit names the audience.
 // Each refusal is [ErrRefused], one answer to the caller, with its own code
 // in the audit record.
 func (i *Issuer) delegationAllowed(ctx context.Context, proof Proof, client policy.Client, audience string) error {
@@ -230,6 +234,9 @@ func (i *Issuer) delegationAllowed(ctx context.Context, proof Proof, client poli
 	case !client.Delegation.AllowsSubject(proof.kind()):
 		return refuse("subject_kind_not_allowed", "the requested audience's delegation does not allow this kind of subject",
 			fmt.Errorf("%q allows acting for %v, and this subject is %s", audience, client.Delegation.AllowedSubjects(), proof.kind()))
+	case !client.Delegation.AllowsSubjectAudience(proof.Acting.Audience):
+		return refuse("subject_audience_not_allowed", "the requested audience's delegation does not accept a subject token issued for that audience",
+			fmt.Errorf("%q accepts subject tokens issued for %v, and this one was issued for %v", audience, client.Delegation.SubjectAudiences, proof.Acting.Audience))
 	case !i.set.ExchangeAllowed(actor.identity(), audience):
 		allowed, _ := i.set.ExchangeClients(actor.identity())
 		return refuse("actor_exchange_limited", "the actor's exchange limit does not name the requested audience",
