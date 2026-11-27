@@ -308,3 +308,29 @@ func TestFromAccessWritesExchangeLimits(t *testing.T) {
 		t.Errorf("an undeclared client: %v, want it refused", err)
 	}
 }
+
+// A private_key_jwt client holds a key and no secret, so GenerateSecrets
+// leaves it without one: the policy refuses a client that names both.
+func TestFromAccessGeneratesNoSecretForAPrivateKeyJWTClient(t *testing.T) {
+	access := loadAccess(t)
+	access.Clients = append(access.Clients, policy.AccessClient{
+		Name: "session-site", Kind: policy.KindConfidential,
+		Redirects: []string{"https://app.example.com/_session/callback"}, SignedOut: []string{"https://app.example.com/"},
+		Requires:                []string{"east:k8s:viewer"},
+		TokenEndpointAuthMethod: policy.AuthPrivateKeyJWT,
+		JWKS: &policy.ClientJWKS{Keys: []map[string]any{{
+			"kty": "EC", "crv": "P-256", "alg": "ES256", "use": "sig", "kid": "k1",
+			"x": "Bid21k1InXBkWxAWY5gn_SJrZYSmQDzJZwihMwki9Lw", "y": "pKhxHMOGfwHNlWo7gyXf_AzNsev1Y33aBiTIpaFN8Yc",
+		}}},
+	})
+	got, err := config.FromAccess(access, lambdaBootstrap())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := got.Policy.Clients["session-site"].Secret; !s.IsZero() {
+		t.Fatalf("the private_key_jwt client got a secret: %+v", s)
+	}
+	if !got.Policy.Clients["grafana"].SecretGenerated() {
+		t.Fatal("a confidential client with a secret no longer gets a generated one")
+	}
+}

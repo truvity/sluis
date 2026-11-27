@@ -37,7 +37,8 @@ type Bootstrap struct {
 	ExchangeLimits []BootstrapExchangeLimit
 	// GenerateSecrets writes every confidential client's secret as
 	// `{generate: true}` and not as the name the access document gives. The
-	// issuer then makes and keeps the value.
+	// issuer then makes and keeps the value. A private_key_jwt client has no
+	// secret and gets none.
 	GenerateSecrets bool
 	// Claims is the claims table: what a group adds to a token. The access
 	// document has no such table, so it is carried through unchanged.
@@ -158,7 +159,9 @@ func FromAccess(access policy.Access, b Bootstrap) (Access, error) {
 	if b.GenerateSecrets {
 		for id := range pol.Clients {
 			c := pol.Clients[id]
-			if c.Kind == "confidential" {
+			// A private_key_jwt client holds a key, not a secret: the policy
+			// refuses one that names both, so it is left as it is.
+			if c.Kind == policy.KindConfidential && !c.PrivateKeyJWT() {
 				c.Secret = policy.ClientSecret{Generate: true}
 				pol.Clients[id] = c
 			}
