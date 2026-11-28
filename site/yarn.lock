@@ -286,9 +286,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@astrojs/starlight@npm:0.42.9":
-  version: 0.42.9
-  resolution: "@astrojs/starlight@npm:0.42.9"
+"@astrojs/starlight@npm:0.43.1":
+  version: 0.43.1
+  resolution: "@astrojs/starlight@npm:0.43.1"
   dependencies:
     "@astrojs/markdown-satteri": "npm:^0.4.3"
     "@astrojs/mdx": "npm:^8.0.3"
@@ -303,7 +303,7 @@ __metadata:
     hast-util-to-html: "npm:^9.0.5"
     hast-util-to-string: "npm:^3.0.1"
     hastscript: "npm:^9.0.1"
-    i18next: "npm:^26.0.7"
+    i18next: "npm:^27.0.1"
     klona: "npm:^2.0.6"
     magic-string: "npm:^1.2.3"
     mdast-util-directive: "npm:^3.1.0"
@@ -323,7 +323,7 @@ __metadata:
   peerDependenciesMeta:
     "@astrojs/markdown-remark":
       optional: true
-  checksum: 10c0/bd6db388795929495f141b5ec22a6fa3dec5da00ecaed523a224d8cfdd54c94dfb4dcb492028ed164de02e42ee60d35c19551cdcd5a016b241f7a743d36a9e63
+  checksum: 10c0/d3eef260649e0ba0f76d138aeb16412371cfb30bdc0b0427daf261fbbae0f48ea43f30980ace3b03fe7662a1fd86a8dc540e30c9cc4492d899e8fdf67dc6df98
   languageName: node
   linkType: hard
 
@@ -3919,15 +3919,15 @@ __metadata:
   languageName: node
   linkType: hard
 
-"i18next@npm:^26.0.7":
-  version: 26.5.10
-  resolution: "i18next@npm:26.5.10"
+"i18next@npm:^27.0.1":
+  version: 27.2.9
+  resolution: "i18next@npm:27.2.9"
   peerDependencies:
     typescript: ^5 || ^6 || ^7
   peerDependenciesMeta:
     typescript:
       optional: true
-  checksum: 10c0/8377a89144f0c94997410a68f3219b5d516c5e98235a8213fbbc0fffc1f67663680bbd76c6053bf50ad52ee967c269f4c07c97514a01ddc838919a935be1ac72
+  checksum: 10c0/cfc18ce50ceebb9d55444facdc725ca71449e03426ff1bbf60ac148aaed42c330401201c041eeaa155d5eecd08e50279b5c28eb2d498826a6326d4ea89c88ee4
   languageName: node
   linkType: hard
 
@@ -5876,7 +5876,7 @@ __metadata:
   dependencies:
     "@astrojs/cloudflare": "npm:14.4.4"
     "@astrojs/markdown-satteri": "npm:0.4.6"
-    "@astrojs/starlight": "npm:0.42.9"
+    "@astrojs/starlight": "npm:0.43.1"
     astro: "npm:7.4.7"
     astro-mermaid: "npm:2.2.0"
     mermaid: "npm:12.3.0"
